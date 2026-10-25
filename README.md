@@ -56,7 +56,10 @@ Everything lives in `%APPDATA%\CLIProxy Desktop` (macOS: `~/Library/Application 
 | Keys | `secrets.bin`, encrypted with DPAPI (Windows) or the Keychain (macOS) |
 | Usage history | `usage-history.json` |
 | Generated proxy config | `proxy/config.yaml` |
+| Your proxy settings | `proxy/config.user.yaml` |
 | Account logins | `proxy/auths/` |
 | Logs | `proxy/proxy.log` (previous run: `proxy.prev.log`) |
 
-`config.yaml` is rewritten on every start, so change settings in the app rather than in the file.
+`config.yaml` is generated from the app settings and `config.user.yaml`; don't edit it. Put custom proxy keys (v8 layout) in `config.user.yaml` (Proxy page → Edit config.user.yaml). Saving it applies live; keys the app owns (server, management, routing strategy and affinity, auth dir, first-byte timeout) are replaced by the app's values.
+
+The app manages the proxy with a random password created per launch and passed in `MANAGEMENT_SUPERVISOR_PASSWORD`; no management key is stored. A custom proxy executable must support it.

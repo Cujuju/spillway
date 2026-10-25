@@ -1,10 +1,10 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
-import { proxyRestartNeeded, type AppSettings } from '@shared/settings';
+import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
 import { appPaths, PROXY_EXE_NAME } from './paths';
-import { affinityTtl } from './proxyConfig';
+import { ensureUserConfigFile } from './proxyLaunch';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
 import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
@@ -26,15 +26,10 @@ const keys = () => ({ clientApiKey: getSecrets().clientApiKey, endpoint: proxy.g
 async function applySettings(next: AppSettings): Promise<AppSettings> {
   const prev = getSettings();
   const saved = setSettings(next);
-  const routingChanged = prev.proxy.strategy !== saved.proxy.strategy || prev.proxy.sessionAffinity !== saved.proxy.sessionAffinity ||
-    prev.proxy.sessionAffinityTtlMinutes !== saved.proxy.sessionAffinityTtlMinutes;
   if (proxy.isRunning() && proxyRestartNeeded(prev, saved)) {
     await proxy.restart();
-  } else if (proxy.isRunning() && routingChanged) {
-    // Live update; the regenerated config.yaml carries the same values on the next start.
-    await management
-      .setRouting(saved.proxy.strategy, saved.proxy.sessionAffinity, affinityTtl(saved.proxy.sessionAffinityTtlMinutes))
-      .catch(() => proxy.restart());
+  } else if (proxy.isRunning() && proxyConfigChanged(prev, saved)) {
+    proxy.applyConfig();
   }
   if (prev.dashboard.refreshIntervalSeconds !== saved.dashboard.refreshIntervalSeconds) usage.start();
   return saved;
@@ -45,6 +40,7 @@ const OPEN_PATHS = {
   config: () => appPaths.proxyDir,
   auths: () => appPaths.authDir,
   logs: () => appPaths.proxyDir,
+  userConfig: () => ensureUserConfigFile(),
 } as const;
 
 const handlers: Handlers = {

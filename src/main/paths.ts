@@ -2,6 +2,8 @@ import { app } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+export const USER_CONFIG_NAME = 'config.user.yaml';
+
 export const PROXY_EXE_NAME = process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
 
 /** All app-owned state lives under Electron's per-user data folder. */
@@ -26,6 +28,10 @@ export const appPaths = {
   },
   get proxyConfigFile() {
     return path.join(this.proxyDir, 'config.yaml');
+  },
+  /** User overlay merged under the app-owned keys; see proxyConfig.ts. */
+  get proxyUserConfigFile() {
+    return path.join(this.proxyDir, USER_CONFIG_NAME);
   },
   get authDir() {
     return path.join(this.proxyDir, 'auths');

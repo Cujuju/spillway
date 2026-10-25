@@ -9,6 +9,7 @@ const LABELS: Record<ProxyState, string> = {
   stopping: 'Stopping',
   crashed: 'Crashed',
   'missing-binary': 'Not installed',
+  'port-busy': 'Port in use',
 };
 
 const TONES: Record<ProxyState, string> = {
@@ -18,6 +19,7 @@ const TONES: Record<ProxyState, string> = {
   stopping: 'amber',
   crashed: 'red',
   'missing-binary': 'red',
+  'port-busy': 'red',
 };
 
 /** compactDuration's smallest unit is a minute. */

@@ -28,5 +28,8 @@
     "vite-plugin-solid": "^2.11.14",
     "vitest": "^5.0.5"
   },
-  "packageManager": "pnpm@12.15.0"
+  "packageManager": "pnpm@12.15.0",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
 }

@@ -35,6 +35,8 @@ export interface AppSettings {
     /** Empty = bundled binary. */
     executablePath: string;
     restartOnCrash: boolean;
+    /** Fail over when an upstream stream sends nothing for this long; 0 = never. */
+    firstByteTimeoutSeconds: number;
   };
   dashboard: {
     refreshIntervalSeconds: number;
@@ -68,6 +70,9 @@ const MAX_REFRESH_SECONDS = 3600;
 const MAX_FORECAST_DAYS = 14;
 const MAX_LOOKBACK_HOURS = 168;
 const MAX_AFFINITY_MINUTES = 24 * 60;
+/** Claude streams begin with message_start within seconds; 90 s also covers very long prompts. */
+const DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS = 90;
+const MAX_FIRST_BYTE_TIMEOUT_SECONDS = 600;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
@@ -88,6 +93,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     sessionAffinityTtlMinutes: 60,
     executablePath: '',
     restartOnCrash: true,
+    firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
   },
   dashboard: {
     refreshIntervalSeconds: 60,
@@ -160,6 +166,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       sessionAffinityTtlMinutes: int(p.sessionAffinityTtlMinutes, d.proxy.sessionAffinityTtlMinutes, 1, MAX_AFFINITY_MINUTES),
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
+      firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
     },
     dashboard: {
       refreshIntervalSeconds: int(db.refreshIntervalSeconds, d.dashboard.refreshIntervalSeconds, MIN_REFRESH_SECONDS, MAX_REFRESH_SECONDS),
@@ -184,6 +191,12 @@ export function normalizeSettings(raw: unknown): AppSettings {
       proxyCrashed: bool(n.proxyCrashed, d.notifications.proxyCrashed),
     },
   };
+}
+
+/** Settings written to config.yaml that a running proxy reloads live. */
+export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
+  return a.proxy.strategy !== b.proxy.strategy || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
+    a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds;
 }
 
 /** Settings whose change requires the proxy to be restarted to take effect. */

@@ -75,13 +75,16 @@ function ProxySection() {
           <NumberField value={p().sessionAffinityTtlMinutes} suffix="minutes" onCommit={(v) => set((d) => void (d.proxy.sessionAffinityTtlMinutes = v))} />
         </SettingRow>
       </Show>
+      <SettingRow label="First-byte timeout" help="A stream that sends nothing for this long is cancelled and retried on another account. 0 turns it off.">
+        <NumberField value={p().firstByteTimeoutSeconds} suffix="seconds" onCommit={(v) => set((d) => void (d.proxy.firstByteTimeoutSeconds = v))} />
+      </SettingRow>
       <SettingRow label="Port" help="Changing it restarts the proxy; update ANTHROPIC_BASE_URL in your clients.">
         <NumberField value={p().port} onCommit={(v) => set((d) => void (d.proxy.port = v))} />
       </SettingRow>
       <SettingRow label="Allow LAN connections" help="Listen on all interfaces. Other devices still need the client key. Restarts the proxy.">
         <Toggle value={p().allowLan} onChange={(v) => set((d) => void (d.proxy.allowLan = v))} />
       </SettingRow>
-      <SettingRow label="Proxy executable" help="Leave empty to use the cli-proxy-api binary bundled with the app.">
+      <SettingRow label="Proxy executable" help="Leave empty to use the cli-proxy-api binary bundled with the app. A custom binary must be a build that supports MANAGEMENT_SUPERVISOR_PASSWORD, or the app cannot manage it.">
         <input class="input wide mono" readOnly value={p().executablePath} placeholder="Bundled" />
         <button class="btn" onClick={() => void window.api.pickProxyExecutable().then((path) => path && set((d) => void (d.proxy.executablePath = path)))}>Browse…</button>
         <Show when={p().executablePath}>
@@ -139,7 +142,7 @@ function Advanced() {
   const [confirming, setConfirming] = createSignal(false);
   const folders = [
     { which: 'data', label: 'App data', help: 'Settings, encrypted keys and usage history.' },
-    { which: 'config', label: 'Proxy config', help: 'The generated config.yaml and proxy log. Rewritten on each start.' },
+    { which: 'config', label: 'Proxy config', help: 'config.yaml (generated from settings and config.user.yaml), config.user.yaml and the proxy log.' },
     { which: 'auths', label: 'Account logins', help: 'OAuth credential files the proxy reads. Keep private.' },
   ] as const;
   return (

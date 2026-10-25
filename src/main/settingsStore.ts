@@ -7,8 +7,6 @@ import { appPaths } from './paths';
 
 /** Secrets are generated locally and never leave this machine. */
 interface Secrets {
-  /** Plain management key; the proxy only keeps a hash of it. */
-  managementKey: string;
   /** Key clients such as Claude Code send to the proxy. */
   clientApiKey: string;
 }
@@ -73,9 +71,8 @@ async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean
       reEncrypt = r.shouldReEncrypt;
     }
     const parsed = JSON.parse(json) as Partial<Secrets>;
-    if (typeof parsed.managementKey === 'string' && typeof parsed.clientApiKey === 'string') {
-      return { value: { managementKey: parsed.managementKey, clientApiKey: parsed.clientApiKey }, reEncrypt };
-    }
+    // Files from before the per-launch supervisor password also hold a managementKey; it is dropped.
+    if (typeof parsed.clientApiKey === 'string') return { value: { clientApiKey: parsed.clientApiKey }, reEncrypt: reEncrypt || 'managementKey' in parsed };
   } catch (err) {
     console.error('[settings] secrets unreadable, regenerating:', err);
   }
@@ -88,7 +85,7 @@ let secrets: Secrets | null = null;
 export async function loadSecrets(): Promise<Secrets> {
   const file = appPaths.secretsFile;
   const decoded = existsSync(file) ? await decode(readFileSync(file)) : null;
-  secrets = decoded?.value ?? { managementKey: newSecret(), clientApiKey: newSecret() };
+  secrets = decoded?.value ?? { clientApiKey: newSecret() };
   // Rewrite when new, unreadable, or encrypted under a rotated key.
   if (!decoded || decoded.reEncrypt) writeFileAtomic(file, await encode(secrets));
   return secrets;

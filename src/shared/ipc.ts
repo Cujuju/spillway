@@ -36,7 +36,8 @@ export interface DesktopApi {
   setAppTooltip(text: string): Promise<void>;
 
   openExternal(url: string): Promise<void>;
-  openPath(which: 'data' | 'config' | 'auths' | 'logs'): Promise<void>;
+  /** userConfig creates config.user.yaml when missing and opens it in the default editor. */
+  openPath(which: 'data' | 'config' | 'auths' | 'logs' | 'userConfig'): Promise<void>;
   copyText(text: string): Promise<void>;
 
   windowMinimize(): void;

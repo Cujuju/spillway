@@ -102,13 +102,6 @@ class ManagementClient {
   async deleteCredential(name: string): Promise<void> {
     await this.request('DELETE', `/credentials?${new URLSearchParams({ name })}`);
   }
-
-  /** v8 PUT /config/<path> replaces that YAML node with the raw JSON body, so values go unwrapped. */
-  async setRouting(strategy: string, sessionAffinity: boolean, affinityTtl: string): Promise<void> {
-    await this.request('PUT', '/config/routing/strategy', strategy);
-    await this.request('PUT', '/config/routing/session-affinity', sessionAffinity);
-    await this.request('PUT', '/config/routing/session-affinity-ttl', affinityTtl);
-  }
 }
 
 export const management = new ManagementClient();

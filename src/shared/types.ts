@@ -40,7 +40,7 @@ export interface UsageSnapshot {
   credentials: Credential[];
 }
 
-export type ProxyState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'missing-binary';
+export type ProxyState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'missing-binary' | 'port-busy';
 
 export interface ProxyStatus {
   state: ProxyState;
@@ -50,6 +50,8 @@ export interface ProxyStatus {
   lastError: string | null;
   executablePath: string | null;
   endpoint: string;
+  /** Why config.user.yaml was ignored; null when it applied or does not exist. */
+  userConfigError: string | null;
 }
 
 /** One stored point of the usage history used for drain rate and the chart. */

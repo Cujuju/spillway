@@ -1,10 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { createWriteStream, existsSync, mkdirSync, renameSync, type WriteStream } from 'node:fs';
+import { createWriteStream, existsSync, renameSync, type FSWatcher, type WriteStream } from 'node:fs';
 import type { LogLine, ProxyStatus } from '@shared/types';
 import { appPaths, resolveProxyExecutable } from './paths';
-import { buildProxyConfig } from './proxyConfig';
-import { getSecrets, getSettings, writeFileAtomic } from './settingsStore';
+import { newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
+import { getSettings } from './settingsStore';
 import { management } from './managementClient';
 import { LogBuffer } from './logBuffer';
 
@@ -25,6 +25,7 @@ class ProxySupervisor extends EventEmitter {
   private stopping = false;
   private crashTimes: number[] = [];
   private logFile: WriteStream | null = null;
+  private userConfigWatcher: FSWatcher | null = null;
   readonly logs = new LogBuffer();
   private status: ProxyStatus = {
     state: 'stopped',
@@ -34,7 +35,15 @@ class ProxySupervisor extends EventEmitter {
     lastError: null,
     executablePath: null,
     endpoint: '',
+    userConfigError: null,
   };
+
+  /** Rewrites config.yaml from settings and config.user.yaml; a running proxy reloads it. */
+  applyConfig(): void {
+    const userConfigError = writeProxyConfig();
+    if (userConfigError) this.log('app', `config.user.yaml ignored: ${userConfigError}`);
+    this.setStatus({ userConfigError });
+  }
 
   getStatus(): ProxyStatus {
     return { ...this.status };
@@ -75,15 +84,20 @@ class ProxySupervisor extends EventEmitter {
       this.setStatus({ state: 'missing-binary', executablePath: null, port, endpoint, lastError: 'Proxy executable not found' });
       return;
     }
-    const secrets = getSecrets();
-    mkdirSync(appPaths.authDir, { recursive: true });
-    writeFileAtomic(appPaths.proxyConfigFile, buildProxyConfig({
-      settings: settings.proxy,
-      managementKey: secrets.managementKey,
-      clientApiKey: secrets.clientApiKey,
-      authDir: appPaths.authDir,
-    }));
-    management.configure(endpoint, secrets.managementKey);
+    if (await portInUse(port, settings.proxy.allowLan)) {
+      // Not a crash: restarting cannot help until the other program exits or the port changes.
+      const lastError = `Port ${port} is already in use by another program`;
+      this.log('app', lastError);
+      this.setStatus({ state: 'port-busy', executablePath: exe, port, endpoint, lastError, pid: null, startedAt: null });
+      return;
+    }
+    this.applyConfig();
+    // Saving config.user.yaml applies it live: the proxy reloads config.yaml when it changes.
+    this.userConfigWatcher ??= watchUserConfig(() => {
+      if (this.proc) this.applyConfig();
+    });
+    const password = newSupervisorPassword();
+    management.configure(endpoint, password);
     this.stopping = false;
     this.rotateLogFile();
     this.setStatus({ state: 'starting', executablePath: exe, port, endpoint, lastError: null, pid: null, startedAt: null });
@@ -94,6 +108,7 @@ class ProxySupervisor extends EventEmitter {
       cwd: appPaths.proxyDir,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, [SUPERVISOR_PASSWORD_ENV]: password },
     });
     this.proc = child;
     child.stdout?.on('data', (d: Buffer) => this.log('stdout', d.toString('utf8')));
@@ -155,7 +170,7 @@ class ProxySupervisor extends EventEmitter {
   async stop(): Promise<void> {
     const child = this.proc;
     if (!child) {
-      if (this.status.state !== 'missing-binary') this.setStatus({ state: 'stopped' });
+      if (this.status.state !== 'missing-binary') this.setStatus({ state: 'stopped', lastError: null });
       return;
     }
     this.stopping = true;

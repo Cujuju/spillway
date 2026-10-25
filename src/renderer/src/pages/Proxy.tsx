@@ -1,4 +1,4 @@
-import { Copy, Eye, EyeOff, FolderOpen, Play, RotateCw, Square } from 'lucide-solid';
+import { Copy, Eye, EyeOff, FilePen, FolderOpen, Play, RotateCw, Square } from 'lucide-solid';
 import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js';
 import { Notice } from '../components/ui';
 import { logs, proxyStatus, setLogs } from '../store';
@@ -69,8 +69,11 @@ export function Proxy() {
         </div>
       </header>
 
-      <Show when={proxyStatus()?.lastError}>
-        <Notice tone="error">{proxyStatus()!.lastError}</Notice>
+      <Show when={state() === 'port-busy'} fallback={<Show when={proxyStatus()?.lastError}><Notice tone="error">{proxyStatus()!.lastError}</Notice></Show>}>
+        <Notice tone="error">Port {proxyStatus()?.port} is in use by another program. Quit it, or choose another port under Settings → Routing & server, then start again.</Notice>
+      </Show>
+      <Show when={proxyStatus()?.userConfigError}>
+        <Notice tone="warn">config.user.yaml was ignored: {proxyStatus()!.userConfigError}. Fix and save it to apply.</Notice>
       </Show>
       <Show when={state() === 'missing-binary'}>
         <Notice tone="error">The cli-proxy-api binary was not found. Choose it under Settings → Routing & server, or rebuild the app with the bundled binary.</Notice>
@@ -100,6 +103,16 @@ export function Proxy() {
           <button class="btn" onClick={() => void window.api.copyText(snippet())}><Copy size={ICON_PX} /> Copy</button>
         </div>
         <pre class="code selectable" style={{ margin: 0 }}>{revealed() ? snippet() : snippet().replace(key(), masked())}</pre>
+      </section>
+
+      <section class="card" style={{ 'margin-top': '16px' }}>
+        <div class="row">
+          <div class="spacer">
+            <h2 class="card-title" style={{ margin: 0 }}>Custom proxy settings</h2>
+            <p class="secondary" style={{ margin: '4px 0 0' }}>Keys in config.user.yaml are merged into the proxy config and applied when you save. App settings win where they overlap.</p>
+          </div>
+          <button class="btn" onClick={() => void window.api.openPath('userConfig')}><FilePen size={ICON_PX} /> Edit config.user.yaml</button>
+        </div>
       </section>
 
       <section class="card" style={{ 'margin-top': '16px' }}>

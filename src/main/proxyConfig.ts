@@ -1,52 +1,73 @@
+import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import type { AppSettings } from '@shared/settings';
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
-  managementKey: string;
   clientApiKey: string;
   authDir: string;
+  /** Text of config.user.yaml; empty when the file does not exist. */
+  userConfig: string;
 }
 
+export interface ProxyConfigResult {
+  yaml: string;
+  /** Set when config.user.yaml was unusable and the app-owned config was written alone. */
+  userConfigError: string | null;
+}
+
+const CONFIG_VERSION = 8;
 const LOOPBACK_HOST = '127.0.0.1';
 /** Empty host binds every interface (upstream default). */
 const ALL_INTERFACES_HOST = '';
-
-/** JSON string literals are valid YAML double-quoted scalars, so paths and keys need no other escaping. */
-const q = (value: string) => JSON.stringify(value);
+const HEADER =
+  ' Managed by CLIProxy Desktop: regenerated from app settings and config.user.yaml.\n Edit config.user.yaml (v8 layout) for custom keys; the app-owned keys below always win.';
 
 /** Go duration string the proxy expects for routing.session-affinity-ttl. */
 export const affinityTtl = (minutes: number) => `${minutes}m`;
 
-/**
- * Builds the app-owned v8 config.yaml. The file is regenerated on every proxy start;
- * keys follow upstream config.example.yaml.
- */
-export function buildProxyConfig(input: ProxyConfigInput): string {
-  const { settings: p } = input;
+/** App-owned keys: settings in the app control them, so they override config.user.yaml. */
+export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [path: string[], value: unknown][] {
+  const p = input.settings;
   return [
-    '# Managed by CLIProxy Desktop. Regenerated on every proxy start; edit settings in the app.',
-    'config-version: 8',
-    '',
-    'server:',
-    `  host: ${q(p.allowLan ? ALL_INTERFACES_HOST : LOOPBACK_HOST)}`,
-    `  port: ${p.port}`,
-    '',
-    'management:',
-    '  allow-remote: false',
-    `  secret-key: ${q(input.managementKey)}`,
-    '  disable-control-panel: true',
-    '',
-    'access:',
-    '  api-keys:',
-    `    - ${q(input.clientApiKey)}`,
-    '',
-    'routing:',
-    `  strategy: ${q(p.strategy)}`,
-    `  session-affinity: ${p.sessionAffinity}`,
-    `  session-affinity-ttl: ${q(affinityTtl(p.sessionAffinityTtlMinutes))}`,
-    '',
-    'oauth:',
-    `  auth-dir: ${q(input.authDir)}`,
-    '',
-  ].join('\n');
+    [['config-version'], CONFIG_VERSION],
+    [['server', 'host'], p.allowLan ? ALL_INTERFACES_HOST : LOOPBACK_HOST],
+    [['server', 'port'], p.port],
+    // The app authenticates with a per-launch supervisor password (environment), never a stored key.
+    [['management', 'allow-remote'], false],
+    [['management', 'disable-control-panel'], true],
+    [['routing', 'strategy'], p.strategy],
+    [['routing', 'session-affinity'], p.sessionAffinity],
+    [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
+    [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],
+    [['oauth', 'auth-dir'], input.authDir],
+  ];
+}
+
+function parseUserConfig(text: string): { doc: Document; error: string | null } {
+  if (!text.trim()) return { doc: new Document({}), error: null };
+  const doc = parseDocument(text);
+  const [syntaxError] = doc.errors;
+  if (syntaxError) return { doc: new Document({}), error: syntaxError.message };
+  if (doc.contents !== null && !isMap(doc.contents)) return { doc: new Document({}), error: 'config.user.yaml must be a mapping of keys' };
+  return { doc, error: null };
+}
+
+/** The app's client key is always accepted; keys the user added in config.user.yaml stay. */
+function ensureClientKey(doc: Document, key: string): void {
+  const keys = doc.getIn(['access', 'api-keys']);
+  if (isSeq(keys)) {
+    if (!(keys.toJSON() as unknown[]).includes(key)) keys.add(key);
+    return;
+  }
+  doc.setIn(['access', 'api-keys'], [key]);
+}
+
+/** Builds config.yaml: config.user.yaml with the app-owned keys applied on top. Comments in the user file are kept. */
+export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
+  const { doc, error } = parseUserConfig(input.userConfig);
+  if (doc.contents === null) doc.contents = doc.createNode({});
+  for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
+  ensureClientKey(doc, input.clientApiKey);
+  doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
+  return { yaml: doc.toString(), userConfigError: error };
 }

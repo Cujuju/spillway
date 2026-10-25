@@ -26,6 +26,8 @@ Provider logos come from [lobe-icons](https://github.com/lobehub/lobe-icons) (MI
 | Installer | `pnpm package` → Windows: `dist/CLIProxy Desktop Setup <ver>.exe`; macOS: `dist/CLIProxy Desktop-<ver>-<arch>.dmg` |
 | Checks | `pnpm typecheck`, `pnpm test` |
 
+CI (`.github/workflows/build.yml`) builds the Windows and macOS installers on each push to `main` and uploads them as artifacts. It checks out the private fork with the repository secret `CLIPROXY_SRC_TOKEN` (a fine-grained token with read access to `Cujuju/CLIProxyAPI` contents); Go comes from the fork's `go.mod`, Node from `engines.node`, pnpm from `packageManager`.
+
 `pnpm dev` breaks if the environment has `ELECTRON_RUN_AS_NODE` set: Electron then runs as plain Node. Unset it first.
 
 Launch at login only applies to installed builds.

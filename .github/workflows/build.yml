@@ -1,0 +1,89 @@
+# Builds the installers on Windows and macOS, including the proxy from the private fork.
+# Needs the repository secret CLIPROXY_SRC_TOKEN: a token with read access to Cujuju/CLIProxyAPI.
+# Builds only; releases are signed and published by hand (scripts/release.mjs).
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            # Host target only: the Windows installer is x64.
+            proxy-targets: ''
+            artifacts: |
+              desktop/dist/*.exe
+              desktop/dist/*.blockmap
+              desktop/dist/latest.yml
+          # Apple Silicon runner; electron-builder.yml packages both arm64 and x64 dmgs.
+          - os: macos-latest
+            proxy-targets: darwin-arm64 darwin-x64
+            artifacts: |
+              desktop/dist/*.dmg
+              desktop/dist/*.zip
+              desktop/dist/*.blockmap
+              desktop/dist/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: desktop
+
+      # Same layout as a local checkout: ../CLIProxyAPI beside the desktop repo.
+      - uses: actions/checkout@v7
+        with:
+          repository: Cujuju/CLIProxyAPI
+          ref: main
+          token: ${{ secrets.CLIPROXY_SRC_TOKEN }}
+          path: CLIProxyAPI
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: CLIProxyAPI/go.mod
+          cache-dependency-path: CLIProxyAPI/go.sum
+
+      # pnpm version from package.json packageManager; Node from package.json engines.node.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: desktop/package.json
+          cache: true
+          cache_dependency_path: desktop/pnpm-lock.yaml
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: desktop/package.json
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the proxy
+        shell: bash
+        env:
+          CLIPROXY_SRC: ${{ github.workspace }}/CLIProxyAPI
+        run: pnpm proxy:build ${{ matrix.proxy-targets }}
+
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Package
+        run: pnpm package
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cliproxy-desktop-${{ matrix.os }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error

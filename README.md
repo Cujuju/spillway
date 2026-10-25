@@ -6,6 +6,8 @@ Windows and macOS tray (menu bar) app that runs the private CLIProxyAPI fork, si
 - Routes with the **soonest-reset** strategy and session affinity by default.
 - Dashboard shows pool remaining, drain rate, a forecast chart, and per-account 5-hour and weekly bars.
 - Accounts page signs in accounts through the browser (OAuth). You can rename, prioritise, disable or remove each one.
+- Activity page lists each upstream request live (account, model, result, tokens, time to first token), with a failed-only filter. Usage refreshes as requests finish.
+- Tray "Use account" menu pins a provider to one account while it is available; Automatic returns to the routing strategy.
 - Optional tray icons, one per limit: active account, pool average, least left, or one specific account.
 - Launches at login, starts minimised, and closes or minimises to the tray.
 - Ten colour themes (Midnight, Tonal, OLED Black, Nord, Dracula, Catppuccin Mocha and Latte, Solarized Dark and Light, Light), or follow the system light/dark mode.

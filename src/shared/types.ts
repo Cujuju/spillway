@@ -86,3 +86,28 @@ export interface LogLine {
   stream: 'stdout' | 'stderr' | 'app';
   text: string;
 }
+
+/** Recent attempts kept for the Activity page, in main and renderer alike; older ones scroll off. */
+export const MAX_ACTIVITY_EVENTS = 500;
+
+/** One upstream attempt from the proxy's live event stream (GET /usage/events). */
+export interface ActivityEvent {
+  at: string;
+  requestId: string;
+  /** Attempts of one credential selection share it. */
+  selectionId: string | null;
+  provider: string;
+  model: string;
+  authIndex: string | null;
+  stream: boolean;
+  failed: boolean;
+  /** Upstream HTTP status of a failed attempt; null on success. */
+  statusCode: number | null;
+  error: string | null;
+  latencyMs: number;
+  /** Time to first token; null when not measured (non-streaming or failed). */
+  ttftMs: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+}

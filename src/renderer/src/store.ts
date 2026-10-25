@@ -2,9 +2,9 @@ import { createMemo, createRoot, createSignal } from 'solid-js';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
 import { resolveTheme, themeTokens } from '@shared/themes';
-import type { HistorySample, LogLine, ProxyStatus, UsageSnapshot } from '@shared/types';
+import { MAX_ACTIVITY_EVENTS, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
-export type Page = 'dashboard' | 'accounts' | 'proxy' | 'settings';
+export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'settings';
 
 const api = window.api;
 
@@ -23,6 +23,7 @@ export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
+export const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 export const [maximized, setMaximized] = createSignal(false);
 /** Ticks every 30 s so countdowns re-render without each component owning a timer. */
 export const [now, setNow] = createSignal(Date.now());
@@ -54,8 +55,8 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
-  const [s, latest, status, hist, logLines] = await Promise.all([
-    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(),
+  const [s, latest, status, hist, logLines, recent] = await Promise.all([
+    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.activityList(),
   ]);
   setSettingsSignal(s);
   setSnapshot(latest.snapshot);
@@ -63,6 +64,7 @@ export async function initStore(): Promise<void> {
   setProxyStatus(status);
   setHistory(hist);
   setLogs(logLines);
+  setActivity(recent);
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -74,6 +76,7 @@ export async function initStore(): Promise<void> {
   api.onMaximized(setMaximized);
   api.onNavigate((p) => setPage(p as Page));
   api.onSettings(setSettingsSignal);
+  api.onActivity((e) => setActivity((prev) => (prev.length >= MAX_ACTIVITY_EVENTS ? [...prev.slice(1), e] : [...prev, e])));
 
   setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
   setInterval(() => void api.usageHistory().then(setHistory), HISTORY_REFRESH_MS);

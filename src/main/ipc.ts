@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
+import { activity } from './activityStream';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
@@ -71,6 +72,8 @@ const handlers: Handlers = {
   usageRefresh: (credentialId) => usage.refresh(credentialId ? usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex : undefined),
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
+  activityList: () => activity.all(),
+  clearActivity: () => activity.clear(),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);
     await shell.openExternal(start.url);

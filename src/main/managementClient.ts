@@ -103,6 +103,14 @@ class ManagementClient {
     await this.request('DELETE', `/credentials?${new URLSearchParams({ name })}`);
   }
 
+  /** Opens the live request stream (server-sent events); the caller reads and closes the body. */
+  async events(signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+    if (!this.base) throw new ManagementError('Proxy not configured', 0);
+    const res = await fetch(`${this.base}/usage/events`, { headers: { Authorization: `Bearer ${this.key}`, Accept: 'text/event-stream' }, signal });
+    if (!res.ok || !res.body) throw new ManagementError(`HTTP ${res.status}`, res.status);
+    return res.body;
+  }
+
   /** Tray "Use account" override; an empty authIndex restores automatic routing. */
   async setPreferredAccount(provider: string, authIndex: string): Promise<void> {
     await this.request('PUT', '/routing/preferred-auth', { provider, auth_index: authIndex });

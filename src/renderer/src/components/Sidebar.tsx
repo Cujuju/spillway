@@ -1,4 +1,4 @@
-import { Gauge, Server, Settings as SettingsIcon, Users } from 'lucide-solid';
+import { Activity as ActivityIcon, Gauge, Server, Settings as SettingsIcon, Users } from 'lucide-solid';
 import { For, type JSX } from 'solid-js';
 import { page, setPage, snapshot, type Page } from '../store';
 import { ProxyStateDot, proxyStatusText } from './ProxyState';
@@ -11,6 +11,7 @@ const NAV: { group: string; items: { id: Page; label: string; icon: () => JSX.El
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: () => <Gauge size={ICON_PX} /> },
       { id: 'accounts', label: 'Accounts', icon: () => <Users size={ICON_PX} /> },
+      { id: 'activity', label: 'Activity', icon: () => <ActivityIcon size={ICON_PX} /> },
     ],
   },
   {

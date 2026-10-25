@@ -1,5 +1,5 @@
 import type { AppSettings } from './settings';
-import type { HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UsageSnapshot } from './types';
+import type { ActivityEvent, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UsageSnapshot } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
@@ -23,6 +23,8 @@ export interface DesktopApi {
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
   usageHistory(): Promise<HistorySample[]>;
   clearHistory(): Promise<void>;
+  activityList(): Promise<ActivityEvent[]>;
+  clearActivity(): Promise<void>;
 
   oauthStart(provider: string): Promise<OAuthStart>;
   oauthStatus(state: string): Promise<OAuthStatus>;
@@ -52,6 +54,7 @@ export interface DesktopApi {
   onMaximized(cb: (maximized: boolean) => void): () => void;
   onNavigate(cb: (page: string) => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
+  onActivity(cb: (e: ActivityEvent) => void): () => void;
 }
 
 /** invoke channels: name → method on DesktopApi. */
@@ -72,6 +75,8 @@ export const INVOKE = {
   usageRefresh: 'usage:refresh',
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
+  activityList: 'activity:list',
+  clearActivity: 'activity:clear',
   oauthStart: 'oauth:start',
   oauthStatus: 'oauth:status',
   oauthCancel: 'oauth:cancel',
@@ -101,4 +106,5 @@ export const EVENTS = {
   onMaximized: 'window:maximized',
   onNavigate: 'app:navigate',
   onSettings: 'settings:changed',
+  onActivity: 'activity:event',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

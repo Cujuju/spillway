@@ -1,5 +1,6 @@
 import { app, nativeTheme, Notification } from 'electron';
 import { EVENTS } from '@shared/ipc';
+import { activity } from './activityStream';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
 import { appIconPath } from './paths';
@@ -32,9 +33,16 @@ function launchedHidden(): boolean {
 function wireEvents(): void {
   usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
   usage.on('error', (m) => send(EVENTS.onUsageError, m));
-  proxy.on('status', (s) => send(EVENTS.onProxyStatus, s));
+  proxy.on('status', (s) => {
+    send(EVENTS.onProxyStatus, s);
+    if (s.state !== 'running') activity.stop();
+  });
+  activity.on('event', (e) => send(EVENTS.onActivity, e));
   proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
-  proxy.on('ready', () => void syncPreferredAccounts().finally(() => usage.start()));
+  proxy.on('ready', () => {
+    activity.start();
+    void syncPreferredAccounts().finally(() => usage.start());
+  });
   proxy.on('crashed', (code) => {
     usage.stop();
     if (getSettings().notifications.proxyCrashed && Notification.isSupported()) {
@@ -79,6 +87,7 @@ if (!app.requestSingleInstanceLock()) {
     e.preventDefault();
     markQuitting();
     usage.stop();
+    activity.stop();
     history.flush();
     void proxy.stop().finally(() => {
       destroyTrays();

@@ -37,6 +37,8 @@ export interface AppSettings {
     restartOnCrash: boolean;
     /** Fail over when an upstream stream sends nothing for this long; 0 = never. */
     firstByteTimeoutSeconds: number;
+    /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
+    preferredAccounts: Record<string, string>;
   };
   dashboard: {
     refreshIntervalSeconds: number;
@@ -94,6 +96,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     executablePath: '',
     restartOnCrash: true,
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
+    preferredAccounts: {},
   },
   dashboard: {
     refreshIntervalSeconds: 60,
@@ -132,6 +135,8 @@ const int = (v: unknown, d: number, min: number, max: number) =>
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T =>
   typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : d;
 const str = (v: unknown, d: string) => (typeof v === 'string' ? v : d);
+const stringRecord = (v: unknown): Record<string, string> =>
+  Object.fromEntries(Object.entries(obj(v)).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1] !== ''));
 
 function normalizeTrayItem(v: unknown): TrayIconSpec | null {
   const o = obj(v);
@@ -167,6 +172,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
+      preferredAccounts: stringRecord(p.preferredAccounts),
     },
     dashboard: {
       refreshIntervalSeconds: int(db.refreshIntervalSeconds, d.dashboard.refreshIntervalSeconds, MIN_REFRESH_SECONDS, MAX_REFRESH_SECONDS),

@@ -3,6 +3,7 @@ import { EVENTS } from '@shared/ipc';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
 import { appIconPath } from './paths';
+import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { destroyTrays, ensureAppTray } from './tray';
@@ -33,7 +34,7 @@ function wireEvents(): void {
   usage.on('error', (m) => send(EVENTS.onUsageError, m));
   proxy.on('status', (s) => send(EVENTS.onProxyStatus, s));
   proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
-  proxy.on('ready', () => usage.start());
+  proxy.on('ready', () => void syncPreferredAccounts().finally(() => usage.start()));
   proxy.on('crashed', (code) => {
     usage.stop();
     if (getSettings().notifications.proxyCrashed && Notification.isSupported()) {
@@ -41,6 +42,8 @@ function wireEvents(): void {
     }
   });
   onSettingsChange((next, prev) => {
+    // The renderer saves whole settings objects, so it must see changes made here (tray account choice).
+    send(EVENTS.onSettings, next);
     if (next.general.launchAtLogin !== prev.general.launchAtLogin || next.general.startMinimized !== prev.general.startMinimized) applyLoginItem();
     if (next.general.theme !== prev.general.theme) syncWindowBackground();
   });

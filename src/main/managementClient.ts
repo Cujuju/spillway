@@ -102,6 +102,11 @@ class ManagementClient {
   async deleteCredential(name: string): Promise<void> {
     await this.request('DELETE', `/credentials?${new URLSearchParams({ name })}`);
   }
+
+  /** Tray "Use account" override; an empty authIndex restores automatic routing. */
+  async setPreferredAccount(provider: string, authIndex: string): Promise<void> {
+    await this.request('PUT', '/routing/preferred-auth', { provider, auth_index: authIndex });
+  }
 }
 
 export const management = new ManagementClient();

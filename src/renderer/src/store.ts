@@ -73,6 +73,7 @@ export async function initStore(): Promise<void> {
   api.onProxyLog((line) => setLogs((prev) => (prev.length >= MAX_LOG_LINES ? [...prev.slice(1), line] : [...prev, line])));
   api.onMaximized(setMaximized);
   api.onNavigate((p) => setPage(p as Page));
+  api.onSettings(setSettingsSignal);
 
   setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
   setInterval(() => void api.usageHistory().then(setHistory), HISTORY_REFRESH_MS);

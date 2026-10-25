@@ -1,8 +1,11 @@
 import { Menu, nativeImage, Tray } from 'electron';
 import { createHash } from 'node:crypto';
+import { maskEmails } from '@shared/privacy';
 import { appIconPath } from './paths';
+import { usePreferredAccount } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
+import { getSettings } from './settingsStore';
 import { usage } from './usagePoller';
 import { showMainWindow } from './window';
 
@@ -26,8 +29,37 @@ function guidFor(id: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+const choose = (provider: string, authIndex: string) =>
+  void usePreferredAccount(provider, authIndex).catch((err: unknown) => console.error('[tray] use account failed:', err));
+
+/** One "Use account" submenu per provider: Automatic, or an account the proxy prefers while it is available. */
+function accountMenus(): Electron.MenuItemConstructorOptions[] {
+  const { proxy: p, dashboard } = getSettings();
+  const credentials = usage.latest()?.credentials.filter((c) => !c.disabled) ?? [];
+  const providers = [...new Set(credentials.map((c) => c.provider))].sort();
+  return providers.map((provider) => {
+    const preferred = p.preferredAccounts[provider] ?? '';
+    const accounts = credentials.filter((c) => c.provider === provider);
+    return {
+      label: providers.length > 1 ? `Use ${provider} account` : 'Use account',
+      submenu: [
+        { label: 'Automatic', type: 'radio', checked: !preferred, click: () => choose(provider, '') },
+        { type: 'separator' },
+        ...accounts.map((c): Electron.MenuItemConstructorOptions => ({
+          // Menus show on screen, so they honour "Show emails" like the window does.
+          label: dashboard.showEmails ? c.label : maskEmails(c.label),
+          type: 'radio',
+          checked: c.authIndex === preferred,
+          click: () => choose(provider, c.authIndex),
+        })),
+      ],
+    };
+  });
+}
+
 function contextMenu(): Menu {
   const running = proxy.isRunning();
+  const accounts = running ? accountMenus() : [];
   return Menu.buildFromTemplate([
     { label: 'Open CLIProxy Desktop', click: showMainWindow },
     { type: 'separator' },
@@ -37,6 +69,7 @@ function contextMenu(): Menu {
       : { label: 'Start proxy', click: () => void proxy.start() },
     { label: 'Restart proxy', enabled: running, click: () => void proxy.restart() },
     { label: 'Refresh usage', enabled: running, click: () => void usage.refresh().catch(() => undefined) },
+    ...(accounts.length ? [{ type: 'separator' } as const, ...accounts] : []),
     { type: 'separator' },
     { label: 'Quit', click: () => void requestQuit() },
   ]);

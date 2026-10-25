@@ -51,6 +51,7 @@ export interface DesktopApi {
   onProxyLog(cb: (l: LogLine) => void): () => void;
   onMaximized(cb: (maximized: boolean) => void): () => void;
   onNavigate(cb: (page: string) => void): () => void;
+  onSettings(cb: (s: AppSettings) => void): () => void;
 }
 
 /** invoke channels: name → method on DesktopApi. */
@@ -99,4 +100,5 @@ export const EVENTS = {
   onProxyLog: 'proxy:log',
   onMaximized: 'window:maximized',
   onNavigate: 'app:navigate',
+  onSettings: 'settings:changed',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

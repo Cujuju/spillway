@@ -19,7 +19,7 @@ extraResources:
 publish:
   provider: github
   owner: Cujuju
-  repo: cliproxy-desktop-updates
+  repo: spillway-updates
   releaseType: release
 win:
   target:

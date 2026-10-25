@@ -67,7 +67,7 @@ $env:ANTHROPIC_AUTH_TOKEN = "<client key from the Proxy page>"
 
 ## Updates
 
-Settings → Updates checks the public [Cujuju/cliproxy-desktop-updates](https://github.com/Cujuju/cliproxy-desktop-updates) repo (`publish` in `electron-builder.yml`), which holds only release files. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification; nothing downloads or installs until you click.
+Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`publish` in `electron-builder.yml`), which holds only release files. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification; nothing downloads or installs until you click.
 
 - Each installer listed in `latest.yml` / `latest-mac.yml` carries an Ed25519 signature over the app, version, file name and SHA-512. The app checks the downloaded file against the public key built into it (`resources/update-public-key.pem`) and deletes a file that fails.
 - Windows: **Download**, then **Restart and install**: the app stops the proxy and runs the installer, which reopens the app.

@@ -1,9 +1,9 @@
-# spillway (repo: cliproxy-desktop)
+# spillway
 
 Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxyAPI).
 
 ## Tracker
-- GitHub Issues: `Cujuju/cliproxy-desktop`
+- GitHub Issues: `Cujuju/spillway`
 - Buckets: `area/supervisor`, `area/ui`
 - Kinds: `kind/feature`, `bug`
 - Arc: `arc/account-rotation`

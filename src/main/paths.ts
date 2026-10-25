@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-export const PROXY_EXE_NAME = 'cli-proxy-api.exe';
+export const PROXY_EXE_NAME = process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
 
 /** All app-owned state lives under Electron's per-user data folder. */
 export const appPaths = {
@@ -35,9 +35,14 @@ export const appPaths = {
   },
 };
 
-/** The bundled proxy binary: resources/bin in a packaged app, the repo's resources/bin in dev. */
+/**
+ * The bundled proxy binary. electron-builder copies resources/bin/<platform>-<arch> to bin in a packaged app;
+ * dev reads the repo folder for this machine (scripts/build-proxy.mjs writes it).
+ */
 export function bundledProxyPath(): string {
-  const base = app.isPackaged ? path.join(process.resourcesPath, 'bin') : path.join(app.getAppPath(), 'resources', 'bin');
+  const base = app.isPackaged
+    ? path.join(process.resourcesPath, 'bin')
+    : path.join(app.getAppPath(), 'resources', 'bin', `${process.platform}-${process.arch}`);
   return path.join(base, PROXY_EXE_NAME);
 }
 

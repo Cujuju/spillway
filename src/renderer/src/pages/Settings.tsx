@@ -3,6 +3,7 @@ import { createResource, createSignal, For, Match, Show, Switch } from 'solid-js
 import type { AppSettings, RoutingStrategy } from '@shared/settings';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
+import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, Toggle } from '../components/ui';
 import { setHistory, settings, updateSettings } from '../store';
 
@@ -29,22 +30,22 @@ function General() {
   const g = () => settings().general;
   return (
     <>
-      <SettingRow label="Launch at login" help="Starts hidden in the tray when you sign in to Windows. Installed builds only.">
+      <SettingRow label="Launch at login" help={`Opens when you sign in to ${OS_NAME}; with Start minimized it stays in the ${TRAY_NAME}. Installed builds only.`}>
         <Toggle value={g().launchAtLogin} onChange={(v) => set((d) => void (d.general.launchAtLogin = v))} />
       </SettingRow>
-      <SettingRow label="Start minimized" help="Open to the tray instead of showing the window.">
+      <SettingRow label="Start minimized" help={`Open to the ${TRAY_NAME} instead of showing the window.`}>
         <Toggle value={g().startMinimized} onChange={(v) => set((d) => void (d.general.startMinimized = v))} />
       </SettingRow>
-      <SettingRow label="Close to tray" help="The close button hides the window; the proxy keeps running. Quit from the tray menu.">
+      <SettingRow label={`Close to ${TRAY_NAME}`} help={`The close button hides the window; the proxy keeps running. Quit from the ${TRAY_NAME} menu.`}>
         <Toggle value={g().closeToTray} onChange={(v) => set((d) => void (d.general.closeToTray = v))} />
       </SettingRow>
-      <SettingRow label="Minimize to tray" help="Minimizing hides the window from the taskbar.">
+      <SettingRow label={`Minimize to ${TRAY_NAME}`} help={`Minimizing hides the window from the ${TASKBAR_NAME}.`}>
         <Toggle value={g().minimizeToTray} onChange={(v) => set((d) => void (d.general.minimizeToTray = v))} />
       </SettingRow>
       <SettingRow label="Confirm before quitting" help="Quitting stops the proxy and any session using it.">
         <Toggle value={g().confirmQuit} onChange={(v) => set((d) => void (d.general.confirmQuit = v))} />
       </SettingRow>
-      <SettingRow label="Theme" help="System follows Windows' light or dark mode.">
+      <SettingRow label="Theme" help={`System follows the ${OS_NAME} light or dark mode setting.`}>
         <ThemePicker value={g().theme} onChange={(v) => set((d) => void (d.general.theme = v))} />
       </SettingRow>
     </>
@@ -80,7 +81,7 @@ function ProxySection() {
       <SettingRow label="Allow LAN connections" help="Listen on all interfaces. Other devices still need the client key. Restarts the proxy.">
         <Toggle value={p().allowLan} onChange={(v) => set((d) => void (d.proxy.allowLan = v))} />
       </SettingRow>
-      <SettingRow label="Proxy executable" help="Leave empty to use the cli-proxy-api.exe bundled with the app.">
+      <SettingRow label="Proxy executable" help="Leave empty to use the cli-proxy-api binary bundled with the app.">
         <input class="input wide mono" readOnly value={p().executablePath} placeholder="Bundled" />
         <button class="btn" onClick={() => void window.api.pickProxyExecutable().then((path) => path && set((d) => void (d.proxy.executablePath = path)))}>Browse…</button>
         <Show when={p().executablePath}>

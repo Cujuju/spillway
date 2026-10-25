@@ -9,15 +9,23 @@ import { destroyTrays, ensureAppTray } from './tray';
 import { usage } from './usagePoller';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
 
-/** Passed by the login item so a login launch can start hidden in the tray. */
+/** Windows: passed by the login item so a login launch can start hidden in the tray. */
 const HIDDEN_ARG = '--hidden';
+const isMac = process.platform === 'darwin';
 
 const send = (channel: string, payload: unknown) => mainWindow()?.webContents.send(channel, payload);
 
 function applyLoginItem(): void {
   if (!app.isPackaged) return;
   const g = getSettings().general;
-  app.setLoginItemSettings({ openAtLogin: g.launchAtLogin, args: g.startMinimized ? [HIDDEN_ARG] : [] });
+  // Login-item args are Windows-only; macOS detects a login launch with wasOpenedAtLogin instead.
+  app.setLoginItemSettings(isMac ? { openAtLogin: g.launchAtLogin } : { openAtLogin: g.launchAtLogin, args: g.startMinimized ? [HIDDEN_ARG] : [] });
+}
+
+/** A login launch with "Start minimized" on goes straight to the tray. */
+function launchedHidden(): boolean {
+  if (isMac) return app.isPackaged && getSettings().general.startMinimized && app.getLoginItemSettings().wasOpenedAtLogin;
+  return process.argv.includes(HIDDEN_ARG);
 }
 
 function wireEvents(): void {
@@ -43,8 +51,11 @@ function wireEvents(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setAppUserModelId('dev.cujuju.cliproxy-desktop');
+  // Windows groups notifications and taskbar entries by this id.
+  if (process.platform === 'win32') app.setAppUserModelId('dev.cujuju.cliproxy-desktop');
   app.on('second-instance', () => showMainWindow());
+  // macOS: clicking the Dock icon reopens the window.
+  app.on('activate', () => showMainWindow());
 
   void app.whenReady().then(async () => {
     await loadSecrets();
@@ -53,8 +64,9 @@ if (!app.requestSingleInstanceLock()) {
     applyLoginItem();
     // The tray is always present: it hosts the limit icons and the hidden-start entry point.
     ensureAppTray();
-    const launchedHidden = process.argv.includes(HIDDEN_ARG);
-    createMainWindow(!launchedHidden);
+    const hidden = launchedHidden();
+    if (hidden) app.dock?.hide();
+    createMainWindow(!hidden);
     if (getSettings().proxy.autoStart) await proxy.start();
   });
 

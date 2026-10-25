@@ -14,10 +14,13 @@ export interface LimitTrayImage {
   tooltip: string;
 }
 
+/** macOS menu bar icons are about 18pt; Windows scales the source icon itself. */
+const MENU_BAR_ICON_PT = 18;
+
 let appTray: Tray | null = null;
 const limitTrays = new Map<string, Tray>();
 
-/** Stable per-icon GUID so Windows remembers each icon's "always show" choice. */
+/** Stable per-icon GUID so Windows remembers each icon's "always show" choice and macOS its menu bar position. */
 function guidFor(id: string): string {
   const h = createHash('sha1').update(`cliproxy-desktop:${id}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
@@ -44,9 +47,20 @@ function attach(tray: Tray): void {
   tray.on('right-click', () => tray.popUpContextMenu(contextMenu()));
 }
 
+function appTrayImage(): Electron.NativeImage {
+  const source = nativeImage.createFromPath(appIconPath());
+  if (process.platform !== 'darwin') return source;
+  const img = nativeImage.createEmpty();
+  for (const scaleFactor of [1, 2]) {
+    const px = MENU_BAR_ICON_PT * scaleFactor;
+    img.addRepresentation({ scaleFactor, buffer: source.resize({ width: px, height: px, quality: 'best' }).toPNG() });
+  }
+  return img;
+}
+
 export function ensureAppTray(): void {
   if (appTray) return;
-  appTray = new Tray(nativeImage.createFromPath(appIconPath()), guidFor('app'));
+  appTray = new Tray(appTrayImage(), guidFor('app'));
   appTray.setToolTip('CLIProxy Desktop');
   attach(appTray);
 }

@@ -73,7 +73,7 @@ export function Proxy() {
         <Notice tone="error">{proxyStatus()!.lastError}</Notice>
       </Show>
       <Show when={state() === 'missing-binary'}>
-        <Notice tone="error">cli-proxy-api.exe was not found. Choose it under Settings → Proxy, or rebuild the app with the bundled binary.</Notice>
+        <Notice tone="error">The cli-proxy-api binary was not found. Choose it under Settings → Routing & server, or rebuild the app with the bundled binary.</Notice>
       </Show>
 
       <section class="card" style={{ 'margin-top': '16px' }}>

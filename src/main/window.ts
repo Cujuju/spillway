@@ -11,6 +11,14 @@ const DEFAULT_HEIGHT = 860;
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 const STATE_SAVE_DEBOUNCE_MS = 500;
+const isMac = process.platform === 'darwin';
+/** Centres the macOS traffic lights (about 14px tall) in the 36px --titlebar-height. */
+const TRAFFIC_LIGHTS = { x: 14, y: 11 };
+
+/** Windows draws its own title bar controls in the renderer; macOS keeps native traffic lights. */
+const chrome: Electron.BrowserWindowConstructorOptions = isMac
+  ? { titleBarStyle: 'hiddenInset', trafficLightPosition: TRAFFIC_LIGHTS }
+  : { frame: false };
 
 interface WindowState {
   x?: number;
@@ -78,7 +86,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     ...(saved?.x !== undefined ? { x: saved.x, y: saved.y } : {}),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    frame: false,
+    ...chrome,
     show: false,
     backgroundColor: themeBackground(),
     icon: appIconPath(),
@@ -107,6 +115,11 @@ export function createMainWindow(show: boolean): BrowserWindow {
   win.on('minimize', () => {
     if (getSettings().general.minimizeToTray) win?.hide();
   });
+  // macOS: a tray-only app leaves the Dock and Cmd-Tab while its window is hidden.
+  if (isMac) {
+    win.on('hide', () => app.dock?.hide());
+    win.on('show', () => void app.dock?.show());
+  }
   win.on('closed', () => {
     win = null;
     if (!quitting && !getSettings().general.closeToTray) app.quit();

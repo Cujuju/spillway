@@ -1,5 +1,6 @@
 # Draws the app icon (navy tile, three quota bars) and writes resources/icon.png,
-# resources/icon.ico (PNG-compressed entries) and src/renderer/public/icon.png.
+# resources/icon.ico (PNG-compressed entries), resources/icon-1024.png (macOS; electron-builder
+# makes the .icns from it) and src/renderer/public/icon.png.
 # Run: pwsh -File scripts/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
@@ -44,6 +45,9 @@ function Get-PngBytes([System.Drawing.Bitmap]$bmp) {
 $pngs = @{}
 foreach ($s in $sizes) { $pngs[$s] = Get-PngBytes (New-IconBitmap $s) }
 [IO.File]::WriteAllBytes((Join-Path $root 'resources/icon.png'), $pngs[256])
+# macOS app icons need a 1024px master (512pt @2x).
+$MAC_ICON_PX = 1024
+[IO.File]::WriteAllBytes((Join-Path $root 'resources/icon-1024.png'), (Get-PngBytes (New-IconBitmap $MAC_ICON_PX)))
 [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon.png'), $pngs[32])
 
 # ICO: 6-byte header, 16-byte directory entry per image, then PNG payloads.

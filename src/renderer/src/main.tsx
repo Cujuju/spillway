@@ -7,4 +7,7 @@ import './styles/pages.css';
 import { App } from './App';
 import { initStore } from './store';
 
+// Platform-specific CSS (macOS title bar) keys off this.
+document.documentElement.dataset.platform = window.api.platform;
+
 void initStore().then(() => render(() => <App />, document.getElementById('root')!));

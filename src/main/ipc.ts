@@ -3,7 +3,7 @@ import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import { proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
-import { appPaths } from './paths';
+import { appPaths, PROXY_EXE_NAME } from './paths';
 import { affinityTtl } from './proxyConfig';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
@@ -65,7 +65,9 @@ const handlers: Handlers = {
   clearProxyLogs: () => proxy.logs.clear(),
   pickProxyExecutable: async () => {
     const w = mainWindow();
-    const opts: Electron.OpenDialogOptions = { title: 'Choose cli-proxy-api.exe', properties: ['openFile'], filters: [{ name: 'Executable', extensions: ['exe'] }] };
+    // macOS binaries have no extension, so only Windows filters by type.
+    const filters = process.platform === 'win32' ? [{ name: 'Executable', extensions: ['exe'] }] : [];
+    const opts: Electron.OpenDialogOptions = { title: `Choose ${PROXY_EXE_NAME}`, properties: ['openFile'], filters };
     const r = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
     return r.canceled ? null : (r.filePaths[0] ?? null);
   },

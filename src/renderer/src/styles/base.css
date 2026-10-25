@@ -111,6 +111,10 @@ a {
   padding-left: 12px;
   gap: 10px;
 }
+/* Clears the native traffic lights (main/window.ts places them 14px in). */
+:root[data-platform='darwin'] .titlebar {
+  padding-left: 80px;
+}
 .titlebar-title {
   font-size: var(--text-xs);
   font-weight: 600;

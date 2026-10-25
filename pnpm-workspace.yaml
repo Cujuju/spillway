@@ -1,0 +1,5 @@
+allowBuilds:
+  electron: true
+  esbuild: true
+  # Squirrel installer helper pulled in by electron-builder; this app ships NSIS only.
+  electron-winstaller: false

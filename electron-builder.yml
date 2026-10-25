@@ -1,0 +1,27 @@
+appId: dev.cujuju.cliproxy-desktop
+productName: CLIProxy Desktop
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+extraResources:
+  # Proxy binary built from the private CLIProxyAPI fork by `pnpm proxy:build`.
+  - from: resources/bin
+    to: bin
+    filter:
+      - cli-proxy-api.exe
+  # Tray, window and notification icon; main reads it from process.resourcesPath.
+  - from: resources/icon.png
+    to: icon.png
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  runAfterFinish: true

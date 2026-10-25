@@ -1,0 +1,296 @@
+/* ── Buttons ────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 12px;
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background: var(--color-surface-input);
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-light);
+}
+.btn.danger {
+  color: var(--color-red-light);
+  border-color: color-mix(in srgb, var(--color-red) 40%, transparent);
+  background: var(--color-red-subtle);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+}
+.btn.ghost:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface-input);
+}
+/* Theo-style pills in the dashboard header. */
+.btn.pill {
+  height: 36px;
+  padding: 0 18px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.btn.pill.solid {
+  background: var(--color-text);
+  color: var(--color-background);
+  border-color: var(--color-text);
+}
+.btn.pill.solid:hover:not(:disabled) {
+  background: var(--color-text-soft);
+}
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+/* ── On/Off toggle (StockApp OnOffToggle) and segmented control ── */
+.toggle {
+  width: 44px;
+  height: var(--control-height);
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background: var(--color-surface-input);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.toggle.on {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-border);
+  color: var(--color-accent-light);
+  font-weight: 600;
+}
+.toggle:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  overflow: hidden;
+}
+.seg button {
+  /* The .seg border adds 1px top and bottom. */
+  height: calc(var(--control-height) - 2px);
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-input);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.seg button.active {
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.input,
+.select {
+  height: var(--control-height);
+  padding: 0 8px;
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background: var(--color-surface-input);
+  color: var(--color-text);
+  min-width: 0;
+}
+.input:focus,
+.select:focus {
+  outline: 1px solid var(--color-accent-border);
+}
+.input.wide {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ── Cards and settings rows ───────────────────────────────────── */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+}
+.card-title {
+  font-size: var(--text-header);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.section-label {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-disabled);
+  margin: 0 0 10px;
+}
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) 1fr;
+  align-items: start;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.setting-row:last-child {
+  border-bottom: 0;
+}
+.setting-label {
+  font-size: var(--text-sm);
+  line-height: var(--setting-label-line-height);
+  /* Centres the first label line on a single-height control. */
+  padding-top: calc((var(--control-height) - var(--setting-label-line-height)) / 2);
+}
+.setting-help {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.setting-control {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-height);
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+/* A sub-setting indents its label only, so its control stays in the shared column. */
+.setting-row.nested .setting-text {
+  margin-left: 4px;
+  padding-left: 14px;
+  border-left: 2px solid var(--color-border);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  background: var(--color-surface-input);
+  color: var(--color-text-secondary);
+}
+.badge.green {
+  background: var(--color-green-subtle);
+  color: var(--color-green);
+}
+.badge.amber {
+  background: var(--color-amber-subtle);
+  color: var(--color-amber);
+}
+.badge.red {
+  background: var(--color-red-subtle);
+  color: var(--color-red-light);
+}
+.badge.accent {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-light);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-disabled);
+  flex-shrink: 0;
+}
+.status-dot.green {
+  background: var(--color-green);
+  box-shadow: 0 0 0 3px var(--color-green-subtle);
+}
+.status-dot.amber {
+  background: var(--color-amber);
+}
+.status-dot.red {
+  background: var(--color-red);
+}
+
+/* ── Dialog ─────────────────────────────────────────────────────── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+.dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-floating);
+  padding: 20px 22px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-btn);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  background: var(--color-amber-subtle);
+  color: var(--color-amber);
+  border: 1px solid color-mix(in srgb, var(--color-amber) 35%, transparent);
+}
+.notice.error {
+  background: var(--color-red-subtle);
+  color: var(--color-red-light);
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+}
+.notice.info {
+  background: var(--color-accent-subtle);
+  color: var(--color-text-soft);
+  border-color: var(--color-accent-border);
+}
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

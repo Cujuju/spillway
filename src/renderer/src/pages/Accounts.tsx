@@ -1,0 +1,149 @@
+import { Plus, Trash2 } from 'lucide-solid';
+import { createSignal, For, Show } from 'solid-js';
+import type { Credential } from '@shared/types';
+import { providerLabel } from '@shared/trayValues';
+import { AddAccountDialog } from '../components/AddAccountDialog';
+import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
+import { proxyStatus, snapshot } from '../store';
+
+const ICON_PX = 14;
+/** Proxy rule (selector.go): only the highest available priority tier is picked from. */
+const PRIORITY_HELP = 'Higher tiers are used first; lower tiers only when every higher account is limited';
+
+function statusBadge(c: Credential) {
+  if (c.disabled) return <span class="badge">Disabled</span>;
+  if (c.cooldownUntil && Date.parse(c.cooldownUntil) > Date.now()) return <span class="badge red">Limited</span>;
+  if (c.nextPick) return <span class="badge green">Next pick</span>;
+  if (c.status === 'error') return <span class="badge red" title={c.statusMessage ?? undefined}>Error</span>;
+  return <span class="badge">Ready</span>;
+}
+
+export function Accounts() {
+  const [adding, setAdding] = createSignal(false);
+  const [deleting, setDeleting] = createSignal<Credential | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
+  const running = () => proxyStatus()?.state === 'running';
+  const creds = () =>
+    [...(snapshot()?.credentials ?? [])].sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
+
+  const act = async (fn: () => Promise<void>) => {
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <header class="dash-header">
+        <div>
+          <h1 class="dash-title">Accounts</h1>
+          <div class="dash-sub">{creds().length} signed in · the proxy rotates between enabled accounts</div>
+        </div>
+        <div class="dash-actions">
+          <button class="btn primary" disabled={!running()} title={running() ? undefined : 'Start the proxy first'} onClick={() => setAdding(true)}>
+            <Plus size={ICON_PX} /> Add account
+          </button>
+        </div>
+      </header>
+
+      <Show when={!running()}>
+        <Notice>
+          <span class="spacer">Accounts are managed through the proxy, which is {proxyStatus()?.state ?? 'stopped'}.</span>
+          <button class="btn" onClick={() => void window.api.proxyStart()}>Start proxy</button>
+        </Notice>
+      </Show>
+      <Show when={error()}>
+        <Notice tone="error">{error()}</Notice>
+      </Show>
+
+      <div class="card" style={{ 'margin-top': '16px', padding: 0 }}>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th title={PRIORITY_HELP}>Priority</th>
+              <th>Enabled</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <For each={creds()} fallback={<tr><td colSpan={6} class="muted" style={{ padding: '24px', 'text-align': 'center' }}>No accounts yet. Use “Add account” to sign in.</td></tr>}>
+              {(c) => (
+                <tr classList={{ disabled: c.disabled }}>
+                  <td>
+                    <div class="row">
+                      <ProviderGlyph provider={c.provider} />
+                      <div style={{ 'min-width': 0 }}>
+                        <input
+                          class="input inline-edit"
+                          value={c.note ?? ''}
+                          placeholder={c.label}
+                          title="Display name (saved as the account note)"
+                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value.trim();
+                            if (v !== (c.note ?? '')) void act(() => window.api.setCredentialNote(c.id, v));
+                          }}
+                        />
+                        <div class="muted truncate mono" title={c.name}>{c.name}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{providerLabel(c.provider)}</td>
+                  <td>{statusBadge(c)}</td>
+                  <td>
+                    <NumberField value={c.priority} width={70} onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
+                  </td>
+                  <td>
+                    <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void act(() => window.api.setCredentialDisabled(c.id, !on))} />
+                  </td>
+                  <td style={{ 'text-align': 'right' }}>
+                    <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
+                      <Trash2 size={ICON_PX} />
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+      </div>
+
+      <Show when={adding()}>
+        <AddAccountDialog onClose={() => setAdding(false)} />
+      </Show>
+      <Show when={deleting()}>
+        {(c) => (
+          <Dialog
+            title="Remove account?"
+            onClose={() => setDeleting(null)}
+            actions={
+              <>
+                <button class="btn" onClick={() => setDeleting(null)}>Cancel</button>
+                <button
+                  class="btn danger"
+                  onClick={() => {
+                    const target = c();
+                    setDeleting(null);
+                    void act(() => window.api.deleteCredential(target.id));
+                  }}
+                >
+                  Remove
+                </button>
+              </>
+            }
+          >
+            <p class="secondary">
+              This deletes the saved login for <strong>{c().label}</strong> ({providerLabel(c().provider)}). You can sign in again later.
+            </p>
+          </Dialog>
+        )}
+      </Show>
+    </>
+  );
+}

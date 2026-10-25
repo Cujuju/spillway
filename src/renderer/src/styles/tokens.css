@@ -1,0 +1,69 @@
+/* Design tokens. Palette, type scale and radii follow StockApp's client-solid index.css. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  /* Segoe UI ÷ Inter width over UI text (StockApp measurement). */
+  size-adjust: 92%;
+  src: url('../assets/fonts/Inter-latin.var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../assets/fonts/JetBrainsMono-latin.var.woff2') format('woff2');
+}
+
+:root {
+  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  --text-xxs: 10px;
+  --text-xs: 11px;
+  --text-body: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-header: 16px;
+  --text-title: 30px;
+  --text-hero: 40px;
+
+  --radius-btn: 6px;
+  --radius-card: 10px;
+  --radius-pill: 999px;
+
+  /* One height for buttons, inputs, toggles and segments so settings rows line up. */
+  --control-height: 28px;
+  --setting-label-line-height: 18px;
+
+  --titlebar-height: 36px;
+  --sidebar-width: 208px;
+
+  --shadow-floating: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
+
+  /* Provider identity colours; Claude matches Theo's dashboard orange. */
+  --provider-claude: #d97757;
+  --provider-codex: #6366f1;
+  --provider-antigravity: #3b82f6;
+  --provider-kimi: #0ea5e9;
+  --provider-devin: #14b8a6;
+  --provider-meta: #3b82f6;
+  --provider-gemini: #8b5cf6;
+  --provider-other: #94a3b8;
+}
+
+/* Base colours come from the active theme (src/shared/themes.ts), set inline on <html> or a .theme-scope preview.
+   Tints derive here, per scope, so a preview recomputes them from its own palette. */
+:root,
+.theme-scope {
+  --color-accent-subtle: color-mix(in srgb, var(--color-accent) 13%, transparent);
+  --color-accent-border: color-mix(in srgb, var(--color-accent) 53%, transparent);
+  --color-green-subtle: color-mix(in srgb, var(--color-green) 10%, transparent);
+  --color-amber-subtle: color-mix(in srgb, var(--color-amber) 12%, transparent);
+  --color-red-subtle: color-mix(in srgb, var(--color-red) 19%, transparent);
+  /* xAI's brand mark is monochrome, so it follows the text colour. */
+  --provider-xai: var(--color-text);
+}

@@ -1,5 +1,7 @@
 import type { AppSettings } from './settings';
-import type { ActivityEvent, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UsageSnapshot } from './types';
+import type {
+  ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UsageSnapshot,
+} from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
@@ -18,6 +20,10 @@ export interface DesktopApi {
   proxyLogs(): Promise<LogLine[]>;
   clearProxyLogs(): Promise<void>;
   pickProxyExecutable(): Promise<string | null>;
+  /** Whether each client's own config points at this proxy with the current endpoint and key. */
+  clientSetupStatus(): Promise<ClientSetupStatus[]>;
+  applyClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
+  undoClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
 
   usageLatest(): Promise<{ snapshot: UsageSnapshot | null; error: string | null }>;
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
@@ -71,6 +77,9 @@ export const INVOKE = {
   proxyLogs: 'proxy:logs',
   clearProxyLogs: 'proxy:clear-logs',
   pickProxyExecutable: 'proxy:pick-exe',
+  clientSetupStatus: 'clients:status',
+  applyClientSetup: 'clients:apply',
+  undoClientSetup: 'clients:undo',
   usageLatest: 'usage:latest',
   usageRefresh: 'usage:refresh',
   usageHistory: 'usage:history',

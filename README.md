@@ -7,6 +7,7 @@ Windows and macOS tray (menu bar) app that runs the private CLIProxyAPI fork, si
 - Dashboard shows pool remaining, drain rate, a forecast chart, and per-account 5-hour and weekly bars.
 - Accounts page signs in accounts through the browser (OAuth). You can rename, prioritise, disable or remove each one.
 - Activity page lists each upstream request live (account, model, result, tokens, time to first token), with a failed-only filter. Usage refreshes as requests finish.
+- Proxy page applies the endpoint and client key to Claude Code's and Codex's own config files, with a backup and Undo.
 - Tray "Use account" menu pins a provider to one account while it is available; Automatic returns to the routing strategy.
 - Optional tray icons, one per limit: active account, pool average, least left, or one specific account.
 - Launches at login, starts minimised, and closes or minimises to the tray.
@@ -39,9 +40,22 @@ Build on a Mac (electron-builder can't make macOS apps on Windows): `pnpm instal
 - Keys are encrypted with the macOS Keychain; the first launch may ask for access.
 - Data lives in `~/Library/Application Support/CLIProxy Desktop`.
 
-## Connect Claude Code
+## Connect clients
 
-The Proxy page shows the endpoint and the client key, and copies them as environment variables:
+The Proxy page shows the endpoint and the client key. **Apply** writes them into a client's own config; **Undo** reverses it.
+
+| Client | File | Apply sets |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_AUTH_TOKEN` |
+| Codex | `~/.codex/config.toml` (or `$CODEX_HOME`) | a `[model_providers.cliproxy]` block at the end (`base_url = "<endpoint>/v1"`, `wire_api = "responses"`, `experimental_bearer_token`), and a root `model_provider = "cliproxy"` at the top |
+
+- The first Apply copies the file to `<file>.cliproxy-backup` (an empty backup when the file did not exist). Undo removes the backup.
+- Claude Code: Undo puts back only the two variables' earlier values (or removes them); other edits made since stay.
+- Codex: the app's lines sit between `# >>> cliproxy-desktop` and `# <<< cliproxy-desktop` markers. An existing root `model_provider` line is commented out with `# cliproxy-desktop disabled: `; Undo removes the markers' blocks and restores that line. Apply refuses when the file already defines `model_providers.cliproxy` itself. Codex stores the key in plain text there.
+- Changing the port or regenerating the key marks an applied client **Out of date**; Re-apply updates it. The app never rewrites these files on its own.
+- Codex edits are text-level, not parsed TOML: a multi-line string containing a line that starts with `[` or `model_provider =` can be misread.
+
+Or set environment variables for Claude Code (the page copies them):
 
 ```powershell
 $env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8317"

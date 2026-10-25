@@ -1,5 +1,6 @@
 import { Copy, Eye, EyeOff, FilePen, FolderOpen, Play, RotateCw, Square } from 'lucide-solid';
 import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js';
+import { ClientSetup } from '../components/ClientSetup';
 import { Notice } from '../components/ui';
 import { logs, proxyStatus, setLogs } from '../store';
 
@@ -80,8 +81,8 @@ export function Proxy() {
       </Show>
 
       <section class="card" style={{ 'margin-top': '16px' }}>
-        <h2 class="card-title">Connect Claude Code</h2>
-        <p class="secondary">Point Claude Code at the proxy with these environment variables. The key below is this app's client key.</p>
+        <h2 class="card-title">Connect clients</h2>
+        <p class="secondary">Clients reach the proxy with this app's client key. Apply writes the endpoint and key into a client's own config, keeping a backup for Undo.</p>
         <div class="row" style={{ 'margin-bottom': '10px' }}>
           <span class="code selectable spacer">{masked()}</span>
           <button class="btn ghost icon-btn" title={revealed() ? 'Hide key' : 'Show key'} onClick={() => setRevealed(!revealed())}>
@@ -94,6 +95,8 @@ export function Proxy() {
             Regenerate
           </button>
         </div>
+        <ClientSetup endpoint={endpoint()} clientKey={key()} />
+        <p class="secondary">Or point Claude Code at the proxy with environment variables:</p>
         <div class="row" style={{ 'margin-bottom': '6px' }}>
           <div class="seg">
             <button classList={{ active: envShell() === 'powershell' }} onClick={() => setEnvShell('powershell')}>PowerShell</button>

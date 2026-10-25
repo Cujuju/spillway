@@ -1,6 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
+import type { ClientId } from '@shared/types';
 import { activity } from './activityStream';
+import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
@@ -23,6 +25,17 @@ function credentialName(id: string): string {
 }
 
 const keys = () => ({ clientApiKey: getSecrets().clientApiKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
+
+const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey });
+const clientStatuses = () => {
+  const files = clientConfigFiles();
+  return CLIENT_IDS.map((c) => clientStatus(c, files[c], clientTarget()));
+};
+/** The id comes from the renderer; only known clients map to a file. */
+function clientFile(client: ClientId): string {
+  if (!CLIENT_IDS.includes(client)) throw new Error(`Unknown client ${String(client)}`);
+  return clientConfigFiles()[client];
+}
 
 async function applySettings(next: AppSettings): Promise<AppSettings> {
   const prev = getSettings();
@@ -67,6 +80,15 @@ const handlers: Handlers = {
     const opts: Electron.OpenDialogOptions = { title: `Choose ${PROXY_EXE_NAME}`, properties: ['openFile'], filters };
     const r = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
     return r.canceled ? null : (r.filePaths[0] ?? null);
+  },
+  clientSetupStatus: () => clientStatuses(),
+  applyClientSetup: (client) => {
+    applyClient(client, clientFile(client), clientTarget());
+    return clientStatuses();
+  },
+  undoClientSetup: (client) => {
+    undoClient(client, clientFile(client));
+    return clientStatuses();
   },
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),
   usageRefresh: (credentialId) => usage.refresh(credentialId ? usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex : undefined),

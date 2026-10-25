@@ -111,3 +111,17 @@ export interface ActivityEvent {
   outputTokens: number;
   cachedTokens: number;
 }
+
+/** Coding clients whose own config the Proxy page can point at the proxy. */
+export type ClientId = 'claude' | 'codex';
+/** out-of-date: applied, but the endpoint or key has changed since (port change, regenerated key). */
+export type ClientSetupState = 'not-applied' | 'applied' | 'out-of-date';
+
+export interface ClientSetupStatus {
+  client: ClientId;
+  state: ClientSetupState;
+  /** Config file, with the home folder shown as ~. */
+  path: string;
+  /** Why the file could not be read; null when it could. */
+  error: string | null;
+}

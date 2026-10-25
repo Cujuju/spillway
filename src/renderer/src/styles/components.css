@@ -175,6 +175,9 @@
   margin-top: 3px;
   line-height: 1.45;
 }
+.setting-help.error {
+  color: var(--color-red-light);
+}
 .setting-control {
   display: flex;
   align-items: center;

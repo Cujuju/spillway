@@ -47,7 +47,8 @@ function parseUserConfig(text: string): { doc: Document; error: string | null } 
   if (!text.trim()) return { doc: new Document({}), error: null };
   const doc = parseDocument(text);
   const [syntaxError] = doc.errors;
-  if (syntaxError) return { doc: new Document({}), error: syntaxError.message };
+  // The first line has the reason and position; the rest is a code frame.
+  if (syntaxError) return { doc: new Document({}), error: syntaxError.message.split('\n')[0] ?? syntaxError.message };
   if (doc.contents !== null && !isMap(doc.contents)) return { doc: new Document({}), error: 'config.user.yaml must be a mapping of keys' };
   return { doc, error: null };
 }

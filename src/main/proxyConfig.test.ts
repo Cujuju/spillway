@@ -57,6 +57,7 @@ describe('buildProxyConfig', () => {
     for (const userConfig of ['routing: [unclosed', '- a list', 'just text']) {
       const { yaml, userConfigError } = build({ userConfig });
       expect(userConfigError).toBeTruthy();
+      expect(userConfigError).not.toContain('\n');
       expect(parse(yaml).server.port).toBe(8317);
     }
   });

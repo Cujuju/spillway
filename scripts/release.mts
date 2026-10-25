@@ -1,7 +1,7 @@
 /**
  * Signs and publishes update files, by hand (README → Updates):
  *   node scripts/release.mts keygen | sign [dist] | publish [dist] [--dry-run]
- * The private key stays outside the repo: $CLIPROXY_UPDATE_KEY or ~/.config/cliproxy-desktop/update_key.
+ * The private key stays outside the repo: $SPILLWAY_UPDATE_KEY or ~/.config/spillway/update_key.
  */
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
@@ -14,7 +14,7 @@ import { publicKeyOf, releaseTag, sha512File, signFile, verifyFile, type SignedF
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_KEY_FILE = path.join(ROOT, 'resources', 'update-public-key.pem');
-const KEY_FILE = process.env.CLIPROXY_UPDATE_KEY || path.join(os.homedir(), '.config', 'cliproxy-desktop', 'update_key');
+const KEY_FILE = process.env.SPILLWAY_UPDATE_KEY || path.join(os.homedir(), '.config', 'spillway', 'update_key');
 /** electron-builder's update listings: Windows, macOS. */
 const LISTINGS = ['latest.yml', 'latest-mac.yml'];
 /** Owner-only: the private key must not be readable by other users. */
@@ -74,7 +74,7 @@ function keygen(): void {
 }
 
 async function sign(dist: string): Promise<void> {
-  if (!existsSync(KEY_FILE)) fail(`no signing key at ${KEY_FILE}; run keygen or set CLIPROXY_UPDATE_KEY`);
+  if (!existsSync(KEY_FILE)) fail(`no signing key at ${KEY_FILE}; run keygen or set SPILLWAY_UPDATE_KEY`);
   const privatePem = readFileSync(KEY_FILE, 'utf8');
   if (publicKeyOf(privatePem).trim() !== readPublicKey().trim()) fail(`${PUBLIC_KEY_FILE} is not the public half of ${KEY_FILE}`);
   for (const listing of readListings(dist)) {
@@ -116,7 +116,7 @@ async function publish(dist: string, dryRun: boolean): Promise<void> {
   const versions = new Set(listings.map((l) => l.version));
   if (versions.size !== 1) fail(`listings disagree on the version: ${[...versions].join(', ')}`);
   const version = listings[0]!.version;
-  const stage = mkdtempSync(path.join(os.tmpdir(), 'cliproxy-release-'));
+  const stage = mkdtempSync(path.join(os.tmpdir(), 'spillway-release-'));
   try {
     const assets: string[] = [];
     for (const listing of listings) {
@@ -140,7 +140,7 @@ async function publish(dist: string, dryRun: boolean): Promise<void> {
     const tag = releaseTag(version);
     // Windows and macOS files are built on different machines, so the second upload adds to the release.
     if (releaseExists(repo, tag)) gh(['release', 'upload', tag, ...assets, '--repo', repo], dryRun);
-    else gh(['release', 'create', tag, ...assets, '--repo', repo, '--title', `CLIProxy Desktop ${version}`, '--notes', `CLIProxy Desktop ${version}`], dryRun);
+    else gh(['release', 'create', tag, ...assets, '--repo', repo, '--title', `Spillway ${version}`, '--notes', `Spillway ${version}`], dryRun);
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }

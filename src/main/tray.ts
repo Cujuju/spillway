@@ -1,4 +1,5 @@
 import { Menu, nativeImage, Tray } from 'electron';
+import { APP_NAME } from '@shared/app';
 import { createHash } from 'node:crypto';
 import { maskEmails } from '@shared/privacy';
 import { appIconPath } from './paths';
@@ -25,7 +26,7 @@ const limitTrays = new Map<string, Tray>();
 
 /** Stable per-icon GUID so Windows remembers each icon's "always show" choice and macOS its menu bar position. */
 function guidFor(id: string): string {
-  const h = createHash('sha1').update(`cliproxy-desktop:${id}`).digest('hex');
+  const h = createHash('sha1').update(`spillway:${id}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
@@ -61,7 +62,7 @@ function contextMenu(): Menu {
   const running = proxy.isRunning();
   const accounts = running ? accountMenus() : [];
   return Menu.buildFromTemplate([
-    { label: 'Open CLIProxy Desktop', click: showMainWindow },
+    { label: `Open ${APP_NAME}`, click: showMainWindow },
     { type: 'separator' },
     { label: `Proxy: ${proxy.getStatus().state}`, enabled: false },
     running
@@ -94,7 +95,7 @@ function appTrayImage(): Electron.NativeImage {
 export function ensureAppTray(): void {
   if (appTray) return;
   appTray = new Tray(appTrayImage(), guidFor('app'));
-  appTray.setToolTip('CLIProxy Desktop');
+  appTray.setToolTip(APP_NAME);
   attach(appTray);
 }
 

@@ -83,6 +83,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: cliproxy-desktop-${{ matrix.os }}
+          name: spillway-${{ matrix.os }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error

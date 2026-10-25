@@ -70,12 +70,12 @@ describe('Codex config.toml', () => {
   it('adds the provider and makes it the default, disabling the old root model_provider', () => {
     const out = applyCodex(original, target);
     const lines = out.split('\n');
-    expect(lines[1]).toBe('model_provider = "cliproxy"');
+    expect(lines[1]).toBe('model_provider = "spillway"');
     expect(out).toContain(`${DISABLED_PREFIX}model_provider = "openai"`);
     // Inside a table it is a different key: untouched.
     expect(out).toContain('\nmodel_provider = "kept"\n');
-    expect(out).toContain('[model_providers.cliproxy]\nname = "CLIProxy Desktop"\nbase_url = "http://127.0.0.1:8317/v1"\nwire_api = "responses"\nexperimental_bearer_token = "k1"\n');
-    expect(out.indexOf('[model_providers.cliproxy]')).toBeGreaterThan(out.indexOf('[model_providers.other]'));
+    expect(out).toContain('[model_providers.spillway]\nname = "Spillway"\nbase_url = "http://127.0.0.1:8317/v1"\nwire_api = "responses"\nexperimental_bearer_token = "k1"\n');
+    expect(out.indexOf('[model_providers.spillway]')).toBeGreaterThan(out.indexOf('[model_providers.other]'));
   });
 
   it('undo restores the original exactly', () => {
@@ -87,13 +87,13 @@ describe('Codex config.toml', () => {
     expect(applyCodex(once, target)).toBe(once);
     const again = applyCodex(once, moved);
     expect(again).toContain('base_url = "http://127.0.0.1:9000/v1"');
-    expect(again.match(/\[model_providers\.cliproxy\]/g)).toHaveLength(1);
+    expect(again.match(/\[model_providers.spillway\]/g)).toHaveLength(1);
     expect(undoCodex(again)).toBe(original);
   });
 
   it('creates config from a missing file and undoes to empty', () => {
     const out = applyCodex(null, target);
-    expect(out).toContain('model_provider = "cliproxy"');
+    expect(out).toContain('model_provider = "spillway"');
     expect(undoCodex(out)).toBe('');
   });
 
@@ -105,12 +105,12 @@ describe('Codex config.toml', () => {
   });
 
   it('refuses when the file already defines the provider', () => {
-    expect(() => applyCodex('[model_providers.cliproxy]\nname = "mine"\n', target)).toThrow(/already defines/);
-    expect(() => applyCodex('[model_providers."cliproxy".http_headers]\n', target)).toThrow(/already defines/);
+    expect(() => applyCodex('[model_providers.spillway]\nname = "mine"\n', target)).toThrow(/already defines/);
+    expect(() => applyCodex('[model_providers."spillway".http_headers]\n', target)).toThrow(/already defines/);
   });
 
   it('refuses an unterminated block', () => {
-    expect(() => applyCodex('# >>> cliproxy-desktop\nmodel_provider = "x"\n', target)).toThrow(/without/);
+    expect(() => applyCodex('# >>> spillway\nmodel_provider = "x"\n', target)).toThrow(/without/);
   });
 
   it('reports state', () => {

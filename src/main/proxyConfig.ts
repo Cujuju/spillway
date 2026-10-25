@@ -1,4 +1,5 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
+import { APP_NAME } from '@shared/app';
 import type { AppSettings } from '@shared/settings';
 
 export interface ProxyConfigInput {
@@ -20,7 +21,7 @@ const LOOPBACK_HOST = '127.0.0.1';
 /** Empty host binds every interface (upstream default). */
 const ALL_INTERFACES_HOST = '';
 const HEADER =
-  ' Managed by CLIProxy Desktop: regenerated from app settings and config.user.yaml.\n Edit config.user.yaml (v8 layout) for custom keys; the app-owned keys below always win.';
+  ` Managed by ${APP_NAME}: regenerated from app settings and config.user.yaml.\n Edit config.user.yaml (v8 layout) for custom keys; the app-owned keys below always win.`;
 
 /** Go duration string the proxy expects for routing.session-affinity-ttl. */
 export const affinityTtl = (minutes: number) => `${minutes}m`;

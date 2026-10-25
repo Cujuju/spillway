@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
+import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { resolveTheme } from '@shared/themes';
 import { existsSync, readFileSync } from 'node:fs';
@@ -90,7 +91,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     show: false,
     backgroundColor: themeBackground(),
     icon: appIconPath(),
-    title: 'CLIProxy Desktop',
+    title: APP_NAME,
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

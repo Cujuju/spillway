@@ -1,4 +1,5 @@
 import { app, nativeTheme, Notification } from 'electron';
+import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { activity } from './activityStream';
 import { history } from './historyStore';
@@ -53,7 +54,7 @@ function wireEvents(): void {
   updates.on('status', (s) => send(EVENTS.onUpdateStatus, s));
   updates.on('found', (version) => {
     if (!Notification.isSupported()) return;
-    const n = new Notification({ title: 'Update available', body: `CLIProxy Desktop ${version} is ready to download in Settings → Updates.`, icon: appIconPath() });
+    const n = new Notification({ title: 'Update available', body: `${APP_NAME} ${version} is ready to download in Settings → Updates.`, icon: appIconPath() });
     n.on('click', () => {
       showMainWindow();
       send(EVENTS.onNavigate, 'settings');
@@ -75,7 +76,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   // Windows groups notifications and taskbar entries by this id.
-  if (process.platform === 'win32') app.setAppUserModelId('dev.cujuju.cliproxy-desktop');
+  if (process.platform === 'win32') app.setAppUserModelId('dev.cujuju.spillway');
   app.on('second-instance', () => showMainWindow());
   // macOS: clicking the Dock icon reopens the window.
   app.on('activate', () => showMainWindow());

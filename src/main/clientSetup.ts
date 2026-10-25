@@ -8,7 +8,7 @@ import {
 } from './clientConfigText';
 import { writeFileAtomic } from './settingsStore';
 
-export const BACKUP_SUFFIX = '.cliproxy-backup';
+export const BACKUP_SUFFIX = '.spillway-backup';
 
 interface ClientEdit {
   apply(text: string | null, target: ClientTarget): string;

@@ -9,7 +9,7 @@ import { createReadStream } from 'node:fs';
 export const releaseTag = (version: string) => `v${version}`;
 
 /** Binds a signature to this app, so a signature made for another app's files never matches. */
-const SIGNATURE_CONTEXT = 'cliproxy-desktop-update-v1';
+const SIGNATURE_CONTEXT = 'spillway-update-v1';
 
 /** One installer listed in latest.yml / latest-mac.yml, plus the signature the release script adds. */
 export interface SignedFileInfo {

@@ -7,7 +7,7 @@ const CLIENTS: { id: ClientId; label: string; help: string }[] = [
   {
     id: 'codex',
     label: 'Codex',
-    help: 'Adds a "cliproxy" model provider and makes it the default. Codex keeps the key in plain text there (experimental_bearer_token).',
+    help: 'Adds a "spillway" model provider and makes it the default. Codex keeps the key in plain text there (experimental_bearer_token).',
   },
 ];
 

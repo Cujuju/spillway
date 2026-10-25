@@ -3,6 +3,7 @@
  * Pure string in, string out; the file handling is in clientSetup.ts.
  */
 import type { ClientSetupState } from '@shared/types';
+import { APP_NAME } from '@shared/app';
 
 export interface ClientTarget {
   /** e.g. http://127.0.0.1:8317 */
@@ -89,12 +90,12 @@ export const claudeIsEmpty = (text: string) => Object.keys(parseSettings(text)).
 // Text-level edit, no TOML parser. Residual: a multi-line string holding a line that starts with `[`
 // or `model_provider =` can be mistaken for a table header or a root key.
 
-export const CODEX_PROVIDER_ID = 'cliproxy';
-const BLOCK_TAG = '# >>> cliproxy-desktop';
-const BLOCK_BEGIN = `${BLOCK_TAG}: added by CLIProxy Desktop; remove it with Undo in the app`;
-const BLOCK_END = '# <<< cliproxy-desktop';
+export const CODEX_PROVIDER_ID = 'spillway';
+const BLOCK_TAG = '# >>> spillway';
+const BLOCK_BEGIN = `${BLOCK_TAG}: added by ${APP_NAME}; remove it with Undo in the app`;
+const BLOCK_END = '# <<< spillway';
 /** Prefix for a root `model_provider` line the apply turned off; undo removes it. */
-export const DISABLED_PREFIX = '# cliproxy-desktop disabled: ';
+export const DISABLED_PREFIX = '# spillway disabled: ';
 /** The proxy serves the OpenAI API under /v1; Codex posts to <base_url>/responses. */
 const OPENAI_PATH = '/v1';
 
@@ -153,7 +154,7 @@ export function applyCodex(text: string | null, target: ClientTarget): string {
   const provider = [
     BLOCK_BEGIN,
     `[model_providers.${CODEX_PROVIDER_ID}]`,
-    `name = ${tomlString('CLIProxy Desktop')}`,
+    `name = ${tomlString(APP_NAME)}`,
     `base_url = ${tomlString(`${target.endpoint}${OPENAI_PATH}`)}`,
     `wire_api = ${tomlString('responses')}`,
     `experimental_bearer_token = ${tomlString(target.key)}`,

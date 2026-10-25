@@ -17,7 +17,7 @@ let home: string;
 let files: ReturnType<typeof clientConfigFiles>;
 
 beforeEach(() => {
-  home = mkdtempSync(path.join(os.tmpdir(), 'cliproxy-client-setup-'));
+  home = mkdtempSync(path.join(os.tmpdir(), 'spillway-client-setup-'));
   files = clientConfigFiles({}, home);
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -60,7 +60,7 @@ describe('client setup files', () => {
   });
 
   it('a rejected edit leaves the file and backup untouched', () => {
-    const own = '[model_providers.cliproxy]\nname = "mine"\n';
+    const own = '[model_providers.spillway]\nname = "mine"\n';
     mkdirSync(path.dirname(files.codex), { recursive: true });
     writeFileSync(files.codex, own);
     expect(() => applyClient('codex', files.codex, target)).toThrow(/already defines/);

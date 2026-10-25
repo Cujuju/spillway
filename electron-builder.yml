@@ -1,5 +1,5 @@
-appId: dev.cujuju.cliproxy-desktop
-productName: CLIProxy Desktop
+appId: dev.cujuju.spillway
+productName: Spillway
 directories:
   output: dist
   buildResources: resources

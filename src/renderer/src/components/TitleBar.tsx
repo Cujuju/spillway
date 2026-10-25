@@ -1,4 +1,5 @@
 import { Copy, Minus, Square, X } from 'lucide-solid';
+import { APP_NAME } from '@shared/app';
 import { Show } from 'solid-js';
 import { maximized } from '../store';
 
@@ -8,7 +9,7 @@ export function TitleBar() {
   return (
     <header class="titlebar">
       <img src="./icon.png" alt="" width="16" height="16" />
-      <span class="titlebar-title">CLIPROXY DESKTOP</span>
+      <span class="titlebar-title">{APP_NAME.toUpperCase()}</span>
       {/* macOS draws native traffic lights instead. */}
       <Show when={window.api.platform !== 'darwin'}>
         <div class="titlebar-controls">

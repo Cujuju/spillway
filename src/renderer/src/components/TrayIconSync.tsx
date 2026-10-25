@@ -1,4 +1,5 @@
 import { createEffect } from 'solid-js';
+import { APP_NAME } from '@shared/app';
 import { providerLabel, readTray, trayLevel } from '@shared/trayValues';
 import { poolSummary, poolWindowKey } from '../lib/forecast';
 import { relativeFuture } from '../lib/format';
@@ -41,7 +42,7 @@ export function TrayIconSync() {
   createEffect(() => {
     const snap = snapshot();
     const state = proxyStatus()?.state ?? 'stopped';
-    const lines = [`CLIProxy Desktop · proxy ${state}`];
+    const lines = [`${APP_NAME} · proxy ${state}`];
     const providers = [...new Set((snap?.credentials ?? []).map((c) => c.provider))];
     for (const provider of providers) {
       const creds = snap!.credentials.filter((c) => c.provider === provider);

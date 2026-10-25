@@ -13,7 +13,7 @@ const pair = () => {
 
 describe('update signatures', () => {
   const key = pair();
-  const file = { url: 'CLIProxy-Desktop-Setup-1.2.0.exe', sha512: 'abc==' };
+  const file = { url: 'Spillway-Setup-1.2.0.exe', sha512: 'abc==' };
   const signed = { ...file, signature: signFile(key.privatePem, '1.2.0', file) };
 
   it('accepts a file signed for its version and hash', () => {
@@ -30,7 +30,7 @@ describe('update signatures', () => {
   });
 
   it('hashes files as base64 SHA-512', async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'cliproxy-sig-'));
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-sig-'));
     try {
       const f = path.join(dir, 'a.bin');
       writeFileSync(f, 'hello');

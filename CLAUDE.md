@@ -1,4 +1,4 @@
-# cliproxy-desktop
+# spillway (repo: cliproxy-desktop)
 
 Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxyAPI).
 

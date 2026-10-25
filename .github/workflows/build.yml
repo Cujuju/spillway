@@ -30,7 +30,6 @@ jobs:
             proxy-targets: darwin-arm64 darwin-x64
             artifacts: |
               desktop/dist/*.dmg
-              desktop/dist/*.zip
               desktop/dist/*.blockmap
               desktop/dist/latest-mac.yml
     runs-on: ${{ matrix.os }}

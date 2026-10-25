@@ -11,6 +11,7 @@ Windows and macOS tray (menu bar) app that runs the private CLIProxyAPI fork, si
 - Tray "Use account" menu pins a provider to one account while it is available; Automatic returns to the routing strategy.
 - Optional tray icons, one per limit: active account, pool average, least left, or one specific account.
 - Launches at login, starts minimised, and closes or minimises to the tray.
+- Checks for updates and installs them after verifying their signature (macOS: downloads the disk image).
 - Ten colour themes (Midnight, Tonal, OLED Black, Nord, Dracula, Catppuccin Mocha and Latte, Solarized Dark and Light, Light), or follow the system light/dark mode.
 - "Show emails" off masks every account email in the window, tray tooltips and notifications.
 
@@ -63,6 +64,33 @@ Or set environment variables for Claude Code (the page copies them):
 $env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8317"
 $env:ANTHROPIC_AUTH_TOKEN = "<client key from the Proxy page>"
 ```
+
+## Updates
+
+Settings → Updates checks the public [Cujuju/cliproxy-desktop-updates](https://github.com/Cujuju/cliproxy-desktop-updates) repo (`publish` in `electron-builder.yml`), which holds only release files. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification; nothing downloads or installs until you click.
+
+- Each installer listed in `latest.yml` / `latest-mac.yml` carries an Ed25519 signature over the app, version, file name and SHA-512. The app checks the downloaded file against the public key built into it (`resources/update-public-key.pem`) and deletes a file that fails.
+- Windows: **Download**, then **Restart and install**: the app stops the proxy and runs the installer, which reopens the app.
+- macOS: Squirrel.Mac only installs Developer ID-signed apps, so with ad-hoc signing the app downloads the verified disk image to Downloads; open it and drag the app to Applications.
+- A build made without `resources/update-public-key.pem` cannot verify updates and never offers one.
+- The listing itself is not signed. Someone with write access to the updates repo can withhold updates, or list an old signed installer under its own older version, which the app ignores; they cannot get an unsigned or relabelled file installed.
+
+### Signing key (once)
+
+```sh
+node scripts/release.mts keygen
+```
+
+Writes the private key to `~/.config/cliproxy-desktop/update_key` (or `$CLIPROXY_UPDATE_KEY`) and the public key to `resources/update-public-key.pem`. Commit the public key so every build embeds it. Back up the private key outside the repo: installed copies accept updates only from it. On Windows the file is protected by your user profile's permissions.
+
+### Release
+
+1. Bump `version` in `package.json` and commit.
+2. Build the installers: `pnpm package` on each platform, or download the CI artifacts into one folder.
+3. `pnpm release sign [dist]` adds the signatures to `latest.yml` / `latest-mac.yml`.
+4. `pnpm release publish [dist] --dry-run` shows the `gh` commands; run it without `--dry-run` to create the `v<version>` release, or add the other platform's files to it. Needs `gh` with push access to the updates repo.
+
+Publish both platforms' files: until the newest release has `latest-mac.yml`, Mac checks report an error (and Windows ones until it has `latest.yml`).
 
 ## Data
 

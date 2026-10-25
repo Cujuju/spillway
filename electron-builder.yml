@@ -14,6 +14,13 @@ extraResources:
   # Tray, window and notification icon; main reads it from process.resourcesPath.
   - from: resources/icon.png
     to: icon.png
+# Update feed. Builds write app-update.yml and latest*.yml from it but never publish (package runs
+# with --publish never); scripts/release.mts signs the files and uploads them.
+publish:
+  provider: github
+  owner: Cujuju
+  repo: cliproxy-desktop-updates
+  releaseType: release
 win:
   target:
     - target: nsis

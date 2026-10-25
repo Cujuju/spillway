@@ -8,6 +8,7 @@ import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { destroyTrays, ensureAppTray } from './tray';
+import { updates } from './updater';
 import { usage } from './usagePoller';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
 
@@ -49,11 +50,22 @@ function wireEvents(): void {
       new Notification({ title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, icon: appIconPath() }).show();
     }
   });
+  updates.on('status', (s) => send(EVENTS.onUpdateStatus, s));
+  updates.on('found', (version) => {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title: 'Update available', body: `CLIProxy Desktop ${version} is ready to download in Settings → Updates.`, icon: appIconPath() });
+    n.on('click', () => {
+      showMainWindow();
+      send(EVENTS.onNavigate, 'settings');
+    });
+    n.show();
+  });
   onSettingsChange((next, prev) => {
     // The renderer saves whole settings objects, so it must see changes made here (tray account choice).
     send(EVENTS.onSettings, next);
     if (next.general.launchAtLogin !== prev.general.launchAtLogin || next.general.startMinimized !== prev.general.startMinimized) applyLoginItem();
     if (next.general.theme !== prev.general.theme) syncWindowBackground();
+    if (next.updates.autoCheck !== prev.updates.autoCheck) updates.setAutoCheck(next.updates.autoCheck);
   });
   // 'system' theme follows the OS light/dark switch.
   nativeTheme.on('updated', syncWindowBackground);
@@ -78,6 +90,7 @@ if (!app.requestSingleInstanceLock()) {
     const hidden = launchedHidden();
     if (hidden) app.dock?.hide();
     createMainWindow(!hidden);
+    updates.setAutoCheck(getSettings().updates.autoCheck);
     if (getSettings().proxy.autoStart) await proxy.start();
   });
 

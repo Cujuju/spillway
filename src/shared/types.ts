@@ -125,3 +125,17 @@ export interface ClientSetupStatus {
   /** Why the file could not be read; null when it could. */
   error: string | null;
 }
+
+/** Update check and download progress, shown under Settings → Updates. */
+export type UpdateStatus =
+  | { state: 'unavailable'; reason: string }
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'up-to-date'; checkedAt: string }
+  | { state: 'available'; version: string }
+  | { state: 'downloading'; version: string; percent: number }
+  /** Windows: a verified installer waits for Restart and install. */
+  | { state: 'ready'; version: string }
+  /** macOS: a verified disk image was saved; the user installs it. */
+  | { state: 'saved'; version: string; file: string }
+  | { state: 'error'; message: string };

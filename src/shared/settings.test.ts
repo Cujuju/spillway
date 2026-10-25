@@ -12,6 +12,11 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ proxy: { firstByteTimeoutSeconds: 99_999 } }).proxy.firstByteTimeoutSeconds).toBe(600);
     expect(normalizeSettings({}).proxy.firstByteTimeoutSeconds).toBe(DEFAULT_SETTINGS.proxy.firstByteTimeoutSeconds);
   });
+
+  it('defaults update auto-check on and keeps a stored choice', () => {
+    expect(normalizeSettings({}).updates.autoCheck).toBe(true);
+    expect(normalizeSettings({ updates: { autoCheck: false } }).updates.autoCheck).toBe(false);
+  });
 });
 
 describe('proxyConfigChanged', () => {

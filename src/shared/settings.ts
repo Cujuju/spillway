@@ -60,6 +60,10 @@ export interface AppSettings {
     accountSwitched: boolean;
     proxyCrashed: boolean;
   };
+  updates: {
+    /** Check for a new release at start and periodically; downloading and installing stay manual. */
+    autoCheck: boolean;
+  };
 }
 
 /** Proxy default port, matching upstream config.example.yaml. */
@@ -121,6 +125,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     accountSwitched: false,
     proxyCrashed: true,
   },
+  updates: {
+    autoCheck: true,
+  },
 };
 
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
@@ -151,7 +158,7 @@ function normalizeTrayItem(v: unknown): TrayIconSpec | null {
 export function normalizeSettings(raw: unknown): AppSettings {
   const d = DEFAULT_SETTINGS;
   const r = obj(raw);
-  const g = obj(r.general), p = obj(r.proxy), db = obj(r.dashboard), t = obj(r.trayIcons), n = obj(r.notifications);
+  const g = obj(r.general), p = obj(r.proxy), db = obj(r.dashboard), t = obj(r.trayIcons), n = obj(r.notifications), u = obj(r.updates);
   const warn = int(t.warnAtPercentUsed, d.trayIcons.warnAtPercentUsed, 1, 99);
   return {
     general: {
@@ -195,6 +202,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
       limitReset: bool(n.limitReset, d.notifications.limitReset),
       accountSwitched: bool(n.accountSwitched, d.notifications.accountSwitched),
       proxyCrashed: bool(n.proxyCrashed, d.notifications.proxyCrashed),
+    },
+    updates: {
+      autoCheck: bool(u.autoCheck, d.updates.autoCheck),
     },
   };
 }

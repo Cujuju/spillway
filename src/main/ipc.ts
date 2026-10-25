@@ -12,6 +12,7 @@ import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
 import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
 import { setAppTrayTooltip, syncLimitTrays } from './tray';
+import { updates } from './updater';
 import { usage } from './usagePoller';
 import { mainWindow } from './window';
 
@@ -89,6 +90,14 @@ const handlers: Handlers = {
   undoClientSetup: (client) => {
     undoClient(client, clientFile(client));
     return clientStatuses();
+  },
+  updateStatus: () => updates.status(),
+  checkForUpdates: () => updates.check(),
+  downloadUpdate: () => updates.download(),
+  installUpdate: async () => {
+    // The installer replaces the bundled proxy binary, which a running proxy keeps locked.
+    if (updates.status().state === 'ready') await proxy.stop();
+    await updates.install();
   },
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),
   usageRefresh: (credentialId) => usage.refresh(credentialId ? usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex : undefined),

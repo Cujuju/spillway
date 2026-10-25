@@ -1,6 +1,6 @@
 import type { AppSettings } from './settings';
 import type {
-  ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UsageSnapshot,
+  ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -24,6 +24,12 @@ export interface DesktopApi {
   clientSetupStatus(): Promise<ClientSetupStatus[]>;
   applyClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
   undoClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
+
+  updateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<void>;
+  downloadUpdate(): Promise<void>;
+  /** Windows: stops the proxy, runs the verified installer and quits. macOS: opens the downloaded disk image. */
+  installUpdate(): Promise<void>;
 
   usageLatest(): Promise<{ snapshot: UsageSnapshot | null; error: string | null }>;
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
@@ -61,6 +67,7 @@ export interface DesktopApi {
   onNavigate(cb: (page: string) => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
   onActivity(cb: (e: ActivityEvent) => void): () => void;
+  onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
 }
 
 /** invoke channels: name → method on DesktopApi. */
@@ -80,6 +87,10 @@ export const INVOKE = {
   clientSetupStatus: 'clients:status',
   applyClientSetup: 'clients:apply',
   undoClientSetup: 'clients:undo',
+  updateStatus: 'update:status',
+  checkForUpdates: 'update:check',
+  downloadUpdate: 'update:download',
+  installUpdate: 'update:install',
   usageLatest: 'usage:latest',
   usageRefresh: 'usage:refresh',
   usageHistory: 'usage:history',
@@ -116,4 +127,5 @@ export const EVENTS = {
   onNavigate: 'app:navigate',
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
+  onUpdateStatus: 'update:status-changed',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

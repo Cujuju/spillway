@@ -13,8 +13,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "proxy:build": "node scripts/build-proxy.mjs",
-    "package": "electron-vite build && electron-builder",
-    "package:dir": "electron-vite build && electron-builder --dir"
+    "package": "electron-vite build && electron-builder --publish never",
+    "package:dir": "electron-vite build && electron-builder --dir --publish never",
+    "release": "node scripts/release.mts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
@@ -33,6 +34,7 @@
     "node": "^24.0.0"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "yaml": "^2.9.1"
   }
 }

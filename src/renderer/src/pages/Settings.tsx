@@ -1,19 +1,20 @@
 import { FolderOpen } from 'lucide-solid';
-import { createResource, createSignal, For, Match, Show, Switch } from 'solid-js';
+import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { AppSettings, RoutingStrategy } from '@shared/settings';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
+import { UpdateSettings } from '../components/UpdateSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, Toggle } from '../components/ui';
 import { setHistory, settings, updateSettings } from '../store';
 
 const ICON_PX = 14;
 
-type Section = 'general' | 'trayIcons' | 'proxy' | 'dashboard' | 'notifications' | 'advanced';
+type Section = 'general' | 'trayIcons' | 'proxy' | 'dashboard' | 'notifications' | 'updates' | 'advanced';
 const NAV: { group: string; items: { id: Section; label: string }[] }[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'System', items: [{ id: 'advanced', label: 'Advanced' }] },
+  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }] },
 ];
 
 const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
@@ -138,7 +139,6 @@ function Notifications() {
 }
 
 function Advanced() {
-  const [version] = createResource(() => window.api.appVersion());
   const [confirming, setConfirming] = createSignal(false);
   const folders = [
     { which: 'data', label: 'App data', help: 'Settings, encrypted keys and usage history.' },
@@ -156,9 +156,6 @@ function Advanced() {
       </For>
       <SettingRow label="Usage history" help="Stored samples behind the chart and drain rate.">
         <button class="btn danger" onClick={() => setConfirming(true)}>Clear history</button>
-      </SettingRow>
-      <SettingRow label="Version">
-        <span class="mono">{version() ?? ''}</span>
       </SettingRow>
       <Show when={confirming()}>
         <Dialog
@@ -204,6 +201,7 @@ export function Settings() {
             <Match when={section() === 'proxy'}><ProxySection /></Match>
             <Match when={section() === 'dashboard'}><DashboardSection /></Match>
             <Match when={section() === 'notifications'}><Notifications /></Match>
+            <Match when={section() === 'updates'}><UpdateSettings /></Match>
             <Match when={section() === 'advanced'}><Advanced /></Match>
           </Switch>
         </div>

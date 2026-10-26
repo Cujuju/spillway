@@ -49,11 +49,11 @@ The Proxy page shows the endpoint and the client key. **Apply** writes them into
 
 | Client | File | Apply sets |
 |---|---|---|
-| Claude Code | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_AUTH_TOKEN` |
+| Claude Code | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_CUSTOM_HEADERS` (`X-Api-Key: <client key>`), and removes `env.ANTHROPIC_AUTH_TOKEN` |
 | Codex | `~/.codex/config.toml` (or `$CODEX_HOME`) | a `[model_providers.spillway]` block at the end (`base_url = "<endpoint>/v1"`, `wire_api = "responses"`, `experimental_bearer_token`), and a root `model_provider = "cliproxy"` at the top |
 
 - The first Apply copies the file to `<file>.spillway-backup` (an empty backup when the file did not exist). Undo removes the backup.
-- Claude Code: Undo puts back only the two variables' earlier values (or removes them); other edits made since stay.
+- Claude Code: the key goes in a header so Claude Code keeps its subscription login (it must stay signed in; requests still use the proxy's accounts). In token mode it ignores usage-limit headers, so T3 Code can't snooze a thread until the reset. Apply keeps other `ANTHROPIC_CUSTOM_HEADERS` lines. Undo puts back only these variables' earlier values (or removes them); other edits made since stay.
 - Codex: the app's lines sit between `# >>> spillway` and `# <<< spillway` markers. An existing root `model_provider` line is commented out with `# spillway disabled: `; Undo removes the markers' blocks and restores that line. Apply refuses when the file already defines `model_providers.spillway` itself. Codex stores the key in plain text there.
 - Changing the port or regenerating the key marks an applied client **Out of date**; Re-apply updates it. The app never rewrites these files on its own.
 - Codex edits are text-level, not parsed TOML: a multi-line string containing a line that starts with `[` or `model_provider =` can be misread.
@@ -62,7 +62,8 @@ Or set environment variables for Claude Code (the page copies them):
 
 ```powershell
 $env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8317"
-$env:ANTHROPIC_AUTH_TOKEN = "<client key from the Proxy page>"
+Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
+$env:ANTHROPIC_CUSTOM_HEADERS = "X-Api-Key: <client key from the Proxy page>"
 ```
 
 ## Updates

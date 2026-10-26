@@ -1,5 +1,6 @@
 import { Copy } from 'lucide-solid';
 import { createSignal } from 'solid-js';
+import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
 import { ExpandRow, Seg } from './ui';
 
 const ICON_PX = 14;
@@ -7,11 +8,12 @@ const ICON_PX = 14;
 type Shell = 'powershell' | 'bash';
 const SHELLS = [{ value: 'powershell', label: 'PowerShell' }, { value: 'bash', label: 'Bash' }] as const;
 
-/** Env vars Claude Code reads to send traffic through a proxy. */
+/** Env vars Claude Code reads to send traffic through a proxy; clears a leftover token that would switch it to token mode. */
 const envSnippet = (shell: Shell, endpoint: string, key: string) =>
-  shell === 'powershell'
-    ? `$env:ANTHROPIC_BASE_URL = "${endpoint}"\n$env:ANTHROPIC_AUTH_TOKEN = "${key}"`
-    : `export ANTHROPIC_BASE_URL=${endpoint}\nexport ANTHROPIC_AUTH_TOKEN=${key}`;
+  [
+    shell === 'powershell' ? `Remove-Item Env:${CLAUDE_TOKEN_VAR} -ErrorAction SilentlyContinue` : `unset ${CLAUDE_TOKEN_VAR}`,
+    ...claudeEnvVars(endpoint, key).map(({ name, value }) => (shell === 'powershell' ? `$env:${name} = "${value}"` : `export ${name}="${value}"`)),
+  ].join('\n');
 
 /** Points one shell session's Claude Code at the proxy, leaving its settings file alone. */
 export function ShellEnvSetup(props: { endpoint: string; clientKey: string; masked: string }) {

@@ -276,9 +276,9 @@
 .env-var:last-child {
   margin-bottom: 0;
 }
-/* Fits the longest name, ANTHROPIC_AUTH_TOKEN, so values line up. */
+/* Fits the longest name, ANTHROPIC_CUSTOM_HEADERS (scaled from 170px for a 20-character name), so values line up. */
 .env-var-name {
-  min-width: 170px;
+  min-width: 205px;
 }
 .steps {
   margin: 6px 0 10px;

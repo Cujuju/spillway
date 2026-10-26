@@ -14,7 +14,7 @@ describe('Claude Code settings.json', () => {
     const out = applyClaude(original, target);
     expect(JSON.parse(out)).toEqual({
       model: 'opus',
-      env: { FOO: '1', ANTHROPIC_BASE_URL: target.endpoint, ANTHROPIC_AUTH_TOKEN: 'k1' },
+      env: { FOO: '1', ANTHROPIC_BASE_URL: target.endpoint, ANTHROPIC_CUSTOM_HEADERS: 'X-Api-Key: k1' },
       theme: 'dark',
     });
     expect(Object.keys(JSON.parse(out))).toEqual(['model', 'env', 'theme']);
@@ -22,7 +22,24 @@ describe('Claude Code settings.json', () => {
   });
 
   it('creates settings from a missing file', () => {
-    expect(JSON.parse(applyClaude(null, target))).toEqual({ env: { ANTHROPIC_BASE_URL: target.endpoint, ANTHROPIC_AUTH_TOKEN: 'k1' } });
+    expect(JSON.parse(applyClaude(null, target))).toEqual({ env: { ANTHROPIC_BASE_URL: target.endpoint, ANTHROPIC_CUSTOM_HEADERS: 'X-Api-Key: k1' } });
+  });
+
+  // A token switches Claude Code out of its subscription login, which hides usage-limit resets.
+  it('removes ANTHROPIC_AUTH_TOKEN and undo puts it back', () => {
+    const legacy = '{\n  "env": {\n    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317",\n    "ANTHROPIC_AUTH_TOKEN": "k1"\n  }\n}\n';
+    const out = applyClaude(legacy, target);
+    expect(JSON.parse(out).env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(undoClaude(out, legacy)).toBe(legacy);
+    expect(claudeState(legacy, target, true)).toBe('out-of-date');
+  });
+
+  it('keeps other custom headers and replaces an old key header', () => {
+    const withHeaders = JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Trace: on\nx-api-key: old' } });
+    const out = applyClaude(withHeaders, target);
+    expect(JSON.parse(out).env.ANTHROPIC_CUSTOM_HEADERS).toBe('X-Trace: on\nX-Api-Key: k1');
+    expect(claudeState(out, target, true)).toBe('applied');
+    expect(JSON.parse(undoClaude(out, withHeaders)).env.ANTHROPIC_CUSTOM_HEADERS).toBe('X-Trace: on\nx-api-key: old');
   });
 
   it('re-applies idempotently', () => {

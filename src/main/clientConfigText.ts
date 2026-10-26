@@ -4,6 +4,9 @@
  */
 import type { ClientSetupState } from '@shared/types';
 import { APP_NAME } from '@shared/app';
+import {
+  CLAUDE_BASE_URL_VAR, CLAUDE_HEADERS_VAR, CLAUDE_KEY_HEADER, CLAUDE_TOKEN_VAR, claudeKeyHeader,
+} from '@shared/claudeEnv';
 
 /** A program that prints the client key to stdout. */
 export interface KeyCommand {
@@ -25,9 +28,8 @@ const eolOf = (text: string) => (text.includes(CRLF) ? CRLF : '\n');
 
 // ── Claude Code: settings.json "env" ─────────────────────────────
 
-export const CLAUDE_BASE_URL_VAR = 'ANTHROPIC_BASE_URL';
-export const CLAUDE_TOKEN_VAR = 'ANTHROPIC_AUTH_TOKEN';
-const CLAUDE_VARS = [CLAUDE_BASE_URL_VAR, CLAUDE_TOKEN_VAR] as const;
+/** Every variable setup touches; undo restores each. */
+const CLAUDE_VARS = [CLAUDE_BASE_URL_VAR, CLAUDE_HEADERS_VAR, CLAUDE_TOKEN_VAR] as const;
 /** Claude Code writes settings.json with two-space indentation. */
 const JSON_INDENT = 2;
 
@@ -61,14 +63,25 @@ function formatSettings(value: Json, original: string | null): string {
 
 const envOf = (settings: Json): Json => (isObject(settings.env) ? settings.env : {});
 
+/** ANTHROPIC_CUSTOM_HEADERS holds one "Name: value" per line. */
+const headerLines = (value: unknown) => (typeof value === 'string' ? value.split(/\r?\n/).filter((line) => line.trim() !== '') : []);
+const isKeyHeader = (line: string) => (line.split(':', 1)[0] ?? '').trim().toLowerCase() === CLAUDE_KEY_HEADER.toLowerCase();
+
+/** Replaces any key header line and keeps the user's other headers. */
+const withKeyHeader = (value: unknown, key: string) =>
+  [...headerLines(value).filter((line) => !isKeyHeader(line)), claudeKeyHeader(key)].join('\n');
+
 export function applyClaude(text: string | null, target: ClientTarget): string {
   const settings = parseSettings(text);
+  const env = envOf(settings);
+  const next: Json = { ...env, [CLAUDE_BASE_URL_VAR]: target.endpoint, [CLAUDE_HEADERS_VAR]: withKeyHeader(env[CLAUDE_HEADERS_VAR], target.key) };
+  delete next[CLAUDE_TOKEN_VAR];
   // Assigning an existing "env" keeps its position; a new one goes last.
-  settings.env = { ...envOf(settings), [CLAUDE_BASE_URL_VAR]: target.endpoint, [CLAUDE_TOKEN_VAR]: target.key };
+  settings.env = next;
   return formatSettings(settings, text);
 }
 
-/** Restores only the two variables to their backed-up values; later edits to anything else stay. */
+/** Restores only the setup's variables to their backed-up values; later edits to anything else stay. */
 export function undoClaude(text: string, backup: string | null): string {
   const settings = parseSettings(text);
   const saved = parseSettings(backup);
@@ -88,7 +101,10 @@ export function claudeState(text: string | null, target: ClientTarget, applied: 
   // Parsed even when not applied, so a broken file shows before Apply.
   const env = envOf(parseSettings(text));
   if (!applied) return 'not-applied';
-  return env[CLAUDE_BASE_URL_VAR] === target.endpoint && env[CLAUDE_TOKEN_VAR] === target.key ? 'applied' : 'out-of-date';
+  const current = env[CLAUDE_BASE_URL_VAR] === target.endpoint
+    && headerLines(env[CLAUDE_HEADERS_VAR]).includes(claudeKeyHeader(target.key))
+    && env[CLAUDE_TOKEN_VAR] === undefined;
+  return current ? 'applied' : 'out-of-date';
 }
 
 /** True when settings.json holds nothing, so undoing a created file can delete it. */

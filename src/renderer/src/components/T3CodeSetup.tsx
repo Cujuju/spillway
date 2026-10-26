@@ -1,15 +1,16 @@
 import { Copy } from 'lucide-solid';
 import { For } from 'solid-js';
+import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
 import { ExpandRow } from './ui';
 
 const ICON_PX = 14;
 
 /** T3 Code runs Claude Code and Codex, so their Apply covers it; a Claude provider with its own home folder needs these variables. */
 export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked: string }) {
-  const vars = () => [
-    { name: 'ANTHROPIC_BASE_URL', value: props.endpoint, shown: props.endpoint },
-    { name: 'ANTHROPIC_AUTH_TOKEN', value: props.clientKey, shown: props.masked },
-  ];
+  const vars = () => {
+    const shown = claudeEnvVars(props.endpoint, props.masked);
+    return claudeEnvVars(props.endpoint, props.clientKey).map((v, i) => ({ ...v, shown: shown[i]?.value ?? '' }));
+  };
   return (
     <ExpandRow
       label="T3 Code"
@@ -18,7 +19,8 @@ export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked
     >
       <ol class="secondary steps">
         <li>In T3 Code, open Settings → Providers and pick the Claude provider (or add a Claude instance to keep a direct one too).</li>
-        <li>Under Environment variables, add these two. Mark the token as sensitive.</li>
+        <li>Under Environment variables, add these two and mark the second as sensitive. Remove {CLAUDE_TOKEN_VAR} if it is there: it stops T3 Code from seeing usage-limit resets.</li>
+        <li>Keep that provider signed in to Claude; requests still use the proxy's accounts.</li>
         <li>Save, then start a new thread with that provider.</li>
       </ol>
       <For each={vars()}>

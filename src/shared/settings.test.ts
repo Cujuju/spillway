@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, normalizeSettings, proxyConfigChanged } from './settings';
+import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, normalizeSettings, proxyConfigChanged } from './settings';
 
 describe('normalizeSettings', () => {
   it('keeps only non-empty string account overrides', () => {
@@ -11,6 +11,17 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ proxy: { firstByteTimeoutSeconds: 0 } }).proxy.firstByteTimeoutSeconds).toBe(0);
     expect(normalizeSettings({ proxy: { firstByteTimeoutSeconds: 99_999 } }).proxy.firstByteTimeoutSeconds).toBe(600);
     expect(normalizeSettings({}).proxy.firstByteTimeoutSeconds).toBe(DEFAULT_SETTINGS.proxy.firstByteTimeoutSeconds);
+  });
+
+  it('keeps a valid tray icon look and resets invalid parts to the default', () => {
+    const item = (look: unknown) => normalizeSettings({ trayIcons: { items: [{ provider: 'claude', windowKey: 'five_hour', look }] } }).trayIcons.items[0]!.look;
+    expect(item({ shape: 'circle', fill: 'filled', color: '#AABBCC' })).toEqual({ shape: 'circle', fill: 'filled', color: '#aabbcc' });
+    expect(item({ shape: 'hexagon', fill: 'glow', color: 'red' })).toEqual(DEFAULT_TRAY_LOOK);
+    expect(item(undefined)).toEqual(DEFAULT_TRAY_LOOK);
+  });
+
+  it('keeps only #rrggbb saved colours', () => {
+    expect(normalizeSettings({ trayIcons: { savedColors: ['#112233', '#12345678', 4, 'blue'] } }).trayIcons.savedColors).toEqual(['#112233']);
   });
 
   it('defaults update auto-check on and keeps a stored choice', () => {

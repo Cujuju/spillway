@@ -5,6 +5,19 @@ import { THEME_CHOICES } from './themes';
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
 export type TrayIconScope = 'active' | 'pool' | 'lowest' | 'account';
 export type TrayIconValue = 'remaining' | 'used';
+/** 'none' draws the digits alone. */
+export type TrayIconShape = 'square' | 'circle' | 'none';
+export type TrayIconFill = 'outline' | 'filled';
+
+/** How one tray icon is drawn, so icons for different limits look different. */
+export interface TrayIconLook {
+  shape: TrayIconShape;
+  fill: TrayIconFill;
+  /** Lowercase #rrggbb; null uses the provider colour. */
+  color: string | null;
+}
+
+export const DEFAULT_TRAY_LOOK: TrayIconLook = { shape: 'square', fill: 'outline', color: null };
 
 export interface TrayIconSpec {
   id: string;
@@ -13,6 +26,7 @@ export interface TrayIconSpec {
   scope: TrayIconScope;
   /** Set when scope is 'account'. */
   credentialId?: string;
+  look: TrayIconLook;
 }
 
 export interface AppSettings {
@@ -53,6 +67,8 @@ export interface AppSettings {
     warnAtPercentUsed: number;
     criticalAtPercentUsed: number;
     items: TrayIconSpec[];
+    /** The colour picker's saved custom colours, shared by every icon. */
+    savedColors: string[];
   };
   notifications: {
     limitHit: boolean;
@@ -115,9 +131,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     warnAtPercentUsed: 75,
     criticalAtPercentUsed: 90,
     items: [
-      { id: 'claude-five_hour-active', provider: 'claude', windowKey: 'five_hour', scope: 'active' },
-      { id: 'claude-seven_day-pool', provider: 'claude', windowKey: 'seven_day', scope: 'pool' },
+      { id: 'claude-five_hour-active', provider: 'claude', windowKey: 'five_hour', scope: 'active', look: DEFAULT_TRAY_LOOK },
+      // A different shape so the two Claude windows are tellable apart out of the box.
+      { id: 'claude-seven_day-pool', provider: 'claude', windowKey: 'seven_day', scope: 'pool', look: { ...DEFAULT_TRAY_LOOK, shape: 'circle' } },
     ],
+    savedColors: [],
   },
   notifications: {
     limitHit: true,
@@ -133,6 +151,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
 const SCOPES: readonly TrayIconScope[] = ['active', 'pool', 'lowest', 'account'];
 const SORTS = ['reset', 'usage', 'name'] as const;
+const SHAPES: readonly TrayIconShape[] = ['square', 'circle', 'none'];
+const FILLS: readonly TrayIconFill[] = ['outline', 'filled'];
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
@@ -142,6 +163,7 @@ const int = (v: unknown, d: number, min: number, max: number) =>
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T =>
   typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : d;
 const str = (v: unknown, d: string) => (typeof v === 'string' ? v : d);
+const hexColor = (v: unknown): string | null => (typeof v === 'string' && HEX_COLOR.test(v) ? v.toLowerCase() : null);
 const stringRecord = (v: unknown): Record<string, string> =>
   Object.fromEntries(Object.entries(obj(v)).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1] !== ''));
 
@@ -151,7 +173,13 @@ function normalizeTrayItem(v: unknown): TrayIconSpec | null {
   const scope = pick(o.scope, SCOPES, 'active');
   if (scope === 'account' && typeof o.credentialId !== 'string') return null;
   const id = typeof o.id === 'string' && o.id ? o.id : `${o.provider}-${o.windowKey}-${scope}`;
-  return { id, provider: o.provider, windowKey: o.windowKey, scope, ...(scope === 'account' ? { credentialId: o.credentialId as string } : {}) };
+  const l = obj(o.look);
+  const look: TrayIconLook = {
+    shape: pick(l.shape, SHAPES, DEFAULT_TRAY_LOOK.shape),
+    fill: pick(l.fill, FILLS, DEFAULT_TRAY_LOOK.fill),
+    color: hexColor(l.color),
+  };
+  return { id, provider: o.provider, windowKey: o.windowKey, scope, ...(scope === 'account' ? { credentialId: o.credentialId as string } : {}), look };
 }
 
 /** Rebuilds settings from stored JSON, dropping invalid values for their defaults. */
@@ -196,6 +224,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       items: Array.isArray(t.items)
         ? t.items.map(normalizeTrayItem).filter((i): i is TrayIconSpec => i !== null)
         : d.trayIcons.items,
+      savedColors: Array.isArray(t.savedColors) ? t.savedColors.map(hexColor).filter((c): c is string => c !== null) : [],
     },
     notifications: {
       limitHit: bool(n.limitHit, d.notifications.limitHit),

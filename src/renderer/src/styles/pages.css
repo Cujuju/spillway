@@ -138,6 +138,7 @@
 }
 .tray-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
@@ -151,6 +152,14 @@
   box-sizing: content-box;
   padding: 4px;
   border-radius: 4px;
+}
+/* Second line of a tray item, under its title. */
+.tray-look {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 /* Approximate Windows taskbar colours, so the preview matches what the tray shows. */
 .tray-item img.taskbar-dark {

@@ -1,10 +1,9 @@
 import { createEffect } from 'solid-js';
 import { APP_NAME } from '@shared/app';
-import { providerLabel, readTray, trayLevel } from '@shared/trayValues';
+import { providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
 import { poolSummary, poolWindowKey } from '../lib/forecast';
 import { relativeFuture } from '../lib/format';
-import { providerColor } from '../lib/providers';
-import { drawTrayIcon, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
+import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
 import { now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
 
 /** Windows truncates tray tooltips past 127 characters. */
@@ -24,16 +23,15 @@ export function TrayIconSync() {
     }
     const images = t.items.map((spec) => {
       const reading = readTray(spec, snap);
-      const level = trayLevel(reading.usedPercent, t.warnAtPercentUsed, t.criticalAtPercentUsed);
-      const shown = reading.usedPercent === null ? null : t.value === 'remaining' ? 100 - reading.usedPercent : reading.usedPercent;
-      const text = shown === null ? '–' : String(Math.round(Math.max(0, shown)));
-      const look = { level, providerColor: providerColor(spec.provider), darkTaskbar };
+      const shown = shownPercent(reading.usedPercent, t.value);
+      const text = trayIconText(shown);
+      const paint = paintFor(spec, darkTaskbar);
       const valueText = shown === null ? 'no data' : `${Math.round(shown)}% ${t.value}`;
       const reset = reading.resetsAt ? ` · resets ${relativeFuture(reading.resetsAt, time)}` : '';
       return {
         id: spec.id,
-        png1x: drawTrayIcon(TRAY_PX_1X, text, look),
-        png2x: drawTrayIcon(TRAY_PX_2X, text, look),
+        png1x: drawTrayIcon(TRAY_PX_1X, text, paint),
+        png2x: drawTrayIcon(TRAY_PX_2X, text, paint),
         tooltip: clip(`${reading.title}: ${valueText}${reset}\n${reading.source}`),
       };
     });

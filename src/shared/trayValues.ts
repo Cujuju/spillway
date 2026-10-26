@@ -1,4 +1,4 @@
-import type { TrayIconSpec } from './settings';
+import type { TrayIconSpec, TrayIconValue } from './settings';
 import type { Credential, UsageSnapshot } from './types';
 
 export interface TrayReading {
@@ -28,7 +28,7 @@ export function providerLabel(provider: string): string {
 }
 
 /** Computes what one tray icon shows from the latest snapshot. */
-export function readTray(spec: TrayIconSpec, snapshot: UsageSnapshot | null): TrayReading {
+export function readTray(spec: Pick<TrayIconSpec, 'provider' | 'windowKey' | 'scope' | 'credentialId'>, snapshot: UsageSnapshot | null): TrayReading {
   const accounts = (snapshot?.credentials ?? []).filter((c) => c.provider === spec.provider && usable(c));
   const withWindow = accounts.filter((c) => windowOf(c, spec.windowKey)?.usedPercent != null);
   const label = withWindow.length ? windowOf(withWindow[0]!, spec.windowKey)!.label : windowLabel(spec.windowKey);
@@ -61,6 +61,15 @@ export function readTray(spec: TrayIconSpec, snapshot: UsageSnapshot | null): Tr
     source: `${withWindow.length} accounts pooled`,
   };
 }
+
+/** Percent the icon shows for its 'remaining' or 'used' setting; null when there is no data. */
+export function shownPercent(usedPercent: number | null, value: TrayIconValue): number | null {
+  if (usedPercent === null) return null;
+  return Math.max(0, value === 'remaining' ? 100 - usedPercent : usedPercent);
+}
+
+/** Digits drawn on the icon; a dash when there is no data. */
+export const trayIconText = (shown: number | null) => (shown === null ? '–' : String(Math.round(shown)));
 
 export type TrayLevel = 'ok' | 'warn' | 'critical' | 'none';
 

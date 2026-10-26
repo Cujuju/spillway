@@ -1,12 +1,12 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-solid';
 import { createMemo, createSignal, For, Show } from 'solid-js';
-import type { TrayIconScope, TrayIconSpec } from '@shared/settings';
-import { KNOWN_WINDOW_LABELS, providerLabel, readTray, trayLevel, windowLabel } from '@shared/trayValues';
+import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
+import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, trayIconText, windowLabel } from '@shared/trayValues';
 import { windowPeriodMs } from '../lib/forecast';
 import { isMac } from '../lib/platform';
-import { providerColor } from '../lib/providers';
-import { drawTrayIcon, TRAY_PX_2X } from '../lib/trayRender';
+import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
+import { TrayIconLookEditor } from './TrayIconLookEditor';
 import { NumberField, Seg, SettingRow, Toggle } from './ui';
 
 const ICON_PX = 14;
@@ -25,9 +25,10 @@ const SCOPES: { value: TrayIconScope; label: string; title: string }[] = [
   { value: 'account', label: 'One account', title: 'A specific account' },
 ];
 
-const specId = (s: Omit<TrayIconSpec, 'id'>) => [s.provider, s.windowKey, s.scope, s.credentialId].filter(Boolean).join('-');
+type Draft = Omit<TrayIconSpec, 'id' | 'look'>;
+const specId = (s: Draft) => [s.provider, s.windowKey, s.scope, s.credentialId].filter(Boolean).join('-');
 
-/** Settings → Tray icons: thresholds and the list of per-limit notification-area icons. */
+/** Settings → Tray icons: thresholds and the list of per-limit notification-area icons with their looks. */
 export function TrayIconSettings() {
   const t = () => settings().trayIcons;
   const set = (fn: (d: ReturnType<typeof settings>['trayIcons']) => void) => void updateSettings((d) => fn(d.trayIcons));
@@ -54,7 +55,7 @@ export function TrayIconSettings() {
 
   const effectiveWindow = () => (windows().some((w) => w.key === windowKey()) ? windowKey() : (windows()[0]?.key ?? ''));
   const effectiveCredential = () => (accounts().some((c) => c.id === credentialId()) ? credentialId() : (accounts()[0]?.id ?? ''));
-  const draft = (): Omit<TrayIconSpec, 'id'> => ({
+  const draft = (): Draft => ({
     provider: provider(),
     windowKey: effectiveWindow(),
     scope: scope(),
@@ -62,7 +63,7 @@ export function TrayIconSettings() {
   });
   const duplicate = () => t().items.some((i) => i.id === specId(draft()));
   const canAdd = () => !!effectiveWindow() && (scope() !== 'account' || !!effectiveCredential()) && !duplicate();
-  const add = () => set((d) => void d.items.push({ id: specId(draft()), ...draft() }));
+  const add = () => set((d) => void d.items.push({ id: specId(draft()), ...draft(), look: DEFAULT_TRAY_LOOK }));
   const move = (index: number, delta: number) =>
     set((d) => {
       const [item] = d.items.splice(index, 1);
@@ -71,10 +72,8 @@ export function TrayIconSettings() {
 
   const preview = (spec: TrayIconSpec) => {
     const r = readTray(spec, snapshot());
-    const shown = r.usedPercent === null ? null : t().value === 'remaining' ? 100 - r.usedPercent : r.usedPercent;
-    const level = trayLevel(r.usedPercent, t().warnAtPercentUsed, t().criticalAtPercentUsed);
-    const look = { level, providerColor: providerColor(spec.provider), darkTaskbar: taskbarDark() };
-    return { src: drawTrayIcon(TRAY_PX_2X, shown === null ? '–' : String(Math.round(Math.max(0, shown))), look), reading: r };
+    const text = trayIconText(shownPercent(r.usedPercent, t().value));
+    return { src: drawTrayIcon(TRAY_PX_2X, text, paintFor(spec, taskbarDark())), reading: r };
   };
   const describe = (spec: TrayIconSpec) => {
     const scopeLabel = SCOPES.find((s) => s.value === spec.scope)?.label ?? spec.scope;
@@ -90,10 +89,10 @@ export function TrayIconSettings() {
       <SettingRow label="Number shown" help="What the digits on each icon mean.">
         <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />
       </SettingRow>
-      <SettingRow label="Warn at" help="Icon turns amber at this percent used.">
+      <SettingRow label="Warn at" help="Limit bars turn amber at this percent used.">
         <NumberField value={t().warnAtPercentUsed} suffix="% used" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = v))} />
       </SettingRow>
-      <SettingRow label="Critical at" help="Icon turns red at this percent used.">
+      <SettingRow label="Critical at" help="Limit bars turn red at this percent used.">
         <NumberField value={t().criticalAtPercentUsed} suffix="% used" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = v))} />
       </SettingRow>
 
@@ -110,6 +109,13 @@ export function TrayIconSettings() {
               <button class="btn ghost icon-btn" title="Move up" disabled={i() === 0} onClick={() => move(i(), -1)}><ArrowUp size={ICON_PX} /></button>
               <button class="btn ghost icon-btn" title="Move down" disabled={i() === t().items.length - 1} onClick={() => move(i(), 1)}><ArrowDown size={ICON_PX} /></button>
               <button class="btn ghost icon-btn" title="Remove" onClick={() => set((d) => void d.items.splice(i(), 1))}><Trash2 size={ICON_PX} /></button>
+              <TrayIconLookEditor
+                look={spec.look}
+                provider={spec.provider}
+                savedColors={t().savedColors}
+                onChange={(look) => set((d) => void (d.items[i()]!.look = look))}
+                onSavedColorsChange={(colors) => set((d) => void (d.savedColors = colors))}
+              />
             </div>
           )}
         </For>

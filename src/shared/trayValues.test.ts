@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, UsageSnapshot } from './types';
-import { readTray, trayLevel } from './trayValues';
+import { readTray, shownPercent, trayIconText, trayLevel } from './trayValues';
 
 const cred = (id: string, used: number, patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
@@ -38,5 +38,15 @@ describe('trayLevel', () => {
     expect(trayLevel(10, 75, 90)).toBe('ok');
     expect(trayLevel(75, 75, 90)).toBe('warn');
     expect(trayLevel(95, 75, 90)).toBe('critical');
+  });
+});
+
+describe('shownPercent and trayIconText', () => {
+  it('shows remaining or used, never below zero, and a dash without data', () => {
+    expect(shownPercent(30, 'remaining')).toBe(70);
+    expect(shownPercent(30, 'used')).toBe(30);
+    expect(shownPercent(104, 'remaining')).toBe(0);
+    expect(trayIconText(shownPercent(null, 'remaining'))).toBe('–');
+    expect(trayIconText(69.6)).toBe('70');
   });
 });

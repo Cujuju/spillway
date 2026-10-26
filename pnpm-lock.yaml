@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      '@cujuju/solidjs-color-picker':
+        specifier: 0.3.0
+        version: 0.3.0(solid-js@1.9.17)
       electron-updater:
         specifier: ^6.8.11
         version: 6.8.11(supports-color@7.2.0)
@@ -292,6 +295,11 @@ packages:
   '@babel/types@7.29.11':
     resolution: {integrity: sha512-WCsemW40Cpc6gouC1SrY6PBaZ+oLRlEVY9XBvZBI7il/HyUrb2nJ505wE1MHEFyDZNnrWDEuy4jL50WVHfTTSQ==}
     engines: {node: '>=6.9.0'}
+
+  '@cujuju/solidjs-color-picker@0.3.0':
+    resolution: {integrity: sha512-ETPit9BjLft6QkiKyx1DERheAJylpaF0cjgbE6/OwTmzxZHUrKfEYFGLO55u9EQGLUISinKVbu/GfecdHUcnpw==}
+    peerDependencies:
+      solid-js: '>=1.7.0'
 
   '@electron-internal/extract-zip@1.0.6':
     resolution: {integrity: sha512-/aQLgFDdCSnwChfUwqekSmE1q2dCTzhUy5saIHBb5vyYn5LzWaKPaIz1wM0lDMCZYBoIG4svJNvAJb6vkI8BuA==}
@@ -2085,6 +2093,10 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.11
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@cujuju/solidjs-color-picker@0.3.0(solid-js@1.9.17)':
+    dependencies:
+      solid-js: 1.9.17
 
   '@electron-internal/extract-zip@1.0.6': {}
 

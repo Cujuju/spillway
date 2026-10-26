@@ -13,5 +13,5 @@
     "allowImportingTsExtensions": true,
     "paths": { "@shared/*": ["./src/shared/*"] }
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "scripts/**/*.mts"]
+  "include": ["appVersion.ts", "appVersion.test.ts", "electron-builder.ts", "electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "scripts/**/*.mts"]
 }

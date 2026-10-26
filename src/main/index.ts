@@ -17,6 +17,9 @@ import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow,
 const HIDDEN_ARG = '--hidden';
 const isMac = process.platform === 'darwin';
 
+// Dev loads package.json, which has no version; packaged builds carry it (electron-builder.ts).
+if (!app.isPackaged) app.setVersion(__APP_VERSION__);
+
 const send = (channel: string, payload: unknown) => mainWindow()?.webContents.send(channel, payload);
 
 function applyLoginItem(): void {

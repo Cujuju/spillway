@@ -9,7 +9,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isMap, isSeq, parse, parseDocument, type Document, type YAMLMap } from 'yaml';
+import { isMap, isSeq, parseDocument, type Document, type YAMLMap } from 'yaml';
+import builderConfig from '../electron-builder.ts';
 import { publicKeyOf, releaseTag, sha512File, signFile, verifyFile, type SignedFileInfo } from '../src/main/updateRelease.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,11 +90,10 @@ async function sign(dist: string): Promise<void> {
   }
 }
 
-/** owner/repo from electron-builder.yml `publish`, which also tells installed apps where to look. */
+/** owner/repo from electron-builder.ts `publish`, which also tells installed apps where to look. */
 function updatesRepo(): string {
-  const config = parse(readFileSync(path.join(ROOT, 'electron-builder.yml'), 'utf8')) as { publish?: { owner?: string; repo?: string } };
-  const { owner, repo } = config.publish ?? {};
-  return owner && repo ? `${owner}/${repo}` : fail('electron-builder.yml has no publish owner and repo');
+  const { owner, repo } = (builderConfig.publish ?? {}) as { owner?: string; repo?: string };
+  return owner && repo ? `${owner}/${repo}` : fail('electron-builder.ts has no publish owner and repo');
 }
 
 const gh = (args: string[], dryRun: boolean) => {

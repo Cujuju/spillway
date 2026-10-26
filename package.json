@@ -1,7 +1,6 @@
 {
   "name": "spillway",
   "productName": "Spillway",
-  "version": "0.1.0",
   "private": true,
   "description": "Desktop app for a private CLIProxyAPI build: accounts, limits, tray.",
   "main": "out/main/index.js",

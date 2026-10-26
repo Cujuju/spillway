@@ -47,6 +47,8 @@
    Tints derive here, per scope, so a preview recomputes them from its own palette. */
 :root,
 .theme-scope {
+  /* Lines between rows in a card: half the border, so rows read as one list rather than boxes. */
+  --color-divider: color-mix(in srgb, var(--color-border) 50%, transparent);
   --color-accent-subtle: color-mix(in srgb, var(--color-accent) 13%, transparent);
   --color-accent-border: color-mix(in srgb, var(--color-accent) 53%, transparent);
   --color-green-subtle: color-mix(in srgb, var(--color-green) 10%, transparent);

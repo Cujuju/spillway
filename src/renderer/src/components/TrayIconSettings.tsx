@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-solid';
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
-import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, trayIconText, windowLabel } from '@shared/trayValues';
+import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdInUnit, trayIconText, windowLabel } from '@shared/trayValues';
 import { isMac } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
@@ -31,6 +31,8 @@ const specId = (s: Draft) => [s.provider, s.windowKey, s.scope, s.credentialId].
 export function TrayIconSettings() {
   const t = () => settings().trayIcons;
   const set = (fn: (d: ReturnType<typeof settings>['trayIcons']) => void) => void updateSettings((d) => fn(d.trayIcons));
+  // Thresholds follow "Number shown"; a level starts at the threshold (used: or more, remaining: or less).
+  const thresholdWording = () => (t().value === 'remaining' ? 'percent remaining or less' : 'percent used or more');
 
   const providers = createMemo(() => {
     const seen = new Set<string>(Object.keys(FALLBACK_WINDOWS));
@@ -91,11 +93,11 @@ export function TrayIconSettings() {
         <SettingRow label="Number shown" help="What the digits on each icon mean.">
           <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />
         </SettingRow>
-        <SettingRow label="Warn at" help="Limit bars turn amber at this percent used.">
-          <NumberField value={t().warnAtPercentUsed} unit="%" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = v))} />
+        <SettingRow label="Warn at" help={`Limit bars and icons turn amber at this ${thresholdWording()}.`}>
+          <NumberField value={thresholdInUnit(t().warnAtPercentUsed, t().value)} unit="%" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = thresholdInUnit(v, d.value)))} />
         </SettingRow>
-        <SettingRow label="Critical at" help="Limit bars turn red at this percent used.">
-          <NumberField value={t().criticalAtPercentUsed} unit="%" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = v))} />
+        <SettingRow label="Critical at" help={`Limit bars and icons turn red at this ${thresholdWording()}.`}>
+          <NumberField value={thresholdInUnit(t().criticalAtPercentUsed, t().value)} unit="%" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = thresholdInUnit(v, d.value)))} />
         </SettingRow>
       </SettingsGroup>
 

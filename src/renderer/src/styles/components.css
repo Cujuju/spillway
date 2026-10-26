@@ -290,7 +290,7 @@
   align-items: center;
   gap: 8px 16px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
 }
 .list-row:last-child {
   border-bottom: 0;
@@ -310,7 +310,7 @@
 }
 .list-row-help.path {
   margin-top: 1px;
-  color: var(--color-text-disabled);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .list-row-help.error {

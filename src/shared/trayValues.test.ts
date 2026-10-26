@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, UsageSnapshot } from './types';
-import { readTray, shownPercent, trayIconText, trayLevel } from './trayValues';
+import { readTray, shownPercent, thresholdInUnit, trayIconText, trayLevel } from './trayValues';
 
 const cred = (id: string, used: number, patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
@@ -38,6 +38,20 @@ describe('trayLevel', () => {
     expect(trayLevel(10, 75, 90)).toBe('ok');
     expect(trayLevel(75, 75, 90)).toBe('warn');
     expect(trayLevel(95, 75, 90)).toBe('critical');
+  });
+});
+
+describe('thresholdInUnit', () => {
+  it('shows a stored percent-used threshold in the icon unit and converts it back', () => {
+    expect(thresholdInUnit(75, 'used')).toBe(75);
+    expect(thresholdInUnit(75, 'remaining')).toBe(25);
+    expect(thresholdInUnit(thresholdInUnit(90, 'remaining'), 'remaining')).toBe(90);
+  });
+
+  it('agrees with the icon digits at the threshold', () => {
+    const warnUsed = 75;
+    expect(trayLevel(warnUsed, warnUsed, 90)).toBe('warn');
+    expect(shownPercent(warnUsed, 'remaining')).toBe(thresholdInUnit(warnUsed, 'remaining'));
   });
 });
 

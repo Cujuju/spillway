@@ -77,10 +77,26 @@ function parseCredential(raw: unknown): Credential | null {
   };
 }
 
+/** Appends 1, 2, … to labels shared within a provider, numbered in id order so numbers stay put between polls. */
+function numberDuplicateLabels(creds: Credential[]): Credential[] {
+  const key = (c: Credential) => `${c.provider}\n${c.label}`;
+  const counts = new Map<string, number>();
+  for (const c of creds) counts.set(key(c), (counts.get(key(c)) ?? 0) + 1);
+  const taken = new Map<string, number>();
+  const numbered = new Map<string, string>();
+  for (const c of [...creds].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (counts.get(key(c))! < 2) continue;
+    const n = (taken.get(key(c)) ?? 0) + 1;
+    taken.set(key(c), n);
+    numbered.set(c.id, `${c.label}${n}`);
+  }
+  return creds.map((c) => (numbered.has(c.id) ? { ...c, label: numbered.get(c.id)! } : c));
+}
+
 export function parseUsageSnapshot(raw: unknown): UsageSnapshot {
   const r = obj(raw);
   const credentials = Array.isArray(r.credentials)
-    ? r.credentials.map(parseCredential).filter((c): c is Credential => c !== null)
+    ? numberDuplicateLabels(r.credentials.map(parseCredential).filter((c): c is Credential => c !== null))
     : [];
   return { fetchedAt: new Date().toISOString(), strategy: s(r.strategy) ?? 'unknown', credentials };
 }

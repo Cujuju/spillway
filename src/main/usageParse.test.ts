@@ -17,6 +17,17 @@ describe('credential label', () => {
   it('defaults to the email domain', () => expect(labelOf({ email: 'someone@pm.me', label: 'someone@pm.me' })).toBe('pm.me'));
   it('prefers the note', () => expect(labelOf({ email: 'someone@pm.me', note: 'Work' })).toBe('Work'));
   it('falls back to the proxy label without an email', () => expect(labelOf({ label: 'API key' })).toBe('API key'));
+  it('numbers labels shared within a provider, in id order', () => {
+    const labels = parseUsageSnapshot({
+      credentials: [
+        { id: 'b', provider: 'claude', email: 'two@gmail.com' },
+        { id: 'a', provider: 'claude', email: 'one@gmail.com' },
+        { id: 'c', provider: 'codex', email: 'three@gmail.com' },
+        { id: 'd', provider: 'claude', email: 'four@pm.me' },
+      ],
+    }).credentials.map((c) => c.label);
+    expect(labels).toEqual(['gmail.com2', 'gmail.com1', 'gmail.com', 'pm.me']);
+  });
 });
 
 describe('windows and weight', () => {

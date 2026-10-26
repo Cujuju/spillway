@@ -27,9 +27,13 @@ export const taskbarDark = () => nativeTheme.shouldUseDarkColorsForSystemIntegra
 let appTray: Tray | null = null;
 const limitTrays = new Map<string, Tray>();
 
-/** Stable per-icon GUID so Windows remembers each icon's "always show" choice and macOS its menu bar position. */
+/**
+ * Stable per-icon GUID so Windows remembers each icon's "always show" choice and macOS its menu bar position.
+ * Windows binds a GUID to the first exe that registers it and rejects it from any other path, so the exe path
+ * is part of the key: an installed copy, a dev build and a moved folder each get their own icons.
+ */
 function guidFor(id: string): string {
-  const h = createHash('sha1').update(`spillway:${id}`).digest('hex');
+  const h = createHash('sha1').update(`spillway:${process.execPath.toLowerCase()}:${id}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 

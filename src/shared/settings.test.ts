@@ -16,6 +16,7 @@ describe('normalizeSettings', () => {
   it('keeps a valid tray icon look and resets invalid parts to the default', () => {
     const item = (look: unknown) => normalizeSettings({ trayIcons: { items: [{ provider: 'claude', windowKey: 'five_hour', look }] } }).trayIcons.items[0]!.look;
     expect(item({ shape: 'circle', fill: 'filled', color: '#AABBCC' })).toEqual({ shape: 'circle', fill: 'filled', color: '#aabbcc' });
+    expect(item({ shape: 'rounded', fill: 'outline', color: null }).shape).toBe('rounded');
     expect(item({ shape: 'hexagon', fill: 'glow', color: 'red' })).toEqual(DEFAULT_TRAY_LOOK);
     expect(item(undefined)).toEqual(DEFAULT_TRAY_LOOK);
   });

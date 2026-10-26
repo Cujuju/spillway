@@ -20,12 +20,15 @@ const DIGITS_ON_LIGHT = '#1f2937';
 const WHITE_TEXT_MAX_LUMINANCE = 0.179;
 /** 1 px outline at 16 px, 2 px at 32 px. */
 const OUTLINE_PER_EDGE = 1 / 16;
+/** Rounded shape's corner radius as a share of the icon edge. */
+const CORNER_RATIO = 0.22;
 /**
  * fontRatio: digit height as a share of the edge. fitRatio: share of the inner width the digits may span;
  * wider text ("100") shrinks to fit. A circle leaves less width at the digits' top and bottom.
  */
 const SHAPE_TEXT: Record<TrayIconShape, { fontRatio: number; fitRatio: number }> = {
   square: { fontRatio: 0.62, fitRatio: 0.84 },
+  rounded: { fontRatio: 0.62, fitRatio: 0.84 },
   circle: { fontRatio: 0.56, fitRatio: 0.74 },
   none: { fontRatio: 0.8, fitRatio: 1 },
 };
@@ -46,6 +49,7 @@ function shapePath(ctx: CanvasRenderingContext2D, shape: Exclude<TrayIconShape, 
   const edge = size - 2 * inset;
   ctx.beginPath();
   if (shape === 'circle') ctx.arc(size / 2, size / 2, edge / 2, 0, 2 * Math.PI);
+  else if (shape === 'rounded') ctx.roundRect(inset, inset, edge, edge, size * CORNER_RATIO);
   else ctx.rect(inset, inset, edge, edge);
 }
 

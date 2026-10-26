@@ -6,6 +6,7 @@ import { Seg } from './ui';
 
 const SHAPES: readonly { value: TrayIconShape; label: string }[] = [
   { value: 'square', label: 'Square' },
+  { value: 'rounded', label: 'Rounded' },
   { value: 'circle', label: 'Circle' },
   { value: 'none', label: 'Digits only' },
 ];

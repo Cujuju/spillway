@@ -6,7 +6,7 @@ export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | '
 export type TrayIconScope = 'active' | 'pool' | 'lowest' | 'account';
 export type TrayIconValue = 'remaining' | 'used';
 /** 'none' draws the digits alone. */
-export type TrayIconShape = 'square' | 'circle' | 'none';
+export type TrayIconShape = 'square' | 'rounded' | 'circle' | 'none';
 export type TrayIconFill = 'outline' | 'filled';
 
 /** How one tray icon is drawn, so icons for different limits look different. */
@@ -151,7 +151,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
 const SCOPES: readonly TrayIconScope[] = ['active', 'pool', 'lowest', 'account'];
 const SORTS = ['reset', 'usage', 'name'] as const;
-const SHAPES: readonly TrayIconShape[] = ['square', 'circle', 'none'];
+const SHAPES: readonly TrayIconShape[] = ['square', 'rounded', 'circle', 'none'];
 const FILLS: readonly TrayIconFill[] = ['outline', 'filled'];
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 

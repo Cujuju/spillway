@@ -1,4 +1,4 @@
-import { Menu, nativeImage, Tray } from 'electron';
+import { Menu, nativeImage, nativeTheme, Tray } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { createHash } from 'node:crypto';
 import { maskEmails } from '@shared/privacy';
@@ -20,6 +20,9 @@ export interface LimitTrayImage {
 
 /** macOS menu bar icons are about 18pt; Windows scales the source icon itself. */
 const MENU_BAR_ICON_PT = 18;
+
+/** The taskbar has its own theme, separate from the app theme (Windows "Choose your default Windows mode"). */
+export const taskbarDark = () => nativeTheme.shouldUseDarkColorsForSystemIntegratedUI;
 
 let appTray: Tray | null = null;
 const limitTrays = new Map<string, Tray>();

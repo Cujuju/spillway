@@ -148,6 +148,16 @@
 }
 .tray-item img {
   flex-shrink: 0;
+  box-sizing: content-box;
+  padding: 4px;
+  border-radius: 4px;
+}
+/* Approximate Windows taskbar colours, so the preview matches what the tray shows. */
+.tray-item img.taskbar-dark {
+  background: #101010;
+}
+.tray-item img.taskbar-light {
+  background: #eeeeee;
 }
 .tray-add {
   display: flex;

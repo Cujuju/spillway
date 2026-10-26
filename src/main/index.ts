@@ -8,7 +8,7 @@ import { appIconPath } from './paths';
 import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
-import { destroyTrays, ensureAppTray } from './tray';
+import { destroyTrays, ensureAppTray, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
@@ -69,7 +69,10 @@ function wireEvents(): void {
     if (next.updates.autoCheck !== prev.updates.autoCheck) updates.setAutoCheck(next.updates.autoCheck);
   });
   // 'system' theme follows the OS light/dark switch.
-  nativeTheme.on('updated', syncWindowBackground);
+  nativeTheme.on('updated', () => {
+    syncWindowBackground();
+    send(EVENTS.onTaskbarDark, taskbarDark());
+  });
 }
 
 if (!app.requestSingleInstanceLock()) {

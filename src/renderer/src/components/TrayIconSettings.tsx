@@ -6,7 +6,7 @@ import { windowPeriodMs } from '../lib/forecast';
 import { isMac } from '../lib/platform';
 import { providerColor } from '../lib/providers';
 import { drawTrayIcon, TRAY_PX_2X } from '../lib/trayRender';
-import { settings, snapshot, updateSettings } from '../store';
+import { settings, snapshot, taskbarDark, updateSettings } from '../store';
 import { NumberField, Seg, SettingRow, Toggle } from './ui';
 
 const ICON_PX = 14;
@@ -73,7 +73,8 @@ export function TrayIconSettings() {
     const r = readTray(spec, snapshot());
     const shown = r.usedPercent === null ? null : t().value === 'remaining' ? 100 - r.usedPercent : r.usedPercent;
     const level = trayLevel(r.usedPercent, t().warnAtPercentUsed, t().criticalAtPercentUsed);
-    return { src: drawTrayIcon(TRAY_PX_2X, shown === null ? '–' : String(Math.round(Math.max(0, shown))), level, providerColor(spec.provider)), reading: r };
+    const look = { level, providerColor: providerColor(spec.provider), darkTaskbar: taskbarDark() };
+    return { src: drawTrayIcon(TRAY_PX_2X, shown === null ? '–' : String(Math.round(Math.max(0, shown))), look), reading: r };
   };
   const describe = (spec: TrayIconSpec) => {
     const scopeLabel = SCOPES.find((s) => s.value === spec.scope)?.label ?? spec.scope;
@@ -101,7 +102,7 @@ export function TrayIconSettings() {
         <For each={t().items} fallback={<div class="muted">No limit icons. Add one below.</div>}>
           {(spec, i) => (
             <div class="tray-item">
-              <img src={preview(spec).src} width={PREVIEW_CSS_PX} height={PREVIEW_CSS_PX} alt="" />
+              <img class={taskbarDark() ? 'taskbar-dark' : 'taskbar-light'} src={preview(spec).src} width={PREVIEW_CSS_PX} height={PREVIEW_CSS_PX} alt="" />
               <div class="spacer" style={{ 'min-width': 0 }}>
                 <div>{preview(spec).reading.title}</div>
                 <div class="muted truncate">{describe(spec)} · {preview(spec).reading.source}</div>

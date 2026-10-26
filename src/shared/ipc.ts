@@ -48,6 +48,8 @@ export interface DesktopApi {
 
   setLimitTrays(images: { id: string; png1x: string; png2x: string; tooltip: string }[]): Promise<void>;
   setAppTooltip(text: string): Promise<void>;
+  /** Whether the taskbar (Windows) or menu bar (macOS) is dark, so tray digits stay readable. */
+  taskbarDark(): Promise<boolean>;
 
   openExternal(url: string): Promise<void>;
   /** userConfig creates config.user.yaml when missing and opens it in the default editor. */
@@ -68,6 +70,7 @@ export interface DesktopApi {
   onSettings(cb: (s: AppSettings) => void): () => void;
   onActivity(cb: (e: ActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
+  onTaskbarDark(cb: (dark: boolean) => void): () => void;
 }
 
 /** invoke channels: name → method on DesktopApi. */
@@ -106,6 +109,7 @@ export const INVOKE = {
   deleteCredential: 'cred:delete',
   setLimitTrays: 'tray:limits',
   setAppTooltip: 'tray:tooltip',
+  taskbarDark: 'tray:taskbar-dark',
   openExternal: 'shell:external',
   openPath: 'shell:path',
   copyText: 'clipboard:copy',
@@ -128,4 +132,5 @@ export const EVENTS = {
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
   onUpdateStatus: 'update:status-changed',
+  onTaskbarDark: 'tray:taskbar-dark-changed',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

@@ -5,7 +5,7 @@ import { poolSummary, poolWindowKey } from '../lib/forecast';
 import { relativeFuture } from '../lib/format';
 import { providerColor } from '../lib/providers';
 import { drawTrayIcon, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
-import { now, proxyStatus, settings, snapshot } from '../store';
+import { now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
 
 /** Windows truncates tray tooltips past 127 characters. */
 const TOOLTIP_MAX = 127;
@@ -17,6 +17,7 @@ export function TrayIconSync() {
     const t = settings().trayIcons;
     const snap = snapshot();
     const time = now();
+    const darkTaskbar = taskbarDark();
     if (!t.enabled) {
       void window.api.setLimitTrays([]);
       return;
@@ -26,13 +27,13 @@ export function TrayIconSync() {
       const level = trayLevel(reading.usedPercent, t.warnAtPercentUsed, t.criticalAtPercentUsed);
       const shown = reading.usedPercent === null ? null : t.value === 'remaining' ? 100 - reading.usedPercent : reading.usedPercent;
       const text = shown === null ? '–' : String(Math.round(Math.max(0, shown)));
-      const stripe = providerColor(spec.provider);
+      const look = { level, providerColor: providerColor(spec.provider), darkTaskbar };
       const valueText = shown === null ? 'no data' : `${Math.round(shown)}% ${t.value}`;
       const reset = reading.resetsAt ? ` · resets ${relativeFuture(reading.resetsAt, time)}` : '';
       return {
         id: spec.id,
-        png1x: drawTrayIcon(TRAY_PX_1X, text, level, stripe),
-        png2x: drawTrayIcon(TRAY_PX_2X, text, level, stripe),
+        png1x: drawTrayIcon(TRAY_PX_1X, text, look),
+        png2x: drawTrayIcon(TRAY_PX_2X, text, look),
         tooltip: clip(`${reading.title}: ${valueText}${reset}\n${reading.source}`),
       };
     });

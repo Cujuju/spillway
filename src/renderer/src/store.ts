@@ -25,6 +25,7 @@ export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(nu
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 export const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 export const [maximized, setMaximized] = createSignal(false);
+export const [taskbarDark, setTaskbarDark] = createSignal(true);
 /** Ticks every 30 s so countdowns re-render without each component owning a timer. */
 export const [now, setNow] = createSignal(Date.now());
 
@@ -55,9 +56,10 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
-  const [s, latest, status, hist, logLines, recent] = await Promise.all([
-    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.activityList(),
+  const [s, latest, status, hist, logLines, recent, dark] = await Promise.all([
+    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.activityList(), api.taskbarDark(),
   ]);
+  setTaskbarDark(dark);
   setSettingsSignal(s);
   setSnapshot(latest.snapshot);
   setUsageError(latest.error);
@@ -74,6 +76,7 @@ export async function initStore(): Promise<void> {
   api.onProxyStatus(setProxyStatus);
   api.onProxyLog((line) => setLogs((prev) => (prev.length >= MAX_LOG_LINES ? [...prev.slice(1), line] : [...prev, line])));
   api.onMaximized(setMaximized);
+  api.onTaskbarDark(setTaskbarDark);
   api.onNavigate((p) => setPage(p as Page));
   api.onSettings(setSettingsSignal);
   api.onActivity((e) => setActivity((prev) => (prev.length >= MAX_ACTIVITY_EVENTS ? [...prev.slice(1), e] : [...prev, e])));

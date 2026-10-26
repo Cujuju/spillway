@@ -4,55 +4,63 @@ import type { TrayLevel } from '@shared/trayValues';
 export const TRAY_PX_1X = 16;
 export const TRAY_PX_2X = 32;
 
-const LEVEL_FILL: Record<TrayLevel, string> = {
-  ok: '#10b981',
+export interface TrayIconLook {
+  level: TrayLevel;
+  /** Outline colour while the limit is fine. */
+  providerColor: string;
+  /** Taskbar theme: picks digit colour, since the icon has no fill behind the digits. */
+  darkTaskbar: boolean;
+}
+
+/** Low limits override the provider colour so they stand out. */
+const ALERT_OUTLINE: Record<Exclude<TrayLevel, 'ok'>, string> = {
   warn: '#f59e0b',
   critical: '#ef4444',
-  none: '#475569',
+  none: '#64748b',
 };
+const DIGITS_ON_DARK = '#ffffff';
+const DIGITS_ON_LIGHT = '#1f2937';
+/** 1 px outline at 16 px, 2 px at 32 px. */
+const OUTLINE_PER_EDGE = 1 / 16;
 /** Corner radius as a share of the icon edge. */
 const CORNER_RATIO = 0.22;
-/** Font heights as a share of the edge: two digits fill the tile, three need to shrink. */
-const FONT_RATIO_2_DIGITS = 0.72;
-const FONT_RATIO_3_DIGITS = 0.5;
+/** Digit height as a share of the edge; wider text ("100") shrinks to fit. */
+const FONT_RATIO = 0.62;
+/** Share of the space inside the outline the digits may span, leaving a gap to the line. */
+const TEXT_FIT_RATIO = 0.84;
 /** Regular weight in the OS UI font, like the taskbar clock beside it. */
 const TRAY_FONT_WEIGHT = 400;
 const TRAY_FONT = "'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif";
-/** A provider stripe along the bottom edge so same-valued icons stay tellable apart. */
-const STRIPE_RATIO = 0.14;
 
-function roundedRect(ctx: CanvasRenderingContext2D, size: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(r, 0);
-  ctx.arcTo(size, 0, size, size, r);
-  ctx.arcTo(size, size, 0, size, r);
-  ctx.arcTo(0, size, 0, 0, r);
-  ctx.arcTo(0, 0, size, 0, r);
-  ctx.closePath();
-}
-
-/** Draws a filled tile with a number, returned as a PNG data URL. */
-export function drawTrayIcon(size: number, text: string, level: TrayLevel, stripeColor: string | null): string {
+/** Draws a rounded-rectangle outline around a number, returned as a PNG data URL. */
+export function drawTrayIcon(size: number, text: string, look: TrayIconLook): string {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  roundedRect(ctx, size, size * CORNER_RATIO);
-  ctx.fillStyle = LEVEL_FILL[level];
-  ctx.fill();
-  if (stripeColor) {
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = stripeColor;
-    ctx.fillRect(0, size * (1 - STRIPE_RATIO), size, size * STRIPE_RATIO);
-    ctx.restore();
+
+  const line = Math.max(1, Math.round(size * OUTLINE_PER_EDGE));
+  // Centre the stroke on the half pixel so a 1 px line stays crisp.
+  ctx.beginPath();
+  ctx.roundRect(line / 2, line / 2, size - line, size - line, size * CORNER_RATIO);
+  ctx.lineWidth = line;
+  ctx.strokeStyle = look.level === 'ok' ? look.providerColor : ALERT_OUTLINE[look.level];
+  ctx.stroke();
+
+  const font = (px: number) => `${TRAY_FONT_WEIGHT} ${px}px ${TRAY_FONT}`;
+  let px = size * FONT_RATIO;
+  ctx.font = font(px);
+  const room = (size - 2 * line) * TEXT_FIT_RATIO;
+  const width = ctx.measureText(text).width;
+  if (width > room) {
+    px *= room / width;
+    ctx.font = font(px);
   }
-  const ratio = text.length >= 3 ? FONT_RATIO_3_DIGITS : FONT_RATIO_2_DIGITS;
-  ctx.font = `${TRAY_FONT_WEIGHT} ${Math.round(size * ratio)}px ${TRAY_FONT}`;
-  ctx.fillStyle = level === 'warn' ? '#0a0f1c' : '#ffffff';
+  // Centre on the glyphs' own ink box; 'middle' baseline sits high for digits.
+  const m = ctx.measureText(text);
+  ctx.fillStyle = look.darkTaskbar ? DIGITS_ON_DARK : DIGITS_ON_LIGHT;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // Nudge up so the stripe never covers the glyph baseline.
-  ctx.fillText(text, size / 2, size * (stripeColor ? 0.45 : 0.53));
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(text, size / 2, size / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
   return canvas.toDataURL('image/png');
 }

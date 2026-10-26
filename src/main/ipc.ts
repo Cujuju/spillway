@@ -11,7 +11,7 @@ import { ensureUserConfigFile } from './proxyLaunch';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
 import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
-import { setAppTrayTooltip, syncLimitTrays } from './tray';
+import { setAppTrayTooltip, syncLimitTrays, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
 import { mainWindow } from './window';
@@ -134,6 +134,7 @@ const handlers: Handlers = {
   },
   setLimitTrays: (images) => syncLimitTrays(images),
   setAppTooltip: (text) => setAppTrayTooltip(text),
+  taskbarDark: () => taskbarDark(),
   openExternal: async (url) => {
     if (/^https?:\/\//.test(url)) await shell.openExternal(url);
   },

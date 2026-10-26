@@ -12,6 +12,8 @@ export interface ClientTarget {
   /** e.g. http://127.0.0.1:8317 */
   endpoint: string;
   key: string;
+  /** The account Codex's account calls reach (`account_view`); its pool login names it. Null before the first usage poll. */
+  codexAccountEmail: string | null;
 }
 
 const CRLF = '\r\n';

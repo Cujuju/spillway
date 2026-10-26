@@ -6,7 +6,7 @@ import type { ClientId, ClientSetupState, ClientSetupStatus } from '@shared/type
 import {
   applyClaude, applyCodex, claudeIsEmpty, claudeState, codexIsEmpty, codexState, undoClaude, undoCodex, type ClientTarget,
 } from './clientConfigText';
-import { CODEX_AUTH_FILE, codexPoolAuthJson, isCodexPoolAuth } from './codexPoolAuth';
+import { CODEX_AUTH_FILE, codexPoolAuthJson, codexPoolAuthMatches, isCodexPoolAuth } from './codexPoolAuth';
 import { writeFileAtomic } from './settingsStore';
 
 export const BACKUP_SUFFIX = '.spillway-backup';
@@ -17,11 +17,18 @@ interface Companion {
   content(target: ClientTarget): string;
   /** True when the file holds what apply writes, for any key. */
   isOurs(text: string): boolean;
+  /** True when the file is applied for this target; parts kept in step automatically (the account) don't count. */
+  matches(text: string, target: ClientTarget): boolean;
 }
 
 const COMPANIONS: Partial<Record<ClientId, Companion>> = {
   // Codex's login: the pool login sends its account calls through the proxy as the routed account.
-  codex: { name: CODEX_AUTH_FILE, content: (t) => codexPoolAuthJson(t.key), isOurs: isCodexPoolAuth },
+  codex: {
+    name: CODEX_AUTH_FILE,
+    content: (t) => codexPoolAuthJson(t.key, t.codexAccountEmail),
+    isOurs: isCodexPoolAuth,
+    matches: (text, t) => codexPoolAuthMatches(text, t.key),
+  },
 };
 
 interface ClientEdit {
@@ -58,7 +65,19 @@ const companionPath = (file: string, companion: Companion) => path.join(path.dir
 function stateWithCompanion(client: ClientId, file: string, target: ClientTarget, state: ClientSetupState): ClientSetupState {
   const companion = COMPANIONS[client];
   if (!companion || state !== 'applied') return state;
-  return read(companionPath(file, companion)) === companion.content(target) ? state : 'out-of-date';
+  const text = read(companionPath(file, companion));
+  return text !== null && companion.matches(text, target) ? state : 'out-of-date';
+}
+
+/** Rewrites an applied companion whose content went stale (the routed account changed). A file the user replaced is left alone. */
+export function syncCompanion(client: ClientId, file: string, target: ClientTarget): void {
+  const companion = COMPANIONS[client];
+  if (!companion) return;
+  const companionFile = companionPath(file, companion);
+  const text = read(companionFile);
+  if (text === null || !companion.matches(text, target)) return;
+  const content = companion.content(target);
+  if (text !== content) writeFileAtomic(resolved(companionFile), content);
 }
 
 /** Backs up the user's own file (a newer one, e.g. a fresh login, replaces an older backup), then replaces it. */

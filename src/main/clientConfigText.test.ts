@@ -3,7 +3,7 @@ import {
   applyClaude, applyCodex, claudeState, codexState, DISABLED_PREFIX, undoClaude, undoCodex,
 } from './clientConfigText';
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', codexAccountEmail: null };
 const moved = { ...target, endpoint: 'http://127.0.0.1:9000' };
 
 describe('Claude Code settings.json', () => {

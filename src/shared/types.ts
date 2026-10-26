@@ -60,6 +60,8 @@ export interface Credential {
   observedAt: string | null;
   /** The account the proxy would pick for a new conversation on this provider. */
   nextPick: boolean;
+  /** Codex: the account Codex's own account calls (usage, plan) reach through the proxy. */
+  accountView: boolean;
   /** The "use this account" override; it takes traffic ahead of the routing strategy while available. */
   preferred: boolean;
   /** Weighted-round-robin weight; 0 excludes the account from that strategy. */

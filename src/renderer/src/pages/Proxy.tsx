@@ -1,33 +1,26 @@
-import { Copy, Eye, EyeOff, FilePen, FolderOpen, Play, RotateCw, Square } from 'lucide-solid';
-import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js';
+import { Copy, Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from 'lucide-solid';
+import { createResource, createSignal, Show } from 'solid-js';
 import { ClientSetup } from '../components/ClientSetup';
+import { ShellEnvSetup } from '../components/ShellEnvSetup';
 import { T3CodeSetup } from '../components/T3CodeSetup';
-import { Notice } from '../components/ui';
-import { logs, proxyStatus, setLogs } from '../store';
+import { Dialog, Notice } from '../components/ui';
+import { proxyStatus } from '../store';
 
 const ICON_PX = 14;
-/** Within this share of a screen from the bottom counts as following the tail. */
-const FOLLOW_TAIL_SHARE = 0.25;
-
-/** Env vars Claude Code reads to send traffic through a proxy. */
-const bashEnv = (endpoint: string, key: string) =>
-  `export ANTHROPIC_BASE_URL=${endpoint}\nexport ANTHROPIC_AUTH_TOKEN=${key}`;
-const powershellEnv = (endpoint: string, key: string) =>
-  `$env:ANTHROPIC_BASE_URL = "${endpoint}"\n$env:ANTHROPIC_AUTH_TOKEN = "${key}"`;
+/** Key characters left visible when masked; the rest become bullets so the masked key keeps its length. */
+const KEY_PREFIX_SHOWN = 4;
 
 export function Proxy() {
   const [keys, { mutate }] = createResource(() => window.api.proxyKeys());
   const [revealed, setRevealed] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
-  const [envShell, setEnvShell] = createSignal<'powershell' | 'bash'>('powershell');
-  let logBox!: HTMLDivElement;
+  const [confirmingRegenerate, setConfirmingRegenerate] = createSignal(false);
 
   const state = () => proxyStatus()?.state ?? 'stopped';
   const running = () => state() === 'running';
   const endpoint = () => keys()?.endpoint ?? proxyStatus()?.endpoint ?? '';
   const key = () => keys()?.clientApiKey ?? '';
-  const masked = () => (revealed() ? key() : `${key().slice(0, 4)}${'•'.repeat(20)}`);
-  const snippet = () => (envShell() === 'powershell' ? powershellEnv(endpoint(), key()) : bashEnv(endpoint(), key()));
+  const masked = () => (revealed() ? key() : `${key().slice(0, KEY_PREFIX_SHOWN)}${'•'.repeat(Math.max(0, key().length - KEY_PREFIX_SHOWN))}`);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -37,20 +30,16 @@ export function Proxy() {
       setBusy(false);
     }
   };
-
-  // Follow the log tail unless the user scrolled up to read.
-  createEffect(on(logs, () => {
-    if (!logBox) return;
-    const atBottom = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < logBox.clientHeight * FOLLOW_TAIL_SHARE;
-    if (atBottom) queueMicrotask(() => (logBox.scrollTop = logBox.scrollHeight));
-  }));
+  const regenerate = () => {
+    setConfirmingRegenerate(false);
+    void run(() => window.api.regenerateClientKey().then(mutate));
+  };
 
   return (
     <>
       <header class="dash-header">
         <div>
           <h1 class="dash-title">Proxy</h1>
-          <div class="dash-sub">CLIProxyAPI on {endpoint() || '—'}</div>
         </div>
         <div class="dash-actions">
           <Show
@@ -82,32 +71,34 @@ export function Proxy() {
       </Show>
 
       <section class="card" style={{ 'margin-top': '16px' }}>
-        <h2 class="card-title">Connect clients</h2>
-        <p class="secondary">Clients reach the proxy with this app's client key. Apply writes the endpoint and key into a client's own config, keeping a backup for Undo.</p>
-        <div class="row" style={{ 'margin-bottom': '10px' }}>
-          <span class="code selectable spacer">{masked()}</span>
-          <button class="btn ghost icon-btn" title={revealed() ? 'Hide key' : 'Show key'} onClick={() => setRevealed(!revealed())}>
-            <Show when={revealed()} fallback={<Eye size={ICON_PX} />}>
-              <EyeOff size={ICON_PX} />
-            </Show>
-          </button>
-          <button class="btn" onClick={() => void window.api.copyText(key())}><Copy size={ICON_PX} /> Copy key</button>
-          <button class="btn ghost" onClick={() => void window.api.regenerateClientKey().then(mutate)} title="Issues a new key and restarts the proxy; old clients stop working">
-            Regenerate
-          </button>
+        <div class="row wrap">
+          <h2 class="card-title spacer" style={{ margin: 0 }}>Connect clients</h2>
+          <span class="chip">
+            <span class="chip-label">Endpoint</span>
+            <span class="chip-value selectable">{endpoint() || '—'}</span>
+            <button class="chip-btn" title="Copy endpoint" aria-label="Copy endpoint" disabled={!endpoint()} onClick={() => void window.api.copyText(endpoint())}>
+              <Copy size={ICON_PX} />
+            </button>
+          </span>
+          <span class="chip">
+            <span class="chip-label">Key</span>
+            <span class="chip-value selectable">{masked()}</span>
+            <button class="chip-btn" title={revealed() ? 'Hide key' : 'Show key'} aria-label={revealed() ? 'Hide key' : 'Show key'} onClick={() => setRevealed(!revealed())}>
+              <Show when={revealed()} fallback={<Eye size={ICON_PX} />}>
+                <EyeOff size={ICON_PX} />
+              </Show>
+            </button>
+            <button class="chip-btn" title="Copy key" aria-label="Copy key" onClick={() => void window.api.copyText(key())}>
+              <Copy size={ICON_PX} />
+            </button>
+            <button class="chip-btn" title="Regenerate key" aria-label="Regenerate key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
+              <RefreshCw size={ICON_PX} />
+            </button>
+          </span>
         </div>
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
         <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
-        <p class="secondary">Or point Claude Code at the proxy with environment variables:</p>
-        <div class="row" style={{ 'margin-bottom': '6px' }}>
-          <div class="seg">
-            <button classList={{ active: envShell() === 'powershell' }} onClick={() => setEnvShell('powershell')}>PowerShell</button>
-            <button classList={{ active: envShell() === 'bash' }} onClick={() => setEnvShell('bash')}>Bash</button>
-          </div>
-          <span class="spacer" />
-          <button class="btn" onClick={() => void window.api.copyText(snippet())}><Copy size={ICON_PX} /> Copy</button>
-        </div>
-        <pre class="code selectable" style={{ margin: 0 }}>{revealed() ? snippet() : snippet().replace(key(), masked())}</pre>
+        <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
       </section>
 
       <section class="card" style={{ 'margin-top': '16px' }}>
@@ -120,22 +111,20 @@ export function Proxy() {
         </div>
       </section>
 
-      <section class="card" style={{ 'margin-top': '16px' }}>
-        <div class="row" style={{ 'margin-bottom': '10px' }}>
-          <h2 class="card-title spacer" style={{ margin: 0 }}>Log</h2>
-          <button class="btn ghost" onClick={() => void window.api.openPath('logs')}><FolderOpen size={ICON_PX} /> Open folder</button>
-          <button class="btn ghost" onClick={() => void window.api.clearProxyLogs().then(() => setLogs([]))}>Clear</button>
-        </div>
-        <div class="log-view selectable" ref={logBox}>
-          <For each={logs()} fallback={<div class="muted">No output yet.</div>}>
-            {(l) => (
-              <div classList={{ 'log-err': l.stream === 'stderr', 'log-app': l.stream === 'app' }}>
-                <span class="muted">{new Date(l.at).toLocaleTimeString()}</span> {l.text}
-              </div>
-            )}
-          </For>
-        </div>
-      </section>
+      <Show when={confirmingRegenerate()}>
+        <Dialog
+          title="Regenerate client key?"
+          onClose={() => setConfirmingRegenerate(false)}
+          actions={
+            <>
+              <button class="btn" onClick={() => setConfirmingRegenerate(false)}>Cancel</button>
+              <button class="btn danger" onClick={regenerate}>Regenerate</button>
+            </>
+          }
+        >
+          <p class="secondary">The proxy restarts, and clients using the old key stop working until you re-apply them.</p>
+        </Dialog>
+      </Show>
     </>
   );
 }

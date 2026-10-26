@@ -5,7 +5,7 @@ import { rollPastResets } from '@shared/usageWindows';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { MAX_ACTIVITY_EVENTS, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
-export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'settings';
+export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'logs' | 'settings';
 
 const api = window.api;
 

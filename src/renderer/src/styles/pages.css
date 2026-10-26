@@ -95,7 +95,8 @@
 
 /* ── Proxy log ───────────────────────────────────────────────────── */
 .log-view {
-  height: 320px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
@@ -267,11 +268,16 @@
   background: var(--color-accent);
 }
 
-/* ── T3 Code steps ───────────────────────────────────────────────── */
-.t3-setup {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 12px;
+/* ── Client setup details ────────────────────────────────────────── */
+.env-var {
+  margin-bottom: 6px;
+}
+.env-var:last-child {
+  margin-bottom: 0;
+}
+/* Fits the longest name, ANTHROPIC_AUTH_TOKEN, so values line up. */
+.env-var-name {
+  min-width: 170px;
 }
 .steps {
   margin: 6px 0 10px;

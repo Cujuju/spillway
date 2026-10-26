@@ -1,4 +1,5 @@
-import { createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { ChevronDown, ChevronUp } from 'lucide-solid';
+import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import { providerLogo, providerVar } from '../lib/providers';
 
@@ -108,6 +109,33 @@ export function ProviderGlyph(props: { provider: string; size?: number }) {
     >
       <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }} innerHTML={logo()} />
     </Show>
+  );
+}
+
+/** Chevron size beside a text button label. */
+const CHEVRON_PX = 14;
+
+/** A list row whose details open in an inset panel beneath it. */
+export function ExpandRow(props: { label: string; help: string; action: string; children: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  return (
+    <div class="list-row">
+      <div>
+        <div class="list-row-label">{props.label}</div>
+        <div class="list-row-help">{props.help}</div>
+      </div>
+      <div class="list-row-actions">
+        <button type="button" class="btn ghost" aria-expanded={open()} onClick={() => setOpen(!open())}>
+          {props.action}
+          <Show when={open()} fallback={<ChevronDown size={CHEVRON_PX} />}>
+            <ChevronUp size={CHEVRON_PX} />
+          </Show>
+        </button>
+      </div>
+      <Show when={open()}>
+        <div class="list-row-detail">{props.children}</div>
+      </Show>
+    </div>
   );
 }
 

@@ -7,8 +7,8 @@ import { ProviderGlyph } from './ui';
 /** A burst of requests reloads the totals once, after it settles. */
 const RELOAD_DEBOUNCE_MS = 2_000;
 
-type Counts = Pick<ActivityDayTotal, 'requests' | 'failed' | 'inputTokens' | 'outputTokens' | 'cachedTokens'>;
-const ZERO: Counts = { requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+type Counts = Pick<ActivityDayTotal, 'requests' | 'failed' | 'inputTokens' | 'outputTokens' | 'cachedTokens' | 'cacheWriteTokens'>;
+const ZERO: Counts = { requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 };
 const sum = (rows: Counts[]): Counts =>
   rows.reduce((a, r) => ({
     requests: a.requests + r.requests,
@@ -16,6 +16,7 @@ const sum = (rows: Counts[]): Counts =>
     inputTokens: a.inputTokens + r.inputTokens,
     outputTokens: a.outputTokens + r.outputTokens,
     cachedTokens: a.cachedTokens + r.cachedTokens,
+    cacheWriteTokens: a.cacheWriteTokens + r.cacheWriteTokens,
   }), ZERO);
 const n = (v: number) => v.toLocaleString();
 
@@ -24,7 +25,7 @@ function CountCells(props: { c: Counts }) {
     <>
       <td class="tabular">{n(props.c.requests)}</td>
       <td class="tabular">{n(props.c.failed)}</td>
-      <td class="tabular">{n(props.c.inputTokens)} / {n(props.c.outputTokens)} / {n(props.c.cachedTokens)}</td>
+      <td class="tabular">{n(props.c.inputTokens)} / {n(props.c.outputTokens)} / {n(props.c.cachedTokens)} / {n(props.c.cacheWriteTokens)}</td>
     </>
   );
 }
@@ -57,7 +58,7 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
           <th>Model</th>
           <th>Requests</th>
           <th>Failed</th>
-          <th title="Input / output / cached tokens">Tokens</th>
+          <th title="Input / output / cache read / cache write tokens">Tokens</th>
         </tr>
       </thead>
       <tbody>

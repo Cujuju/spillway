@@ -25,18 +25,22 @@ export function expiredDays(days: string[], today: number, retentionDays: number
   return days.filter((day) => day < oldestKept);
 }
 
+/** Rows saved before cache writes were recorded have none. */
+const withCacheWrites = <T extends { cacheWriteTokens?: number }>(r: T): T & { cacheWriteTokens: number } => ({ ...r, cacheWriteTokens: r.cacheWriteTokens ?? 0 });
+
 const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model'>) => `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}`;
 
 /** Adds one request to its day/account/model row. */
 export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): void {
   const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model };
   const key = totalKey(base);
-  const row = totals.get(key) ?? { ...base, requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  const row = totals.get(key) ?? { ...base, requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 };
   row.requests += 1;
   row.failed += e.failed ? 1 : 0;
   row.inputTokens += e.inputTokens;
   row.outputTokens += e.outputTokens;
   row.cachedTokens += e.cachedTokens;
+  row.cacheWriteTokens += e.cacheWriteTokens;
   totals.set(key, row);
 }
 
@@ -78,7 +82,7 @@ class ActivityLog {
       if (!line) return [];
       try {
         const e = JSON.parse(line) as ActivityEvent;
-        return typeof e?.at === 'string' && typeof e.requestId === 'string' ? [e] : [];
+        return typeof e?.at === 'string' && typeof e.requestId === 'string' ? [withCacheWrites(e)] : [];
       } catch {
         return [];
       }
@@ -132,7 +136,7 @@ class ActivityLog {
     try {
       const raw: unknown = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
       const rows = Array.isArray(raw) ? raw.filter((r): r is ActivityDayTotal => typeof r?.day === 'string' && typeof r?.requests === 'number') : [];
-      this.totals = new Map(rows.map((r) => [totalKey(r), r]));
+      this.totals = new Map(rows.map((r) => [totalKey(r), withCacheWrites(r)]));
     } catch (err) {
       console.error('[activity] totals unreadable, starting empty:', err);
       this.totals = new Map();

@@ -134,7 +134,10 @@ export interface ActivityEvent {
   ttftMs: number | null;
   inputTokens: number;
   outputTokens: number;
+  /** Cache reads. Claude counts them apart from input; OpenAI includes them in input. */
   cachedTokens: number;
+  /** Tokens written to the prompt cache (Claude); 0 where the provider doesn't report them. */
+  cacheWriteTokens: number;
 }
 
 /** Requests and tokens for one local day, account and model; kept after that day's request log expires. */
@@ -149,6 +152,7 @@ export interface ActivityDayTotal {
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;
+  cacheWriteTokens: number;
 }
 
 /** Coding clients whose own config the Proxy page can point at the proxy. */

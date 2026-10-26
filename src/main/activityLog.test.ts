@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -20,7 +20,7 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
   at: at.toISOString(), requestId: `r-${at.getTime()}`, selectionId: null, provider: 'claude', model: 'opus', authIndex: 'a1',
-  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1,
+  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2,
   ...patch,
 });
 
@@ -41,7 +41,7 @@ describe('addToTotals', () => {
     addToTotals(totals, event(day));
     addToTotals(totals, event(day, { failed: true, inputTokens: 1 }));
     addToTotals(totals, event(day, { model: 'haiku' }));
-    expect([...totals.values()].find((t) => t.model === 'opus')).toMatchObject({ day: '2026-10-25', requests: 2, failed: 1, inputTokens: 11 });
+    expect([...totals.values()].find((t) => t.model === 'opus')).toMatchObject({ day: '2026-10-25', requests: 2, failed: 1, inputTokens: 11, cacheWriteTokens: 4 });
     expect(totals.size).toBe(2);
   });
 });
@@ -59,6 +59,12 @@ describe('activityLog', () => {
     // Totals outlive the pruned day.
     expect(activityLog.totalsList().map((t) => t.day).sort()).toEqual([localDay(old.getTime()), localDay(today.getTime())]);
     expect(JSON.parse(readFileSync(path.join(dir, 'daily-totals.json'), 'utf8'))).toHaveLength(2);
+  });
+  it('reads requests saved before cache writes were recorded as having none', () => {
+    const { cacheWriteTokens: _, ...legacy } = event(new Date(2026, 0, 2, 12));
+    appendFileSync(path.join(dir, '2026-01-02.jsonl'), `${JSON.stringify(legacy)}
+`);
+    expect(activityLog.day('2026-01-02')[0]?.cacheWriteTokens).toBe(0);
   });
   it('rejects day keys that are not dates', () => {
     expect(activityLog.day('../settings')).toEqual([]);

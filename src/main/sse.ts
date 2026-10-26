@@ -63,5 +63,6 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     inputTokens: n(r.input_tokens),
     outputTokens: n(r.output_tokens),
     cachedTokens: n(r.cached_tokens),
+    cacheWriteTokens: n(r.cache_creation_tokens),
   };
 }

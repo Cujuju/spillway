@@ -86,7 +86,7 @@ export function Activity() {
                 <th>Account</th>
                 <th>Model</th>
                 <th>Result</th>
-                <th title="Input / output / cached tokens">Tokens</th>
+                <th title="Input / output / cache read / cache write tokens">Tokens</th>
                 <th title="Time to first token">First token</th>
                 <th>Total</th>
               </tr>
@@ -109,7 +109,7 @@ export function Activity() {
                         <span class="muted" style={{ 'margin-left': '6px' }}>{errorText(e)}</span>
                       </Show>
                     </td>
-                    <td class="tabular">{tokens(e.inputTokens)} / {tokens(e.outputTokens)} / {tokens(e.cachedTokens)}</td>
+                    <td class="tabular">{tokens(e.inputTokens)} / {tokens(e.outputTokens)} / {tokens(e.cachedTokens)} / {tokens(e.cacheWriteTokens)}</td>
                     <td class="tabular">{duration(e.ttftMs)}</td>
                     <td class="tabular">{duration(e.latencyMs)}</td>
                   </tr>

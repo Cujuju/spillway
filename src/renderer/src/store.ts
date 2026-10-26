@@ -3,7 +3,8 @@ import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
 import { resolveTheme, themeTokens } from '@shared/themes';
-import { MAX_ACTIVITY_EVENTS, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
+import { rangeDays } from './lib/activityStats';
+import { MAX_ACTIVITY_EVENTS, type ActivityBucket, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
 export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'logs' | 'settings';
 
@@ -31,6 +32,8 @@ export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 export const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
+/** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
+export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
 
@@ -38,6 +41,10 @@ const CLOCK_TICK_MS = 30_000;
 const MAX_LOG_LINES = 2000;
 /** History refetch after a snapshot is cheap (local file) and keeps the chart current. */
 const HISTORY_REFRESH_MS = 5 * 60_000;
+/** Covers the overview's 30-day range and the plan sizing's history. */
+const ACTIVITY_DAYS = rangeDays('30d');
+/** A burst of requests reloads the hourly activity once, after it settles. */
+const ACTIVITY_RELOAD_DEBOUNCE_MS = 2_000;
 
 export async function saveSettings(next: AppSettings): Promise<void> {
   setSettingsSignal(await api.setSettings(next));
@@ -72,6 +79,7 @@ export async function initStore(): Promise<void> {
   setHistory(hist);
   setLogs(logLines);
   setActivity(recent);
+  void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets);
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -84,7 +92,12 @@ export async function initStore(): Promise<void> {
   api.onTaskbarDark(setTaskbarDark);
   api.onNavigate((p) => setPage(p as Page));
   api.onSettings(setSettingsSignal);
-  api.onActivity((e) => setActivity((prev) => (prev.length >= MAX_ACTIVITY_EVENTS ? [...prev.slice(1), e] : [...prev, e])));
+  let bucketsReload: ReturnType<typeof setTimeout> | undefined;
+  api.onActivity((e) => {
+    setActivity((prev) => (prev.length >= MAX_ACTIVITY_EVENTS ? [...prev.slice(1), e] : [...prev, e]));
+    clearTimeout(bucketsReload);
+    bucketsReload = setTimeout(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets), ACTIVITY_RELOAD_DEBOUNCE_MS);
+  });
 
   setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
   setInterval(() => void api.usageHistory().then(setHistory), HISTORY_REFRESH_MS);

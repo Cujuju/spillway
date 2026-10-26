@@ -28,7 +28,7 @@ const weekly = (id: string, used: number, resetIn: number | null, patch: Partial
   account(id, [win('five_hour', 10, null, FIVE_H), win('seven_day', used, resetIn, WEEK)], patch);
 /** Projects with shares from plans alone (no history): same-plan accounts split the pool evenly. */
 const run = (creds: Credential[], key: string, perHour: number, strategy: string, days = 1) =>
-  project(creds, key, perHour, NOW, days, strategy, poolShares([], creds, key));
+  project(creds, key, perHour, NOW, days, strategy, poolShares([], creds, key, []));
 const at = (p: { points: { t: number; remaining: number }[] }, t: number) => p.points.find((x) => x.t === t)!.remaining;
 
 describe('poolWindowKey', () => {
@@ -44,14 +44,14 @@ describe('poolWindowKey', () => {
 describe('poolSummary', () => {
   it('is the percent of the pool left, over enabled accounts', () => {
     const creds = [weekly('a', 40, H), weekly('b', 10, H), weekly('c', 0, H, { disabled: true })];
-    expect(poolSummary(creds, 'seven_day', poolShares([], creds, 'seven_day'))).toEqual({ remaining: 75, accounts: 2 });
+    expect(poolSummary(creds, 'seven_day', poolShares([], creds, 'seven_day', []))).toEqual({ remaining: 75, accounts: 2 });
   });
   it('counts a Max 5x account five times a Pro one', () => {
     const creds = [weekly('max', 0, H, { plan: MAX_5X }), weekly('pro', 0, H, { plan: PRO })];
     // 5-hour windows at 10% used: (5 x 90 + 1 x 90) / 6.
-    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour')).remaining).toBeCloseTo(90);
+    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBeCloseTo(90);
     creds[1]!.windows[0]!.usedPercent = 100;
-    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour')).remaining).toBeCloseTo(75);
+    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBeCloseTo(75);
   });
 });
 

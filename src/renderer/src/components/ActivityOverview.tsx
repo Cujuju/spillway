@@ -1,18 +1,13 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
-import type { ActivityBucket } from '@shared/types';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import {
-  bucketStarts, byModel, inRange, metricValue, RANGES, rangeDays, series, summarize, type Metric, type Range, type Summary,
+  bucketStarts, byModel, inRange, metricValue, RANGES, series, summarize, type Metric, type Range, type Summary,
 } from '../lib/activityStats';
 import { compactNumber, pct, usd } from '../lib/format';
-import { activity } from '../store';
+import { activityBuckets, now } from '../store';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { TrendChart } from './TrendChart';
 import { ProviderGlyph, Seg } from './ui';
 
-/** A burst of requests reloads once, after it settles. */
-const RELOAD_DEBOUNCE_MS = 2_000;
-/** Enough for the longest range and the heatmap's 30-day rhythm. */
-const LOAD_DAYS = rangeDays('30d');
 const USAGE_CHART_PX = 220;
 const CACHE_CHART_PX = 160;
 /** Date the price table in src/shared/modelPrices.ts was checked. */
@@ -52,19 +47,7 @@ function Tile(props: { label: string; value: string; sub?: string; title?: strin
 export function ActivityOverview() {
   const [range, setRange] = createSignal<Range>('7d');
   const [metric, setMetric] = createSignal<Metric>('cost');
-  const [rows, setRows] = createSignal<ActivityBucket[]>([]);
-  const [now, setNow] = createSignal(Date.now());
-  const load = () => void window.api.activityBuckets(LOAD_DAYS).then((r) => {
-    setNow(Date.now());
-    setRows(r);
-  });
-  onMount(load);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(on(activity, () => {
-    clearTimeout(timer);
-    timer = setTimeout(load, RELOAD_DEBOUNCE_MS);
-  }, { defer: true }));
-  onCleanup(() => clearTimeout(timer));
+  const rows = activityBuckets;
 
   const starts = createMemo(() => bucketStarts(range(), now()));
   const scoped = createMemo(() => inRange(rows(), starts()));

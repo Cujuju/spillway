@@ -5,7 +5,7 @@ import { poolShares } from '../lib/poolCapacity';
 import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
 import { dayTime } from '../lib/format';
 import { providerVar } from '../lib/providers';
-import { history, now, settings, updateSettings } from '../store';
+import { activityBuckets, history, now, settings, updateSettings } from '../store';
 import { QuotaChart } from './QuotaChart';
 import { Seg } from './ui';
 
@@ -40,7 +40,7 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
   const to = () => now() + days() * DAY_MS;
 
   // Accounts weighted by plan size, so a Pro and a Max account add up by what they hold.
-  const shares = createMemo(() => (key() ? poolShares(history(), props.credentials, key()!) : new Map()));
+  const shares = createMemo(() => (key() ? poolShares(history(), props.credentials, key()!, activityBuckets()) : new Map()));
   const plans = () => [...new Set(props.credentials.filter((c) => !c.disabled).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
   const summary = createMemo(() => (key() ? poolSummary(props.credentials, key()!, shares()) : null));
   const rate = createMemo(() => (key() ? drainRatePerHour(history(), shares(), key()!, now(), settings().dashboard.drainLookbackHours) : null));

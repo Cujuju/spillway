@@ -5,7 +5,7 @@ import { poolSummary, poolWindowKey } from '../lib/forecast';
 import { poolShares } from '../lib/poolCapacity';
 import { relativeFuture } from '../lib/format';
 import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
-import { history, now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
+import { activityBuckets, history, now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
 
 /** Windows truncates tray tooltips past 127 characters. */
 const TOOLTIP_MAX = 127;
@@ -48,7 +48,7 @@ export function TrayIconSync() {
       const creds = snap!.credentials.filter((c) => c.provider === provider);
       const key = poolWindowKey(creds);
       if (!key) continue;
-      const s = poolSummary(creds, key, poolShares(history(), creds, key));
+      const s = poolSummary(creds, key, poolShares(history(), creds, key, activityBuckets()));
       lines.push(`${providerLabel(provider)}: ${Math.round(s.remaining)}% of pool left`);
     }
     void window.api.setAppTooltip(clip(lines.join('\n')));

@@ -109,7 +109,7 @@ export function Dashboard() {
           </div>
         }
       >
-        <nav class="provider-tabs" style={{ 'margin-top': '16px' }}>
+        <nav class="provider-tabs">
           <For each={providers()}>
             {(p) => (
               <button class="provider-tab" classList={{ active: provider() === p.id }} onClick={() => setChosen(p.id)}>

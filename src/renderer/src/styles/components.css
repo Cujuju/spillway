@@ -182,9 +182,11 @@
   color: var(--color-text-disabled);
   margin: 0 0 10px;
 }
-/* Cards of settings rows stack with the page's card spacing. */
-.settings-group + .settings-group {
-  margin-top: 16px;
+/* Page-level notices and cards stack with one gap; .dash-header supplies the gap above the first. */
+.notice + .notice,
+.notice + .card,
+.card + .card {
+  margin-top: var(--page-gap);
 }
 
 .badge {

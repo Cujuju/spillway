@@ -72,7 +72,7 @@ export function Proxy() {
         <Notice tone="error">The cli-proxy-api binary was not found. Choose it under Settings → Routing & server, or rebuild the app with the bundled binary.</Notice>
       </Show>
 
-      <section class="card" style={{ 'margin-top': '16px' }}>
+      <section class="card">
         <div class="row wrap">
           <h2 class="card-title spacer" style={{ margin: 0 }}>Connect clients</h2>
           <span class="chip">
@@ -103,7 +103,7 @@ export function Proxy() {
         <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
       </section>
 
-      <section class="card" style={{ 'margin-top': '16px' }}>
+      <section class="card">
         <div class="row">
           <div class="spacer">
             <h2 class="card-title" style={{ margin: 0 }}>Custom proxy settings</h2>

@@ -77,7 +77,7 @@ export function Activity() {
         <Notice>New activity appears while the proxy is running.</Notice>
       </Show>
 
-      <div class="card" style={{ 'margin-top': '16px', padding: 0 }}>
+      <div class="card" style={{ padding: 0 }}>
         <Show when={view() === 'requests'} fallback={<ActivityTotals account={accountName} />}>
           <table class="table">
             <thead>

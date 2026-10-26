@@ -61,7 +61,7 @@ export function Accounts() {
         <Notice tone="error">{error()}</Notice>
       </Show>
 
-      <div class="card" style={{ 'margin-top': '16px', padding: 0 }}>
+      <div class="card" style={{ padding: 0 }}>
         <table class="table">
           <thead>
             <tr>

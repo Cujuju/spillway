@@ -14,6 +14,9 @@
   --text-title: 20px;
   --text-hero: 40px;
 
+  /* Vertical gap between page-level blocks: header, notices, cards. */
+  --page-gap: 16px;
+
   --radius-btn: 6px;
   --radius-card: 10px;
   --radius-pill: 999px;

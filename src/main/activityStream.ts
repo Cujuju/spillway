@@ -9,6 +9,8 @@ import { usage } from './usagePoller';
 const USAGE_REFRESH_DEBOUNCE_MS = 2_000;
 /** The stream drops when the proxy restarts or reloads; reconnect while it should be running. */
 const RECONNECT_MS = 2_000;
+/** Stream events that only mean "reload usage" (docs/desktop-api.md in the fork). */
+const USAGE_RELOAD_EVENTS = new Set(['ready', 'resync', 'usage']);
 
 /** Reads the proxy's live request stream: logs each attempt, keeps recent ones and refreshes usage when traffic changed it. */
 class ActivityStream extends EventEmitter {
@@ -72,7 +74,8 @@ class ActivityStream extends EventEmitter {
   }
 
   private onMessage(event: string, data: string): void {
-    if (event === 'resync') return this.scheduleUsageRefresh();
+    // ready: lookups may have landed before the stream connected. usage: a lookup recorded new windows.
+    if (USAGE_RELOAD_EVENTS.has(event)) return this.scheduleUsageRefresh();
     if (event !== 'request') return;
     const e = parseActivityEvent(data);
     if (!e) return;

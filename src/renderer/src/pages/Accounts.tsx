@@ -3,6 +3,7 @@ import { createSignal, For, Show } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from '../components/AddAccountDialog';
+import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
 import { proxyStatus, snapshot } from '../store';
 
@@ -43,6 +44,7 @@ export function Accounts() {
           <div class="dash-sub">{creds().length} signed in · the proxy rotates between enabled accounts</div>
         </div>
         <div class="dash-actions">
+          <ShowEmailsButton />
           <button class="btn primary" disabled={!running()} title={running() ? undefined : 'Start the proxy first'} onClick={() => setAdding(true)}>
             <Plus size={ICON_PX} /> Add account
           </button>
@@ -82,15 +84,15 @@ export function Accounts() {
                         <input
                           class="input inline-edit"
                           value={c.note ?? ''}
-                          placeholder={c.label}
-                          title="Display name (saved as the account note)"
+                          placeholder="Name this account"
+                          title="Account name (saved as the account note)"
                           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                           onBlur={(e) => {
                             const v = e.currentTarget.value.trim();
                             if (v !== (c.note ?? '')) void act(() => window.api.setCredentialNote(c.id, v));
                           }}
                         />
-                        <div class="muted truncate tabular" title={c.name}>{c.name}</div>
+                        <div class="muted truncate" title={`Auth file: ${c.name}`}>{c.email ?? c.name}</div>
                       </div>
                     </div>
                   </td>

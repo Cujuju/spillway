@@ -4,6 +4,7 @@ import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AccountRow } from '../components/AccountRow';
 import { PoolPanel } from '../components/PoolPanel';
+import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Notice, ProviderGlyph } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
 import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } from '../store';
@@ -71,9 +72,7 @@ export function Dashboard() {
           </div>
         </div>
         <div class="dash-actions">
-          <button class="btn pill" onClick={() => void updateSettings((d) => { d.dashboard.showEmails = !d.dashboard.showEmails; })}>
-            {settings().dashboard.showEmails ? 'Hide emails' : 'Show emails'}
-          </button>
+          <ShowEmailsButton class="btn pill" />
           <button class="btn pill solid" disabled={refreshing() || proxyState() !== 'running'} onClick={refreshAll}>
             <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} /> Refresh all credentials
           </button>

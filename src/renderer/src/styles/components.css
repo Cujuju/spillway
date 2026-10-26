@@ -127,6 +127,36 @@
 .select:focus {
   outline: 1px solid var(--color-accent-border);
 }
+/* A number with its unit inside the box: the label is the visible input, the inner input is bare. */
+.number-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: text;
+}
+.number-field:focus-within {
+  outline: 1px solid var(--color-accent-border);
+}
+.number-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+/* Spinner arrows would sit between the number and its unit; arrow keys still step the value. */
+.number-field input::-webkit-inner-spin-button,
+.number-field input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.number-field-unit {
+  color: var(--color-text-muted);
+}
 .input.wide {
   flex: 1 1 0;
   min-width: 0;
@@ -152,45 +182,9 @@
   color: var(--color-text-disabled);
   margin: 0 0 10px;
 }
-.setting-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 280px) 1fr;
-  align-items: start;
-  gap: 16px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.setting-row:last-child {
-  border-bottom: 0;
-}
-.setting-label {
-  font-size: var(--text-sm);
-  line-height: var(--setting-label-line-height);
-  /* Centres the first label line on a single-height control. */
-  padding-top: calc((var(--control-height) - var(--setting-label-line-height)) / 2);
-}
-.setting-help {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  margin-top: 3px;
-  line-height: 1.45;
-}
-.setting-help.error {
-  color: var(--color-red-light);
-}
-.setting-control {
-  display: flex;
-  align-items: center;
-  min-height: var(--control-height);
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-/* A sub-setting indents its label only, so its control stays in the shared column. */
-.setting-row.nested .setting-text {
-  margin-left: 4px;
-  padding-left: 14px;
-  border-left: 2px solid var(--color-border);
+/* Cards of settings rows stack with the page's card spacing. */
+.settings-group + .settings-group {
+  margin-top: 16px;
 }
 
 .badge {
@@ -322,9 +316,24 @@
 }
 .list-row-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
+}
+/* A wide control (picker, path) sits under the text at full width. */
+.list-row.stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+.list-row.stacked .list-row-actions {
+  justify-content: flex-start;
+}
+/* A sub-setting indents its text only, so its control stays right-aligned. */
+.list-row.nested .list-row-text {
+  margin-left: 4px;
+  padding-left: 14px;
+  border-left: 2px solid var(--color-border);
 }
 .list-row-actions .main-action {
   min-width: var(--list-action-min-width);

@@ -2,7 +2,7 @@ import { createResource, createSignal, Match, onCleanup, Show, Switch } from 'so
 import type { UpdateStatus } from '@shared/types';
 import { isMac } from '../lib/platform';
 import { settings, updateSettings } from '../store';
-import { SettingRow, Toggle } from './ui';
+import { SettingRow, SettingsGroup, Toggle } from './ui';
 
 type Of<K extends UpdateStatus['state']> = Extract<UpdateStatus, { state: K }>;
 
@@ -21,7 +21,7 @@ export function UpdateSettings() {
   const checkButton = () => <button class="btn" onClick={() => void window.api.checkForUpdates()}>Check for updates</button>;
 
   return (
-    <>
+    <SettingsGroup>
       <SettingRow label="Check automatically" help="Checks shortly after launch and every few hours, and notifies you. Nothing downloads or installs until you choose to.">
         <Toggle value={settings().updates.autoCheck} onChange={(v) => void updateSettings((d) => void (d.updates.autoCheck = v))} />
       </SettingRow>
@@ -44,7 +44,7 @@ export function UpdateSettings() {
           <Match when={when('error')}>
             {(e) => (
               <>
-                <span class="setting-help error">{e().message}</span>
+                <span class="list-row-help error">{e().message}</span>
                 {checkButton()}
               </>
             )}
@@ -78,6 +78,6 @@ export function UpdateSettings() {
           </Match>
         </Switch>
       </SettingRow>
-    </>
+    </SettingsGroup>
   );
 }

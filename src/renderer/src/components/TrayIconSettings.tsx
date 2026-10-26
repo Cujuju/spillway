@@ -6,7 +6,7 @@ import { isMac } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
 import { TrayIconLookEditor } from './TrayIconLookEditor';
-import { NumberField, Seg, SettingRow, Toggle } from './ui';
+import { NumberField, Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 
 const ICON_PX = 14;
 /** Preview at 2x so the tile is legible in the settings list. */
@@ -84,63 +84,66 @@ export function TrayIconSettings() {
 
   return (
     <>
-      <SettingRow label="Show limit icons" help={SHOW_ICONS_HELP}>
-        <Toggle value={t().enabled} onChange={(v) => set((d) => void (d.enabled = v))} />
-      </SettingRow>
-      <SettingRow label="Number shown" help="What the digits on each icon mean.">
-        <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />
-      </SettingRow>
-      <SettingRow label="Warn at" help="Limit bars turn amber at this percent used.">
-        <NumberField value={t().warnAtPercentUsed} suffix="% used" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = v))} />
-      </SettingRow>
-      <SettingRow label="Critical at" help="Limit bars turn red at this percent used.">
-        <NumberField value={t().criticalAtPercentUsed} suffix="% used" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = v))} />
-      </SettingRow>
+      <SettingsGroup title="Display">
+        <SettingRow label="Show limit icons" help={SHOW_ICONS_HELP}>
+          <Toggle value={t().enabled} onChange={(v) => set((d) => void (d.enabled = v))} />
+        </SettingRow>
+        <SettingRow label="Number shown" help="What the digits on each icon mean.">
+          <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />
+        </SettingRow>
+        <SettingRow label="Warn at" help="Limit bars turn amber at this percent used.">
+          <NumberField value={t().warnAtPercentUsed} unit="%" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = v))} />
+        </SettingRow>
+        <SettingRow label="Critical at" help="Limit bars turn red at this percent used.">
+          <NumberField value={t().criticalAtPercentUsed} unit="%" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = v))} />
+        </SettingRow>
+      </SettingsGroup>
 
-      <div class="section-label" style={{ 'margin-top': '18px' }}>Icons</div>
-      <div class="tray-list">
-        <For each={t().items} fallback={<div class="muted">No limit icons. Add one below.</div>}>
-          {(spec, i) => (
-            <div class="tray-item">
-              <img class={taskbarDark() ? 'taskbar-dark' : 'taskbar-light'} src={preview(spec).src} width={PREVIEW_CSS_PX} height={PREVIEW_CSS_PX} alt="" />
-              <div class="spacer" style={{ 'min-width': 0 }}>
-                <div>{preview(spec).reading.title}</div>
-                <div class="muted truncate">{describe(spec)} · {preview(spec).reading.source}</div>
+      <SettingsGroup title="Icons">
+        <div class="tray-list">
+          <For each={t().items} fallback={<div class="muted">No limit icons. Add one below.</div>}>
+            {(spec, i) => (
+              <div class="tray-item">
+                <img class={taskbarDark() ? 'taskbar-dark' : 'taskbar-light'} src={preview(spec).src} width={PREVIEW_CSS_PX} height={PREVIEW_CSS_PX} alt="" />
+                <div class="spacer" style={{ 'min-width': 0 }}>
+                  <div>{preview(spec).reading.title}</div>
+                  <div class="muted truncate">{describe(spec)} · {preview(spec).reading.source}</div>
+                </div>
+                <button class="btn ghost icon-btn" title="Move up" disabled={i() === 0} onClick={() => move(i(), -1)}><ArrowUp size={ICON_PX} /></button>
+                <button class="btn ghost icon-btn" title="Move down" disabled={i() === t().items.length - 1} onClick={() => move(i(), 1)}><ArrowDown size={ICON_PX} /></button>
+                <button class="btn ghost icon-btn" title="Remove" onClick={() => set((d) => void d.items.splice(i(), 1))}><Trash2 size={ICON_PX} /></button>
+                <TrayIconLookEditor
+                  look={spec.look}
+                  provider={spec.provider}
+                  savedColors={t().savedColors}
+                  onChange={(look) => set((d) => void (d.items[i()]!.look = look))}
+                  onSavedColorsChange={(colors) => set((d) => void (d.savedColors = colors))}
+                />
               </div>
-              <button class="btn ghost icon-btn" title="Move up" disabled={i() === 0} onClick={() => move(i(), -1)}><ArrowUp size={ICON_PX} /></button>
-              <button class="btn ghost icon-btn" title="Move down" disabled={i() === t().items.length - 1} onClick={() => move(i(), 1)}><ArrowDown size={ICON_PX} /></button>
-              <button class="btn ghost icon-btn" title="Remove" onClick={() => set((d) => void d.items.splice(i(), 1))}><Trash2 size={ICON_PX} /></button>
-              <TrayIconLookEditor
-                look={spec.look}
-                provider={spec.provider}
-                savedColors={t().savedColors}
-                onChange={(look) => set((d) => void (d.items[i()]!.look = look))}
-                onSavedColorsChange={(colors) => set((d) => void (d.savedColors = colors))}
-              />
-            </div>
-          )}
-        </For>
-      </div>
+            )}
+          </For>
+        </div>
 
-      <div class="tray-add">
-        <select class="select" value={provider()} onChange={(e) => setProvider(e.currentTarget.value)}>
-          <For each={providers()}>{(p) => <option value={p}>{providerLabel(p)}</option>}</For>
-        </select>
-        <select class="select" value={effectiveWindow()} onChange={(e) => setWindowKey(e.currentTarget.value)}>
-          <For each={windows()} fallback={<option value="">No limits reported yet</option>}>{(w) => <option value={w.key}>{w.label}</option>}</For>
-        </select>
-        <select class="select" value={scope()} onChange={(e) => setScope(e.currentTarget.value as TrayIconScope)}>
-          <For each={SCOPES}>{(s) => <option value={s.value} title={s.title}>{s.label}</option>}</For>
-        </select>
-        <Show when={scope() === 'account'}>
-          <select class="select" value={effectiveCredential()} onChange={(e) => setCredentialId(e.currentTarget.value)}>
-            <For each={accounts()} fallback={<option value="">No accounts</option>}>{(c) => <option value={c.id}>{c.label}</option>}</For>
+        <div class="tray-add">
+          <select class="select" value={provider()} onChange={(e) => setProvider(e.currentTarget.value)}>
+            <For each={providers()}>{(p) => <option value={p}>{providerLabel(p)}</option>}</For>
           </select>
-        </Show>
-        <button class="btn primary" disabled={!canAdd()} title={duplicate() ? 'Already added' : undefined} onClick={add}>
-          <Plus size={ICON_PX} /> Add icon
-        </button>
-      </div>
+          <select class="select" value={effectiveWindow()} onChange={(e) => setWindowKey(e.currentTarget.value)}>
+            <For each={windows()} fallback={<option value="">No limits reported yet</option>}>{(w) => <option value={w.key}>{w.label}</option>}</For>
+          </select>
+          <select class="select" value={scope()} onChange={(e) => setScope(e.currentTarget.value as TrayIconScope)}>
+            <For each={SCOPES}>{(s) => <option value={s.value} title={s.title}>{s.label}</option>}</For>
+          </select>
+          <Show when={scope() === 'account'}>
+            <select class="select" value={effectiveCredential()} onChange={(e) => setCredentialId(e.currentTarget.value)}>
+              <For each={accounts()} fallback={<option value="">No accounts</option>}>{(c) => <option value={c.id}>{c.label}</option>}</For>
+            </select>
+          </Show>
+          <button class="btn primary" disabled={!canAdd()} title={duplicate() ? 'Already added' : undefined} onClick={add}>
+            <Plus size={ICON_PX} /> Add icon
+          </button>
+        </div>
+      </SettingsGroup>
     </>
   );
 }

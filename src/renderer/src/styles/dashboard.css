@@ -5,12 +5,13 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 22px;
+  /* Matches the gap between cards. */
+  margin-bottom: 16px;
 }
 .dash-title {
   font-size: var(--text-title);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 .dash-sub {

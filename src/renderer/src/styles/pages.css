@@ -133,6 +133,7 @@
   min-width: 0;
 }
 .tray-list {
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;

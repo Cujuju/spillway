@@ -46,7 +46,7 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
           const state = () => STATE[s()?.state ?? 'not-applied'];
           return (
             <div class="list-row">
-              <div>
+              <div class="list-row-text">
                 <div class="list-row-label">
                   {c.label}
                   <span class={`badge ${state().tone}`} title={state().title}>{state().label}</span>

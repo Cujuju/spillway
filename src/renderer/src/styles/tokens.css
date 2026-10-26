@@ -10,7 +10,8 @@
   --text-sm: 13px;
   --text-md: 14px;
   --text-header: 16px;
-  --text-title: 30px;
+  /* Page titles: one step above card titles (--text-header), not a hero size. */
+  --text-title: 20px;
   --text-hero: 40px;
 
   --radius-btn: 6px;

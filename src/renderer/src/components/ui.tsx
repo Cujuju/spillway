@@ -34,22 +34,35 @@ export function Seg<T extends string | number>(props: { value: T; options: reado
   );
 }
 
-export function SettingRow(props: { label: string; help?: string; nested?: boolean; children: JSX.Element }) {
+/** Text on the left, control right-aligned. `stacked` puts a wide control (picker, path) under the text. */
+export function SettingRow(props: { label: string; help?: string; nested?: boolean; stacked?: boolean; children: JSX.Element }) {
   return (
-    <div class="setting-row" classList={{ nested: props.nested }}>
-      <div class="setting-text">
-        <div class="setting-label">{props.label}</div>
+    <div class="list-row" classList={{ nested: props.nested, stacked: props.stacked }}>
+      <div class="list-row-text">
+        <div class="list-row-label">{props.label}</div>
         <Show when={props.help}>
-          <div class="setting-help">{props.help}</div>
+          <div class="list-row-help">{props.help}</div>
         </Show>
       </div>
-      <div class="setting-control">{props.children}</div>
+      <div class="list-row-actions">{props.children}</div>
     </div>
   );
 }
 
-/** Number input that commits on blur or Enter, clamped by the settings normalizer. */
-export function NumberField(props: { value: number; onCommit: (v: number) => void; min?: number; max?: number; width?: number; suffix?: string }) {
+/** One titled card of related settings rows. */
+export function SettingsGroup(props: { title?: string; children: JSX.Element }) {
+  return (
+    <section class="card settings-group">
+      <Show when={props.title}>
+        <h2 class="card-title">{props.title}</h2>
+      </Show>
+      {props.children}
+    </section>
+  );
+}
+
+/** Number input that commits on blur or Enter, clamped by the settings normalizer. `unit` shows inside the box, after the number. */
+export function NumberField(props: { value: number; onCommit: (v: number) => void; min?: number; max?: number; width?: number; unit?: string }) {
   const DEFAULT_WIDTH_PX = 90;
   const commit = (el: HTMLInputElement) => {
     const v = Number(el.value);
@@ -57,21 +70,20 @@ export function NumberField(props: { value: number; onCommit: (v: number) => voi
     else el.value = String(props.value);
   };
   return (
-    <span class="row">
+    <label class="input number-field" style={{ width: `${props.width ?? DEFAULT_WIDTH_PX}px` }}>
       <input
-        class="input tabular"
+        class="tabular"
         type="number"
         min={props.min}
         max={props.max}
         value={props.value}
-        style={{ width: `${props.width ?? DEFAULT_WIDTH_PX}px` }}
         onBlur={(e) => commit(e.currentTarget)}
         onKeyDown={(e) => e.key === 'Enter' && commit(e.currentTarget)}
       />
-      <Show when={props.suffix}>
-        <span class="muted">{props.suffix}</span>
+      <Show when={props.unit}>
+        <span class="number-field-unit">{props.unit}</span>
       </Show>
-    </span>
+    </label>
   );
 }
 
@@ -120,7 +132,7 @@ export function ExpandRow(props: { label: string; help: string; action: string; 
   const [open, setOpen] = createSignal(false);
   return (
     <div class="list-row">
-      <div>
+      <div class="list-row-text">
         <div class="list-row-label">{props.label}</div>
         <div class="list-row-help">{props.help}</div>
       </div>

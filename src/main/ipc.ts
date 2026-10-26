@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
+import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
@@ -104,6 +105,9 @@ const handlers: Handlers = {
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
   activityList: () => activity.all(),
+  activityDays: () => activityLog.days(),
+  activityDay: (day) => activityLog.day(day),
+  activityTotals: () => activityLog.totalsList(),
   clearActivity: () => activity.clear(),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);

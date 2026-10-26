@@ -32,6 +32,12 @@ export function dayTime(t: number): string {
   return new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
+/** "Sat, Oct 25" for a local YYYY-MM-DD day key. */
+export function dayLabel(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export function dateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }

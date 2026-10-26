@@ -1,6 +1,7 @@
 import { app, nativeTheme, Notification } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
+import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
@@ -70,6 +71,7 @@ function wireEvents(): void {
     if (next.general.launchAtLogin !== prev.general.launchAtLogin || next.general.startMinimized !== prev.general.startMinimized) applyLoginItem();
     if (next.general.theme !== prev.general.theme) syncWindowBackground();
     if (next.updates.autoCheck !== prev.updates.autoCheck) updates.setAutoCheck(next.updates.autoCheck);
+    if (next.activity.retentionDays !== prev.activity.retentionDays) activityLog.prune();
   });
   // 'system' theme follows the OS light/dark switch.
   nativeTheme.on('updated', () => {
@@ -91,6 +93,7 @@ if (!app.requestSingleInstanceLock()) {
     await loadSecrets();
     registerIpc();
     wireEvents();
+    activityLog.prune();
     applyLoginItem();
     // The tray is always present: it hosts the limit icons and the hidden-start entry point.
     ensureAppTray();
@@ -109,6 +112,7 @@ if (!app.requestSingleInstanceLock()) {
     usage.stop();
     activity.stop();
     history.flush();
+    activityLog.flush();
     void proxy.stop().finally(() => {
       destroyTrays();
       app.quit();

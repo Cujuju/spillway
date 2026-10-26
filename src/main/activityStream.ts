@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { MAX_ACTIVITY_EVENTS, type ActivityEvent } from '@shared/types';
+import { activityLog, localDay } from './activityLog';
 import { management } from './managementClient';
 import { parseActivityEvent, SseParser } from './sse';
 import { usage } from './usagePoller';
@@ -9,18 +10,22 @@ const USAGE_REFRESH_DEBOUNCE_MS = 2_000;
 /** The stream drops when the proxy restarts or reloads; reconnect while it should be running. */
 const RECONNECT_MS = 2_000;
 
-/** Reads the proxy's live request stream: keeps recent attempts and refreshes usage when traffic changed it. */
+/** Reads the proxy's live request stream: logs each attempt, keeps recent ones and refreshes usage when traffic changed it. */
 class ActivityStream extends EventEmitter {
-  private events: ActivityEvent[] = [];
+  /** Null until first read, then seeded from today's log so the recent list survives a restart. */
+  private events: ActivityEvent[] | null = null;
   private abort: AbortController | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
 
   all(): ActivityEvent[] {
+    this.events ??= activityLog.day(localDay(Date.now())).slice(-MAX_ACTIVITY_EVENTS);
     return [...this.events];
   }
 
+  /** Deletes the stored log and totals too. */
   clear(): void {
     this.events = [];
+    activityLog.clear();
   }
 
   start(): void {
@@ -71,7 +76,9 @@ class ActivityStream extends EventEmitter {
     if (event !== 'request') return;
     const e = parseActivityEvent(data);
     if (!e) return;
-    this.events = this.events.length >= MAX_ACTIVITY_EVENTS ? [...this.events.slice(1), e] : [...this.events, e];
+    activityLog.append(e);
+    const events = this.all();
+    this.events = events.length >= MAX_ACTIVITY_EVENTS ? [...events.slice(1), e] : [...events, e];
     this.emit('event', e);
     this.scheduleUsageRefresh();
   }

@@ -80,6 +80,10 @@ export interface AppSettings {
     /** Check for a new release at start and periodically; downloading and installing stay manual. */
     autoCheck: boolean;
   };
+  activity: {
+    /** Days of per-request logs kept on disk; daily totals are kept until cleared. */
+    retentionDays: number;
+  };
 }
 
 /** Proxy default port, matching upstream config.example.yaml. */
@@ -95,6 +99,9 @@ const MAX_AFFINITY_MINUTES = 24 * 60;
 /** Claude streams begin with message_start within seconds; 90 s also covers very long prompts. */
 const DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS = 90;
 const MAX_FIRST_BYTE_TIMEOUT_SECONDS = 600;
+/** A month of requests is a few MB per busy day; a year bounds disk use. */
+const DEFAULT_ACTIVITY_RETENTION_DAYS = 30;
+const MAX_ACTIVITY_RETENTION_DAYS = 365;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
@@ -146,6 +153,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   updates: {
     autoCheck: true,
   },
+  activity: {
+    retentionDays: DEFAULT_ACTIVITY_RETENTION_DAYS,
+  },
 };
 
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
@@ -187,6 +197,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
   const d = DEFAULT_SETTINGS;
   const r = obj(raw);
   const g = obj(r.general), p = obj(r.proxy), db = obj(r.dashboard), t = obj(r.trayIcons), n = obj(r.notifications), u = obj(r.updates);
+  const a = obj(r.activity);
   const warn = int(t.warnAtPercentUsed, d.trayIcons.warnAtPercentUsed, 1, 99);
   return {
     general: {
@@ -234,6 +245,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
     },
     updates: {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),
+    },
+    activity: {
+      retentionDays: int(a.retentionDays, d.activity.retentionDays, 1, MAX_ACTIVITY_RETENTION_DAYS),
     },
   };
 }

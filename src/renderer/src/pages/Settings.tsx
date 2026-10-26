@@ -6,7 +6,7 @@ import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, Toggle } from '../components/ui';
-import { setHistory, settings, updateSettings } from '../store';
+import { setActivity, setHistory, settings, updateSettings } from '../store';
 
 const ICON_PX = 14;
 
@@ -139,9 +139,9 @@ function Notifications() {
 }
 
 function Advanced() {
-  const [confirming, setConfirming] = createSignal(false);
+  const [confirming, setConfirming] = createSignal<'usage' | 'activity' | null>(null);
   const folders = [
-    { which: 'data', label: 'App data', help: 'Settings, encrypted keys and usage history.' },
+    { which: 'data', label: 'App data', help: 'Settings, encrypted keys, usage and activity history.' },
     { which: 'config', label: 'Proxy config', help: 'config.yaml (generated from settings and config.user.yaml), config.user.yaml and the proxy log.' },
     { which: 'auths', label: 'Account logins', help: 'OAuth credential files the proxy reads. Keep private.' },
   ] as const;
@@ -155,20 +155,40 @@ function Advanced() {
         )}
       </For>
       <SettingRow label="Usage history" help="Stored samples behind the chart and drain rate.">
-        <button class="btn danger" onClick={() => setConfirming(true)}>Clear history</button>
+        <button class="btn danger" onClick={() => setConfirming('usage')}>Clear history</button>
       </SettingRow>
-      <Show when={confirming()}>
+      <SettingRow label="Keep requests for" help="Days of per-request activity stored on disk. Daily totals are kept until cleared.">
+        <NumberField value={settings().activity.retentionDays} suffix="days" onCommit={(v) => set((d) => void (d.activity.retentionDays = v))} />
+      </SettingRow>
+      <SettingRow label="Activity history" help="Stored requests and daily totals behind the Activity page.">
+        <button class="btn danger" onClick={() => setConfirming('activity')}>Clear history</button>
+      </SettingRow>
+      <Show when={confirming() === 'usage'}>
         <Dialog
           title="Clear usage history?"
-          onClose={() => setConfirming(false)}
+          onClose={() => setConfirming(null)}
           actions={
             <>
-              <button class="btn" onClick={() => setConfirming(false)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setConfirming(false); })}>Clear</button>
+              <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
+              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setConfirming(null); })}>Clear</button>
             </>
           }
         >
           <p class="secondary">The chart and drain rate start over. Accounts and settings are kept.</p>
+        </Dialog>
+      </Show>
+      <Show when={confirming() === 'activity'}>
+        <Dialog
+          title="Clear activity history?"
+          onClose={() => setConfirming(null)}
+          actions={
+            <>
+              <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
+              <button class="btn danger" onClick={() => void window.api.clearActivity().then(() => { setActivity([]); setConfirming(null); })}>Clear</button>
+            </>
+          }
+        >
+          <p class="secondary">Every stored request and daily total is deleted. Accounts and settings are kept.</p>
         </Dialog>
       </Show>
     </>

@@ -1,6 +1,6 @@
 import type { AppSettings } from './settings';
 import type {
-  ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
+  ActivityDayTotal, ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -35,7 +35,14 @@ export interface DesktopApi {
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
   usageHistory(): Promise<HistorySample[]>;
   clearHistory(): Promise<void>;
+  /** Recent attempts across days, oldest first. */
   activityList(): Promise<ActivityEvent[]>;
+  /** Local days (YYYY-MM-DD) with stored requests, newest first. */
+  activityDays(): Promise<string[]>;
+  /** One stored day's requests, oldest first. */
+  activityDay(day: string): Promise<ActivityEvent[]>;
+  activityTotals(): Promise<ActivityDayTotal[]>;
+  /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
 
   oauthStart(provider: string): Promise<OAuthStart>;
@@ -99,6 +106,9 @@ export const INVOKE = {
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
   activityList: 'activity:list',
+  activityDays: 'activity:days',
+  activityDay: 'activity:day',
+  activityTotals: 'activity:totals',
   clearActivity: 'activity:clear',
   oauthStart: 'oauth:start',
   oauthStatus: 'oauth:status',

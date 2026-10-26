@@ -233,8 +233,26 @@ a {
   color: var(--color-text-secondary);
 }
 .build-sub {
+  display: block;
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
+}
+/* A row that opens a page: no button chrome, only a brighter title on hover. */
+.build-row.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.build-row.link:hover .build-title,
+.build-row.link:hover .build-version {
+  color: var(--color-text);
+}
+.build-row.link:focus-visible {
+  outline: 2px solid var(--color-accent-border);
+  outline-offset: 2px;
 }
 .build-modified {
   color: var(--color-amber);

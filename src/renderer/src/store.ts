@@ -11,6 +11,14 @@ export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'logs' | 's
 const api = window.api;
 
 export const [page, setPage] = createSignal<Page>('dashboard');
+
+export type SettingsSection = 'general' | 'appearance' | 'trayIcons' | 'proxy' | 'dashboard' | 'notifications' | 'updates' | 'advanced';
+/** Lives here, not in the Settings page, so other views can open a section directly. */
+export const [settingsSection, setSettingsSection] = createSignal<SettingsSection>('general');
+export function openSettings(section: SettingsSection): void {
+  setSettingsSection(section);
+  setPage('settings');
+}
 export const [settings, setSettingsSignal] = createSignal<AppSettings>(DEFAULT_SETTINGS);
 /** Ticks every 30 s so countdowns re-render without each component owning a timer. */
 export const [now, setNow] = createSignal(Date.now());

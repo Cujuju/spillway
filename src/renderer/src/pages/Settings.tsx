@@ -6,12 +6,11 @@ import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
-import { setActivity, setHistory, settings, updateSettings } from '../store';
+import { setActivity, setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
 
-type Section = 'general' | 'appearance' | 'trayIcons' | 'proxy' | 'dashboard' | 'notifications' | 'updates' | 'advanced';
-const NAV: { group: string; items: { id: Section; label: string }[] }[] = [
+const NAV: { group: string; items: { id: SettingsSection; label: string }[] }[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'dashboard', label: 'Dashboard' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }] },
@@ -219,7 +218,6 @@ function Advanced() {
 }
 
 export function Settings() {
-  const [section, setSection] = createSignal<Section>('general');
   const title = () => NAV.flatMap((g) => g.items).find((i) => i.id === section())?.label ?? '';
   return (
     <div class="settings">

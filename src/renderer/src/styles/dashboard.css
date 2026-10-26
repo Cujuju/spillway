@@ -37,7 +37,7 @@
 .provider-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
   margin-bottom: 22px;
   overflow-x: auto;
 }
@@ -124,7 +124,7 @@
 .summary-tabs {
   display: flex;
   gap: 18px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
   margin: 14px 0 12px;
 }
 .summary-tabs button {
@@ -178,7 +178,7 @@
   font-size: var(--text-sm);
   color: var(--color-text-soft);
   padding: 10px 0 18px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
   margin-bottom: 18px;
 }
 
@@ -213,7 +213,7 @@
   gap: 24px;
   align-items: center;
   padding: 16px 4px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-divider);
 }
 .account-row.disabled {
   opacity: 0.55;

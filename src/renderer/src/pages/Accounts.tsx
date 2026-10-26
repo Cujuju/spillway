@@ -3,6 +3,7 @@ import { createSignal, For, Show } from 'solid-js';
 import type { Credential, ResetCredits } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from '../components/AddAccountDialog';
+import { ResetCreditButton } from '../components/ResetCreditButton';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
 import { proxyStatus, snapshot } from '../store';
@@ -30,12 +31,14 @@ export function Accounts() {
   const [adding, setAdding] = createSignal(false);
   const [deleting, setDeleting] = createSignal<Credential | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [info, setInfo] = createSignal<string | null>(null);
   const running = () => proxyStatus()?.state === 'running';
   const creds = () =>
     [...(snapshot()?.credentials ?? [])].sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
 
   const act = async (fn: () => Promise<void>) => {
     setError(null);
+    setInfo(null);
     try {
       await fn();
     } catch (e) {
@@ -66,6 +69,9 @@ export function Accounts() {
       </Show>
       <Show when={error()}>
         <Notice tone="error">{error()}</Notice>
+      </Show>
+      <Show when={info()}>
+        <Notice tone="info">{info()}</Notice>
       </Show>
 
       <div class="card" style={{ padding: 0 }}>
@@ -106,7 +112,15 @@ export function Accounts() {
                   <td>
                     <div class="row" style={{ gap: '6px' }}>
                       <span title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span>
-                      <Show when={c.resetCredits?.available}>{resetBadge(c.resetCredits!)}</Show>
+                      <Show when={c.resetCredits?.available}>
+                        {resetBadge(c.resetCredits!)}
+                        <ResetCreditButton
+                          credential={c}
+                          disabled={!running()}
+                          onDone={(m) => { setError(null); setInfo(m); }}
+                          onError={(m) => { setInfo(null); setError(m); }}
+                        />
+                      </Show>
                     </div>
                   </td>
                   <td>{statusBadge(c)}</td>

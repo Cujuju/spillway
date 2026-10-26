@@ -37,6 +37,10 @@ export interface ResetCredits {
   checkedAt: string;
 }
 
+/** ChatGPT's answer to spending a reset credit: spent, nothing reached, none held, or a replayed request. */
+export const RESET_CREDIT_OUTCOMES = ['reset', 'nothing_to_reset', 'no_credit', 'already_redeemed'] as const;
+export type ResetCreditOutcome = (typeof RESET_CREDIT_OUTCOMES)[number];
+
 export interface Credential {
   id: string;
   /** Auth file name; the management API addresses credentials by it. */

@@ -1,5 +1,5 @@
 import { parseBuildInfo, type BuildInfo } from '@shared/buildInfo';
-import type { ManagementLockout, OAuthStart, OAuthStatus, UsageSnapshot } from '@shared/types';
+import { RESET_CREDIT_OUTCOMES, type ManagementLockout, type OAuthStart, type OAuthStatus, type ResetCreditOutcome, type UsageSnapshot } from '@shared/types';
 import { parseUsageSnapshot } from './usageParse';
 
 /** Management calls are loopback; anything slower means the proxy is wedged. */
@@ -68,6 +68,14 @@ class ManagementClient {
 
   async refreshUsage(authIndex?: string): Promise<UsageSnapshot> {
     return parseUsageSnapshot(await this.request('POST', '/usage/refresh', authIndex ? { auth_index: authIndex } : {}, REFRESH_TIMEOUT_MS));
+  }
+
+  /** Spends one reset credit; the proxy answers with ChatGPT's outcome and fresh usage. */
+  async useResetCredit(authIndex: string): Promise<{ outcome: ResetCreditOutcome; snapshot: UsageSnapshot }> {
+    const res = (await this.request('POST', '/usage/reset-credit', { auth_index: authIndex }, REFRESH_TIMEOUT_MS)) as { code?: unknown; usage?: unknown };
+    const outcome = RESET_CREDIT_OUTCOMES.find((o) => o === res.code);
+    if (!outcome) throw new Error(`Unexpected reset outcome: ${String(res.code)}`);
+    return { outcome, snapshot: parseUsageSnapshot(res.usage) };
   }
 
   async shutdown(): Promise<boolean> {

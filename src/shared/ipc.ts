@@ -1,7 +1,7 @@
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -39,6 +39,8 @@ export interface DesktopApi {
 
   usageLatest(): Promise<{ snapshot: UsageSnapshot | null; error: string | null }>;
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
+  /** Spends one of a Codex account's rate-limit reset credits. */
+  useResetCredit(credentialId: string): Promise<ResetCreditOutcome>;
   usageHistory(): Promise<HistorySample[]>;
   clearHistory(): Promise<void>;
   /** Recent attempts across days, oldest first. */
@@ -111,6 +113,7 @@ export const INVOKE = {
   installUpdate: 'update:install',
   usageLatest: 'usage:latest',
   usageRefresh: 'usage:refresh',
+  useResetCredit: 'usage:use-reset-credit',
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
   activityList: 'activity:list',

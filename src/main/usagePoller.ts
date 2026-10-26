@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Notification } from 'electron';
 import { maskEmails } from '@shared/privacy';
-import type { UsageSnapshot } from '@shared/types';
+import type { ResetCreditOutcome, UsageSnapshot } from '@shared/types';
 import { rollPastResets } from '@shared/usageWindows';
 import { history } from './historyStore';
 import { management } from './managementClient';
@@ -69,6 +69,14 @@ class UsagePoller extends EventEmitter {
   async refresh(authIndex?: string): Promise<UsageSnapshot | null> {
     if (!proxy.isRunning()) return this.last;
     return this.accept(await management.refreshUsage(authIndex));
+  }
+
+  /** Spends one of a Codex account's reset credits, then publishes the usage that follows. */
+  async useResetCredit(authIndex: string): Promise<ResetCreditOutcome> {
+    if (!proxy.isRunning()) throw new Error('Start the proxy first');
+    const { outcome, snapshot } = await management.useResetCredit(authIndex);
+    this.accept(snapshot);
+    return outcome;
   }
 
   start(): void {

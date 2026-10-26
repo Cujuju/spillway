@@ -116,6 +116,11 @@ const handlers: Handlers = {
   },
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),
   usageRefresh: (credentialId) => usage.refresh(credentialId ? usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex : undefined),
+  useResetCredit: (credentialId) => {
+    const authIndex = usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex;
+    if (!authIndex) throw new Error('Account not found');
+    return usage.useResetCredit(authIndex);
+  },
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
   activityList: () => activity.all(),

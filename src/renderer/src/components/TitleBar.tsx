@@ -4,11 +4,13 @@ import { Show } from 'solid-js';
 import { maximized } from '../store';
 
 const ICON_PX = 14;
+/** Two-thirds of the 36 px title bar; scripts/make-icon.ps1 writes icon.png at this size and icon@2x.png at double. */
+const APP_ICON_PX = 24;
 
 export function TitleBar() {
   return (
     <header class="titlebar">
-      <img src="./icon.png" alt="" width="16" height="16" />
+      <img src="./icon.png" srcset="./icon.png 1x, ./icon@2x.png 2x" alt="" width={APP_ICON_PX} height={APP_ICON_PX} />
       <span class="titlebar-title">{APP_NAME.toUpperCase()}</span>
       {/* macOS draws native traffic lights instead. */}
       <Show when={window.api.platform !== 'darwin'}>

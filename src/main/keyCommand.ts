@@ -4,6 +4,7 @@
  */
 import { app } from 'electron';
 import type { KeyCommand } from './clientConfigText';
+import { printClientKeyLauncherPath } from './paths';
 import { readClientKey } from './settingsStore';
 
 export const PRINT_CLIENT_KEY_ARG = '--print-client-key';
@@ -13,10 +14,13 @@ const EXIT_FAILED = 1;
 
 export const isPrintClientKeyLaunch = () => process.argv.includes(PRINT_CLIENT_KEY_ARG);
 
-/** The command clients run to fetch the key. Dev runs Electron with the app folder as its first argument. */
+/**
+ * The command clients run to fetch the key. It starts the launcher, which re-runs Spillway with the
+ * remaining arguments and without ELECTRON_RUN_AS_NODE. Dev passes the app folder before the flag.
+ */
 export function clientKeyCommand(): KeyCommand {
-  const args = app.isPackaged ? [PRINT_CLIENT_KEY_ARG] : [app.getAppPath(), PRINT_CLIENT_KEY_ARG];
-  return { command: process.execPath, args };
+  const appArgs = app.isPackaged ? [PRINT_CLIENT_KEY_ARG] : [app.getAppPath(), PRINT_CLIENT_KEY_ARG];
+  return { command: process.execPath, args: [printClientKeyLauncherPath(), ...appArgs] };
 }
 
 /**

@@ -27,7 +27,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 
 - Themes: one palette per theme in `src/shared/themes.ts`, used by the renderer (inline CSS vars) and the window background. Tints derive in `tokens.css`; don't hardcode colours.
 - Email masking: the renderer's `snapshot` memo masks every credential field when "Show emails" is off, so views never handle raw emails. Main-process text (notifications) uses `maskEmails`.
-- Proxy status has one indicator: the dot on the sidebar's Proxy item.
+- Proxy status has one indicator: the sidebar's Proxy icon, tinted by state.
 
 - Platforms: Windows and macOS. Proxy binaries live in `resources/bin/<platform>-<arch>/` (Node names); `scripts/build-proxy.mjs`, `electron-builder.yml` (`${platform}-${arch}`) and `src/main/paths.ts` must agree. UI wording for tray/taskbar comes from `src/renderer/src/lib/platform.ts`.
 

@@ -1,8 +1,8 @@
-import { Activity as ActivityIcon, Gauge, ScrollText, Server, Settings as SettingsIcon, Users } from 'lucide-solid';
+import { Activity as ActivityIcon, Gauge, ScrollText, Settings as SettingsIcon, Users } from 'lucide-solid';
 import { For, type JSX } from 'solid-js';
 import { page, setPage, snapshot, type Page } from '../store';
 import { BuildCard } from './BuildCard';
-import { ProxyStateDot, proxyStatusText } from './ProxyState';
+import { ProxyStateIcon, proxyStatusText } from './ProxyState';
 
 const ICON_PX = 15;
 
@@ -18,7 +18,7 @@ const NAV: { group: string; items: { id: Page; label: string; icon: () => JSX.El
   {
     group: 'System',
     items: [
-      { id: 'proxy', label: 'Proxy', icon: () => <Server size={ICON_PX} /> },
+      { id: 'proxy', label: 'Proxy', icon: () => <ProxyStateIcon size={ICON_PX} /> },
       { id: 'logs', label: 'Logs', icon: () => <ScrollText size={ICON_PX} /> },
       { id: 'settings', label: 'Settings', icon: () => <SettingsIcon size={ICON_PX} /> },
     ],
@@ -44,7 +44,6 @@ export function Sidebar() {
                   {item.icon()}
                   <span class="spacer">{item.label}</span>
                   {item.id === 'accounts' && accountCount() > 0 ? <span class="badge">{accountCount()}</span> : null}
-                  {item.id === 'proxy' ? <ProxyStateDot /> : null}
                 </button>
               )}
             </For>

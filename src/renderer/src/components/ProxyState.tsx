@@ -1,4 +1,5 @@
 import type { ProxyState } from '@shared/types';
+import { Server } from 'lucide-solid';
 import { compactDuration } from '../lib/format';
 import { now, proxyStatus } from '../store';
 
@@ -39,7 +40,7 @@ export function proxyStatusText(): string {
   return `${label} · ${ms < UPTIME_MIN_MS ? 'just started' : `up ${compactDuration(ms)}`}`;
 }
 
-/** The app's one proxy status indicator; sits on the sidebar's Proxy item. */
-export function ProxyStateDot() {
-  return <span class={`status-dot ${TONES[proxyState()]}`} role="img" aria-label={proxyStatusText()} />;
+/** The app's one proxy status indicator: the sidebar's Proxy icon, tinted by state. */
+export function ProxyStateIcon(props: { size: number }) {
+  return <Server size={props.size} class={`status-icon ${TONES[proxyState()]}`} role="img" aria-label={proxyStatusText()} />;
 }

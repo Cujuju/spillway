@@ -217,22 +217,17 @@
   background: var(--color-accent-subtle);
   color: var(--color-accent-light);
 }
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-disabled);
+.status-icon {
   flex-shrink: 0;
 }
-.status-dot.green {
-  background: var(--color-green);
-  box-shadow: 0 0 0 3px var(--color-green-subtle);
+.status-icon.green {
+  color: var(--color-green);
 }
-.status-dot.amber {
-  background: var(--color-amber);
+.status-icon.amber {
+  color: var(--color-amber);
 }
-.status-dot.red {
-  background: var(--color-red);
+.status-icon.red {
+  color: var(--color-red);
 }
 
 /* ── Dialog ─────────────────────────────────────────────────────── */

@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import type { Credential } from '@shared/types';
-import { depletionAt, drainRatePerHour, drainSeries, pastSeries, poolSummary, poolWindowKey, project } from '../lib/forecast';
+import { depletionAt, poolSummary, poolWindowKey, project } from '../lib/forecast';
+import { couplingRatios, drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
 import { dayTime } from '../lib/format';
 import { providerVar } from '../lib/providers';
 import { history, now, settings, updateSettings } from '../store';
@@ -38,13 +39,14 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
 
   const summary = createMemo(() => (key() ? poolSummary(props.credentials, key()!) : null));
   const rate = createMemo(() => (key() ? drainRatePerHour(history(), ids(), key()!, now(), settings().dashboard.drainLookbackHours) : null));
+  const ratios = createMemo(() => (key() ? couplingRatios(history(), ids(), key()!, now(), settings().dashboard.drainLookbackHours) : {}));
   const past = createMemo(() => {
     const k = key();
     const s = summary();
     if (!k || !s) return [];
     return [...pastSeries(history(), props.credentials, k, from()), { t: now(), remaining: s.remaining }];
   });
-  const projection = createMemo(() => (key() ? project(props.credentials, key()!, rate() ?? 0, now(), days(), props.strategy) : null));
+  const projection = createMemo(() => (key() ? project(props.credentials, key()!, { perHour: rate() ?? 0, ratios: ratios() }, now(), days(), props.strategy) : null));
   const drain = createMemo(() => (key() ? drainSeries(history(), ids(), key()!, from()) : []));
   const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...drain().map((p) => p.remaining)) * DRAIN_HEADROOM));
   const emptyAt = () => (rate() ? depletionAt(projection()?.points ?? []) : null);

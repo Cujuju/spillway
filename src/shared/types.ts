@@ -14,6 +14,8 @@ export interface LimitWindow {
   durationMs: number | null;
   /** Model-, feature- or spend-specific window; only unscoped windows describe the account and drive routing. */
   scoped: boolean;
+  /** After a reset: 'fixed' starts the next period at once, 'on_use' with the next request; null when unknown. */
+  resetCadence: 'fixed' | 'on_use' | null;
 }
 
 export interface Credential {
@@ -37,6 +39,8 @@ export interface Credential {
   nextPick: boolean;
   /** The "use this account" override; it takes traffic ahead of the routing strategy while available. */
   preferred: boolean;
+  /** Weighted-round-robin weight; 0 excludes the account from that strategy. */
+  weight: number;
   windows: LimitWindow[];
 }
 

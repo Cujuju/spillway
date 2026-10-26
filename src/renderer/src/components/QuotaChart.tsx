@@ -1,5 +1,5 @@
 import { createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show } from 'solid-js';
-import type { SeriesPoint } from '../lib/forecast';
+import type { SeriesPoint } from '../lib/poolHistory';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;

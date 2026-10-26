@@ -1,12 +1,28 @@
 import type { HistorySample, LimitWindow, UsageSnapshot } from './types';
 
 /**
+ * When a window resets next after one reset at `resetAt` has passed by `now`. A fixed-cadence
+ * window resets every `durationMs`; any other starts on its next use, so the time is unknown (null).
+ */
+export function nextResetAfter(w: Pick<LimitWindow, 'durationMs' | 'resetCadence'>, resetAt: number, now: number): number | null {
+  if (w.resetCadence !== 'fixed' || !w.durationMs) return null;
+  const periods = Math.floor((now - resetAt) / w.durationMs) + 1;
+  return resetAt + periods * w.durationMs;
+}
+
+/**
  * A window past its reset holds no usage. The proxy keeps reporting the old value until it
  * observes the account again, so readers roll it to zero themselves.
  */
 export function rollWindow(w: LimitWindow, now: number): LimitWindow {
   if (!w.resetsAt || Date.parse(w.resetsAt) > now) return w;
-  return { ...w, usedPercent: w.usedPercent === null ? null : 0, resetsAt: null, status: w.status === null ? null : 'allowed' };
+  const next = nextResetAfter(w, Date.parse(w.resetsAt), now);
+  return {
+    ...w,
+    usedPercent: w.usedPercent === null ? null : 0,
+    resetsAt: next === null ? null : new Date(next).toISOString(),
+    status: w.status === null ? null : 'allowed',
+  };
 }
 
 /** Rolls every window whose reset has passed; returns `snapshot` itself when none has. */

@@ -7,6 +7,9 @@ const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v
 const s = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const STATUSES = ['allowed', 'allowed_warning', 'rejected'] as const;
+const CADENCES = ['fixed', 'on_use'] as const;
+/** The proxy's weight for credentials that set none (credentialweight.Default). */
+const DEFAULT_WEIGHT = 1;
 const MS_PER_SECOND = 1000;
 const HOUR_MS = 3_600_000;
 
@@ -34,6 +37,7 @@ function parseWindow(raw: unknown): LimitWindow | null {
     status,
     durationMs: 'duration_seconds' in w ? (seconds && seconds > 0 ? seconds * MS_PER_SECOND : null) : legacyDurationMs(key),
     scoped: w.scoped === true,
+    resetCadence: CADENCES.find((c) => c === w.reset_cadence) ?? null,
   };
 }
 
@@ -68,6 +72,7 @@ function parseCredential(raw: unknown): Credential | null {
     lastUsedAt: s(c.last_used_at),
     nextPick: c.next_pick === true,
     preferred: c.preferred === true,
+    weight: n(c.weight) ?? DEFAULT_WEIGHT,
     windows,
   };
 }

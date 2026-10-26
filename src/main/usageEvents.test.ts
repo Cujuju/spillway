@@ -5,10 +5,10 @@ import { diffUsage } from './usageEvents';
 const cred = (id: string, patch: Partial<Credential> = {}): Credential => ({
   id, name: `${id}.json`, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null,
   disabled: false, status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null,
-  nextPick: false, preferred: false, windows: [], ...patch,
+  nextPick: false, preferred: false, weight: 1, windows: [], ...patch,
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '2026-10-25T00:00:00Z', strategy: 'soonest-reset', credentials });
-const fiveHour = (status: 'allowed' | 'rejected') => [{ key: 'five_hour', label: '5-hour', usedPercent: 100, resetsAt: null, status, durationMs: 5 * 3_600_000, scoped: false }];
+const fiveHour = (status: 'allowed' | 'rejected') => [{ key: 'five_hour', label: '5-hour', usedPercent: 100, resetsAt: null, status, durationMs: 5 * 3_600_000, scoped: false, resetCadence: null }];
 
 describe('diffUsage', () => {
   it('reports nothing for the first snapshot', () => {

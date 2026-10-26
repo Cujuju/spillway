@@ -4,7 +4,7 @@ import { consumedBetween, rollPastResets } from './usageWindows';
 
 const NOW = Date.parse('2026-10-25T12:00:00Z');
 const win = (resetsAt: string | null, status: LimitWindow['status'] = 'rejected'): LimitWindow => ({
-  key: 'five_hour', label: '5-hour', usedPercent: 100, resetsAt, status, durationMs: 5 * 3_600_000, scoped: false,
+  key: 'five_hour', label: '5-hour', usedPercent: 100, resetsAt, status, durationMs: 5 * 3_600_000, scoped: false, resetCadence: null,
 });
 const snap = (...windows: LimitWindow[]): UsageSnapshot => ({
   fetchedAt: '', strategy: 'soonest-reset', credentials: [{ id: 'a', windows } as Credential],
@@ -14,6 +14,10 @@ describe('rollPastResets', () => {
   it('zeroes a window whose reset passed and clears its reset and rejection', () => {
     const rolled = rollPastResets(snap(win('2026-10-25T11:00:00Z')), NOW).credentials[0]!.windows[0]!;
     expect(rolled).toMatchObject({ usedPercent: 0, resetsAt: null, status: 'allowed' });
+  });
+  it('moves a fixed-cadence window to its next period', () => {
+    const fixed = { ...win('2026-10-25T01:00:00Z'), resetCadence: 'fixed' as const };
+    expect(rollPastResets(snap(fixed), NOW).credentials[0]!.windows[0]!.resetsAt).toBe('2026-10-25T16:00:00.000Z');
   });
   it('returns the same snapshot when nothing reset', () => {
     const s = snap(win('2026-10-25T13:00:00Z'), win(null));

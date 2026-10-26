@@ -37,6 +37,12 @@ function parseWindow(raw: unknown): LimitWindow | null {
   };
 }
 
+/** Default account name: the part after the last "@", e.g. "pm.me". */
+export function emailDomain(email: string | null): string | null {
+  const at = email?.lastIndexOf('@') ?? -1;
+  return email && at >= 0 ? s(email.slice(at + 1)) : null;
+}
+
 function parseCredential(raw: unknown): Credential | null {
   const c = obj(raw);
   const id = s(c.id);
@@ -44,14 +50,15 @@ function parseCredential(raw: unknown): Credential | null {
   if (!id || !provider) return null;
   const windows = Array.isArray(c.windows) ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null) : [];
   const note = s(c.note);
+  const email = s(c.email);
   return {
     id,
     name: s(c.name) ?? id,
     authIndex: s(c.auth_index) ?? id,
     provider: provider.toLowerCase(),
-    label: note ?? s(c.label) ?? s(c.email) ?? id,
+    label: note ?? emailDomain(email) ?? s(c.label) ?? email ?? id,
     note,
-    email: s(c.email),
+    email,
     disabled: c.disabled === true,
     status: s(c.status) ?? 'unknown',
     statusMessage: s(c.status_message),

@@ -84,7 +84,7 @@ export function Accounts() {
                         <input
                           class="input inline-edit"
                           value={c.note ?? ''}
-                          placeholder="Name this account"
+                          placeholder={c.label}
                           title="Account name (saved as the account note)"
                           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                           onBlur={(e) => {

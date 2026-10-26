@@ -15,6 +15,9 @@ const CORNER_RATIO = 0.22;
 /** Font heights as a share of the edge: two digits fill the tile, three need to shrink. */
 const FONT_RATIO_2_DIGITS = 0.72;
 const FONT_RATIO_3_DIGITS = 0.5;
+/** Regular weight in the OS UI font, like the taskbar clock beside it. */
+const TRAY_FONT_WEIGHT = 400;
+const TRAY_FONT = "'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif";
 /** A provider stripe along the bottom edge so same-valued icons stay tellable apart. */
 const STRIPE_RATIO = 0.14;
 
@@ -45,7 +48,7 @@ export function drawTrayIcon(size: number, text: string, level: TrayLevel, strip
     ctx.restore();
   }
   const ratio = text.length >= 3 ? FONT_RATIO_3_DIGITS : FONT_RATIO_2_DIGITS;
-  ctx.font = `700 ${Math.round(size * ratio)}px "Segoe UI", Arial, sans-serif`;
+  ctx.font = `${TRAY_FONT_WEIGHT} ${Math.round(size * ratio)}px ${TRAY_FONT}`;
   ctx.fillStyle = level === 'warn' ? '#0a0f1c' : '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

@@ -37,9 +37,8 @@ export function ActivityHeatmap(props: {
   };
 
   return (
-    <div class="card heat-card">
+    <div class="heat-card">
       <div class="chart-head heat-head">
-        <div class="section-label">By hour</div>
         <span class="chart-head-note" title={zone}>{zoneLabel} time</span>
         <Seg value={mode()} options={[{ value: 'week', label: 'Last 7 days' }, { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over the last 30 days' }] as const} onChange={setMode} />
       </div>

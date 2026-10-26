@@ -178,6 +178,9 @@ importers:
       '@cujuju/solidjs-kv-tooltip':
         specifier: link:../solidjs-toolkit/packages/kv-tooltip
         version: link:../solidjs-toolkit/packages/kv-tooltip
+      '@cujuju/solidjs-tiling-window-manager':
+        specifier: link:../solidjs-toolkit/packages/tiling-window-manager
+        version: link:../solidjs-toolkit/packages/tiling-window-manager
       electron-updater:
         specifier: ^6.8.11
         version: 6.8.11(supports-color@7.2.0)

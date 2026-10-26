@@ -1,0 +1,75 @@
+/* ── Activity Overview: chart tiles in the toolkit's TilingWorkspace ── */
+.activity-board {
+  /* Fills the page below the stat strip; grows past it (page scrolls) when its tiles need the room. */
+  flex: 1 0 0;
+  margin-top: var(--page-gap);
+  --twm-accent: var(--color-accent);
+  --twm-accent-soft: var(--color-accent-subtle);
+  --twm-danger: var(--color-red);
+  --twm-danger-soft: var(--color-red-subtle);
+  --twm-border: var(--color-border);
+  --twm-border-strong: var(--color-border-strong);
+  --twm-surface: var(--color-surface-raised);
+  --twm-text: var(--color-text);
+  --twm-text-muted: var(--color-text-muted);
+  --twm-shadow: var(--shadow-floating);
+  --twm-radius: var(--radius-card);
+}
+.board-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 16px;
+}
+.board-tile-head {
+  align-items: center;
+  min-width: 0;
+  cursor: grab;
+  user-select: none;
+}
+/* A narrow tile truncates its title and note; the controls keep their size. */
+.board-tile-head > .section-label,
+.board-tile-head > .chart-head-note {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-tile-head > .seg,
+.board-tile-head > .icon-btn {
+  flex-shrink: 0;
+}
+.board-tile-head .seg button {
+  white-space: nowrap;
+}
+.twm[data-dragging] .board-tile-head {
+  cursor: grabbing;
+}
+/* Title and note on the left; a spacer pushes the metric switch and remove button right. */
+.board-tile-head > .chart-head-note {
+  margin-left: 0;
+}
+.board-tile-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+/* A fill-height trend chart takes the body's height exactly, so it never scrolls. */
+.board-tile-body > .trend.fill {
+  height: 100%;
+  overflow: hidden;
+}
+.trend.fill .chart {
+  margin-top: 0;
+}
+.board-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-card);
+}
+.share-cell {
+  width: 12%;
+}

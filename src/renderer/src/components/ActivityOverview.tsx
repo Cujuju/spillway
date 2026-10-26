@@ -1,45 +1,16 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
-import {
-  bucketStarts, byModel, inRange, metricValue, RANGES, series, summarize, type Metric, type Range, type SeriesPoint, type Summary,
-} from '../lib/activityStats';
-import { compactNumber, pct, usd } from '../lib/format';
+import { createMemo, createSignal, Show } from 'solid-js';
+import { bucketStarts, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
+import { compactNumber, usd } from '../lib/format';
 import { activityBuckets, now } from '../store';
-import { ActivityHeatmap } from './ActivityHeatmap';
-import type { TipRow } from './ChartTip';
-import { TokenCell } from './TokenCell';
-import { TrendChart } from './TrendChart';
-import { ProviderGlyph, Seg } from './ui';
+import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
+import { countRows, hitRate, savings } from './activityFormat';
+import type { ActivityData } from './activityPanels';
+import { Seg } from './ui';
 
-const USAGE_CHART_PX = 180;
-/** The hit rate sits near 100% most of the time; a short chart with 0/50/100% lines is enough. */
-const CACHE_CHART_PX = 110;
-const CACHE_Y_TICKS = 2;
 /** Date the price table in src/shared/modelPrices.ts was checked. */
 const PRICES_CHECKED = 'Oct 26, 2026';
-
-const NUMERIC_COLUMNS = ['Requests', 'Input', 'Output', 'Cache read', 'Cache write', 'Cache hit', 'API cost'];
-/** Model, the numeric columns, and Share. */
-const MODEL_COLUMN_COUNT = NUMERIC_COLUMNS.length + 2;
 const RANGE_OPTIONS = [{ value: '24h', label: '24 hours' }, { value: '7d', label: '7 days' }, { value: '30d', label: '30 days' }] as const;
-const METRIC_OPTIONS = [{ value: 'cost', label: 'API cost' }, { value: 'tokens', label: 'Tokens' }, { value: 'requests', label: 'Requests' }] as const;
 const BUCKET_NOTE: Record<Range, string> = { '24h': 'Hourly', '7d': 'Every 3 hours', '30d': 'Daily' };
-
-const formatMetric = (m: Metric) => (v: number) => (m === 'cost' ? usd(v) : compactNumber(v));
-/** Axis labels: "$0", "$0.25", "$12.5", "$1.2K". */
-const axisMetric = (m: Metric) => (v: number) => (m !== 'cost' ? compactNumber(v) : v === 0 ? '$0' : v < 1 ? usd(v) : `$${compactNumber(v)}`);
-const hitRate = (s: Summary) => (s.cacheHitRate === null ? '—' : pct(s.cacheHitRate * 100, 1));
-const savings = (s: Summary) => Math.max(0, s.uncachedCostUsd - s.costUsd);
-
-/** Hover readout for one bucket or cell. */
-const countRows = (s: Summary): TipRow[] => [
-  { label: 'API cost', value: usd(s.costUsd) },
-  { label: 'Requests', value: `${s.requests.toLocaleString()}${s.failed ? ` (${s.failed} failed)` : ''}` },
-  { label: 'Input', value: compactNumber(s.inputTokens) },
-  { label: 'Output', value: compactNumber(s.outputTokens) },
-  { label: 'Cache read', value: compactNumber(s.cachedTokens) },
-  { label: 'Cache write', value: compactNumber(s.cacheWriteTokens) },
-  { label: 'Cache hit rate', value: hitRate(s) },
-];
 
 function Stat(props: { label: string; value: string; sub: string; title?: string }) {
   return (
@@ -51,13 +22,13 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
   );
 }
 
+/** Range and totals stay on top; the charts below are tiles the user arranges. */
 export function ActivityOverview() {
   const [range, setRange] = createSignal<Range>('7d');
-  const [metric, setMetric] = createSignal<Metric>('cost');
-  const rows = activityBuckets;
+  const [placing, setPlacing] = createSignal<PendingChart | null>(null);
 
   const starts = createMemo(() => bucketStarts(range(), now()));
-  const scoped = createMemo(() => inRange(rows(), starts()));
+  const scoped = createMemo(() => inRange(activityBuckets(), starts()));
   const total = createMemo(() => summarize(scoped()));
   const points = createMemo(() => series(scoped(), starts(), now()));
   const models = createMemo(() => byModel(scoped()));
@@ -69,16 +40,23 @@ export function ActivityOverview() {
     const start = new Date(p.start).toLocaleString(undefined, { weekday: 'short', hour: 'numeric' });
     return RANGES[range()].hoursPerBucket > 1 ? `${start} – ${new Date(p.end).toLocaleTimeString(undefined, { hour: 'numeric' })}` : start;
   };
-  const xLabel = (t: number) => new Date(t).toLocaleString(undefined, daily() || range() === '7d' ? { month: 'numeric', day: 'numeric' } : { hour: 'numeric' });
-  const tip = (i: number) => ({ title: bucketLabel(points()[i]!), rows: countRows(points()[i]!.summary) });
-  const metricLabel = () => METRIC_OPTIONS.find((o) => o.value === metric())!.label;
+  const data: ActivityData = {
+    points,
+    rows: activityBuckets,
+    now,
+    models,
+    total,
+    bucketNote: () => BUCKET_NOTE[range()],
+    xLabel: (t) => new Date(t).toLocaleString(undefined, daily() || range() === '7d' ? { month: 'numeric', day: 'numeric' } : { hour: 'numeric' }),
+    tip: (i) => ({ title: bucketLabel(points()[i]!), rows: countRows(points()[i]!.summary) }),
+  };
 
   return (
     <>
       <div class="toolbar">
         <Seg value={range()} options={RANGE_OPTIONS} onChange={setRange} />
         <span class="spacer" />
-        <Seg value={metric()} options={METRIC_OPTIONS} onChange={setMetric} />
+        <AddChartSelect onPick={setPlacing} />
       </div>
 
       <div class="card stat-strip">
@@ -89,54 +67,7 @@ export function ActivityOverview() {
         <Stat label="Cache savings" value={usd(savings(total()))} sub="vs. no caching" title="List-price cost with every prompt token uncached, minus the estimate" />
       </div>
 
-      <div class="card">
-        <div class="chart-head">
-          <div class="section-label">{metricLabel()} over time</div>
-          <span class="chart-head-note">{BUCKET_NOTE[range()]}</span>
-        </div>
-        <TrendChart kind="bar" height={USAGE_CHART_PX} ariaLabel={`${metricLabel()} over time`} points={points().map((p) => ({ start: p.start, value: metricValue(p.summary, metric()) }))}
-          yLabel={axisMetric(metric())} xLabel={xLabel} tooltip={tip} />
-      </div>
-      <div class="card">
-        <div class="chart-head">
-          <div class="section-label">Cache hit rate</div>
-          <span class="chart-head-note">Share of prompt tokens read from cache</span>
-        </div>
-        <TrendChart kind="line" height={CACHE_CHART_PX} ariaLabel="Cache hit rate over time" yMax={1} yTicks={CACHE_Y_TICKS}
-          points={points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate }))} yLabel={(v) => pct(v * 100)} xLabel={xLabel} tooltip={tip} />
-      </div>
-
-      <ActivityHeatmap rows={rows()} now={now()} metric={metric()} format={(s) => formatMetric(metric())(metricValue(s, metric()))} tooltip={countRows} />
-
-      <div class="card table-card">
-        <table class="table dense">
-          <thead>
-            <tr>
-              <th>Model</th><For each={NUMERIC_COLUMNS}>{(c) => <th class="num">{c}</th>}</For><th>Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={models()} fallback={<tr><td colSpan={MODEL_COLUMN_COUNT} class="muted">No requests in this range.</td></tr>}>
-              {(m) => {
-                const share = () => (metricValue(total(), metric()) > 0 ? metricValue(m.summary, metric()) / metricValue(total(), metric()) : 0);
-                return (
-                  <tr>
-                    <td class="fill" title={m.model}><div class="cell-name"><ProviderGlyph provider={m.provider} size={14} /><span class="tabular">{m.model || '—'}</span></div></td>
-                    <td class="tabular num">{m.summary.requests.toLocaleString()}</td>
-                    <TokenCell v={m.summary.inputTokens} />
-                    <TokenCell v={m.summary.outputTokens} />
-                    <TokenCell v={m.summary.cachedTokens} />
-                    <TokenCell v={m.summary.cacheWriteTokens} provider={m.provider} />
-                    <td class="tabular num">{hitRate(m.summary)}</td>
-                    <td class="tabular num">{m.summary.unpricedRequests === m.summary.requests ? '—' : usd(m.summary.costUsd)}</td>
-                    <td style={{ width: '12%' }}><div class="share-bar" title={pct(share() * 100, 1)}><span style={{ width: `${share() * 100}%` }} /></div></td>
-                  </tr>
-                );
-              }}
-            </For>
-          </tbody>
-        </table>
-      </div>
+      <ActivityBoard data={data} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
 
       <p class="muted chart-note">
         API cost uses list prices checked {PRICES_CHECKED}, with cache writes at the 5-minute rate: what the same tokens would cost

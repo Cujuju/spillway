@@ -1,3 +1,4 @@
+import type { ActivityMetric } from '@shared/activityBoard';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
 import { promptTokens } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityCounts } from '@shared/types';
@@ -6,7 +7,7 @@ const HOURS_PER_DAY = 24;
 const DAYS_PER_WEEK = 7;
 
 export type Range = '24h' | '7d' | '30d';
-export type Metric = 'cost' | 'tokens' | 'requests';
+export type Metric = ActivityMetric;
 
 interface RangeSpec {
   /** Bars in the trend chart. */

@@ -37,6 +37,7 @@
     "@cujuju/solidjs-hold-action": "link:../solidjs-toolkit/packages/hold-action",
     "@cujuju/solidjs-hooks": "link:../solidjs-toolkit/packages/hooks",
     "@cujuju/solidjs-kv-tooltip": "link:../solidjs-toolkit/packages/kv-tooltip",
+    "@cujuju/solidjs-tiling-window-manager": "link:../solidjs-toolkit/packages/tiling-window-manager",
     "electron-updater": "^6.8.11",
     "yaml": "^2.9.1"
   }

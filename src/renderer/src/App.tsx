@@ -19,7 +19,7 @@ export function App() {
         <Sidebar />
         <main class="page">
           {/* The log view fills the page height instead of scrolling the page. */}
-          <div class="page-inner" classList={{ fill: page() === 'logs' }}>
+          <div class="page-inner" classList={{ fill: page() === 'logs' || page() === 'activity' }}>
             <Switch>
               <Match when={page() === 'dashboard'}><Dashboard /></Match>
               <Match when={page() === 'accounts'}><Accounts /></Match>

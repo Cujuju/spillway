@@ -11,6 +11,8 @@ const BAR_FILL = 0.72;
 /** Bars round their top (data end) by this much, never wider than half the bar. */
 const BAR_RADIUS = 4;
 const POINT_RADIUS = 2.5;
+/** Smallest plot a fill-height chart draws: axis labels plus a few gridlines. */
+const MIN_FILL_HEIGHT_PX = 80;
 
 export interface TrendPoint {
   start: number;
@@ -21,7 +23,8 @@ export interface TrendPoint {
 export interface TrendChartProps {
   points: TrendPoint[];
   kind: 'bar' | 'line';
-  height: number;
+  /** Fixed height; omitted, the chart fills its container's height. */
+  height?: number;
   ariaLabel: string;
   yLabel: (v: number) => string;
   xLabel: (t: number) => string;
@@ -43,16 +46,22 @@ function niceCeil(v: number): number {
 export function TrendChart(props: TrendChartProps) {
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
+  const [fillHeight, setFillHeight] = createSignal(MIN_FILL_HEIGHT_PX);
+  const height = () => props.height ?? fillHeight();
   const [hover, setHover] = createSignal<number | null>(null);
   const [pointer, setPointer] = createSignal({ x: 0, y: 0 });
   onMount(() => {
-    const ro = new ResizeObserver(([e]) => e && setWidth(Math.max(200, e.contentRect.width)));
+    const ro = new ResizeObserver(([e]) => {
+      if (!e) return;
+      setWidth(Math.max(200, e.contentRect.width));
+      setFillHeight(Math.max(MIN_FILL_HEIGHT_PX, e.contentRect.height));
+    });
     ro.observe(host);
     onCleanup(() => ro.disconnect());
   });
 
   const plotW = () => width() - PAD.left - PAD.right;
-  const plotH = () => props.height - PAD.top - PAD.bottom;
+  const plotH = () => height() - PAD.top - PAD.bottom;
   const slot = () => plotW() / Math.max(1, props.points.length);
   const yMax = createMemo(() => props.yMax ?? niceCeil(Math.max(0, ...props.points.map((p) => p.value ?? 0))));
   const x = (i: number) => PAD.left + slot() * (i + 0.5);
@@ -106,8 +115,8 @@ export function TrendChart(props: TrendChartProps) {
   };
 
   return (
-    <div ref={host} class="trend" onPointerMove={pick} onPointerLeave={() => setHover(null)}>
-      <svg class="chart" style={{ height: `${props.height}px` }} width={width()} height={props.height} role="img" aria-label={props.ariaLabel}
+    <div ref={host} class="trend" classList={{ fill: props.height === undefined }} onPointerMove={pick} onPointerLeave={() => setHover(null)}>
+      <svg class="chart" style={{ height: `${height()}px` }} width={width()} height={height()} role="img" aria-label={props.ariaLabel}
         tabindex="0" onKeyDown={onKey} onBlur={() => setHover(null)}>
         <For each={yTicks()}>
           {(v) => (
@@ -117,7 +126,7 @@ export function TrendChart(props: TrendChartProps) {
             </>
           )}
         </For>
-        <For each={xTicks()}>{(t) => <text x={x(t.i)} y={props.height - 6} text-anchor="middle">{t.label}</text>}</For>
+        <For each={xTicks()}>{(t) => <text x={x(t.i)} y={height() - 6} text-anchor="middle">{t.label}</text>}</For>
         <Show when={props.kind === 'bar'} fallback={
           <>
             <path d={linePath()} fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linejoin="round" />

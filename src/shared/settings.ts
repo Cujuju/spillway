@@ -1,5 +1,6 @@
 /** App settings: shape, defaults and normalization of untrusted stored JSON. */
 
+import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { THEME_CHOICES } from './themes';
 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
@@ -83,6 +84,8 @@ export interface AppSettings {
   activity: {
     /** Days of per-request logs kept on disk; daily totals are kept until cleared. */
     retentionDays: number;
+    /** The Overview's chart tiles. */
+    board: ActivityBoard;
   };
 }
 
@@ -155,6 +158,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   activity: {
     retentionDays: DEFAULT_ACTIVITY_RETENTION_DAYS,
+    board: DEFAULT_ACTIVITY_BOARD,
   },
 };
 
@@ -248,6 +252,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
     },
     activity: {
       retentionDays: int(a.retentionDays, d.activity.retentionDays, 1, MAX_ACTIVITY_RETENTION_DAYS),
+      board: normalizeActivityBoard(a.board),
     },
   };
 }

@@ -29,3 +29,6 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 ## Checks
 `pnpm typecheck && pnpm test && pnpm build`. Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.
+
+## Commits
+Commit your own changes as soon as the checks pass, without being asked. Other sessions share this checkout, so stage only your own paths and hunks.

@@ -12,7 +12,7 @@ $icoSizes = 16, 24, 32, 48, 64, 128, 256
 $MAC_ICON_PX = 1024
 # Corner radius as a share of the edge; matches the tray limit icons' rounded shape.
 $CORNER_RATIO = 0.22
-# Must match APP_ICON_PX in src/renderer/src/components/TitleBar.tsx.
+# Must match --titlebar-icon-size in src/renderer/src/styles/tokens.css.
 $TITLEBAR_ICON_PX = 28
 
 function New-RoundedPath([int]$size) {

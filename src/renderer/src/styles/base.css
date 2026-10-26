@@ -107,8 +107,13 @@ a {
   background: var(--color-surface-sunken);
   border-bottom: 1px solid var(--color-border);
   -webkit-app-region: drag;
-  padding-left: 12px;
+  /* Same inset left as above and below, so the icon sits square in the corner. */
+  padding-left: calc((var(--titlebar-height) - var(--titlebar-icon-size)) / 2);
   gap: 10px;
+}
+.titlebar-icon {
+  width: var(--titlebar-icon-size);
+  height: var(--titlebar-icon-size);
 }
 /* Clears the native traffic lights (main/window.ts places them 14px in). */
 :root[data-platform='darwin'] .titlebar {

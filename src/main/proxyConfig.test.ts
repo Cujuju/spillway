@@ -5,6 +5,7 @@ import { buildProxyConfig } from './proxyConfig';
 
 const base = {
   clientApiKey: 'client"key',
+  managementKey: 'mk',
   authDir: 'C:\\data\\proxy\\auths',
   settings: DEFAULT_SETTINGS.proxy,
   userConfig: '',

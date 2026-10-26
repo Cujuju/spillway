@@ -5,6 +5,8 @@ import type { AppSettings } from '@shared/settings';
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
   clientApiKey: string;
+  /** Stable management key for outside tools; the proxy stores it bcrypt-hashed. */
+  managementKey: string;
   authDir: string;
   /** Text of config.user.yaml; empty when the file does not exist. */
   userConfig: string;
@@ -33,7 +35,8 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['config-version'], CONFIG_VERSION],
     [['server', 'host'], p.allowLan ? ALL_INTERFACES_HOST : LOOPBACK_HOST],
     [['server', 'port'], p.port],
-    // The app authenticates with a per-launch supervisor password (environment), never a stored key.
+    // The app authenticates with a per-launch supervisor password (environment); this key is for outside tools.
+    [['management', 'secret-key'], input.managementKey],
     [['management', 'allow-remote'], false],
     [['management', 'disable-control-panel'], true],
     [['routing', 'strategy'], p.strategy],

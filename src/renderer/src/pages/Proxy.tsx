@@ -20,7 +20,9 @@ export function Proxy() {
   const running = () => state() === 'running';
   const endpoint = () => keys()?.endpoint ?? proxyStatus()?.endpoint ?? '';
   const key = () => keys()?.clientApiKey ?? '';
-  const masked = () => (revealed() ? key() : `${key().slice(0, KEY_PREFIX_SHOWN)}${'•'.repeat(Math.max(0, key().length - KEY_PREFIX_SHOWN))}`);
+  const maskOf = (value: string) => (revealed() ? value : `${value.slice(0, KEY_PREFIX_SHOWN)}${'•'.repeat(Math.max(0, value.length - KEY_PREFIX_SHOWN))}`);
+  const masked = () => maskOf(key());
+  const managementKey = () => keys()?.managementKey ?? '';
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -97,7 +99,7 @@ export function Proxy() {
           </span>
         </div>
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
-        <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
+        <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} managementKey={managementKey()} maskedManagementKey={maskOf(managementKey())} />
         <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
       </section>
 

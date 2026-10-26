@@ -35,6 +35,7 @@ export function writeProxyConfig(): string | null {
   const { yaml, userConfigError } = buildProxyConfig({
     settings: getSettings().proxy,
     clientApiKey: getSecrets().clientApiKey,
+    managementKey: getSecrets().managementKey,
     authDir: appPaths.authDir,
     userConfig: readUserConfig(),
   });

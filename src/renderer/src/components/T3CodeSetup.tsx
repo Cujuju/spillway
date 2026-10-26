@@ -6,11 +6,15 @@ import { ExpandRow } from './ui';
 const ICON_PX = 14;
 
 /** T3 Code runs Claude Code and Codex, so their Apply covers it; a Claude provider with its own home folder needs these variables. */
-export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked: string }) {
+export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked: string; managementKey: string; maskedManagementKey: string }) {
   const vars = () => {
     const shown = claudeEnvVars(props.endpoint, props.masked);
     return claudeEnvVars(props.endpoint, props.clientKey).map((v, i) => ({ ...v, shown: shown[i]?.value ?? '' }));
   };
+  const hubFields = () => [
+    { name: 'Hub URL', value: props.endpoint, shown: props.endpoint },
+    { name: 'Management key', value: props.managementKey, shown: props.maskedManagementKey },
+  ];
   return (
     <ExpandRow
       label="T3 Code"
@@ -23,7 +27,19 @@ export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked
         <li>Keep that provider signed in to Claude; requests still use the proxy's accounts.</li>
         <li>Save, then start a new thread with that provider.</li>
       </ol>
-      <For each={vars()}>
+      <CopyRows rows={vars()} />
+      <ol class="secondary steps">
+        <li>To see every pooled account's quota in T3 Code, open Settings → Providers → Usage providers → Add a CLIProxyAPI hub, and enter these.</li>
+      </ol>
+      <CopyRows rows={hubFields()} />
+    </ExpandRow>
+  );
+}
+
+function CopyRows(props: { rows: { name: string; value: string; shown: string }[] }) {
+  return (
+    <>
+      <For each={props.rows}>
         {(v) => (
           <div class="row env-var">
             <span class="chip env-var-name"><span class="chip-value">{v.name}</span></span>
@@ -34,6 +50,6 @@ export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked
           </div>
         )}
       </For>
-    </ExpandRow>
+    </>
   );
 }

@@ -27,7 +27,7 @@ function credentialName(id: string): string {
   return c.name;
 }
 
-const keys = () => ({ clientApiKey: getSecrets().clientApiKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
+const keys = () => ({ clientApiKey: getSecrets().clientApiKey, managementKey: getSecrets().managementKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
 
 const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey, keyCommand: clientKeyCommand() });
 const clientStatuses = () => {

@@ -101,6 +101,8 @@ export type OAuthStatus =
 
 export interface ProxyKeys {
   clientApiKey: string;
+  /** For outside tools that read the proxy's management API (T3 Code's usage provider). */
+  managementKey: string;
   endpoint: string;
 }
 

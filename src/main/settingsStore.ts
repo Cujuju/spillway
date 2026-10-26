@@ -10,6 +10,8 @@ import { appPaths } from './paths';
 interface Secrets {
   /** Key clients such as Claude Code send to the proxy. */
   clientApiKey: string;
+  /** Management key for outside tools (T3 Code's usage provider); the app itself uses the per-launch supervisor password. */
+  managementKey: string;
 }
 
 const SECRET_BYTES = 32;
@@ -72,8 +74,13 @@ async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean
       reEncrypt = r.shouldReEncrypt;
     }
     const parsed = JSON.parse(json) as Partial<Secrets>;
-    // Files from before the per-launch supervisor password also hold a managementKey; it is dropped.
-    if (typeof parsed.clientApiKey === 'string') return { value: { clientApiKey: parsed.clientApiKey }, reEncrypt: reEncrypt || 'managementKey' in parsed };
+    if (typeof parsed.clientApiKey !== 'string') return null;
+    // Files without a management key get one, so they are rewritten.
+    const hasManagementKey = typeof parsed.managementKey === 'string' && parsed.managementKey !== '';
+    return {
+      value: { clientApiKey: parsed.clientApiKey, managementKey: hasManagementKey ? parsed.managementKey! : newSecret() },
+      reEncrypt: reEncrypt || !hasManagementKey,
+    };
   } catch (err) {
     console.error('[settings] secrets unreadable:', err);
   }
@@ -95,7 +102,7 @@ let secrets: Secrets | null = null;
 export async function loadSecrets(): Promise<Secrets> {
   const file = appPaths.secretsFile;
   const decoded = existsSync(file) ? await decode(readFileSync(file)) : null;
-  secrets = decoded?.value ?? { clientApiKey: newSecret() };
+  secrets = decoded?.value ?? { clientApiKey: newSecret(), managementKey: newSecret() };
   // Rewrite when new, unreadable, or encrypted under a rotated key.
   if (!decoded || decoded.reEncrypt) writeFileAtomic(file, await encode(secrets));
   return secrets;

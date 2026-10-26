@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } f
 import { addCounts, emptyCounts } from '@shared/activityCounts';
 import type { ActivityCounts, ActivityDayTotal } from '@shared/types';
 import { dayLabel, usd } from '../lib/format';
+import { TokenCell } from './TokenCell';
 import { activity } from '../store';
 import { ProviderGlyph } from './ui';
 
@@ -14,16 +15,18 @@ const sum = (rows: ActivityCounts[]): ActivityCounts => {
   return total;
 };
 const n = (v: number) => v.toLocaleString();
+const COLUMN_COUNT = 9;
 
-function CountCells(props: { c: ActivityCounts }) {
+/** `provider` is unset on a day row, which sums every provider. */
+function CountCells(props: { c: ActivityCounts; provider?: string }) {
   return (
     <>
       <td class="tabular num">{n(props.c.requests)}</td>
-      <td class="tabular num">{n(props.c.failed)}</td>
-      <td class="tabular num">{n(props.c.inputTokens)}</td>
-      <td class="tabular num">{n(props.c.outputTokens)}</td>
-      <td class="tabular num">{n(props.c.cachedTokens)}</td>
-      <td class="tabular num">{n(props.c.cacheWriteTokens)}</td>
+      <td class="tabular num" classList={{ zero: !props.c.failed }}>{n(props.c.failed)}</td>
+      <TokenCell v={props.c.inputTokens} />
+      <TokenCell v={props.c.outputTokens} />
+      <TokenCell v={props.c.cachedTokens} />
+      <TokenCell v={props.c.cacheWriteTokens} provider={props.provider} />
       <td class="tabular num" title={props.c.unpricedRequests ? `${n(props.c.unpricedRequests)} requests on models without a price are left out` : undefined}>
         {props.c.unpricedRequests === props.c.requests ? '—' : usd(props.c.costUsd)}
       </td>
@@ -52,7 +55,8 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
   });
 
   return (
-    <table class="table nowrap">
+    <div class="card table-card">
+    <table class="table dense">
       <thead>
         <tr>
           <th>Day / account</th>
@@ -67,24 +71,24 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
         </tr>
       </thead>
       <tbody>
-        <For each={days()} fallback={<tr><td colSpan={9} class="muted">No requests recorded yet.</td></tr>}>
+        <For each={days()} fallback={<tr><td colSpan={COLUMN_COUNT} class="muted">No requests recorded yet.</td></tr>}>
           {(d) => (
             <>
-              <tr style={{ 'font-weight': 600 }}>
+              <tr class="group-row">
                 <td colSpan={2}>{dayLabel(d.day)}</td>
                 <CountCells c={d.total} />
               </tr>
               <For each={d.rows}>
                 {(r) => (
-                  <tr>
-                    <td>
-                      <div class="row" style={{ gap: '8px', 'padding-left': '12px' }}>
+                  <tr class="child-row">
+                    <td class="fill" title={props.account(r.authIndex)}>
+                      <div class="cell-name">
                         <ProviderGlyph provider={r.provider} size={14} />
                         <span>{props.account(r.authIndex)}</span>
                       </div>
                     </td>
                     <td class="tabular">{r.model || '—'}</td>
-                    <CountCells c={r} />
+                    <CountCells c={r} provider={r.provider} />
                   </tr>
                 )}
               </For>
@@ -93,5 +97,6 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
         </For>
       </tbody>
     </table>
+    </div>
   );
 }

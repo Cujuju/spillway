@@ -67,6 +67,9 @@ const PRICES: Record<string, ModelPrice> = {
 
 /** Claude bills cache reads and writes apart from input; OpenAI's input includes its cached tokens. */
 const CACHE_APART_FROM_INPUT = new Set(['claude']);
+/** Providers whose usage reports cache writes; OpenAI's reports none. */
+const CACHE_WRITES_REPORTED = new Set(['claude']);
+export const reportsCacheWrites = (provider: string) => CACHE_WRITES_REPORTED.has(provider);
 
 export interface TokenCounts {
   inputTokens: number;

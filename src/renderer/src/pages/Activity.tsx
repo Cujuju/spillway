@@ -1,9 +1,10 @@
-import { createMemo, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
-import { tokenCost } from '@shared/modelPrices';
+import { createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { reportsCacheWrites, tokenCost } from '@shared/modelPrices';
 import { maskEmails } from '@shared/privacy';
 import { MAX_ACTIVITY_EVENTS, type ActivityEvent } from '@shared/types';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityTotals } from '../components/ActivityTotals';
+import { TokenCell } from '../components/TokenCell';
 import { Notice, ProviderGlyph, Seg } from '../components/ui';
 import { dayLabel, usd } from '../lib/format';
 import { activity, proxyStatus, settings, snapshot } from '../store';
@@ -15,9 +16,9 @@ const SHOW_SECONDS_FROM_MS = 1000;
 const PAGE_SIZE = MAX_ACTIVITY_EVENTS;
 /** Day picker value for the live recent list. */
 const RECENT = '';
+const REQUEST_COLUMN_COUNT = 10;
 
 const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
-const tokens = (v: number) => v.toLocaleString();
 const requestCost = (e: ActivityEvent) => {
   const cost = tokenCost(e.provider, e.model, e);
   return cost ? usd(cost.usd) : '—';
@@ -59,27 +60,8 @@ export function Activity() {
   return (
     <>
       <header class="dash-header title-row">
-        <div>
-          <h1 class="dash-title">Activity</h1>
-          <Switch>
-            <Match when={view() === 'requests'}>
-              <div class="dash-sub">Each upstream attempt, newest first · {source().length} {scope()}, {failedCount()} failed</div>
-            </Match>
-            <Match when={view() === 'totals'}>
-              <div class="dash-sub">Requests and tokens per day, account and model</div>
-            </Match>
-          </Switch>
-        </div>
-        <div class="dash-actions">
-          <Seg value={view()} options={[{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const} onChange={setView} />
-          <Show when={view() === 'requests'}>
-            <select class="select" value={day()} onChange={(e) => pickDay(e.currentTarget.value)}>
-              <option value={RECENT}>Recent</option>
-              <For each={days()}>{(d) => <option value={d}>{dayLabel(d)}</option>}</For>
-            </select>
-            <Seg value={filter()} options={[{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const} onChange={setFilter} />
-          </Show>
-        </div>
+        <h1 class="dash-title">Activity</h1>
+        <Seg value={view()} options={[{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const} onChange={setView} />
       </header>
 
       <Show when={proxyStatus()?.state !== 'running'}>
@@ -89,60 +71,75 @@ export function Activity() {
       <Show when={view() === 'overview'}>
         <ActivityOverview />
       </Show>
-      <Show when={view() !== 'overview'}>
+      <Show when={view() === 'totals'}>
+        <ActivityTotals account={accountName} />
+      </Show>
+      <Show when={view() === 'requests'}>
+        <div class="toolbar">
+          <select class="select" value={day()} onChange={(e) => pickDay(e.currentTarget.value)}>
+            <option value={RECENT}>Recent</option>
+            <For each={days()}>{(d) => <option value={d}>{dayLabel(d)}</option>}</For>
+          </select>
+          <Seg value={filter()} options={[{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const} onChange={setFilter} />
+          <span class="spacer" />
+          <span class="toolbar-note">{source().length.toLocaleString()} {scope()} · {failedCount()} failed · newest first</span>
+        </div>
         <div class="card table-card">
-          <Show when={view() === 'requests'} fallback={<ActivityTotals account={accountName} />}>
-            <table class="table nowrap">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Account</th>
-                  <th>Model</th>
-                  <th>Result</th>
-                  <th class="num">Input</th>
-                  <th class="num">Output</th>
-                  <th class="num">Cache read</th>
-                  <th class="num">Cache write</th>
-                  <th class="num" title="At API list prices">API cost</th>
-                  <th title="Time to first token">First token</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={rows().slice(0, limit())} fallback={<tr><td colSpan={11} class="muted">No requests.</td></tr>}>
-                  {(e) => (
-                    <tr>
+          <table class="table dense">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Account · model</th>
+                <th>Result</th>
+                <th class="num">Input</th>
+                <th class="num">Output</th>
+                <th class="num">Cache read</th>
+                <th class="num">Cache write</th>
+                <th class="num" title="At API list prices">API cost</th>
+                <th class="num" title="Time to first token">First token</th>
+                <th class="num">Total time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={rows().slice(0, limit())} fallback={<tr><td colSpan={REQUEST_COLUMN_COUNT} class="muted">No requests.</td></tr>}>
+                {(e) => (
+                  <>
+                    <tr classList={{ 'has-error': !!errorText(e) }}>
                       <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
-                      <td>
-                        <div class="row" style={{ gap: '8px' }}>
+                      <td class="fill" title={`${accountName(e.authIndex)} · ${e.model || 'no model'}`}>
+                        <div class="cell-name">
                           <ProviderGlyph provider={e.provider} size={14} />
-                          <span>{accountName(e.authIndex)}</span>
+                          <span>{accountName(e.authIndex)} <span class="muted">· {e.model || '—'}</span></span>
                         </div>
                       </td>
-                      <td class="tabular">{e.model || '—'}</td>
                       <td>
                         <Show when={e.failed} fallback={<span class="badge green">OK</span>}>
-                          <span class="badge red" title={errorText(e)}>{e.statusCode ?? 'Failed'}</span>
-                          <span class="muted truncate error-text">{errorText(e)}</span>
+                          <span class="badge red">{e.statusCode ?? 'Failed'}</span>
                         </Show>
                       </td>
-                      <td class="tabular num">{tokens(e.inputTokens)}</td>
-                      <td class="tabular num">{tokens(e.outputTokens)}</td>
-                      <td class="tabular num">{tokens(e.cachedTokens)}</td>
-                      <td class="tabular num">{tokens(e.cacheWriteTokens)}</td>
+                      <TokenCell v={e.inputTokens} />
+                      <TokenCell v={e.outputTokens} />
+                      <TokenCell v={e.cachedTokens} />
+                      <TokenCell v={e.cacheWriteTokens} provider={e.provider} />
                       <td class="tabular num">{requestCost(e)}</td>
-                      <td class="tabular">{duration(e.ttftMs)}</td>
-                      <td class="tabular">{duration(e.latencyMs)}</td>
+                      <td class="tabular num">{duration(e.ttftMs)}</td>
+                      <td class="tabular num">{duration(e.latencyMs)}</td>
                     </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-            <Show when={rows().length > limit()}>
-              <div style={{ padding: '12px', 'text-align': 'center' }}>
-                <button class="btn ghost" onClick={() => setLimit((l) => l + PAGE_SIZE)}>Show older</button>
-              </div>
-            </Show>
+                    {/* The error gets its own line so it never widens the columns. */}
+                    <Show when={errorText(e)}>
+                      <tr class="error-row">
+                        <td colSpan={REQUEST_COLUMN_COUNT}><div class="truncate" title={errorText(e)}>{errorText(e)}</div></td>
+                      </tr>
+                    </Show>
+                  </>
+                )}
+              </For>
+            </tbody>
+          </table>
+          <Show when={rows().length > limit()}>
+            <div class="more-row">
+              <button class="btn ghost" onClick={() => setLimit((l) => l + PAGE_SIZE)}>Show older</button>
+            </div>
           </Show>
         </div>
       </Show>

@@ -1,9 +1,10 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 
-const PAD = { left: 56, right: 12, top: 12, bottom: 24 };
-const Y_TICKS = 4;
-/** About this many x labels fit without colliding at the narrowest window. */
-const X_LABELS = 6;
+/** Left pad fits a 5-character axis label ("$37.5", "100%"). */
+const PAD = { left: 44, right: 8, top: 10, bottom: 22 };
+const DEFAULT_Y_TICKS = 4;
+/** A 7-day range labels every day; ~60px per label fits the narrowest window's ~550px plot. */
+const X_LABELS = 8;
 /** Fraction of each slot a bar fills; the rest is the gap between bars. */
 const BAR_FILL = 0.72;
 /** Bars round their top (data end) by this much, never wider than half the bar. */
@@ -28,6 +29,8 @@ export interface TrendChartProps {
   xLabel: (t: number) => string;
   /** Fixed scale top (e.g. 1 for a rate); otherwise a round number above the largest value. */
   yMax?: number;
+  /** Gridlines above the baseline. */
+  yTicks?: number;
   tooltip: (index: number) => JSX.Element;
 }
 
@@ -75,11 +78,17 @@ export function TrendChart(props: TrendChartProps) {
     });
     return d;
   });
+  // Label where the text changes (a new day or hour), so labels sit on boundaries; then thin to fit.
   const xTicks = createMemo(() => {
-    const step = Math.max(1, Math.ceil(props.points.length / X_LABELS));
-    return props.points.flatMap((p, i) => (i % step === 0 ? [{ i, label: props.xLabel(p.start) }] : []));
+    const labels = props.points.map((p) => props.xLabel(p.start));
+    const changes = labels.flatMap((label, i) => (i > 0 && label !== labels[i - 1] ? [{ i, label }] : []));
+    const step = Math.max(1, Math.ceil(changes.length / X_LABELS));
+    return changes.filter((_, k) => k % step === 0);
   });
-  const yTicks = createMemo(() => Array.from({ length: Y_TICKS + 1 }, (_, i) => (yMax() * i) / Y_TICKS));
+  const yTicks = createMemo(() => {
+    const count = props.yTicks ?? DEFAULT_Y_TICKS;
+    return Array.from({ length: count + 1 }, (_, i) => (yMax() * i) / count);
+  });
 
   const pick = (e: PointerEvent) => {
     const rect = host.getBoundingClientRect();

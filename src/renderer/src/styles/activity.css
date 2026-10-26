@@ -1,43 +1,68 @@
-/* Activity overview: tiles, trend charts with hover readouts, day-by-hour heatmap. */
-/* Wide activity tables scroll inside their card instead of wrapping each cell. */
-.table-card {
-  padding: 0;
-  overflow-x: auto;
-}
-.table.nowrap th,
-.table.nowrap td {
-  white-space: nowrap;
-}
-.error-text {
-  display: inline-block;
-  max-width: 260px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-.table th.num,
-.table td.num {
-  text-align: right;
-}
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--page-gap);
-  margin-bottom: var(--page-gap);
-}
-/* Tiles sit in a grid gap, not the page's card stack. */
-.stat-grid > .card {
-  margin-top: 0;
-}
+/* Activity page: stat strip, trend charts with hover readouts, day-by-hour heatmap, dense tables. */
+
+/* ── Toolbar under the page header ───────────────────────────────── */
 .notice + .toolbar {
   margin-top: var(--page-gap);
 }
-.stat-tile .section-label {
-  margin-bottom: 6px;
+.toolbar-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Stat strip: one card, cells split by 1px rules that survive wrapping ── */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 1px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-border);
+}
+.stat-cell {
+  padding: 10px 14px;
+  background: var(--color-surface);
+  min-width: 0;
+}
+.stat-label {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 .stat-value {
-  font-size: var(--text-title);
+  margin-top: 2px;
+  font-size: 17px;
   font-weight: 600;
+  line-height: 1.3;
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Chart cards ─────────────────────────────────────────────────── */
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.chart-head .section-label {
+  margin: 0;
+}
+/* The mode toggle is taller than the label line. */
+.heat-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
+.chart-head-note {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 .trend {
   position: relative;
@@ -56,50 +81,48 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-strong);
   box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 .tip-title {
   color: var(--color-text-secondary);
-  margin-bottom: 6px;
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 .tip-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  line-height: 1.6;
   font-variant-numeric: tabular-nums;
 }
 .tip-row strong {
   color: var(--color-text);
+  font-weight: 600;
 }
 .tip-row span {
   color: var(--color-text-muted);
 }
+
+/* ── Heatmap: 24 flexible columns fill the card ──────────────────── */
 .heat-card {
   position: relative;
 }
-.heat-head {
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.heat-head .section-label {
-  margin: 0;
-}
 .heat {
   display: grid;
-  /* Cells stay near the 14-20px squares of Claude Code's chart; the grid sits left. */
-  grid-template-columns: 36px repeat(24, minmax(10px, 20px));
+  grid-template-columns: 34px repeat(24, minmax(6px, 1fr));
   gap: 3px;
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
 }
 .heat-hour {
   white-space: nowrap;
+  line-height: 1.6;
 }
 .heat-day {
   align-self: center;
 }
 .heat-cell {
-  aspect-ratio: 1;
+  height: 16px;
   border-radius: 3px;
   background: var(--color-surface-sunken);
 }
@@ -114,18 +137,92 @@
 .heat-cell.l4 { background: var(--color-accent); }
 .heat-legend {
   display: flex;
-  justify-content: flex-start;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   margin-top: 10px;
+  padding-left: 37px;
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
 }
 .heat-legend .heat-cell {
   width: 10px;
+  height: 10px;
+}
+
+/* ── Dense tables: columns shrink to fit; headers wrap, values don't ── */
+.table-card {
+  padding: 0;
+  overflow-x: auto;
+}
+.table.dense {
+  font-size: var(--text-xs);
+}
+.table.dense th {
+  padding: 8px;
+  vertical-align: bottom;
+  line-height: 1.3;
+}
+.table.dense td {
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+.table.dense tbody tr:hover td {
+  background: var(--color-surface-raised);
+}
+.table th.num,
+.table td.num {
+  text-align: right;
+}
+.table td.zero {
+  color: var(--color-text-muted);
+}
+/* The card edge needs more inset than the gap between columns. */
+.table.dense th:first-child,
+.table.dense td:first-child {
+  padding-left: 12px;
+}
+.table.dense th:last-child,
+.table.dense td:last-child {
+  padding-right: 12px;
+}
+/* Takes the leftover width and truncates, so numeric columns never scroll. */
+.table td.fill {
+  max-width: 0;
+  width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cell-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table tr.group-row td {
+  background: var(--color-surface-sunken);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.table tr.child-row td:first-child {
+  padding-left: 22px;
+}
+/* A failed request's error, on its own line under the request. */
+.table tr.has-error td {
+  border-bottom: 0;
+}
+/* Indented to the account text: 12px inset + 14px glyph + 8px gap. */
+.table.dense tr.error-row td {
+  padding-top: 0;
+  padding-left: 34px;
+  max-width: 0;
+  color: var(--color-red-light);
 }
 .share-bar {
-  width: 80px;
+  min-width: 40px;
   height: 6px;
   border-radius: 3px;
   background: var(--color-surface-sunken);
@@ -136,7 +233,13 @@
   height: 100%;
   background: var(--color-accent);
 }
+.more-row {
+  padding: 10px;
+  text-align: center;
+  border-top: 1px solid var(--color-border);
+}
 .chart-note {
   margin-top: var(--page-gap);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }

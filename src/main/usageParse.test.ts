@@ -44,6 +44,12 @@ describe('windows and weight', () => {
     expect(c.weight).toBe(1);
     expect(c.windows[0]).toMatchObject({ durationMs: 604_800_000, resetCadence: null });
   });
+  it('reads the plan, dropping a missing or non-positive multiplier', () => {
+    expect(parseOne({ plan: { tier: 'default_claude_max_5x', label: 'Max 5x', multiplier: 5 } }).plan)
+      .toEqual({ tier: 'default_claude_max_5x', label: 'Max 5x', multiplier: 5 });
+    expect(parseOne({ plan: { tier: 'enterprise', multiplier: null } }).plan).toEqual({ tier: 'enterprise', label: 'enterprise', multiplier: null });
+    expect(parseOne({}).plan).toBeNull();
+  });
   it('drops an unknown cadence', () => {
     expect(parseOne({ windows: [{ key: 'k', reset_cadence: 'monthly' }] }).windows[0]!.resetCadence).toBeNull();
   });

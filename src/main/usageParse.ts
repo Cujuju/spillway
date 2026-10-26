@@ -1,4 +1,4 @@
-import type { Credential, LimitWindow, UsageSnapshot } from '@shared/types';
+import type { Credential, CredentialPlan, LimitWindow, UsageSnapshot } from '@shared/types';
 
 /** Maps the proxy's snake_case /usage/windows payload to the app's types, dropping malformed entries. */
 
@@ -47,6 +47,15 @@ export function emailDomain(email: string | null): string | null {
   return email && at >= 0 ? s(email.slice(at + 1)) : null;
 }
 
+function parsePlan(raw: unknown): CredentialPlan | null {
+  const p = obj(raw);
+  const tier = s(p.tier) ?? '';
+  const label = s(p.label) ?? tier;
+  if (!label) return null;
+  const multiplier = n(p.multiplier);
+  return { tier, label, multiplier: multiplier !== null && multiplier > 0 ? multiplier : null };
+}
+
 function parseCredential(raw: unknown): Credential | null {
   const c = obj(raw);
   const id = s(c.id);
@@ -73,6 +82,7 @@ function parseCredential(raw: unknown): Credential | null {
     nextPick: c.next_pick === true,
     preferred: c.preferred === true,
     weight: n(c.weight) ?? DEFAULT_WEIGHT,
+    plan: parsePlan(c.plan),
     windows,
   };
 }

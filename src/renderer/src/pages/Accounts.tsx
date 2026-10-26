@@ -96,7 +96,7 @@ export function Accounts() {
                       </div>
                     </div>
                   </td>
-                  <td>{providerLabel(c.provider)}</td>
+                  <td title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</td>
                   <td>{statusBadge(c)}</td>
                   <td>
                     <NumberField value={c.priority} width={70} onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />

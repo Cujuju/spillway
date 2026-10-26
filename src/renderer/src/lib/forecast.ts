@@ -1,8 +1,9 @@
 import type { Credential, LimitWindow } from '@shared/types';
 import { nextResetAfter } from '@shared/usageWindows';
+import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
 
-/** Pool forecast for one provider and one limit window (Theo-style remaining-quota chart). */
+/** Pool forecast for one provider and one limit window, in percent of the whole pool (see poolCapacity). */
 
 const HOUR_MS = 60 * 60_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -34,8 +35,8 @@ interface Win {
   durationMs: number | null;
   resetCadence: LimitWindow['resetCadence'];
   scoped: boolean;
-  /** Percent of this window used per 1% of the projected one; 0 leaves it out of the cap. */
-  ratio: number;
+  /** Account percent of this window used per 1% of the pool; 0 leaves it out of the cap. */
+  cost: number;
 }
 
 interface Account {
@@ -44,54 +45,56 @@ interface Account {
   weight: number;
   preferred: boolean;
   cooldownUntil: number | null;
+  /** Fraction of the pool's capacity this account holds. */
+  share: number;
   /** The projected window first, then the account-wide windows that also cap it. */
   windows: Win[];
 }
 
 const ms = (iso: string | null) => (iso ? Date.parse(iso) : null);
-const toWin = (w: LimitWindow, ratio: number): Win => ({
+const toWin = (w: LimitWindow, cost: number): Win => ({
   used: Math.min(FULL, Math.max(0, w.usedPercent ?? 0)),
   resetAt: ms(w.resetsAt),
   durationMs: w.durationMs,
   resetCadence: w.resetCadence,
   scoped: w.scoped,
-  ratio: w.usedPercent === null ? 0 : ratio,
+  cost: w.usedPercent === null ? 0 : cost,
 });
 
-function accountsFor(credentials: Credential[], key: string, ratios: Record<string, number> = {}): Account[] {
-  return credentials
-    .filter((c) => !c.disabled)
-    .flatMap((c) => {
-      const w = c.windows.find((x) => x.key === key);
-      if (!w || w.usedPercent === null) return [];
-      const others = c.windows.filter((x) => x.key !== key && !x.scoped).map((x) => toWin(x, ratios[x.key] ?? 0));
-      return [{
-        id: c.id,
-        priority: c.priority,
-        weight: c.weight,
-        preferred: c.preferred,
-        cooldownUntil: ms(c.cooldownUntil),
-        windows: [toWin(w, 1), ...others],
-      }];
-    });
+function accountsFor(credentials: Credential[], key: string, shares: Map<string, AccountShare>): Account[] {
+  return credentials.flatMap((c) => {
+    const s = shares.get(c.id);
+    const w = c.windows.find((x) => x.key === key);
+    if (!s || !w || w.usedPercent === null) return [];
+    const others = c.windows.filter((x) => x.key !== key && !x.scoped).map((x) => toWin(x, s.cost[x.key] ?? 0));
+    return [{
+      id: c.id,
+      priority: c.priority,
+      weight: c.weight,
+      preferred: c.preferred,
+      cooldownUntil: ms(c.cooldownUntil),
+      share: s.share,
+      windows: [toWin(w, s.cost[key]!), ...others],
+    }];
+  });
 }
 
-const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + (FULL - a.windows[0]!.used), 0);
+const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + a.share * (FULL - a.windows[0]!.used), 0);
 
 export interface PoolSummary {
+  /** Percent of the whole pool left. */
   remaining: number;
-  capacity: number;
   accounts: number;
 }
 
 /** Expects windows already rolled past their resets (the store's snapshot is). */
-export function poolSummary(credentials: Credential[], key: string): PoolSummary {
-  const accounts = accountsFor(credentials, key);
-  return { remaining: remainingOf(accounts), capacity: accounts.length * FULL, accounts: accounts.length };
+export function poolSummary(credentials: Credential[], key: string, shares: Map<string, AccountShare>): PoolSummary {
+  const accounts = accountsFor(credentials, key, shares);
+  return { remaining: remainingOf(accounts), accounts: accounts.length };
 }
 
-/** Projected-window percent `w` can still take before it caps. */
-const roomIn = (w: Win) => (w.ratio > 0 ? (FULL - w.used) / w.ratio : Infinity);
+/** Pool percent `w` can still take before it caps. */
+const roomIn = (w: Win) => (w.cost > 0 ? (FULL - w.used) / w.cost : Infinity);
 const roomOf = (a: Account) => Math.min(...a.windows.map(roomIn));
 
 /** The proxy's soonest-reset rank: the longest account-wide window's reset, then the shortest's; unknown or past last. */
@@ -126,10 +129,10 @@ function take(a: Account, want: number, t: number): number {
   const got = Math.min(roomOf(a), want);
   if (got <= 0) return 0;
   for (const w of a.windows) {
-    if (w.ratio === 0) continue;
+    if (w.cost === 0) continue;
     if (w.used === 0 && w.resetAt === null && w.durationMs !== null) w.resetAt = t + w.durationMs;
     // The capping window lands on exactly FULL, so rounding cannot leave a sliver of room.
-    w.used = got === roomIn(w) ? FULL : w.used + got * w.ratio;
+    w.used = got === roomIn(w) ? FULL : w.used + got * w.cost;
   }
   return got;
 }
@@ -169,7 +172,7 @@ function spend(accounts: Account[], amount: number, t: number, strategy: string)
   }
 }
 
-/** Refills every window whose reset is due by `t`; returns the projected window's restored percent and first reset. */
+/** Refills every window whose reset is due by `t`; returns the pool percent restored and the first reset. */
 function applyResets(accounts: Account[], t: number): { restored: number; firstAt: number } {
   let restored = 0;
   let firstAt = Infinity;
@@ -177,7 +180,7 @@ function applyResets(accounts: Account[], t: number): { restored: number; firstA
     a.windows.forEach((w, i) => {
       if (w.resetAt === null || w.resetAt > t) return;
       if (i === 0) {
-        restored += w.used;
+        restored += a.share * w.used;
         firstAt = Math.min(firstAt, w.resetAt);
       }
       w.used = 0;
@@ -187,30 +190,26 @@ function applyResets(accounts: Account[], t: number): { restored: number; firstA
   return { restored, firstAt };
 }
 
-export interface Drain {
-  /** Projected-window percent used per hour across the pool. */
-  perHour: number;
-  /** Other windows' percent per 1% of the projected one (poolHistory.couplingRatios). */
-  ratios: Record<string, number>;
-}
-
 export interface Projection {
   points: SeriesPoint[];
-  /** First upcoming reset and the percent it restores. */
+  /** First upcoming reset and the pool percent it restores. */
   nextReset: { at: number; restores: number } | null;
 }
 
 /**
- * Projects the pool forward at a steady drain, routed as the proxy would (`strategy`). An account
- * takes use only while every account-wide window has room. Windows refill at their resets: a
- * fixed-cadence window every period, any other on its next use after the reset.
+ * Projects the pool forward at a steady drain (pool %/hour), routed as the proxy would (`strategy`).
+ * Rotation spreads requests, so each account takes an equal (or weighted) part of the absolute use.
+ * An account takes use only while every account-wide window has room. Windows refill at their
+ * resets: a fixed-cadence window every period, any other on its next use after the reset.
  */
-export function project(credentials: Credential[], key: string, drain: Drain, now: number, days: number, strategy: string): Projection {
-  const accounts = accountsFor(credentials, key, drain.ratios);
+export function project(
+  credentials: Credential[], key: string, perHour: number, now: number, days: number, strategy: string, shares: Map<string, AccountShare>,
+): Projection {
+  const accounts = accountsFor(credentials, key, shares);
   const end = now + days * DAY_MS;
   const points: SeriesPoint[] = [{ t: now, remaining: remainingOf(accounts) }];
   let nextReset: Projection['nextReset'] = null;
-  const drainPerStep = (drain.perHour * STEP_MS) / HOUR_MS;
+  const drainPerStep = (perHour * STEP_MS) / HOUR_MS;
 
   for (let t = now + STEP_MS; t <= end; t += STEP_MS) {
     const { restored, firstAt } = applyResets(accounts, t);

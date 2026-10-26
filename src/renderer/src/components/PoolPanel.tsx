@@ -1,7 +1,8 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { depletionAt, poolSummary, poolWindowKey, project } from '../lib/forecast';
-import { couplingRatios, drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
+import { poolShares } from '../lib/poolCapacity';
+import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
 import { dayTime } from '../lib/format';
 import { providerVar } from '../lib/providers';
 import { history, now, settings, updateSettings } from '../store';
@@ -15,6 +16,8 @@ const FORECAST_DAY_CHOICES = [1, 3, 7, 14] as const;
 const DRAIN_HEADROOM = 1.2;
 /** Smallest drain-rate axis, %/hour, so a quiet day still reads as a flat line. */
 const MIN_DRAIN_AXIS = 5;
+/** Pool figures are percent of the whole pool. */
+const POOL_FULL = 100;
 
 /** Pool figures, remaining/drain chart and forecast for one provider (Theo's summary block). */
 export function PoolPanel(props: { provider: string; credentials: Credential[]; strategy: string }) {
@@ -32,22 +35,23 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
     const k = chosenKey();
     return k && windowOptions().some((o) => o.value === k) ? k : poolWindowKey(props.credentials);
   };
-  const ids = () => props.credentials.filter((c) => !c.disabled).map((c) => c.id);
   const days = () => settings().dashboard.forecastDays;
   const from = () => now() - settings().dashboard.drainLookbackHours * HOUR_MS;
   const to = () => now() + days() * DAY_MS;
 
-  const summary = createMemo(() => (key() ? poolSummary(props.credentials, key()!) : null));
-  const rate = createMemo(() => (key() ? drainRatePerHour(history(), ids(), key()!, now(), settings().dashboard.drainLookbackHours) : null));
-  const ratios = createMemo(() => (key() ? couplingRatios(history(), ids(), key()!, now(), settings().dashboard.drainLookbackHours) : {}));
+  // Accounts weighted by plan size, so a Pro and a Max account add up by what they hold.
+  const shares = createMemo(() => (key() ? poolShares(history(), props.credentials, key()!) : new Map()));
+  const plans = () => [...new Set(props.credentials.filter((c) => !c.disabled).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
+  const summary = createMemo(() => (key() ? poolSummary(props.credentials, key()!, shares()) : null));
+  const rate = createMemo(() => (key() ? drainRatePerHour(history(), shares(), key()!, now(), settings().dashboard.drainLookbackHours) : null));
   const past = createMemo(() => {
     const k = key();
     const s = summary();
     if (!k || !s) return [];
-    return [...pastSeries(history(), props.credentials, k, from()), { t: now(), remaining: s.remaining }];
+    return [...pastSeries(history(), props.credentials, k, from(), shares()), { t: now(), remaining: s.remaining }];
   });
-  const projection = createMemo(() => (key() ? project(props.credentials, key()!, { perHour: rate() ?? 0, ratios: ratios() }, now(), days(), props.strategy) : null));
-  const drain = createMemo(() => (key() ? drainSeries(history(), ids(), key()!, from()) : []));
+  const projection = createMemo(() => (key() ? project(props.credentials, key()!, rate() ?? 0, now(), days(), props.strategy, shares()) : null));
+  const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, from()) : []));
   const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...drain().map((p) => p.remaining)) * DRAIN_HEADROOM));
   const emptyAt = () => (rate() ? depletionAt(projection()?.points ?? []) : null);
 
@@ -63,7 +67,7 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
           <>
             <div class="summary-figures">
               <span class="summary-big">{Math.round(s().remaining)}%</span>
-              <span class="summary-of">/ {s().capacity}% remaining</span>
+              <span class="summary-of" title="Accounts count by plan size">of pool remaining · {plans()}</span>
               <span class="summary-rate">
                 {rate() === null ? 'Collecting history for drain rate…' : `~${rate()!.toFixed(1)}%/hour`}
               </span>
@@ -94,7 +98,7 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
                 from={from()}
                 to={to()}
                 now={now()}
-                yMax={s().capacity}
+                yMax={POOL_FULL}
                 yLabel={(v) => `${Math.round(v)}%`}
                 color={providerVar(props.provider)}
               />
@@ -102,7 +106,7 @@ export function PoolPanel(props: { provider: string; credentials: Credential[]; 
             <div class="chart-foot">
               <span>
                 {projection()?.nextReset
-                  ? `Next reset +${Math.round(projection()!.nextReset!.restores)}% · ${dayTime(projection()!.nextReset!.at)}`
+                  ? `Next reset +${Math.round(projection()!.nextReset!.restores)}% of pool · ${dayTime(projection()!.nextReset!.at)}`
                   : 'No reset in range'}
               </span>
               <span>

@@ -18,6 +18,15 @@ export interface LimitWindow {
   resetCadence: 'fixed' | 'on_use' | null;
 }
 
+export interface CredentialPlan {
+  /** Provider tier, e.g. default_claude_max_5x. */
+  tier: string;
+  /** Short name, e.g. "Max 5x" or "Pro". */
+  label: string;
+  /** 5-hour session usage relative to Pro (Max 5x = 5); null when unknown. */
+  multiplier: number | null;
+}
+
 export interface Credential {
   id: string;
   /** Auth file name; the management API addresses credentials by it. */
@@ -41,6 +50,8 @@ export interface Credential {
   preferred: boolean;
   /** Weighted-round-robin weight; 0 excludes the account from that strategy. */
   weight: number;
+  /** Subscription plan from the provider's profile; null when unknown. */
+  plan: CredentialPlan | null;
   windows: LimitWindow[];
 }
 

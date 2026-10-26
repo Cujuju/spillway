@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, HistorySample } from '@shared/types';
-import { couplingRatios, drainRatePerHour, drainSeries, pastSeries } from './poolHistory';
+import type { AccountShare } from './poolCapacity';
+import { drainRatePerHour, drainSeries, pastSeries } from './poolHistory';
 
 const H = 3_600_000;
 const WEEK = 168 * H;
 const NOW = Date.parse('2026-10-25T00:00:00Z');
 const iso = (t: number) => new Date(t).toISOString();
 const sample = (at: number, used: HistorySample['used'], resets?: HistorySample['resets']): HistorySample => ({ at: iso(at), used, resets });
+/** Equal shares: pool percent is the mean of the accounts' percents. */
+const equal = (...ids: string[]) => new Map<string, AccountShare>(ids.map((id) => [id, { share: 1 / ids.length, cost: {} }]));
 const weekly = (id: string, used: number): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
-  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1,
+  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null,
   windows: [{ key: 'seven_day', label: 'Weekly', usedPercent: used, resetsAt: null, status: 'allowed', durationMs: WEEK, scoped: false, resetCadence: 'fixed' }],
 });
 
@@ -23,7 +26,7 @@ describe('drainRatePerHour', () => {
       sample(NOW, { a: { seven_day: 4 } }, { a: { seven_day: NOW + WEEK } }),
     ];
     // 8 before the reset, 2 into the new window, then 2 more over 4 hours.
-    expect(drainRatePerHour(samples, ['a'], 'seven_day', NOW, 24)).toBe(3);
+    expect(drainRatePerHour(samples, equal('a'), 'seven_day', NOW, 24)).toBe(3);
   });
   it('treats a drop without a recorded reset as no use', () => {
     const samples = [
@@ -31,32 +34,22 @@ describe('drainRatePerHour', () => {
       sample(NOW - H, { a: { seven_day: 50 } }, { a: { seven_day: NOW + H } }),
       sample(NOW, { a: { seven_day: 52 } }),
     ];
-    expect(drainRatePerHour(samples, ['a'], 'seven_day', NOW, 24)).toBe(1);
+    expect(drainRatePerHour(samples, equal('a'), 'seven_day', NOW, 24)).toBe(1);
   });
   it('needs two samples', () => {
-    expect(drainRatePerHour([], ['a'], 'seven_day', NOW, 24)).toBeNull();
+    expect(drainRatePerHour([], equal('a'), 'seven_day', NOW, 24)).toBeNull();
   });
-});
-
-describe('couplingRatios', () => {
-  it('pools how far each other window moved per 1% of the projected one, across resets', () => {
-    const samples = [
-      sample(NOW - 2 * H, { a: { seven_day: 10, five_hour: 90 }, b: { seven_day: 0, five_hour: 0 } }, { a: { five_hour: NOW - H } }),
-      sample(NOW - H, { a: { seven_day: 12, five_hour: 6 }, b: { seven_day: 1, five_hour: 4 } }),
-    ];
-    // seven_day moved 3; five_hour 6 after a's reset plus 4 on b.
-    expect(couplingRatios(samples, ['a', 'b'], 'seven_day', NOW, 24)).toEqual({ five_hour: 10 / 3 });
-  });
-  it('is empty when the projected window did not move', () => {
-    const samples = [sample(NOW - H, { a: { seven_day: 5, five_hour: 1 } }), sample(NOW, { a: { seven_day: 5, five_hour: 9 } })];
-    expect(couplingRatios(samples, ['a'], 'seven_day', NOW, 24)).toEqual({});
+  it('weights each account by its share of the pool', () => {
+    const samples = [sample(NOW - H, { max: { k: 0 }, pro: { k: 0 } }), sample(NOW, { max: { k: 10 }, pro: { k: 30 } })];
+    const shares = new Map<string, AccountShare>([['max', { share: 0.8, cost: {} }], ['pro', { share: 0.2, cost: {} }]]);
+    expect(drainRatePerHour(samples, shares, 'k', NOW, 24)).toBeCloseTo(14);
   });
 });
 
 describe('pastSeries', () => {
   it('carries values forward and seeds accounts without history from their current value', () => {
     const samples = [sample(NOW - 2 * H, { a: { seven_day: 10 } }), sample(NOW - H, { a: { seven_day: 20 } })];
-    expect(pastSeries(samples, [weekly('a', 20), weekly('new', 30)], 'seven_day', 0).map((p) => p.remaining)).toEqual([160, 150]);
+    expect(pastSeries(samples, [weekly('a', 20), weekly('new', 30)], 'seven_day', 0, equal('a', 'new')).map((p) => p.remaining)).toEqual([80, 75]);
   });
 });
 
@@ -67,6 +60,6 @@ describe('drainSeries', () => {
       sample(NOW + 2 * H, { a: { k: 30 } }, { a: { k: NOW + 2.5 * H } }),
       sample(NOW + 3 * H, { a: { k: 4 } }),
     ];
-    expect(drainSeries(s, ['a'], 'k', 0).map((p) => p.remaining)).toEqual([10, 4]);
+    expect(drainSeries(s, equal('a'), 'k', 0).map((p) => p.remaining)).toEqual([10, 4]);
   });
 });

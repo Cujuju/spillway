@@ -143,19 +143,39 @@ export interface ActivityEvent {
   cacheWriteTokens: number;
 }
 
-/** Requests and tokens for one local day, account and model; kept after that day's request log expires. */
-export interface ActivityDayTotal {
-  /** Local calendar day, YYYY-MM-DD. */
-  day: string;
-  provider: string;
-  authIndex: string | null;
-  model: string;
+/** Summed requests, tokens and list-price cost (src/shared/modelPrices.ts). */
+export interface ActivityCounts {
   requests: number;
   failed: number;
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;
   cacheWriteTokens: number;
+  costUsd: number;
+  /** Cost had every prompt token been billed at the uncached input rate. */
+  uncachedCostUsd: number;
+  /** Requests whose model has no known price; their cost is not in `costUsd`. */
+  unpricedRequests: number;
+}
+
+/** Requests and tokens for one local day, account and model; kept after that day's request log expires. */
+export interface ActivityDayTotal extends ActivityCounts {
+  /** Local calendar day, YYYY-MM-DD. */
+  day: string;
+  provider: string;
+  authIndex: string | null;
+  model: string;
+}
+
+/** Activity for one local hour, account and model. */
+export interface ActivityBucket extends ActivityCounts {
+  /** Start of the local hour, epoch ms. With `wholeDay`, local midnight. */
+  start: number;
+  /** The day's request log has expired, so only its daily total remains. */
+  wholeDay: boolean;
+  provider: string;
+  authIndex: string | null;
+  model: string;
 }
 
 /** Coding clients whose own config the Proxy page can point at the proxy. */

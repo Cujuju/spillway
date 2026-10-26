@@ -1,0 +1,142 @@
+/* Activity overview: tiles, trend charts with hover readouts, day-by-hour heatmap. */
+/* Wide activity tables scroll inside their card instead of wrapping each cell. */
+.table-card {
+  padding: 0;
+  overflow-x: auto;
+}
+.table.nowrap th,
+.table.nowrap td {
+  white-space: nowrap;
+}
+.error-text {
+  display: inline-block;
+  max-width: 260px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.table th.num,
+.table td.num {
+  text-align: right;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--page-gap);
+  margin-bottom: var(--page-gap);
+}
+/* Tiles sit in a grid gap, not the page's card stack. */
+.stat-grid > .card {
+  margin-top: 0;
+}
+.notice + .toolbar {
+  margin-top: var(--page-gap);
+}
+.stat-tile .section-label {
+  margin-bottom: 6px;
+}
+.stat-value {
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.trend {
+  position: relative;
+}
+.trend svg:focus-visible {
+  outline: 2px solid var(--color-accent-border);
+  outline-offset: 2px;
+}
+.chart-tip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 180px;
+  padding: 8px 10px;
+  border-radius: var(--radius-btn);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+  font-size: var(--text-sm);
+}
+.tip-title {
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tip-row strong {
+  color: var(--color-text);
+}
+.tip-row span {
+  color: var(--color-text-muted);
+}
+.heat-card {
+  position: relative;
+}
+.heat-head {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.heat-head .section-label {
+  margin: 0;
+}
+.heat {
+  display: grid;
+  /* Cells stay near the 14-20px squares of Claude Code's chart; the grid sits left. */
+  grid-template-columns: 36px repeat(24, minmax(10px, 20px));
+  gap: 3px;
+  font-size: var(--text-xxs);
+  color: var(--color-text-muted);
+}
+.heat-hour {
+  white-space: nowrap;
+}
+.heat-day {
+  align-self: center;
+}
+.heat-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: var(--color-surface-sunken);
+}
+.heat-cell:hover,
+.heat-cell:focus-visible {
+  outline: 1px solid var(--color-text-secondary);
+}
+/* One hue, light to dark: the accent mixed into the card surface. */
+.heat-cell.l1 { background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface)); }
+.heat-cell.l2 { background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface)); }
+.heat-cell.l3 { background: color-mix(in srgb, var(--color-accent) 78%, var(--color-surface)); }
+.heat-cell.l4 { background: var(--color-accent); }
+.heat-legend {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: var(--text-xxs);
+  color: var(--color-text-muted);
+}
+.heat-legend .heat-cell {
+  width: 10px;
+}
+.share-bar {
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+.share-bar span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+.chart-note {
+  margin-top: var(--page-gap);
+  font-size: var(--text-sm);
+}

@@ -1,31 +1,32 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from 'solid-js';
-import type { ActivityDayTotal } from '@shared/types';
-import { dayLabel } from '../lib/format';
+import { addCounts, emptyCounts } from '@shared/activityCounts';
+import type { ActivityCounts, ActivityDayTotal } from '@shared/types';
+import { dayLabel, usd } from '../lib/format';
 import { activity } from '../store';
 import { ProviderGlyph } from './ui';
 
 /** A burst of requests reloads the totals once, after it settles. */
 const RELOAD_DEBOUNCE_MS = 2_000;
 
-type Counts = Pick<ActivityDayTotal, 'requests' | 'failed' | 'inputTokens' | 'outputTokens' | 'cachedTokens' | 'cacheWriteTokens'>;
-const ZERO: Counts = { requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 };
-const sum = (rows: Counts[]): Counts =>
-  rows.reduce((a, r) => ({
-    requests: a.requests + r.requests,
-    failed: a.failed + r.failed,
-    inputTokens: a.inputTokens + r.inputTokens,
-    outputTokens: a.outputTokens + r.outputTokens,
-    cachedTokens: a.cachedTokens + r.cachedTokens,
-    cacheWriteTokens: a.cacheWriteTokens + r.cacheWriteTokens,
-  }), ZERO);
+const sum = (rows: ActivityCounts[]): ActivityCounts => {
+  const total = emptyCounts();
+  for (const r of rows) addCounts(total, r);
+  return total;
+};
 const n = (v: number) => v.toLocaleString();
 
-function CountCells(props: { c: Counts }) {
+function CountCells(props: { c: ActivityCounts }) {
   return (
     <>
-      <td class="tabular">{n(props.c.requests)}</td>
-      <td class="tabular">{n(props.c.failed)}</td>
-      <td class="tabular">{n(props.c.inputTokens)} / {n(props.c.outputTokens)} / {n(props.c.cachedTokens)} / {n(props.c.cacheWriteTokens)}</td>
+      <td class="tabular num">{n(props.c.requests)}</td>
+      <td class="tabular num">{n(props.c.failed)}</td>
+      <td class="tabular num">{n(props.c.inputTokens)}</td>
+      <td class="tabular num">{n(props.c.outputTokens)}</td>
+      <td class="tabular num">{n(props.c.cachedTokens)}</td>
+      <td class="tabular num">{n(props.c.cacheWriteTokens)}</td>
+      <td class="tabular num" title={props.c.unpricedRequests ? `${n(props.c.unpricedRequests)} requests on models without a price are left out` : undefined}>
+        {props.c.unpricedRequests === props.c.requests ? '—' : usd(props.c.costUsd)}
+      </td>
     </>
   );
 }
@@ -51,18 +52,22 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
   });
 
   return (
-    <table class="table">
+    <table class="table nowrap">
       <thead>
         <tr>
           <th>Day / account</th>
           <th>Model</th>
-          <th>Requests</th>
-          <th>Failed</th>
-          <th title="Input / output / cache read / cache write tokens">Tokens</th>
+          <th class="num">Requests</th>
+          <th class="num">Failed</th>
+          <th class="num">Input</th>
+          <th class="num">Output</th>
+          <th class="num">Cache read</th>
+          <th class="num">Cache write</th>
+          <th class="num" title="At API list prices">API cost</th>
         </tr>
       </thead>
       <tbody>
-        <For each={days()} fallback={<tr><td colSpan={5} class="muted">No requests recorded yet.</td></tr>}>
+        <For each={days()} fallback={<tr><td colSpan={9} class="muted">No requests recorded yet.</td></tr>}>
           {(d) => (
             <>
               <tr style={{ 'font-weight': 600 }}>

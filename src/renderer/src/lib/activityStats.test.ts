@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { emptyCounts } from '@shared/activityCounts';
+import type { ActivityBucket } from '@shared/types';
+import { bucketStarts, byModel, heatGrid, series, summarize } from './activityStats';
+
+// Local-clock times so bucket edges don't depend on the test machine's zone.
+const NOW = new Date(2026, 9, 26, 14, 30).getTime();
+const at = (daysAgo: number, hour: number) => new Date(2026, 9, 26 - daysAgo, hour).getTime();
+const row = (start: number, patch: Partial<ActivityBucket> = {}): ActivityBucket => ({
+  ...emptyCounts(), start, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'claude-opus-5-5', requests: 1, ...patch,
+});
+
+describe('bucketStarts', () => {
+  it('ends with the bucket holding now, aligned to the local clock', () => {
+    expect(bucketStarts('24h', NOW).at(-1)).toBe(at(0, 14));
+    expect(bucketStarts('7d', NOW).at(-1)).toBe(at(0, 12));
+    expect(bucketStarts('30d', NOW)).toHaveLength(30);
+    expect(bucketStarts('30d', NOW)[0]).toBe(at(29, 0));
+  });
+});
+
+describe('series / summarize', () => {
+  it('puts each row in its bucket and drops rows before the range', () => {
+    const starts = bucketStarts('24h', NOW);
+    const points = series([row(at(0, 13)), row(at(0, 13)), row(at(0, 14)), row(at(3, 9))], starts, NOW);
+    expect(points.at(-2)!.summary.requests).toBe(2);
+    expect(points.at(-1)!.summary.requests).toBe(1);
+    expect(points.reduce((n, p) => n + p.summary.requests, 0)).toBe(3);
+  });
+  it('rates cache hits over all prompt tokens, by each provider\'s rules', () => {
+    const s = summarize([
+      row(NOW, { inputTokens: 10, cachedTokens: 80, cacheWriteTokens: 10 }),
+      row(NOW, { provider: 'codex', model: 'gpt-6.1-sol', inputTokens: 100, cachedTokens: 50 }),
+    ]);
+    expect(s.promptTokens).toBe(200);
+    expect(s.cacheHitRate).toBeCloseTo(130 / 200);
+  });
+});
+
+describe('byModel', () => {
+  it('groups by provider and model, costliest first', () => {
+    const models = byModel([row(NOW, { model: 'a', costUsd: 1 }), row(NOW, { model: 'b', costUsd: 3 }), row(NOW, { model: 'a', costUsd: 1 })]);
+    expect(models.map((m) => [m.model, m.summary.requests])).toEqual([['b', 1], ['a', 2]]);
+  });
+});
+
+describe('heatGrid', () => {
+  it('shows the last 7 days oldest first, by local hour, without whole-day totals', () => {
+    const grid = heatGrid([row(at(0, 9)), row(at(6, 23)), row(at(7, 9)), row(at(1, 0), { wholeDay: true })], 'week', NOW);
+    expect(grid).toHaveLength(7);
+    expect(grid[6]!.cells[9]!.requests).toBe(1);
+    expect(grid[0]!.cells[23]!.requests).toBe(1);
+    expect(grid.flatMap((r) => r.cells).reduce((n, c) => n + c.requests, 0)).toBe(2);
+  });
+  it('sums every week into its weekday for the rhythm view', () => {
+    const grid = heatGrid([row(at(0, 9)), row(at(7, 9))], 'rhythm', NOW);
+    // NOW is a Monday; rows run Monday first.
+    expect(grid[0]!.cells[9]!.requests).toBe(2);
+  });
+});

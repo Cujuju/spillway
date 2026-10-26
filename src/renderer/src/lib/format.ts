@@ -45,3 +45,16 @@ export function dateTime(iso: string): string {
 export function pct(value: number, digits = 0): string {
   return `${value.toFixed(digits)}%`;
 }
+
+/** Below a cent, "<$0.01"; to the cent under $1,000; whole dollars above. */
+const WHOLE_DOLLARS_FROM = 1000;
+const CENT = 0.01;
+export function usd(v: number): string {
+  if (v > 0 && v < CENT) return '<$0.01';
+  return v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2, minimumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2 });
+}
+
+/** "1.2M", "34K", "980" for token counts. */
+export function compactNumber(v: number): string {
+  return v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+}

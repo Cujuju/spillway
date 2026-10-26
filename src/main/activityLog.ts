@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
+import { addEvent, emptyCounts, withCountsFilled } from '@shared/activityCounts';
+import type { ActivityBucket, ActivityDayTotal, ActivityEvent } from '@shared/types';
 import { appPaths } from './paths';
 import { getSettings, writeFileAtomic } from './settingsStore';
 
@@ -25,7 +26,13 @@ export function expiredDays(days: string[], today: number, retentionDays: number
   return days.filter((day) => day < oldestKept);
 }
 
-/** Rows saved before cache writes were recorded have none. */
+/** Local days, YYYY-MM-DD, from `count - 1` days before `today` through today. */
+export function lastDays(today: number, count: number): string[] {
+  const d = new Date(today);
+  return Array.from({ length: count }, (_, i) => localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (count - 1 - i)).getTime()));
+}
+
+/** Requests saved before cache writes were recorded have none. */
 const withCacheWrites = <T extends { cacheWriteTokens?: number }>(r: T): T & { cacheWriteTokens: number } => ({ ...r, cacheWriteTokens: r.cacheWriteTokens ?? 0 });
 
 const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model'>) => `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}`;
@@ -34,14 +41,24 @@ const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | '
 export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): void {
   const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model };
   const key = totalKey(base);
-  const row = totals.get(key) ?? { ...base, requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 };
-  row.requests += 1;
-  row.failed += e.failed ? 1 : 0;
-  row.inputTokens += e.inputTokens;
-  row.outputTokens += e.outputTokens;
-  row.cachedTokens += e.cachedTokens;
-  row.cacheWriteTokens += e.cacheWriteTokens;
+  const row = totals.get(key) ?? { ...base, ...emptyCounts() };
+  addEvent(row, e);
   totals.set(key, row);
+}
+
+/** One day's requests summed per local hour, account and model. */
+export function hourlyBuckets(events: ActivityEvent[]): ActivityBucket[] {
+  const rows = new Map<string, ActivityBucket>();
+  for (const e of events) {
+    const at = new Date(Date.parse(e.at));
+    at.setMinutes(0, 0, 0);
+    const base = { start: at.getTime(), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model };
+    const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}`;
+    const row = rows.get(key) ?? { ...base, ...emptyCounts() };
+    addEvent(row, e);
+    rows.set(key, row);
+  }
+  return [...rows.values()];
 }
 
 /**
@@ -54,6 +71,8 @@ class ActivityLog {
   private totals: Map<string, ActivityDayTotal> | null = null;
   private totalsTimer: NodeJS.Timeout | null = null;
   private prunedOn = '';
+  /** Hourly sums of finished days; their files no longer change. */
+  private pastBuckets = new Map<string, ActivityBucket[]>();
 
   append(e: ActivityEvent): void {
     const day = localDay(Date.parse(e.at));
@@ -93,6 +112,24 @@ class ActivityLog {
     return [...this.loadTotals().values()];
   }
 
+  /** Hourly activity for the last `days` local days; days whose requests expired come from their totals. */
+  buckets(days: number): ActivityBucket[] {
+    const today = localDay(Date.now());
+    const stored = new Set(this.days());
+    return lastDays(Date.now(), days).flatMap((day) => {
+      if (stored.has(day)) {
+        const cached = this.pastBuckets.get(day);
+        if (cached) return cached;
+        const rows = hourlyBuckets(this.day(day));
+        if (day < today) this.pastBuckets.set(day, rows);
+        return rows;
+      }
+      const [y, m, d] = day.split('-').map(Number);
+      const start = new Date(y!, m! - 1, d!).getTime();
+      return this.totalsList().filter((t) => t.day === day).map(({ day: _, ...t }): ActivityBucket => ({ ...t, start, wholeDay: true }));
+    });
+  }
+
   /** Deletes day files outside the retention setting. */
   prune(): void {
     this.prunedOn = localDay(Date.now());
@@ -112,6 +149,7 @@ class ActivityLog {
     this.appendTimer = this.totalsTimer = null;
     this.pending.clear();
     this.totals = new Map();
+    this.pastBuckets.clear();
     rmSync(appPaths.activityDir, { recursive: true, force: true });
   }
 
@@ -136,7 +174,7 @@ class ActivityLog {
     try {
       const raw: unknown = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
       const rows = Array.isArray(raw) ? raw.filter((r): r is ActivityDayTotal => typeof r?.day === 'string' && typeof r?.requests === 'number') : [];
-      this.totals = new Map(rows.map((r) => [totalKey(r), withCacheWrites(r)]));
+      this.totals = new Map(rows.map((r) => [totalKey(r), withCountsFilled(r)]));
     } catch (err) {
       console.error('[activity] totals unreadable, starting empty:', err);
       this.totals = new Map();

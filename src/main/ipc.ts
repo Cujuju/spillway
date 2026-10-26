@@ -21,6 +21,9 @@ import { mainWindow } from './window';
 
 type Handlers = { [K in keyof typeof INVOKE]: (...args: Parameters<DesktopApi[K]>) => ReturnType<DesktopApi[K]> | Awaited<ReturnType<DesktopApi[K]>> };
 
+/** Longest span the Activity overview asks for; bounds a renderer-supplied day count. */
+const MAX_BUCKET_DAYS = 365;
+
 /** Credential actions arrive by id; the management API addresses them by file name. */
 function credentialName(id: string): string {
   const c = usage.latest()?.credentials.find((x) => x.id === id);
@@ -114,6 +117,7 @@ const handlers: Handlers = {
   activityDays: () => activityLog.days(),
   activityDay: (day) => activityLog.day(day),
   activityTotals: () => activityLog.totalsList(),
+  activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),
   clearActivity: () => activity.clear(),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);

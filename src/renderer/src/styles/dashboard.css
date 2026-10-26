@@ -7,6 +7,10 @@
   gap: 16px;
   margin-bottom: var(--page-gap);
 }
+/* Actions share the title's row; a subtitle hangs below the title alone. */
+.dash-header.title-row {
+  align-items: flex-start;
+}
 .dash-title {
   font-size: var(--text-title);
   font-weight: 600;

@@ -1,9 +1,11 @@
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
+import { tokenCost } from '@shared/modelPrices';
 import { maskEmails } from '@shared/privacy';
 import { MAX_ACTIVITY_EVENTS, type ActivityEvent } from '@shared/types';
+import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityTotals } from '../components/ActivityTotals';
 import { Notice, ProviderGlyph, Seg } from '../components/ui';
-import { dayLabel } from '../lib/format';
+import { dayLabel, usd } from '../lib/format';
 import { activity, proxyStatus, settings, snapshot } from '../store';
 
 const MS_PER_SECOND = 1000;
@@ -16,9 +18,13 @@ const RECENT = '';
 
 const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
 const tokens = (v: number) => v.toLocaleString();
+const requestCost = (e: ActivityEvent) => {
+  const cost = tokenCost(e.provider, e.model, e);
+  return cost ? usd(cost.usd) : '—';
+};
 
 export function Activity() {
-  const [view, setView] = createSignal<'requests' | 'totals'>('requests');
+  const [view, setView] = createSignal<'overview' | 'requests' | 'totals'>('overview');
   const [filter, setFilter] = createSignal<'all' | 'failed'>('all');
   const [day, setDay] = createSignal(RECENT);
   const [days, setDays] = createSignal<string[]>([]);
@@ -52,17 +58,20 @@ export function Activity() {
 
   return (
     <>
-      <header class="dash-header">
+      <header class="dash-header title-row">
         <div>
           <h1 class="dash-title">Activity</h1>
-          <div class="dash-sub">
-            <Show when={view() === 'requests'} fallback="Requests and tokens per day, account and model">
-              Each upstream attempt, newest first · {source().length} {scope()}, {failedCount()} failed
-            </Show>
-          </div>
+          <Switch>
+            <Match when={view() === 'requests'}>
+              <div class="dash-sub">Each upstream attempt, newest first · {source().length} {scope()}, {failedCount()} failed</div>
+            </Match>
+            <Match when={view() === 'totals'}>
+              <div class="dash-sub">Requests and tokens per day, account and model</div>
+            </Match>
+          </Switch>
         </div>
         <div class="dash-actions">
-          <Seg value={view()} options={[{ value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const} onChange={setView} />
+          <Seg value={view()} options={[{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const} onChange={setView} />
           <Show when={view() === 'requests'}>
             <select class="select" value={day()} onChange={(e) => pickDay(e.currentTarget.value)}>
               <option value={RECENT}>Recent</option>
@@ -77,53 +86,66 @@ export function Activity() {
         <Notice>New activity appears while the proxy is running.</Notice>
       </Show>
 
-      <div class="card" style={{ padding: 0 }}>
-        <Show when={view() === 'requests'} fallback={<ActivityTotals account={accountName} />}>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Account</th>
-                <th>Model</th>
-                <th>Result</th>
-                <th title="Input / output / cache read / cache write tokens">Tokens</th>
-                <th title="Time to first token">First token</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={rows().slice(0, limit())} fallback={<tr><td colSpan={7} class="muted">No requests.</td></tr>}>
-                {(e) => (
-                  <tr>
-                    <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
-                    <td>
-                      <div class="row" style={{ gap: '8px' }}>
-                        <ProviderGlyph provider={e.provider} size={14} />
-                        <span>{accountName(e.authIndex)}</span>
-                      </div>
-                    </td>
-                    <td class="tabular">{e.model || '—'}</td>
-                    <td>
-                      <Show when={e.failed} fallback={<span class="badge green">OK</span>}>
-                        <span class="badge red" title={errorText(e)}>{e.statusCode ?? 'Failed'}</span>
-                        <span class="muted" style={{ 'margin-left': '6px' }}>{errorText(e)}</span>
-                      </Show>
-                    </td>
-                    <td class="tabular">{tokens(e.inputTokens)} / {tokens(e.outputTokens)} / {tokens(e.cachedTokens)} / {tokens(e.cacheWriteTokens)}</td>
-                    <td class="tabular">{duration(e.ttftMs)}</td>
-                    <td class="tabular">{duration(e.latencyMs)}</td>
-                  </tr>
-                )}
-              </For>
-            </tbody>
-          </table>
-          <Show when={rows().length > limit()}>
-            <div style={{ padding: '12px', 'text-align': 'center' }}>
-              <button class="btn ghost" onClick={() => setLimit((l) => l + PAGE_SIZE)}>Show older</button>
-            </div>
+      <Show when={view() === 'overview'}>
+        <ActivityOverview />
+      </Show>
+      <Show when={view() !== 'overview'}>
+        <div class="card table-card">
+          <Show when={view() === 'requests'} fallback={<ActivityTotals account={accountName} />}>
+            <table class="table nowrap">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Account</th>
+                  <th>Model</th>
+                  <th>Result</th>
+                  <th class="num">Input</th>
+                  <th class="num">Output</th>
+                  <th class="num">Cache read</th>
+                  <th class="num">Cache write</th>
+                  <th class="num" title="At API list prices">API cost</th>
+                  <th title="Time to first token">First token</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={rows().slice(0, limit())} fallback={<tr><td colSpan={11} class="muted">No requests.</td></tr>}>
+                  {(e) => (
+                    <tr>
+                      <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
+                      <td>
+                        <div class="row" style={{ gap: '8px' }}>
+                          <ProviderGlyph provider={e.provider} size={14} />
+                          <span>{accountName(e.authIndex)}</span>
+                        </div>
+                      </td>
+                      <td class="tabular">{e.model || '—'}</td>
+                      <td>
+                        <Show when={e.failed} fallback={<span class="badge green">OK</span>}>
+                          <span class="badge red" title={errorText(e)}>{e.statusCode ?? 'Failed'}</span>
+                          <span class="muted truncate error-text">{errorText(e)}</span>
+                        </Show>
+                      </td>
+                      <td class="tabular num">{tokens(e.inputTokens)}</td>
+                      <td class="tabular num">{tokens(e.outputTokens)}</td>
+                      <td class="tabular num">{tokens(e.cachedTokens)}</td>
+                      <td class="tabular num">{tokens(e.cacheWriteTokens)}</td>
+                      <td class="tabular num">{requestCost(e)}</td>
+                      <td class="tabular">{duration(e.ttftMs)}</td>
+                      <td class="tabular">{duration(e.latencyMs)}</td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+            <Show when={rows().length > limit()}>
+              <div style={{ padding: '12px', 'text-align': 'center' }}>
+                <button class="btn ghost" onClick={() => setLimit((l) => l + PAGE_SIZE)}>Show older</button>
+              </div>
+            </Show>
           </Show>
-        </Show>
-      </div>
+        </div>
+      </Show>
     </>
   );
 }

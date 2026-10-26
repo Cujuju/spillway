@@ -15,7 +15,7 @@ vi.mock('./settingsStore', async () => {
   };
 });
 
-const { activityLog, addToTotals, expiredDays, localDay } = await import('./activityLog');
+const { activityLog, addToTotals, expiredDays, hourlyBuckets, lastDays, localDay } = await import('./activityLog');
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
@@ -46,6 +46,16 @@ describe('addToTotals', () => {
   });
 });
 
+describe('hourlyBuckets / lastDays', () => {
+  it('sums requests per local hour, account and model', () => {
+    const rows = hourlyBuckets([event(new Date(2026, 9, 25, 9, 5)), event(new Date(2026, 9, 25, 9, 55)), event(new Date(2026, 9, 25, 10, 1))]);
+    expect(rows.map((r) => [new Date(r.start).getHours(), r.requests])).toEqual([[9, 2], [10, 1]]);
+  });
+  it('lists days oldest first, ending today', () => {
+    expect(lastDays(new Date(2026, 9, 1, 12).getTime(), 3)).toEqual(['2026-09-29', '2026-09-30', '2026-10-01']);
+  });
+});
+
 describe('activityLog', () => {
   it('stores requests per day, lists days newest first, and prunes past retention', () => {
     const today = new Date();
@@ -65,6 +75,16 @@ describe('activityLog', () => {
     appendFileSync(path.join(dir, '2026-01-02.jsonl'), `${JSON.stringify(legacy)}
 `);
     expect(activityLog.day('2026-01-02')[0]?.cacheWriteTokens).toBe(0);
+  });
+  it('serves stored days hourly and expired days from their totals', () => {
+    const today = new Date();
+    const expired = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
+    activityLog.append(event(expired));
+    activityLog.flush();
+    rmSync(path.join(dir, `${localDay(expired.getTime())}.jsonl`));
+    const rows = activityLog.buckets(3);
+    expect(rows.find((r) => r.wholeDay)).toMatchObject({ requests: 1, start: new Date(expired).setHours(0, 0, 0, 0) });
+    expect(rows.some((r) => !r.wholeDay)).toBe(true);
   });
   it('rejects day keys that are not dates', () => {
     expect(activityLog.day('../settings')).toEqual([]);

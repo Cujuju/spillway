@@ -1,0 +1,141 @@
+import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+
+const PAD = { left: 56, right: 12, top: 12, bottom: 24 };
+const Y_TICKS = 4;
+/** About this many x labels fit without colliding at the narrowest window. */
+const X_LABELS = 6;
+/** Fraction of each slot a bar fills; the rest is the gap between bars. */
+const BAR_FILL = 0.72;
+/** Bars round their top (data end) by this much, never wider than half the bar. */
+const BAR_RADIUS = 4;
+/** Tooltip keeps this far from the pointer and the chart's edge. */
+const TIP_OFFSET = 12;
+const TIP_WIDTH = 240;
+const POINT_RADIUS = 2.5;
+
+export interface TrendPoint {
+  start: number;
+  /** null leaves a gap (no data for the bucket). */
+  value: number | null;
+}
+
+export interface TrendChartProps {
+  points: TrendPoint[];
+  kind: 'bar' | 'line';
+  height: number;
+  ariaLabel: string;
+  yLabel: (v: number) => string;
+  xLabel: (t: number) => string;
+  /** Fixed scale top (e.g. 1 for a rate); otherwise a round number above the largest value. */
+  yMax?: number;
+  tooltip: (index: number) => JSX.Element;
+}
+
+/** 1, 2, 2.5 or 5 times a power of ten, at least `v`. */
+function niceCeil(v: number): number {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p;
+}
+
+/** Bar or line over time with a per-bucket hover readout (pointer and arrow keys). */
+export function TrendChart(props: TrendChartProps) {
+  let host!: HTMLDivElement;
+  const [width, setWidth] = createSignal(800);
+  const [hover, setHover] = createSignal<number | null>(null);
+  const [pointerX, setPointerX] = createSignal(0);
+  onMount(() => {
+    const ro = new ResizeObserver(([e]) => e && setWidth(Math.max(200, e.contentRect.width)));
+    ro.observe(host);
+    onCleanup(() => ro.disconnect());
+  });
+
+  const plotW = () => width() - PAD.left - PAD.right;
+  const plotH = () => props.height - PAD.top - PAD.bottom;
+  const slot = () => plotW() / Math.max(1, props.points.length);
+  const yMax = createMemo(() => props.yMax ?? niceCeil(Math.max(0, ...props.points.map((p) => p.value ?? 0))));
+  const x = (i: number) => PAD.left + slot() * (i + 0.5);
+  const y = (v: number) => PAD.top + plotH() - (Math.min(v, yMax()) / yMax()) * plotH();
+  const baseline = () => PAD.top + plotH();
+
+  const barPath = (i: number, v: number) => {
+    const w = Math.max(1, slot() * BAR_FILL);
+    const left = x(i) - w / 2;
+    const top = y(v);
+    const r = Math.min(BAR_RADIUS, w / 2, baseline() - top);
+    return `M${left},${baseline()}V${top + r}Q${left},${top} ${left + r},${top}H${left + w - r}Q${left + w},${top} ${left + w},${top + r}V${baseline()}Z`;
+  };
+  const linePath = createMemo(() => {
+    let d = '';
+    let open = false;
+    props.points.forEach((p, i) => {
+      if (p.value === null) return void (open = false);
+      d += `${open ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`;
+      open = true;
+    });
+    return d;
+  });
+  const xTicks = createMemo(() => {
+    const step = Math.max(1, Math.ceil(props.points.length / X_LABELS));
+    return props.points.flatMap((p, i) => (i % step === 0 ? [{ i, label: props.xLabel(p.start) }] : []));
+  });
+  const yTicks = createMemo(() => Array.from({ length: Y_TICKS + 1 }, (_, i) => (yMax() * i) / Y_TICKS));
+
+  const pick = (e: PointerEvent) => {
+    const rect = host.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    setPointerX(px);
+    const i = Math.floor((px - PAD.left) / slot());
+    setHover(i >= 0 && i < props.points.length ? i : null);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const i = Math.min(props.points.length - 1, Math.max(0, (hover() ?? props.points.length - 1) + step));
+    setHover(i);
+    setPointerX(x(i));
+  };
+  const tipLeft = () => (pointerX() + TIP_OFFSET + TIP_WIDTH > width() ? pointerX() - TIP_OFFSET - TIP_WIDTH : pointerX() + TIP_OFFSET);
+
+  return (
+    <div ref={host} class="trend" onPointerMove={pick} onPointerLeave={() => setHover(null)}>
+      <svg class="chart" style={{ height: `${props.height}px` }} width={width()} height={props.height} role="img" aria-label={props.ariaLabel}
+        tabindex="0" onKeyDown={onKey} onBlur={() => setHover(null)}>
+        <For each={yTicks()}>
+          {(v) => (
+            <>
+              <line x1={PAD.left} x2={width() - PAD.right} y1={y(v)} y2={y(v)} stroke="var(--color-border)" stroke-dasharray={v ? '2 4' : undefined} />
+              <text x={PAD.left - 8} y={y(v) + 4} text-anchor="end">{props.yLabel(v)}</text>
+            </>
+          )}
+        </For>
+        <For each={xTicks()}>{(t) => <text x={x(t.i)} y={props.height - 6} text-anchor="middle">{t.label}</text>}</For>
+        <Show when={props.kind === 'bar'} fallback={
+          <>
+            <path d={linePath()} fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linejoin="round" />
+            {/* Dots keep a value visible when gaps on both sides leave it no line. */}
+            <For each={props.points}>{(p, i) => <Show when={p.value !== null}><circle cx={x(i())} cy={y(p.value!)} r={POINT_RADIUS} fill="var(--color-accent)" /></Show>}</For>
+          </>
+        }>
+          <For each={props.points}>
+            {(p, i) => (
+              <Show when={p.value}>
+                {(v) => <path d={barPath(i(), v())} fill="var(--color-accent)" opacity={hover() === null || hover() === i() ? 1 : 0.55} />}
+              </Show>
+            )}
+          </For>
+        </Show>
+        <Show when={hover() !== null}>
+          <line x1={x(hover()!)} x2={x(hover()!)} y1={PAD.top} y2={baseline()} stroke="var(--color-text-muted)" stroke-dasharray="3 3" />
+          <Show when={props.kind === 'line' ? props.points[hover()!]?.value : null}>
+            {(v) => <circle cx={x(hover()!)} cy={y(v())} r="4" fill="var(--color-accent)" stroke="var(--color-surface)" stroke-width="2" />}
+          </Show>
+        </Show>
+      </svg>
+      <Show when={hover() !== null}>
+        <div class="chart-tip" style={{ left: `${tipLeft()}px`, top: `${PAD.top}px`, width: `${TIP_WIDTH}px` }}>{props.tooltip(hover()!)}</div>
+      </Show>
+    </div>
+  );
+}

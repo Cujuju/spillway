@@ -1,7 +1,7 @@
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -44,6 +44,8 @@ export interface DesktopApi {
   /** One stored day's requests, oldest first. */
   activityDay(day: string): Promise<ActivityEvent[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
+  /** Hourly activity for the last `days` local days, today included; expired days as daily totals. */
+  activityBuckets(days: number): Promise<ActivityBucket[]>;
   /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
 
@@ -111,6 +113,7 @@ export const INVOKE = {
   activityDays: 'activity:days',
   activityDay: 'activity:day',
   activityTotals: 'activity:totals',
+  activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',
   oauthStart: 'oauth:start',
   oauthStatus: 'oauth:status',

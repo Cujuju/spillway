@@ -86,7 +86,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     startMinimized: true,
     closeToTray: true,
     minimizeToTray: false,
-    theme: 'dark',
+    theme: 'dracula',
     confirmQuit: false,
   },
   proxy: {

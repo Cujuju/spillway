@@ -4,7 +4,7 @@ import { EVENTS } from '@shared/ipc';
 import { resolveTheme } from '@shared/themes';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { appIconPath, appPaths } from './paths';
+import { appPaths, shellIconPath } from './paths';
 import { getSettings, writeFileAtomic } from './settingsStore';
 
 const DEFAULT_WIDTH = 1280;
@@ -90,7 +90,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     ...chrome,
     show: false,
     backgroundColor: themeBackground(),
-    icon: appIconPath(),
+    icon: shellIconPath(),
     title: APP_NAME,
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.cjs'),

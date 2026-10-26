@@ -2,7 +2,7 @@ import { Menu, nativeImage, nativeTheme, Tray } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { createHash } from 'node:crypto';
 import { maskEmails } from '@shared/privacy';
-import { appIconPath } from './paths';
+import { appIconPath, shellIconPath } from './paths';
 import { usePreferredAccount } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
@@ -89,8 +89,8 @@ function attach(tray: Tray): void {
 }
 
 function appTrayImage(): Electron.NativeImage {
+  if (process.platform !== 'darwin') return nativeImage.createFromPath(shellIconPath());
   const source = nativeImage.createFromPath(appIconPath());
-  if (process.platform !== 'darwin') return source;
   const img = nativeImage.createEmpty();
   for (const scaleFactor of [1, 2]) {
     const px = MENU_BAR_ICON_PT * scaleFactor;

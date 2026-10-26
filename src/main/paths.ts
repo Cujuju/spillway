@@ -58,6 +58,11 @@ export function resolveProxyExecutable(override: string): string | null {
   return existsSync(candidate) ? candidate : null;
 }
 
-export function appIconPath(): string {
-  return app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(app.getAppPath(), 'resources', 'icon.png');
-}
+const resourcePath = (file: string) =>
+  app.isPackaged ? path.join(process.resourcesPath, file) : path.join(app.getAppPath(), 'resources', file);
+
+/** 256 px PNG: notifications and the macOS menu bar. */
+export const appIconPath = () => resourcePath('icon.png');
+
+/** Window and tray icon. Windows gets the .ico: its hand-drawn 16-32 px sizes stay sharp where the PNG blurs. */
+export const shellIconPath = () => resourcePath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');

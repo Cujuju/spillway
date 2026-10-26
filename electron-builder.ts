@@ -12,8 +12,9 @@ const config: Configuration = {
     // Proxy binary for the platform and arch being packaged, built by `pnpm proxy:build`.
     // Folder names match scripts/build-proxy.mjs and src/main/paths.ts.
     { from: 'resources/bin/${platform}-${arch}', to: 'bin' },
-    // Tray, window and notification icon; main reads it from process.resourcesPath.
+    // Notification and macOS tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.
     { from: 'resources/icon.png', to: 'icon.png' },
+    { from: 'resources/icon.ico', to: 'icon.ico' },
   ],
   // Update feed. Builds write app-update.yml and latest*.yml from it but never publish (package runs
   // with --publish never); scripts/release.mts signs the files and uploads them.

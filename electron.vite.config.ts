@@ -10,6 +10,8 @@ const updatePublicKey = existsSync(UPDATE_PUBLIC_KEY_FILE) ? readFileSync(UPDATE
 /** Read once when the build or dev server starts. */
 const version = appVersion(import.meta.dirname);
 const build = gitBuild(import.meta.dirname);
+/** The @cujuju/solidjs-* packages are linked from a sibling checkout (package.json `link:`). */
+const TOOLKIT_DIR = resolve('../solidjs-toolkit');
 
 export default defineConfig({
   main: {
@@ -24,6 +26,11 @@ export default defineConfig({
   },
   renderer: {
     plugins: [solid()],
-    resolve: { alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } },
+    resolve: {
+      alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') },
+      // Linked toolkit packages sit outside this tree; one Solid runtime, or their signals never update ours.
+      dedupe: ['solid-js'],
+    },
+    server: { fs: { allow: ['.', TOOLKIT_DIR] } },
   },
 });

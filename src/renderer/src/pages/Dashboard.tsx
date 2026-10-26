@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Search } from 'lucide-solid';
+import { Layers, Plus, RefreshCw, Search } from 'lucide-solid';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
@@ -12,6 +12,8 @@ import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } 
 const ICON_PX = 14;
 /** Claude first: it is the provider this app was built around; the rest by account count. */
 const PRIMARY_PROVIDER = 'claude';
+/** Tab id for every provider on one chart. */
+const ALL = 'all';
 
 const used = (c: Credential, key: string | null) => c.windows.find((w) => w.key === key)?.usedPercent ?? null;
 const resetAt = (c: Credential, key: string | null) => {
@@ -32,23 +34,30 @@ export function Dashboard() {
       .map(([id, count]) => ({ id, count }))
       .sort((a, b) => Number(b.id === PRIMARY_PROVIDER) - Number(a.id === PRIMARY_PROVIDER) || b.count - a.count);
   });
+  const multi = () => providers().length > 1;
+  // Several providers open on All, so every pool's quota and drain show at once.
   const provider = () => {
     const p = chosen();
-    return p && providers().some((x) => x.id === p) ? p : (providers()[0]?.id ?? null);
+    if (p && (providers().some((x) => x.id === p) || (p === ALL && multi()))) return p;
+    return multi() ? ALL : (providers()[0]?.id ?? null);
   };
-  const providerCreds = createMemo(() => creds().filter((c) => c.provider === provider()));
+  const credsOf = (id: string) => creds().filter((c) => c.provider === id);
+  const providerCreds = createMemo(() => (provider() === ALL ? creds() : credsOf(provider() ?? '')));
+  const pools = createMemo(() => (provider() === ALL ? providers().map((p) => p.id) : [provider()!]).map((id) => ({ provider: id, credentials: credsOf(id) })));
+  // Each provider sorts by its own widest window; keys differ between providers.
+  const sortKeys = createMemo(() => new Map(pools().map((p) => [p.provider, poolWindowKey(p.credentials)])));
   const loaded = () => creds().filter((c) => c.windows.some((w) => w.usedPercent !== null)).length;
 
   const rows = createMemo(() => {
     const q = query().trim().toLowerCase();
-    const key = poolWindowKey(providerCreds());
+    const keyOf = (c: Credential) => sortKeys().get(c.provider) ?? null;
     const list = providerCreds().filter((c) => !q || [c.label, c.email ?? '', c.name, c.note ?? ''].some((s) => s.toLowerCase().includes(q)));
     const sort = settings().dashboard.accountSort;
     return [...list].sort((a, b) => {
       if (a.disabled !== b.disabled) return Number(a.disabled) - Number(b.disabled);
       if (sort === 'name') return a.label.localeCompare(b.label);
-      if (sort === 'usage') return (used(a, key) ?? Infinity) - (used(b, key) ?? Infinity);
-      return resetAt(a, key) - resetAt(b, key);
+      if (sort === 'usage') return (used(a, keyOf(a)) ?? Infinity) - (used(b, keyOf(b)) ?? Infinity);
+      return resetAt(a, keyOf(a)) - resetAt(b, keyOf(b));
     });
   });
 
@@ -110,6 +119,13 @@ export function Dashboard() {
         }
       >
         <nav class="provider-tabs">
+          <Show when={multi()}>
+            <button class="provider-tab" classList={{ active: provider() === ALL }} onClick={() => setChosen(ALL)}>
+              <Layers size={ICON_PX} />
+              All
+              <span class="count">{creds().length}</span>
+            </button>
+          </Show>
           <For each={providers()}>
             {(p) => (
               <button class="provider-tab" classList={{ active: provider() === p.id }} onClick={() => setChosen(p.id)}>
@@ -121,8 +137,9 @@ export function Dashboard() {
           </For>
         </nav>
 
+        {/* Keyed: a tab change starts the panel fresh, since window choices differ per tab. */}
         <Show when={provider()} keyed>
-          {(p) => <PoolPanel provider={p} credentials={providerCreds()} strategy={snapshot()?.strategy ?? ''} />}
+          {(_tab) => <PoolPanel pools={pools()} strategy={snapshot()?.strategy ?? ''} />}
         </Show>
 
         <div class="toolbar">

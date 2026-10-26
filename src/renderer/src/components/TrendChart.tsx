@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { ChartTip, type TipRow } from './ChartTip';
 
 /** Left pad fits a 5-character axis label ("$37.5", "100%"). */
 const PAD = { left: 44, right: 8, top: 10, bottom: 22 };
@@ -9,9 +10,6 @@ const X_LABELS = 8;
 const BAR_FILL = 0.72;
 /** Bars round their top (data end) by this much, never wider than half the bar. */
 const BAR_RADIUS = 4;
-/** Tooltip keeps this far from the pointer and the chart's edge. */
-const TIP_OFFSET = 12;
-const TIP_WIDTH = 240;
 const POINT_RADIUS = 2.5;
 
 export interface TrendPoint {
@@ -31,7 +29,7 @@ export interface TrendChartProps {
   yMax?: number;
   /** Gridlines above the baseline. */
   yTicks?: number;
-  tooltip: (index: number) => JSX.Element;
+  tooltip: (index: number) => { title: string; rows: TipRow[] };
 }
 
 /** 1, 2, 2.5 or 5 times a power of ten, at least `v`. */
@@ -46,7 +44,7 @@ export function TrendChart(props: TrendChartProps) {
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
   const [hover, setHover] = createSignal<number | null>(null);
-  const [pointerX, setPointerX] = createSignal(0);
+  const [pointer, setPointer] = createSignal({ x: 0, y: 0 });
   onMount(() => {
     const ro = new ResizeObserver(([e]) => e && setWidth(Math.max(200, e.contentRect.width)));
     ro.observe(host);
@@ -93,7 +91,7 @@ export function TrendChart(props: TrendChartProps) {
   const pick = (e: PointerEvent) => {
     const rect = host.getBoundingClientRect();
     const px = e.clientX - rect.left;
-    setPointerX(px);
+    setPointer({ x: e.clientX, y: e.clientY });
     const i = Math.floor((px - PAD.left) / slot());
     setHover(i >= 0 && i < props.points.length ? i : null);
   };
@@ -103,9 +101,9 @@ export function TrendChart(props: TrendChartProps) {
     e.preventDefault();
     const i = Math.min(props.points.length - 1, Math.max(0, (hover() ?? props.points.length - 1) + step));
     setHover(i);
-    setPointerX(x(i));
+    const rect = host.getBoundingClientRect();
+    setPointer({ x: rect.left + x(i), y: rect.top + PAD.top });
   };
-  const tipLeft = () => (pointerX() + TIP_OFFSET + TIP_WIDTH > width() ? pointerX() - TIP_OFFSET - TIP_WIDTH : pointerX() + TIP_OFFSET);
 
   return (
     <div ref={host} class="trend" onPointerMove={pick} onPointerLeave={() => setHover(null)}>
@@ -143,7 +141,7 @@ export function TrendChart(props: TrendChartProps) {
         </Show>
       </svg>
       <Show when={hover() !== null}>
-        <div class="chart-tip" style={{ left: `${tipLeft()}px`, top: `${PAD.top}px`, width: `${TIP_WIDTH}px` }}>{props.tooltip(hover()!)}</div>
+        <ChartTip {...props.tooltip(hover()!)} x={pointer().x} y={pointer().y} />
       </Show>
     </div>
   );

@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
+import { ChartTip, type TipRow } from './ChartTip';
 import { heatGrid, hourLabel, metricValue, type HeatMode, type Metric, type Summary } from '../lib/activityStats';
 import type { ActivityBucket } from '@shared/types';
 import { Seg } from './ui';
@@ -24,22 +25,19 @@ export function ActivityHeatmap(props: {
   now: number;
   metric: Metric;
   format: (s: Summary) => string;
-  tooltip: (s: Summary) => JSX.Element;
+  tooltip: (s: Summary) => TipRow[];
 }) {
   const [mode, setMode] = createSignal<HeatMode>('week');
-  const [tip, setTip] = createSignal<{ x: number; y: number; title: string; s: Summary } | null>(null);
+  const [tip, setTip] = createSignal<{ cell: HTMLElement; title: string; s: Summary } | null>(null);
   const grid = createMemo(() => heatGrid(props.rows, mode(), props.now));
   const max = createMemo(() => Math.max(0, ...grid().flatMap((r) => r.cells.map((c) => metricValue(c, props.metric)))));
-  let host!: HTMLDivElement;
 
   const show = (e: Event, day: string, h: number, s: Summary) => {
-    const cell = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const box = host.getBoundingClientRect();
-    setTip({ x: cell.left - box.left + cell.width / 2, y: cell.bottom - box.top, title: `${day} ${hourLabel(h)}`, s });
+    setTip({ cell: e.currentTarget as HTMLElement, title: `${day} ${hourLabel(h)}`, s });
   };
 
   return (
-    <div class="card heat-card" ref={host}>
+    <div class="card heat-card">
       <div class="chart-head heat-head">
         <div class="section-label">By hour</div>
         <span class="chart-head-note" title={zone}>{zoneLabel} time</span>
@@ -73,12 +71,7 @@ export function ActivityHeatmap(props: {
         less <For each={SHADES}>{(l) => <span class={`heat-cell l${l}`} />}</For> more
       </div>
       <Show when={tip()}>
-        {(t) => (
-          <div class="chart-tip" style={{ left: `${t().x}px`, top: `${t().y + 6}px`, transform: 'translateX(-50%)' }}>
-            <div class="tip-title">{t().title}</div>
-            {props.tooltip(t().s)}
-          </div>
-        )}
+        {(t) => <ChartTip title={t().title} rows={props.tooltip(t().s)} anchor={() => (t().cell.isConnected ? t().cell.getBoundingClientRect() : null)} />}
       </Show>
     </div>
   );

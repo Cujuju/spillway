@@ -5,6 +5,7 @@ import {
 import { compactNumber, pct, usd } from '../lib/format';
 import { activityBuckets, now } from '../store';
 import { ActivityHeatmap } from './ActivityHeatmap';
+import type { TipRow } from './ChartTip';
 import { TokenCell } from './TokenCell';
 import { TrendChart } from './TrendChart';
 import { ProviderGlyph, Seg } from './ui';
@@ -29,19 +30,16 @@ const axisMetric = (m: Metric) => (v: number) => (m !== 'cost' ? compactNumber(v
 const hitRate = (s: Summary) => (s.cacheHitRate === null ? '—' : pct(s.cacheHitRate * 100, 1));
 const savings = (s: Summary) => Math.max(0, s.uncachedCostUsd - s.costUsd);
 
-/** Hover readout for one bucket or cell: label left, value right. */
-function CountsTip(props: { s: Summary }) {
-  const rows = () => [
-    ['API cost', usd(props.s.costUsd)],
-    ['Requests', `${props.s.requests.toLocaleString()}${props.s.failed ? ` (${props.s.failed} failed)` : ''}`],
-    ['Input', compactNumber(props.s.inputTokens)],
-    ['Output', compactNumber(props.s.outputTokens)],
-    ['Cache read', compactNumber(props.s.cachedTokens)],
-    ['Cache write', compactNumber(props.s.cacheWriteTokens)],
-    ['Cache hit rate', hitRate(props.s)],
-  ];
-  return <For each={rows()}>{([l, v]) => <div class="tip-row"><span>{l}</span><strong>{v}</strong></div>}</For>;
-}
+/** Hover readout for one bucket or cell. */
+const countRows = (s: Summary): TipRow[] => [
+  { label: 'API cost', value: usd(s.costUsd) },
+  { label: 'Requests', value: `${s.requests.toLocaleString()}${s.failed ? ` (${s.failed} failed)` : ''}` },
+  { label: 'Input', value: compactNumber(s.inputTokens) },
+  { label: 'Output', value: compactNumber(s.outputTokens) },
+  { label: 'Cache read', value: compactNumber(s.cachedTokens) },
+  { label: 'Cache write', value: compactNumber(s.cacheWriteTokens) },
+  { label: 'Cache hit rate', value: hitRate(s) },
+];
 
 function Stat(props: { label: string; value: string; sub: string; title?: string }) {
   return (
@@ -72,12 +70,7 @@ export function ActivityOverview() {
     return RANGES[range()].hoursPerBucket > 1 ? `${start} – ${new Date(p.end).toLocaleTimeString(undefined, { hour: 'numeric' })}` : start;
   };
   const xLabel = (t: number) => new Date(t).toLocaleString(undefined, daily() || range() === '7d' ? { month: 'numeric', day: 'numeric' } : { hour: 'numeric' });
-  const tip = (i: number) => (
-    <>
-      <div class="tip-title">{bucketLabel(points()[i]!)}</div>
-      <CountsTip s={points()[i]!.summary} />
-    </>
-  );
+  const tip = (i: number) => ({ title: bucketLabel(points()[i]!), rows: countRows(points()[i]!.summary) });
   const metricLabel = () => METRIC_OPTIONS.find((o) => o.value === metric())!.label;
 
   return (
@@ -113,7 +106,7 @@ export function ActivityOverview() {
           points={points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate }))} yLabel={(v) => pct(v * 100)} xLabel={xLabel} tooltip={tip} />
       </div>
 
-      <ActivityHeatmap rows={rows()} now={now()} metric={metric()} format={(s) => formatMetric(metric())(metricValue(s, metric()))} tooltip={(s) => <CountsTip s={s} />} />
+      <ActivityHeatmap rows={rows()} now={now()} metric={metric()} format={(s) => formatMetric(metric())(metricValue(s, metric()))} tooltip={countRows} />
 
       <div class="card table-card">
         <table class="table dense">

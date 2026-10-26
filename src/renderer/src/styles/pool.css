@@ -1,0 +1,57 @@
+/* Pool panel: several providers on one chart, and the toolkit tooltip themed to the app. */
+.summary-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+}
+.summary-pool {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.summary-pool .provider-glyph,
+.summary-pool svg {
+  align-self: center;
+}
+.summary-mid {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--pool-color);
+}
+.chart-foot {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.chart-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quota-chart svg:focus-visible {
+  outline: 2px solid var(--color-accent-border);
+  outline-offset: 2px;
+}
+
+/* ── Toolkit tooltip panel, themed by its CSS variables ──────────── */
+:root {
+  --kv-bg: var(--color-surface-raised);
+  --kv-border: var(--color-border-strong);
+  --kv-radius: var(--radius-btn);
+  --kv-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+  --kv-padding: 8px 10px;
+  --kv-separator-color: var(--color-border);
+}
+.chart-tip {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.tip-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}

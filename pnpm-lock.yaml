@@ -169,6 +169,15 @@ importers:
       '@cujuju/solidjs-color-picker':
         specifier: 0.3.0
         version: 0.3.0(solid-js@1.9.17)
+      '@cujuju/solidjs-hold-action':
+        specifier: link:../solidjs-toolkit/packages/hold-action
+        version: link:../solidjs-toolkit/packages/hold-action
+      '@cujuju/solidjs-hooks':
+        specifier: link:../solidjs-toolkit/packages/hooks
+        version: link:../solidjs-toolkit/packages/hooks
+      '@cujuju/solidjs-kv-tooltip':
+        specifier: link:../solidjs-toolkit/packages/kv-tooltip
+        version: link:../solidjs-toolkit/packages/kv-tooltip
       electron-updater:
         specifier: ^6.8.11
         version: 6.8.11(supports-color@7.2.0)

@@ -1,50 +1,60 @@
-import { For } from 'solid-js';
+import { For, type JSX } from 'solid-js';
 import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
 import { CopyButton, ExpandRow } from './ui';
 
+interface Field {
+  name: string;
+  value: string;
+  shown: string;
+}
+
 /** T3 Code runs Claude Code and Codex, so their Apply covers it; a Claude provider with its own home folder needs these variables. */
 export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked: string; managementKey: string; maskedManagementKey: string }) {
-  const vars = () => {
+  const vars = (): Field[] => {
     const shown = claudeEnvVars(props.endpoint, props.masked);
     return claudeEnvVars(props.endpoint, props.clientKey).map((v, i) => ({ ...v, shown: shown[i]?.value ?? '' }));
   };
-  const hubFields = () => [
+  const hubFields = (): Field[] => [
     { name: 'Hub URL', value: props.endpoint, shown: props.endpoint },
     { name: 'Management key', value: props.managementKey, shown: props.maskedManagementKey },
   ];
   return (
-    <ExpandRow
-      label="T3 Code"
-      help="Covered by Apply above, unless its Claude provider has its own home folder."
-      action="Steps"
-    >
-      <ol class="secondary steps">
-        <li>In T3 Code, open Settings → Providers and pick the Claude provider (or add a Claude instance to keep a direct one too).</li>
-        <li>Under Environment variables, add these two and mark the second as sensitive. Remove {CLAUDE_TOKEN_VAR} if it is there: it stops T3 Code from seeing usage-limit resets.</li>
-        <li>Keep that provider signed in to Claude; requests still use the proxy's accounts.</li>
-        <li>Save, then start a new thread with that provider.</li>
-      </ol>
-      <CopyRows rows={vars()} />
-      <ol class="secondary steps">
-        <li>To see every pooled account's quota in T3 Code, open Settings → Providers → Usage providers → Add a CLIProxyAPI hub, and enter these. Use this management key, not the client key above: the hub gets 401 with the client key.</li>
-      </ol>
-      <CopyRows rows={hubFields()} />
+    <ExpandRow label="T3 Code" help="Covered by Apply above, unless its Claude provider has its own home folder." action="Steps">
+      <SetupGroup
+        title="Claude provider with its own home folder"
+        help={
+          <>
+            Settings → Providers → the Claude provider → Environment variables. Add these, mark the second as sensitive, and remove {CLAUDE_TOKEN_VAR} if it is
+            there (it hides usage-limit resets). Keep the provider signed in to Claude, then start a new thread.
+          </>
+        }
+        fields={vars()}
+      />
+      <SetupGroup
+        title="Usage hub (every pooled account's quota)"
+        help="Settings → Providers → Usage providers → Add a CLIProxyAPI hub. Use this management key, not the client key: the hub gets 401 with the client key."
+        fields={hubFields()}
+      />
     </ExpandRow>
   );
 }
 
-function CopyRows(props: { rows: { name: string; value: string; shown: string }[] }) {
+function SetupGroup(props: { title: string; help: JSX.Element; fields: Field[] }) {
   return (
-    <>
-      <For each={props.rows}>
-        {(v) => (
-          <div class="row env-var">
-            <span class="chip env-var-name"><span class="chip-value">{v.name}</span></span>
-            <span class="selectable spacer tabular">{v.shown}</span>
-            <CopyButton ghost value={v.value} what={v.name} />
-          </div>
-        )}
-      </For>
-    </>
+    <div class="setup-group">
+      <div class="list-row-label">{props.title}</div>
+      <div class="list-row-help">{props.help}</div>
+      <div class="setup-fields">
+        <For each={props.fields}>
+          {(f) => (
+            <span class="chip setup-field">
+              <span class="chip-label">{f.name}</span>
+              <span class="chip-value selectable">{f.shown}</span>
+              <CopyButton chip value={f.value} what={f.name} />
+            </span>
+          )}
+        </For>
+      </div>
+    </div>
   );
 }

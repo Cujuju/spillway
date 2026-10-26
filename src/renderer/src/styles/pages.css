@@ -276,11 +276,34 @@
 .env-var:last-child {
   margin-bottom: 0;
 }
+/* One titled set of copyable fields; sets are divided like list rows. */
+.setup-group + .setup-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.setup-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+/* A full-width chip: label, value, copy icon. */
+.setup-field {
+  display: flex;
+  width: 100%;
+}
 /* Fits the longest name, ANTHROPIC_CUSTOM_HEADERS (scaled from 170px for a 20-character name), so values line up. */
-.env-var-name {
+.setup-field .chip-label {
+  flex-shrink: 0;
   min-width: 205px;
 }
-.steps {
-  margin: 6px 0 10px;
-  padding-left: 18px;
+/* Block, not flex, so a long value ends in an ellipsis. */
+.setup-field .chip-value {
+  display: block;
+  align-content: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -82,15 +82,15 @@ export function Proxy() {
             <CopyButton chip value={endpoint()} what="endpoint" disabled={!endpoint()} />
           </span>
           <span class="chip">
-            <span class="chip-label">Key</span>
+            <span class="chip-label">Client key</span>
             <span class="chip-value selectable">{masked()}</span>
-            <button class="chip-btn" title={revealed() ? 'Hide key' : 'Show key'} aria-label={revealed() ? 'Hide key' : 'Show key'} onClick={() => setRevealed(!revealed())}>
+            <button class="chip-btn" title={revealed() ? 'Hide client key' : 'Show client key'} aria-label={revealed() ? 'Hide client key' : 'Show client key'} onClick={() => setRevealed(!revealed())}>
               <Show when={revealed()} fallback={<Eye size={ICON_PX} />}>
                 <EyeOff size={ICON_PX} />
               </Show>
             </button>
-            <CopyButton chip value={key()} what="key" />
-            <button class="chip-btn" title="Regenerate key" aria-label="Regenerate key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
+            <CopyButton chip value={key()} what="client key" />
+            <button class="chip-btn" title="Regenerate client key" aria-label="Regenerate client key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
               <RefreshCw size={ICON_PX} />
             </button>
           </span>

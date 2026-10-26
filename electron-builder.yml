@@ -27,6 +27,8 @@ win:
       arch: x64
   icon: resources/icon.ico
 nsis:
+  # No spaces: GitHub renames spaced uploads, and latest.yml's url must match the uploaded name.
+  artifactName: ${productName}-Setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

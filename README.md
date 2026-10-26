@@ -24,7 +24,7 @@ Provider logos come from [lobe-icons](https://github.com/lobehub/lobe-icons) (MI
 | Install deps | `pnpm install` |
 | Build the proxy into `resources/bin/<platform>-<arch>` | `pnpm proxy:build` for this machine, or `pnpm proxy:build darwin-arm64 darwin-x64`, or `all` (source: `CLIPROXY_SRC` or `../CLIProxyAPI`) |
 | Dev, with hot reload | `pnpm dev` |
-| Installer | `pnpm package` → Windows: `dist/Spillway Setup <ver>.exe`; macOS: `dist/Spillway-<ver>-<arch>.dmg` |
+| Installer | `pnpm package` → Windows: `dist/Spillway-Setup-<ver>.exe` (per-user install with Start Menu and desktop shortcuts); macOS: `dist/Spillway-<ver>-<arch>.dmg` |
 | Checks | `pnpm typecheck`, `pnpm test` |
 
 CI (`.github/workflows/build.yml`) builds the Windows and macOS installers on each push to `main` and uploads them as artifacts. It checks out the private fork with the repository secret `CLIPROXY_SRC_TOKEN` (a fine-grained token with read access to `Cujuju/CLIProxyAPI` contents); Go comes from the fork's `go.mod`, Node from `engines.node`, pnpm from `packageManager`.

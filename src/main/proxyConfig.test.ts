@@ -11,6 +11,7 @@ const base = {
   userConfig: '',
 };
 
+
 const build = (over: Partial<typeof base> = {}) => buildProxyConfig({ ...base, ...over });
 const parsed = (over: Partial<typeof base> = {}) => parse(build(over).yaml);
 
@@ -25,8 +26,8 @@ describe('buildProxyConfig', () => {
     expect(cfg.access['api-keys']).toEqual(['client"key']);
   });
 
-  it('never writes a management key: the supervisor password comes from the environment', () => {
-    expect(parsed().management).toEqual({ 'allow-remote': false, 'disable-control-panel': true });
+  it('writes the stable management key for outside tools; the app itself uses the supervisor password', () => {
+    expect(parsed().management).toEqual({ 'secret-key': 'mk', 'allow-remote': false, 'disable-control-panel': true });
   });
 
   it('binds all interfaces only when LAN access is on', () => {

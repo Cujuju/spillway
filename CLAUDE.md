@@ -18,6 +18,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - Proxy management API: `docs/desktop-api.md` in the fork.
 - v8 `PUT /config/<path>` replaces the node with the raw JSON body, so send the value unwrapped (no `{value}`).
 - The app authenticates with a per-launch supervisor password (`MANAGEMENT_SUPERVISOR_PASSWORD`), exempt from the loopback IP ban. Other wrong keys still ban 127.0.0.1 for 30 minutes.
+- Outside tools (T3 Code's CLIProxyAPI usage hub) use the stable `managementKey` in `secrets.bin`, written to `management.secret-key`; never rotate it per launch.
 - Codex gets the client key by running `Spillway --print-client-key` (`[model_providers.spillway.auth]`); never write the key into `config.toml`.
 - Claude Code gets the client key as `ANTHROPIC_CUSTOM_HEADERS: X-Api-Key: <key>` (`src/shared/claudeEnv.ts`), never `ANTHROPIC_AUTH_TOKEN`: token mode drops Claude Code out of its subscription login, and it then ignores the proxy's usage-limit headers (T3 Code snooze).
 - Proxy settings reach the proxy by rewriting `config.yaml` (`proxy.applyConfig()`); the proxy hot-reloads it. Don't add management PUTs for settings the app owns.

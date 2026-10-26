@@ -109,4 +109,6 @@ Everything lives in `%APPDATA%\Spillway` (macOS: `~/Library/Application Support/
 
 `config.yaml` is generated from the app settings and `config.user.yaml`; don't edit it. Put custom proxy keys (v8 layout) in `config.user.yaml` (Proxy page → Edit config.user.yaml). Saving it applies live; keys the app owns (server, management, routing strategy and affinity, auth dir, first-byte timeout) are replaced by the app's values.
 
-The app manages the proxy with a random password created per launch and passed in `MANAGEMENT_SUPERVISOR_PASSWORD`; no management key is stored. A custom proxy executable must support it.
+The app manages the proxy with a random password created per launch and passed in `MANAGEMENT_SUPERVISOR_PASSWORD`. A custom proxy executable must support it.
+
+Outside tools use a separate, stable management key from `secrets.bin` (the proxy stores it hashed). T3 Code shows every pooled account's quota with it: Settings → Providers → Usage providers → Add a CLIProxyAPI hub, with the Hub URL and Management key from the Proxy page's T3 Code steps. A wrong key from another tool bans 127.0.0.1 from management for 30 minutes; the app is exempt.

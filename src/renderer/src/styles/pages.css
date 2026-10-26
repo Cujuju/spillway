@@ -276,11 +276,9 @@
 .env-var:last-child {
   margin-bottom: 0;
 }
-/* One titled set of copyable fields; sets are divided like list rows. */
+/* One titled set of copyable fields; spacing alone separates sets. */
 .setup-group + .setup-group {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 14px;
 }
 .setup-fields {
   display: flex;
@@ -298,9 +296,10 @@
   flex-shrink: 0;
   min-width: 205px;
 }
-/* Block, not flex, so a long value ends in an ellipsis. */
+/* Block, not flex, so a long value ends in an ellipsis. Values sit right, labels left. */
 .setup-field .chip-value {
   display: block;
+  text-align: right;
   align-content: center;
   flex: 1;
   min-width: 0;

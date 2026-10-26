@@ -235,9 +235,6 @@
 .account-meta .back {
   color: var(--color-red-light);
 }
-.account-meta .active-pick {
-  color: var(--color-green);
-}
 .limits {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

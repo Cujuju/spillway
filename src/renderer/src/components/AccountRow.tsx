@@ -50,7 +50,9 @@ export function AccountRow(props: { credential: Credential }) {
             <div class="back">Limited · back in {compactDuration(benchedFor())}</div>
           </Show>
           <Show when={!c().disabled && benchedFor() === 0 && c().nextPick}>
-            <div class="active-pick">● Next pick for new conversations</div>
+            <div>
+              <span class="badge green" title="Picked for new conversations">Next pick</span>
+            </div>
           </Show>
           <Show when={c().statusMessage && benchedFor() === 0}>
             <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>

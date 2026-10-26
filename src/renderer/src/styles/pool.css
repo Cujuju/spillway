@@ -56,14 +56,15 @@
   margin-right: 6px;
 }
 
-/* ── Hold-to-confirm button; the toolkit's progress bar runs along its bottom edge ── */
-.hold-btn {
+/* ── Reset-credit badge, held to spend; the toolkit's bar fills it while held ── */
+.hold-badge {
   position: relative;
   overflow: hidden;
-  height: 22px;
-  padding: 0 8px;
-  font-size: var(--text-xs);
-  color: var(--color-accent-light);
+  border: 0;
+  cursor: pointer;
+}
+.hold-badge:disabled {
+  cursor: default;
 }
 
 /* Keeps the label above the hold progress fill. */

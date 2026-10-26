@@ -1,6 +1,6 @@
 import { createSignal, Show } from 'solid-js';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
-import type { Credential, ResetCreditOutcome } from '@shared/types';
+import type { Credential, ResetCreditOutcome, ResetCredits } from '@shared/types';
 
 /** Spending a credit cannot be undone, so it takes a deliberate four-second hold. */
 const RESET_HOLD_MS = 4_000;
@@ -13,13 +13,18 @@ const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
   already_redeemed: (label) => `That reset for ${label} was already redeemed.`,
 };
 
+function heldText(r: ResetCredits): string {
+  return `${r.available} rate-limit ${r.available === 1 ? 'reset' : 'resets'} held, ${r.applicable} usable now. Checked ${new Date(r.checkedAt).toLocaleString()}.`;
+}
+
 /**
- * Press and hold to spend one of a Codex account's rate-limit reset credits. Only enabled while a
- * credit is usable, i.e. the account has reached a limit.
+ * The account's reset-credit count, as a badge. While a credit is usable (the account has reached a
+ * limit), holding the badge spends one.
  */
 export function ResetCreditButton(props: { credential: Credential; disabled: boolean; onDone: (message: string) => void; onError: (message: string) => void }) {
   const [busy, setBusy] = createSignal(false);
-  const usable = () => (props.credential.resetCredits?.applicable ?? 0) > 0;
+  const credits = () => props.credential.resetCredits!;
+  const usable = () => credits().applicable > 0;
   const enabled = () => usable() && !props.disabled && !busy();
 
   const spend = async () => {
@@ -35,26 +40,29 @@ export function ResetCreditButton(props: { credential: Credential; disabled: boo
   };
   const hold = useHoldAction({ durationMs: RESET_HOLD_MS, enabled, onComplete: () => void spend() });
 
-  const title = () =>
-    props.disabled
-      ? 'Start the proxy first'
-      : usable()
-        ? `Hold ${HOLD_SECONDS} seconds to spend one reset credit and clear this account's reached limits`
-        : 'Usable once this account reaches a limit';
+  const action = () =>
+    !usable()
+      ? 'A reset clears a limit the account has reached.'
+      : props.disabled
+        ? 'Start the proxy to use one.'
+        : `Hold ${HOLD_SECONDS} seconds to spend one and clear this account's reached limits.`;
 
   return (
     <button
       type="button"
-      class="btn ghost hold-btn"
+      class="badge hold-badge"
+      classList={{ accent: usable() }}
       disabled={!enabled()}
-      title={title()}
+      title={`${heldText(credits())} ${action()}`}
       {...hold.handlers}
       onClick={(e) => hold.shouldSuppressClick() && e.preventDefault()}
     >
       <Show when={hold.holding()}>
         <HoldIndicator progress={hold.progress} shape="bar" stroke="var(--color-accent-border)" />
       </Show>
-      <span class="hold-label">{busy() ? 'Resetting…' : hold.holding() ? 'Keep holding…' : 'Use reset'}</span>
+      <span class="hold-label">
+        {busy() ? 'Resetting…' : `${credits().available} ${credits().available === 1 ? 'reset' : 'resets'}`}
+      </span>
     </button>
   );
 }

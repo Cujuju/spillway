@@ -5,10 +5,18 @@
 import type { ClientSetupState } from '@shared/types';
 import { APP_NAME } from '@shared/app';
 
+/** A program that prints the client key to stdout. */
+export interface KeyCommand {
+  command: string;
+  args: string[];
+}
+
 export interface ClientTarget {
   /** e.g. http://127.0.0.1:8317 */
   endpoint: string;
   key: string;
+  /** Codex fetches the key with this instead of storing it. */
+  keyCommand: KeyCommand;
 }
 
 const CRLF = '\r\n';
@@ -98,13 +106,19 @@ const BLOCK_END = '# <<< spillway';
 export const DISABLED_PREFIX = '# spillway disabled: ';
 /** The proxy serves the OpenAI API under /v1; Codex posts to <base_url>/responses. */
 const OPENAI_PATH = '/v1';
+/** 0: Codex keeps the key until the proxy rejects it, then reruns the command. The key changes only on regenerate. */
+const KEY_REFRESH_INTERVAL_MS = 0;
+/**
+ * Print-key mode measured ~0.4 s warm. A timeout fails the Codex session until restart, so allow far more
+ * than Codex's 5 s default for a cold start after boot.
+ */
+const KEY_COMMAND_TIMEOUT_MS = 15_000;
 
 const TABLE_HEADER = /^\s*\[/;
 const ROOT_MODEL_PROVIDER = /^\s*model_provider\s*=/;
 const OWN_PROVIDER_ELSEWHERE = new RegExp(
   `^\\s*(\\[\\s*model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[\\].]|model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[.=])`,
 );
-const QUOTED_VALUE = (key: string) => new RegExp(`^\\s*${key}\\s*=\\s*(".*")\\s*$`);
 
 /** TOML basic strings accept JSON's string escapes. */
 const tomlString = (s: string) => JSON.stringify(s);
@@ -141,6 +155,26 @@ const firstTable = (lines: string[]) => {
   return i === -1 ? lines.length : i;
 };
 
+/** Lines inside the root block and the provider block, without their markers. */
+function codexBlocks(target: ClientTarget): [root: string[], provider: string[]] {
+  const { command, args } = target.keyCommand;
+  return [
+    [`model_provider = ${tomlString(CODEX_PROVIDER_ID)}`],
+    [
+      `[model_providers.${CODEX_PROVIDER_ID}]`,
+      `name = ${tomlString(APP_NAME)}`,
+      `base_url = ${tomlString(`${target.endpoint}${OPENAI_PATH}`)}`,
+      `wire_api = ${tomlString('responses')}`,
+      // Codex runs this for the key, so the key itself is never written here.
+      `[model_providers.${CODEX_PROVIDER_ID}.auth]`,
+      `command = ${tomlString(command)}`,
+      `args = [${args.map(tomlString).join(', ')}]`,
+      `refresh_interval_ms = ${KEY_REFRESH_INTERVAL_MS}`,
+      `timeout_ms = ${KEY_COMMAND_TIMEOUT_MS}`,
+    ],
+  ];
+}
+
 export function applyCodex(text: string | null, target: ClientTarget): string {
   const original = text ?? '';
   const { outside } = partition(original);
@@ -149,18 +183,10 @@ export function applyCodex(text: string | null, target: ClientTarget): string {
   }
   const rootEnd = firstTable(outside);
   const body = outside.map((l, i) => (i < rootEnd && ROOT_MODEL_PROVIDER.test(l) ? `${DISABLED_PREFIX}${l}` : l));
+  const [root, provider] = codexBlocks(target);
+  const wrap = (lines: string[]) => [BLOCK_BEGIN, ...lines, BLOCK_END];
   // Root key first: everything after a table header belongs to that table.
-  const head = [BLOCK_BEGIN, `model_provider = ${tomlString(CODEX_PROVIDER_ID)}`, BLOCK_END];
-  const provider = [
-    BLOCK_BEGIN,
-    `[model_providers.${CODEX_PROVIDER_ID}]`,
-    `name = ${tomlString(APP_NAME)}`,
-    `base_url = ${tomlString(`${target.endpoint}${OPENAI_PATH}`)}`,
-    `wire_api = ${tomlString('responses')}`,
-    `experimental_bearer_token = ${tomlString(target.key)}`,
-    BLOCK_END,
-  ];
-  return joinLines([...head, ...body, ...provider], eolOf(original));
+  return joinLines([...wrap(root), ...body, ...wrap(provider)], eolOf(original));
 }
 
 export function undoCodex(text: string): string {
@@ -168,26 +194,12 @@ export function undoCodex(text: string): string {
   return joinLines(outside.map((l) => (l.startsWith(DISABLED_PREFIX) ? l.slice(DISABLED_PREFIX.length) : l)), eolOf(text));
 }
 
-/** First `key = "…"` value in `lines`; null when absent or not a plain basic string. */
-function quotedValue(lines: string[], key: string): string | null {
-  const pattern = QUOTED_VALUE(key);
-  const quoted = lines.map((l) => pattern.exec(l)?.[1]).find((v) => v !== undefined);
-  if (quoted === undefined) return null;
-  try {
-    return JSON.parse(quoted) as string;
-  } catch {
-    return null;
-  }
-}
-
+/** Applied only when both blocks match what apply would write now, so any changed field shows as out of date. */
 export function codexState(text: string | null, target: ClientTarget): ClientSetupState {
   const { outside, blocks } = partition(text ?? '');
   if (blocks.length === 0) return 'not-applied';
-  const inside = blocks.flat();
   const current =
-    quotedValue(inside, 'model_provider') === CODEX_PROVIDER_ID &&
-    quotedValue(inside, 'base_url') === `${target.endpoint}${OPENAI_PATH}` &&
-    quotedValue(inside, 'experimental_bearer_token') === target.key &&
+    JSON.stringify(blocks) === JSON.stringify(codexBlocks(target)) &&
     // A root model_provider added since would clash with ours (duplicate key).
     !outside.slice(0, firstTable(outside)).some((l) => ROOT_MODEL_PROVIDER.test(l));
   return current ? 'applied' : 'out-of-date';

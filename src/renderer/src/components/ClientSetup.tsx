@@ -7,14 +7,14 @@ const CLIENTS: { id: ClientId; label: string; help: string }[] = [
   {
     id: 'codex',
     label: 'Codex',
-    help: 'Adds a "spillway" model provider and makes it the default. Codex keeps the key in plain text there (experimental_bearer_token).',
+    help: 'Adds a "spillway" model provider and makes it the default. Codex asks Spillway for the key, so it is never written to its config.',
   },
 ];
 
 const STATE: Record<ClientSetupState, { label: string; tone: string; title: string }> = {
   'not-applied': { label: 'Not applied', tone: '', title: 'This client does not use the proxy through its config file.' },
-  applied: { label: 'Applied', tone: 'green', title: 'The config file points at this proxy with the current key.' },
-  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port or key changed since it was applied. Re-apply to update it.' },
+  applied: { label: 'Applied', tone: 'green', title: 'The config file points at this proxy and gets the current key.' },
+  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port, key or app location changed since it was applied. Re-apply to update it.' },
 };
 
 /** Apply/Undo of the proxy endpoint and key in each client's own config file; main keeps a backup. */

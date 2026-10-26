@@ -3,8 +3,9 @@ import {
   applyClaude, applyCodex, claudeState, codexState, DISABLED_PREFIX, undoClaude, undoCodex,
 } from './clientConfigText';
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
-const moved = { endpoint: 'http://127.0.0.1:9000', key: 'k1' };
+const keyCommand = { command: 'C:\\Apps\\Spillway\\Spillway.exe', args: ['--print-client-key'] };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', keyCommand };
+const moved = { ...target, endpoint: 'http://127.0.0.1:9000' };
 
 describe('Claude Code settings.json', () => {
   const original = '{\n  "model": "opus",\n  "env": {\n    "FOO": "1",\n    "ANTHROPIC_BASE_URL": "https://old"\n  },\n  "theme": "dark"\n}\n';
@@ -74,7 +75,13 @@ describe('Codex config.toml', () => {
     expect(out).toContain(`${DISABLED_PREFIX}model_provider = "openai"`);
     // Inside a table it is a different key: untouched.
     expect(out).toContain('\nmodel_provider = "kept"\n');
-    expect(out).toContain('[model_providers.spillway]\nname = "Spillway"\nbase_url = "http://127.0.0.1:8317/v1"\nwire_api = "responses"\nexperimental_bearer_token = "k1"\n');
+    expect(out).toContain(
+      '[model_providers.spillway]\nname = "Spillway"\nbase_url = "http://127.0.0.1:8317/v1"\nwire_api = "responses"\n' +
+        '[model_providers.spillway.auth]\ncommand = "C:\\\\Apps\\\\Spillway\\\\Spillway.exe"\nargs = ["--print-client-key"]\n' +
+        'refresh_interval_ms = 0\n',
+    );
+    // The command fetches the key; it is never written.
+    expect(out).not.toContain('k1');
     expect(out.indexOf('[model_providers.spillway]')).toBeGreaterThan(out.indexOf('[model_providers.other]'));
   });
 
@@ -118,7 +125,14 @@ describe('Codex config.toml', () => {
     expect(codexState(original, target)).toBe('not-applied');
     expect(codexState(out, target)).toBe('applied');
     expect(codexState(out, moved)).toBe('out-of-date');
-    expect(codexState(out, { ...target, key: 'k2' })).toBe('out-of-date');
+    // A regenerated key needs no re-apply: Codex reruns the command after a 401.
+    expect(codexState(out, { ...target, key: 'k2' })).toBe('applied');
+    expect(codexState(out, { ...target, keyCommand: { ...keyCommand, command: 'D:\\Spillway.exe' } })).toBe('out-of-date');
+    // Older applies stored the key itself; applying again replaces it.
+    const legacy = out.replace(/\[model_providers\.spillway\.auth\][^#]*/, 'experimental_bearer_token = "k1"\n');
+    expect(legacy).toContain('experimental_bearer_token');
+    expect(codexState(legacy, target)).toBe('out-of-date');
+    expect(applyCodex(legacy, target)).toBe(out);
     // A root model_provider added later clashes with ours.
     expect(codexState(out.replace('# my config', 'model_provider = "openai"'), target)).toBe('out-of-date');
   });

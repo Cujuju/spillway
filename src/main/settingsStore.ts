@@ -2,6 +2,7 @@ import { safeStorage } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { APP_NAME } from '@shared/app';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { appPaths } from './paths';
 
@@ -74,9 +75,18 @@ async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean
     // Files from before the per-launch supervisor password also hold a managementKey; it is dropped.
     if (typeof parsed.clientApiKey === 'string') return { value: { clientApiKey: parsed.clientApiKey }, reEncrypt: reEncrypt || 'managementKey' in parsed };
   } catch (err) {
-    console.error('[settings] secrets unreadable, regenerating:', err);
+    console.error('[settings] secrets unreadable:', err);
   }
   return null;
+}
+
+/** Decrypts the existing secrets file for print-key mode. Never creates or rewrites it. */
+export async function readClientKey(): Promise<string> {
+  const file = appPaths.secretsFile;
+  if (!existsSync(file)) throw new Error(`No client key at ${file}; start ${APP_NAME} once first`);
+  const decoded = await decode(readFileSync(file));
+  if (!decoded) throw new Error(`Client key at ${file} is unreadable; open ${APP_NAME} to regenerate it`);
+  return decoded.value.clientApiKey;
 }
 
 let secrets: Secrets | null = null;

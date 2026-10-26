@@ -12,7 +12,7 @@ vi.mock('./settingsStore', () => ({
 
 const { applyClient, BACKUP_SUFFIX, clientConfigFiles, clientStatus, undoClient } = await import('./clientSetup');
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', keyCommand: { command: '/apps/spillway', args: ['--print-client-key'] } };
 let home: string;
 let files: ReturnType<typeof clientConfigFiles>;
 

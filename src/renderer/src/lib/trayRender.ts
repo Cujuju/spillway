@@ -20,8 +20,6 @@ const DIGITS_ON_LIGHT = '#1f2937';
 const WHITE_TEXT_MAX_LUMINANCE = 0.179;
 /** 1 px outline at 16 px, 2 px at 32 px. */
 const OUTLINE_PER_EDGE = 1 / 16;
-/** Square corner radius as a share of the icon edge. */
-const CORNER_RATIO = 0.22;
 /**
  * fontRatio: digit height as a share of the edge. fitRatio: share of the inner width the digits may span;
  * wider text ("100") shrinks to fit. A circle leaves less width at the digits' top and bottom.
@@ -48,7 +46,7 @@ function shapePath(ctx: CanvasRenderingContext2D, shape: Exclude<TrayIconShape, 
   const edge = size - 2 * inset;
   ctx.beginPath();
   if (shape === 'circle') ctx.arc(size / 2, size / 2, edge / 2, 0, 2 * Math.PI);
-  else ctx.roundRect(inset, inset, edge, edge, size * CORNER_RATIO);
+  else ctx.rect(inset, inset, edge, edge);
 }
 
 const OPAQUE_HEX = /^#[0-9a-f]{6}$/i;
@@ -84,7 +82,7 @@ export function drawTrayIcon(size: number, text: string, p: TrayIconPaint): stri
 
   const line = p.shape !== 'none' && p.fill === 'outline' ? Math.max(1, Math.round(size * OUTLINE_PER_EDGE)) : 0;
   if (p.shape !== 'none') {
-    // Inset an outline by half its width so the stroke stays inside the icon and a 1 px line stays crisp.
+    // Inset an outline by half its width so the stroke's outer edge is the icon edge and a 1 px line stays crisp.
     shapePath(ctx, p.shape, line / 2, size);
     if (p.fill === 'filled') {
       ctx.fillStyle = p.color;

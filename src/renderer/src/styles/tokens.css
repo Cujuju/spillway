@@ -20,6 +20,8 @@
   --radius-btn: 6px;
   --radius-card: 10px;
   --radius-pill: 999px;
+  /* Half a 20px-tall badge's pill radius. */
+  --radius-badge: 5px;
 
   /* One height for buttons, inputs, toggles and segments so settings rows line up. */
   --control-height: 28px;

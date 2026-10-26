@@ -38,6 +38,9 @@ export function AccountRow(props: { credential: Credential }) {
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>
+          <Show when={!c().disabled && benchedFor() === 0 && c().nextPick}>
+            <span class="badge green" title="Picked for new conversations">Next pick</span>
+          </Show>
         </div>
         <div class="account-meta">
           <Show when={c().email && c().email !== c().label}>
@@ -48,11 +51,6 @@ export function AccountRow(props: { credential: Credential }) {
           </Show>
           <Show when={!c().disabled && benchedFor() > 0}>
             <div class="back">Limited · back in {compactDuration(benchedFor())}</div>
-          </Show>
-          <Show when={!c().disabled && benchedFor() === 0 && c().nextPick}>
-            <div>
-              <span class="badge green" title="Picked for new conversations">Next pick</span>
-            </div>
           </Show>
           <Show when={c().statusMessage && benchedFor() === 0}>
             <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>

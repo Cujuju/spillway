@@ -193,8 +193,9 @@
   display: inline-flex;
   align-items: center;
   height: 20px;
+  flex-shrink: 0;
   padding: 0 7px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-badge);
   font-size: var(--text-xxs);
   font-weight: 600;
   background: var(--color-surface-input);

@@ -1,22 +1,23 @@
 # Builds every app icon from resources/icon-source.png (square artwork, art to the edges, no corners):
 #   resources/icon.png (256), resources/icon-1024.png (macOS; electron-builder makes the .icns),
 #   resources/icon.ico and src/renderer/public/icon.png + icon@2x.png (title bar).
-# 16-32 px sizes are a hand-drawn version of the same scene: the artwork blurs to a blob there,
-# and those are the sizes the Windows tray, taskbar and title bar show.
+# The 16 px size is a hand-drawn version of the same scene: the artwork blurs to a blob there,
+# and 16 px is the Windows tray icon at 100% scaling. Every other size is the artwork.
 # Run: pwsh -File scripts/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'resources/icon-source.png'
 # Windows uses these icon sizes across Explorer, taskbar and installer.
 $icoSizes = 16, 24, 32, 48, 64, 128, 256
-# At or below this size the hand-drawn version replaces the artwork.
-$DRAWN_MAX_PX = 32
+# Tray icon size at 100% scaling; at or below it the hand-drawn version replaces the artwork.
+# Taskbar (24 px) and larger use the artwork.
+$DRAWN_MAX_PX = 16
 # macOS app icons need a 1024 px master (512 pt @2x).
 $MAC_ICON_PX = 1024
 # Corner radius as a share of the edge; matches the tray limit icons' rounded shape.
 $CORNER_RATIO = 0.22
-# Must match APP_ICON_PX in src/renderer/src/components/TitleBar.tsx; it and its double must be in $icoSizes.
-$TITLEBAR_ICON_PX = 24
+# Must match APP_ICON_PX in src/renderer/src/components/TitleBar.tsx.
+$TITLEBAR_ICON_PX = 28
 
 # Hand-drawn scene on a 32-unit grid; even coordinates land on whole pixels at 16 px.
 $GRID = 32
@@ -93,9 +94,9 @@ try {
   foreach ($s in $icoSizes) { $pngs[$s] = Get-PngBytes ($(if ($s -le $DRAWN_MAX_PX) { New-DrawnBitmap $s } else { New-ArtBitmap $art $s })) }
   [IO.File]::WriteAllBytes((Join-Path $root 'resources/icon.png'), $pngs[256])
   [IO.File]::WriteAllBytes((Join-Path $root 'resources/icon-1024.png'), (Get-PngBytes (New-ArtBitmap $art $MAC_ICON_PX)))
-  # Title bar shows 24 px (TitleBar.tsx APP_ICON_PX); @2x serves 200% scaling.
-  [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon.png'), $pngs[$TITLEBAR_ICON_PX])
-  [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon@2x.png'), $pngs[2 * $TITLEBAR_ICON_PX])
+  # Title bar artwork; @2x serves 200% scaling.
+  [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon.png'), (Get-PngBytes (New-ArtBitmap $art $TITLEBAR_ICON_PX)))
+  [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon@2x.png'), (Get-PngBytes (New-ArtBitmap $art (2 * $TITLEBAR_ICON_PX))))
 } finally {
   $art.Dispose()
 }

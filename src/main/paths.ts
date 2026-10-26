@@ -68,5 +68,5 @@ const resourcePath = (file: string) =>
 /** 256 px PNG: notifications and the macOS menu bar. */
 export const appIconPath = () => resourcePath('icon.png');
 
-/** Window and tray icon. Windows gets the .ico: its hand-drawn 16-32 px sizes stay sharp where the PNG blurs. */
+/** Window and tray icon. Windows gets the .ico: its hand-drawn 16 px tray size stays sharp where the PNG blurs. */
 export const shellIconPath = () => resourcePath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');

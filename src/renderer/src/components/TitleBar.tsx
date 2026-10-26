@@ -4,8 +4,9 @@ import { Show } from 'solid-js';
 import { maximized } from '../store';
 
 const ICON_PX = 14;
-/** Two-thirds of the 36 px title bar; scripts/make-icon.ps1 writes icon.png at this size and icon@2x.png at double. */
-const APP_ICON_PX = 24;
+/** Larger than the 24 px taskbar icon, leaving 4 px above and below in the 36 px title bar.
+ *  scripts/make-icon.ps1 writes icon.png at this size and icon@2x.png at double. */
+const APP_ICON_PX = 28;
 
 export function TitleBar() {
   return (

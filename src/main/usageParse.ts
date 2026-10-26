@@ -1,4 +1,4 @@
-import type { Credential, CredentialPlan, LimitWindow, UsageSnapshot } from '@shared/types';
+import type { Credential, CredentialPlan, LimitWindow, ResetCredits, UsageSnapshot } from '@shared/types';
 
 /** Maps the proxy's snake_case /usage/windows payload to the app's types, dropping malformed entries. */
 
@@ -56,6 +56,14 @@ function parsePlan(raw: unknown): CredentialPlan | null {
   return { tier, label, multiplier: multiplier !== null && multiplier > 0 ? multiplier : null };
 }
 
+function parseResetCredits(raw: unknown): ResetCredits | null {
+  const r = obj(raw);
+  const available = n(r.available);
+  const checkedAt = s(r.checked_at);
+  if (available === null || available < 0 || !checkedAt) return null;
+  return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt };
+}
+
 function parseCredential(raw: unknown): Credential | null {
   const c = obj(raw);
   const id = s(c.id);
@@ -83,6 +91,7 @@ function parseCredential(raw: unknown): Credential | null {
     preferred: c.preferred === true,
     weight: n(c.weight) ?? DEFAULT_WEIGHT,
     plan: parsePlan(c.plan),
+    resetCredits: parseResetCredits(c.reset_credits),
     windows,
   };
 }

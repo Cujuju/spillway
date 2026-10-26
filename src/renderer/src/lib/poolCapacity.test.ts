@@ -10,7 +10,7 @@ const PRO: CredentialPlan = { tier: 'default_claude_ai', label: 'Pro', multiplie
 const account = (id: string, plan: CredentialPlan | null): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
   status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
-  weight: 1, plan,
+  weight: 1, plan, resetCredits: null,
   windows: [
     { key: 'five_hour', label: '5-hour', usedPercent: 0, resetsAt: null, status: 'allowed', durationMs: 5 * H, scoped: false, resetCadence: 'on_use' },
     { key: 'seven_day', label: 'Weekly', usedPercent: 0, resetsAt: null, status: 'allowed', durationMs: 168 * H, scoped: false, resetCadence: 'fixed' },

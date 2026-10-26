@@ -28,6 +28,15 @@ export interface CredentialPlan {
   multiplier: number | null;
 }
 
+/** A Codex account's rate-limit reset credits as of the proxy's last lookup. */
+export interface ResetCredits {
+  /** Credits the account holds. */
+  available: number;
+  /** Credits usable now, i.e. against a limit the account has reached. */
+  applicable: number;
+  checkedAt: string;
+}
+
 export interface Credential {
   id: string;
   /** Auth file name; the management API addresses credentials by it. */
@@ -53,6 +62,8 @@ export interface Credential {
   weight: number;
   /** Subscription plan from the provider's profile; null when unknown. */
   plan: CredentialPlan | null;
+  /** Codex only; null when never reported. Claude has no such credit. */
+  resetCredits: ResetCredits | null;
   windows: LimitWindow[];
 }
 

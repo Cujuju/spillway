@@ -50,6 +50,13 @@ describe('windows and weight', () => {
     expect(parseOne({ plan: { tier: 'enterprise', multiplier: null } }).plan).toEqual({ tier: 'enterprise', label: 'enterprise', multiplier: null });
     expect(parseOne({}).plan).toBeNull();
   });
+  it('reads reset credits, capping usable ones at the held count', () => {
+    expect(parseOne({ reset_credits: { available: 1, applicable: 0, checked_at: '2026-10-26T12:00:00Z' } }).resetCredits)
+      .toEqual({ available: 1, applicable: 0, checkedAt: '2026-10-26T12:00:00Z' });
+    expect(parseOne({ reset_credits: { available: 1, applicable: 3, checked_at: 'x' } }).resetCredits?.applicable).toBe(1);
+    expect(parseOne({ reset_credits: null }).resetCredits).toBeNull();
+    expect(parseOne({}).resetCredits).toBeNull();
+  });
   it('drops an unknown cadence', () => {
     expect(parseOne({ windows: [{ key: 'k', reset_cadence: 'monthly' }] }).windows[0]!.resetCadence).toBeNull();
   });

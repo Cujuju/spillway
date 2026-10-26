@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
-import type { Credential } from '@shared/types';
+import type { Credential, ResetCredits } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from '../components/AddAccountDialog';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
@@ -10,6 +10,13 @@ import { proxyStatus, snapshot } from '../store';
 const ICON_PX = 14;
 /** Proxy rule (selector.go): only the highest available priority tier is picked from. */
 const PRIORITY_HELP = 'Higher tiers are used first; lower tiers only when every higher account is limited';
+
+/** Codex rate-limit reset credits; usable ones only count against a limit already reached. */
+function resetBadge(r: ResetCredits) {
+  const noun = r.available === 1 ? 'reset' : 'resets';
+  const title = `${r.available} rate-limit ${noun} held, ${r.applicable} usable now. A reset clears a limit the account has reached. Checked ${new Date(r.checkedAt).toLocaleString()}.`;
+  return <span class={`badge${r.applicable > 0 ? ' accent' : ''}`} title={title}>{r.available} {noun}</span>;
+}
 
 function statusBadge(c: Credential) {
   if (c.disabled) return <span class="badge">Disabled</span>;
@@ -96,7 +103,12 @@ export function Accounts() {
                       </div>
                     </div>
                   </td>
-                  <td title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</td>
+                  <td>
+                    <div class="row" style={{ gap: '6px' }}>
+                      <span title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span>
+                      <Show when={c.resetCredits?.available}>{resetBadge(c.resetCredits!)}</Show>
+                    </div>
+                  </td>
                   <td>{statusBadge(c)}</td>
                   <td>
                     <NumberField value={c.priority} width={70} onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />

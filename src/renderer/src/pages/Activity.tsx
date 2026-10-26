@@ -61,23 +61,23 @@ export function Activity() {
             <For each={rows()} fallback={<tr><td colSpan={7} class="muted">No requests yet.</td></tr>}>
               {(e) => (
                 <tr>
-                  <td class="mono">{new Date(e.at).toLocaleTimeString()}</td>
+                  <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
                   <td>
                     <div class="row" style={{ gap: '8px' }}>
                       <ProviderGlyph provider={e.provider} size={14} />
                       <span>{account(e)}</span>
                     </div>
                   </td>
-                  <td class="mono">{e.model || '—'}</td>
+                  <td class="tabular">{e.model || '—'}</td>
                   <td>
                     <Show when={e.failed} fallback={<span class="badge green">OK</span>}>
                       <span class="badge red" title={errorText(e)}>{e.statusCode ?? 'Failed'}</span>
                       <span class="muted" style={{ 'margin-left': '6px' }}>{errorText(e)}</span>
                     </Show>
                   </td>
-                  <td class="mono">{tokens(e.inputTokens)} / {tokens(e.outputTokens)} / {tokens(e.cachedTokens)}</td>
-                  <td class="mono">{duration(e.ttftMs)}</td>
-                  <td class="mono">{duration(e.latencyMs)}</td>
+                  <td class="tabular">{tokens(e.inputTokens)} / {tokens(e.outputTokens)} / {tokens(e.cachedTokens)}</td>
+                  <td class="tabular">{duration(e.ttftMs)}</td>
+                  <td class="tabular">{duration(e.latencyMs)}</td>
                 </tr>
               )}
             </For>

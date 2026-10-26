@@ -58,7 +58,7 @@ export function NumberField(props: { value: number; onCommit: (v: number) => voi
   return (
     <span class="row">
       <input
-        class="input mono"
+        class="input tabular"
         type="number"
         min={props.min}
         max={props.max}

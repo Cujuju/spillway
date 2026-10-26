@@ -1,26 +1,8 @@
 /* Design tokens. Palette, type scale and radii follow StockApp's client-solid index.css. */
 
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  /* Segoe UI ÷ Inter width over UI text (StockApp measurement). */
-  size-adjust: 92%;
-  src: url('../assets/fonts/Inter-latin.var.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url('../assets/fonts/JetBrainsMono-latin.var.woff2') format('woff2');
-}
-
 :root {
-  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  /* The OS UI font: matches the taskbar/menu bar clock beside the tray icons. No monospace anywhere. */
+  --font-text: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   --text-xxs: 10px;
   --text-xs: 11px;

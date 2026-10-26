@@ -15,7 +15,7 @@
 }
 .dash-sub {
   margin-top: 8px;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
   padding-left: 10px;
@@ -60,7 +60,7 @@
   border-bottom-color: var(--color-text);
 }
 .provider-tab .count {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
   min-width: 22px;
   height: 20px;
@@ -215,7 +215,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: var(--text-md);
 }

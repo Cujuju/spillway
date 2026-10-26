@@ -90,7 +90,7 @@ export function Accounts() {
                             if (v !== (c.note ?? '')) void act(() => window.api.setCredentialNote(c.id, v));
                           }}
                         />
-                        <div class="muted truncate mono" title={c.name}>{c.name}</div>
+                        <div class="muted truncate tabular" title={c.name}>{c.name}</div>
                       </div>
                     </div>
                   </td>

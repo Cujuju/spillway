@@ -97,7 +97,7 @@
 .log-view {
   height: 320px;
   overflow-y: auto;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
   line-height: 1.55;
   white-space: pre-wrap;

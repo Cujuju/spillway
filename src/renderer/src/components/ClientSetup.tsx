@@ -53,7 +53,7 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
                   <span class={`badge ${state().tone}`} title={state().title}>{state().label}</span>
                 </div>
                 <div class="setting-help">{c.help}</div>
-                <div class="setting-help mono">{s()?.path ?? ''}</div>
+                <div class="setting-help tabular">{s()?.path ?? ''}</div>
                 <Show when={s()?.error}>
                   <div class="setting-help error">{s()!.error}</div>
                 </Show>

@@ -86,7 +86,7 @@ function ProxySection() {
         <Toggle value={p().allowLan} onChange={(v) => set((d) => void (d.proxy.allowLan = v))} />
       </SettingRow>
       <SettingRow label="Proxy executable" help="Leave empty to use the cli-proxy-api binary bundled with the app. A custom binary must be a build that supports MANAGEMENT_SUPERVISOR_PASSWORD, or the app cannot manage it.">
-        <input class="input wide mono" readOnly value={p().executablePath} placeholder="Bundled" />
+        <input class="input wide tabular" readOnly value={p().executablePath} placeholder="Bundled" />
         <button class="btn" onClick={() => void window.api.pickProxyExecutable().then((path) => path && set((d) => void (d.proxy.executablePath = path)))}>Browse…</button>
         <Show when={p().executablePath}>
           <button class="btn ghost" onClick={() => set((d) => void (d.proxy.executablePath = ''))}>Use bundled</button>

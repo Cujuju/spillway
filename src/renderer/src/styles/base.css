@@ -53,8 +53,7 @@ a {
   background: transparent;
 }
 
-.mono {
-  font-family: var(--font-mono);
+.tabular {
   font-variant-numeric: tabular-nums;
 }
 .muted {

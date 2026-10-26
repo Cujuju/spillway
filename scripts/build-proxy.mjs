@@ -3,6 +3,8 @@
 // in electron-builder.yml and bundledProxyPath() in src/main/paths.ts.
 // Source checkout: CLIPROXY_SRC env var, else ../CLIProxyAPI next to this repo.
 // Targets: host by default; or e.g. `pnpm proxy:build darwin-arm64 darwin-x64`, or `all`.
+// --keep-last-good (used by `pnpm dev`): a failed build keeps the existing binary instead of failing,
+// so a fork mid-edit never stops the dev app from launching.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -12,14 +14,21 @@ import { gitBuild } from '../appVersion.ts';
 const ALL_TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64'];
 const GOOS = { win32: 'windows', darwin: 'darwin', linux: 'linux' };
 const GOARCH = { x64: 'amd64', arm64: 'arm64' };
+const KEEP_LAST_GOOD = '--keep-last-good';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = path.resolve(process.env.CLIPROXY_SRC ?? path.join(root, '..', 'CLIProxyAPI'));
-const args = process.argv.slice(2);
+const keepLastGood = process.argv.includes(KEEP_LAST_GOOD);
+const args = process.argv.slice(2).filter((a) => a !== KEEP_LAST_GOOD);
 const targets = args.includes('all') ? ALL_TARGETS : args.length ? args : [`${process.platform}-${process.arch}`];
 
-if (!existsSync(path.join(src, 'go.mod'))) {
-  console.error(`CLIProxyAPI source not found at ${src}. Set CLIPROXY_SRC to the checkout.`);
+/** Reports a failed target; exits unless --keep-last-good and a binary is already in place. */
+function fail(message, dest) {
+  if (keepLastGood && existsSync(dest)) {
+    console.warn(`${message}\nKeeping the last good proxy binary at ${dest}.`);
+    return;
+  }
+  console.error(message);
   process.exit(1);
 }
 
@@ -41,12 +50,22 @@ for (const target of targets) {
   }
   const name = platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
   const built = path.join(src, 'dist', target, name);
-  const outDir = path.join(root, 'resources', 'bin', target);
+  const dest = path.join(root, 'resources', 'bin', target, name);
+  if (!existsSync(path.join(src, 'go.mod'))) {
+    fail(`CLIProxyAPI source not found at ${src}. Set CLIPROXY_SRC to the checkout.`, dest);
+    continue;
+  }
   mkdirSync(path.dirname(built), { recursive: true });
-  mkdirSync(outDir, { recursive: true });
+  mkdirSync(path.dirname(dest), { recursive: true });
   // CGO off: a pure-Go binary cross-compiles from any host. Go ad-hoc signs darwin/arm64 output.
   const env = { ...process.env, GOOS: GOOS[platform], GOARCH: GOARCH[arch], CGO_ENABLED: '0' };
-  execFileSync('go', ['build', '-trimpath', '-ldflags', ldflags(), '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
-  copyFileSync(built, path.join(outDir, name));
-  console.log(`proxy binary → ${path.join(outDir, name)}`);
+  try {
+    execFileSync('go', ['build', '-trimpath', '-ldflags', ldflags(), '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
+    // EBUSY on Windows when a proxy from this binary is still running.
+    copyFileSync(built, dest);
+  } catch (err) {
+    fail(`Proxy build for ${target} failed: ${err instanceof Error ? err.message : err}`, dest);
+    continue;
+  }
+  console.log(`proxy binary → ${dest}`);
 }

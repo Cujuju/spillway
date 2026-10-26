@@ -394,6 +394,14 @@
 .chip-btn:hover:not(:disabled) {
   background: var(--color-surface-hover);
   color: var(--color-text);
+/* CopyButton's confirmation, for both the chip and the labelled button. */
+.chip-btn.copied,
+.chip-btn.copied:hover:not(:disabled),
+.btn.copied,
+.btn.copied:hover:not(:disabled) {
+  background: var(--color-green-subtle);
+  color: var(--color-green);
+}
 }
 .chip-btn:disabled {
   opacity: 0.5;

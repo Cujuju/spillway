@@ -203,6 +203,16 @@ export interface ClientSetupStatus {
   error: string | null;
 }
 
+/** A client IP with failed management keys (an outside tool such as T3 Code's usage hub; the app itself is exempt). */
+export interface ManagementLockout {
+  ip: string;
+  failures: number;
+  /** Total failures that earn the next lockout. */
+  failuresAllowed: number;
+  /** ISO time; null when not locked out. */
+  lockedUntil: string | null;
+}
+
 /** An app running the client: it keeps the settings it started with. */
 export interface ClientProcess {
   pid: number;

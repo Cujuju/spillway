@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-solid';
+import { Check, ChevronDown, ChevronUp, Copy } from 'lucide-solid';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import { providerLogo, providerVar } from '../lib/providers';
@@ -148,6 +148,43 @@ export function ExpandRow(props: { label: string; help: string; action: string; 
         <div class="list-row-detail">{props.children}</div>
       </Show>
     </div>
+  );
+}
+
+/** Long enough to notice, short enough that a second copy shows a fresh confirmation. */
+const COPIED_SHOWN_MS = 1500;
+const COPY_ICON_PX = 14;
+
+/**
+ * Copies `value` and confirms with a check for a moment.
+ * `chip` renders the icon-only chip button; otherwise a button labelled `label`.
+ */
+export function CopyButton(props: { value: string; what: string; label?: string; chip?: boolean; ghost?: boolean; disabled?: boolean }) {
+  const [copied, setCopied] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const copy = async () => {
+    await window.api.copyText(props.value);
+    setCopied(true);
+    clearTimeout(timer);
+    timer = setTimeout(() => setCopied(false), COPIED_SHOWN_MS);
+  };
+  const title = () => (copied() ? 'Copied' : `Copy ${props.what}`);
+  return (
+    <button
+      type="button"
+      class={props.chip ? 'chip-btn' : 'btn'}
+      classList={{ ghost: !props.chip && props.ghost, copied: copied() }}
+      title={title()}
+      aria-label={title()}
+      disabled={props.disabled}
+      onClick={() => void copy()}
+    >
+      <Show when={copied()} fallback={<Copy size={COPY_ICON_PX} />}>
+        <Check size={COPY_ICON_PX} />
+      </Show>
+      <Show when={!props.chip}>{copied() ? 'Copied' : (props.label ?? 'Copy')}</Show>
+    </button>
   );
 }
 

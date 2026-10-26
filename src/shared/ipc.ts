@@ -1,7 +1,7 @@
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -26,6 +26,10 @@ export interface DesktopApi {
   clientSetupStatus(): Promise<ClientSetupStatus[]>;
   applyClientSetup(client: ClientId): Promise<ClientSetupResult>;
   undoClientSetup(client: ClientId): Promise<ClientSetupResult>;
+  /** Outside tools locked out of the management API by wrong keys. */
+  managementLockouts(): Promise<ManagementLockout[]>;
+  /** Lifts every lockout; returns the list after. */
+  resetManagementLockouts(): Promise<ManagementLockout[]>;
 
   updateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<void>;
@@ -128,6 +132,8 @@ export const INVOKE = {
   openExternal: 'shell:external',
   openPath: 'shell:path',
   copyText: 'clipboard:copy',
+  managementLockouts: 'mgmt:lockouts',
+  resetManagementLockouts: 'mgmt:lockouts-reset',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;
 
 export const SEND = {

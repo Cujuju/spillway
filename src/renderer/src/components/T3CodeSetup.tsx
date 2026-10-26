@@ -1,9 +1,6 @@
-import { Copy } from 'lucide-solid';
 import { For } from 'solid-js';
 import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
-import { ExpandRow } from './ui';
-
-const ICON_PX = 14;
+import { CopyButton, ExpandRow } from './ui';
 
 /** T3 Code runs Claude Code and Codex, so their Apply covers it; a Claude provider with its own home folder needs these variables. */
 export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked: string; managementKey: string; maskedManagementKey: string }) {
@@ -29,7 +26,7 @@ export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked
       </ol>
       <CopyRows rows={vars()} />
       <ol class="secondary steps">
-        <li>To see every pooled account's quota in T3 Code, open Settings → Providers → Usage providers → Add a CLIProxyAPI hub, and enter these.</li>
+        <li>To see every pooled account's quota in T3 Code, open Settings → Providers → Usage providers → Add a CLIProxyAPI hub, and enter these. Use this management key, not the client key above: the hub gets 401 with the client key.</li>
       </ol>
       <CopyRows rows={hubFields()} />
     </ExpandRow>
@@ -44,9 +41,7 @@ function CopyRows(props: { rows: { name: string; value: string; shown: string }[
           <div class="row env-var">
             <span class="chip env-var-name"><span class="chip-value">{v.name}</span></span>
             <span class="selectable spacer tabular">{v.shown}</span>
-            <button class="btn ghost" title={`Copy ${v.name}`} onClick={() => void window.api.copyText(v.value)}>
-              <Copy size={ICON_PX} /> Copy
-            </button>
+            <CopyButton ghost value={v.value} what={v.name} />
           </div>
         )}
       </For>

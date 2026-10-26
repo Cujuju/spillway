@@ -2,7 +2,7 @@ import { CheckCircle2, ExternalLink, LoaderCircle } from 'lucide-solid';
 import { createSignal, For, Match, onCleanup, Switch } from 'solid-js';
 import type { OAuthStart } from '@shared/types';
 import { OAUTH_PROVIDERS } from '../lib/providers';
-import { Dialog, Notice, ProviderGlyph } from './ui';
+import { CopyButton, Dialog, Notice, ProviderGlyph } from './ui';
 
 /** Matches the dashboard's own "is it done yet" cadence without hammering the proxy. */
 const POLL_MS = 1_500;
@@ -129,7 +129,7 @@ export function AddAccountDialog(props: { onClose: () => void }) {
                 <button class="btn" onClick={() => void window.api.openExternal(w().session.url)}>
                   <ExternalLink size={14} /> Open again
                 </button>
-                <button class="btn ghost" onClick={() => void window.api.copyText(w().session.url)}>Copy link</button>
+                <CopyButton ghost value={w().session.url} what="link" label="Copy link" />
               </div>
             </>
           )}

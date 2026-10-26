@@ -1,9 +1,6 @@
-import { Copy } from 'lucide-solid';
 import { createSignal } from 'solid-js';
 import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
-import { ExpandRow, Seg } from './ui';
-
-const ICON_PX = 14;
+import { CopyButton, ExpandRow, Seg } from './ui';
 
 type Shell = 'powershell' | 'bash';
 const SHELLS = [{ value: 'powershell', label: 'PowerShell' }, { value: 'bash', label: 'Bash' }] as const;
@@ -23,9 +20,7 @@ export function ShellEnvSetup(props: { endpoint: string; clientKey: string; mask
       <div class="row env-var">
         <Seg value={shell()} options={SHELLS} onChange={setShell} />
         <span class="spacer" />
-        <button class="btn" onClick={() => void window.api.copyText(envSnippet(shell(), props.endpoint, props.clientKey))}>
-          <Copy size={ICON_PX} /> Copy
-        </button>
+        <CopyButton value={envSnippet(shell(), props.endpoint, props.clientKey)} what="variables" />
       </div>
       <pre class="snippet selectable">{envSnippet(shell(), props.endpoint, props.masked)}</pre>
     </ExpandRow>

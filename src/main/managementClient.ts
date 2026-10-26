@@ -1,5 +1,5 @@
 import { parseBuildInfo, type BuildInfo } from '@shared/buildInfo';
-import type { OAuthStart, OAuthStatus, UsageSnapshot } from '@shared/types';
+import type { ManagementLockout, OAuthStart, OAuthStatus, UsageSnapshot } from '@shared/types';
 import { parseUsageSnapshot } from './usageParse';
 
 /** Management calls are loopback; anything slower means the proxy is wedged. */
@@ -117,6 +117,14 @@ class ManagementClient {
     return res.body;
   }
 
+  async lockouts(): Promise<ManagementLockout[]> {
+    return parseLockouts(await this.request('GET', '/server/lockouts'));
+  }
+
+  async resetLockouts(): Promise<void> {
+    await this.request('DELETE', '/server/lockouts');
+  }
+
   /** Tray "Use account" override; an empty authIndex restores automatic routing. */
   async setPreferredAccount(provider: string, authIndex: string): Promise<void> {
     await this.request('PUT', '/routing/preferred-auth', { provider, auth_index: authIndex });
@@ -124,3 +132,14 @@ class ManagementClient {
 }
 
 export const management = new ManagementClient();
+
+/** Reads `{ lockouts: [{ ip, failures, failures_allowed, locked_until }] }`; malformed rows are dropped. */
+export function parseLockouts(data: unknown): ManagementLockout[] {
+  const rows = (data as { lockouts?: unknown } | null)?.lockouts;
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((r: Record<string, unknown>) =>
+    typeof r?.ip === 'string' && typeof r.failures === 'number' && typeof r.failures_allowed === 'number'
+      ? [{ ip: r.ip, failures: r.failures, failuresAllowed: r.failures_allowed, lockedUntil: typeof r.locked_until === 'string' ? r.locked_until : null }]
+      : [],
+  );
+}

@@ -93,6 +93,11 @@ const handlers: Handlers = {
     return r.canceled ? null : (r.filePaths[0] ?? null);
   },
   clientSetupStatus: () => clientStatuses(),
+  managementLockouts: () => management.lockouts(),
+  resetManagementLockouts: async () => {
+    await management.resetLockouts();
+    return management.lockouts();
+  },
   applyClientSetup: (client) => {
     applyClient(client, clientFile(client), clientTarget());
     return setupResult(client);

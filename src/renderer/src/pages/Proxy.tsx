@@ -1,9 +1,10 @@
-import { Copy, Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from 'lucide-solid';
+import { Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from 'lucide-solid';
 import { createResource, createSignal, Show } from 'solid-js';
 import { ClientSetup } from '../components/ClientSetup';
+import { ManagementLockouts } from '../components/ManagementLockouts';
 import { ShellEnvSetup } from '../components/ShellEnvSetup';
 import { T3CodeSetup } from '../components/T3CodeSetup';
-import { Dialog, Notice } from '../components/ui';
+import { CopyButton, Dialog, Notice } from '../components/ui';
 import { proxyStatus } from '../store';
 
 const ICON_PX = 14;
@@ -78,9 +79,7 @@ export function Proxy() {
           <span class="chip">
             <span class="chip-label">Endpoint</span>
             <span class="chip-value selectable">{endpoint() || '—'}</span>
-            <button class="chip-btn" title="Copy endpoint" aria-label="Copy endpoint" disabled={!endpoint()} onClick={() => void window.api.copyText(endpoint())}>
-              <Copy size={ICON_PX} />
-            </button>
+            <CopyButton chip value={endpoint()} what="endpoint" disabled={!endpoint()} />
           </span>
           <span class="chip">
             <span class="chip-label">Key</span>
@@ -90,9 +89,7 @@ export function Proxy() {
                 <EyeOff size={ICON_PX} />
               </Show>
             </button>
-            <button class="chip-btn" title="Copy key" aria-label="Copy key" onClick={() => void window.api.copyText(key())}>
-              <Copy size={ICON_PX} />
-            </button>
+            <CopyButton chip value={key()} what="key" />
             <button class="chip-btn" title="Regenerate key" aria-label="Regenerate key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
               <RefreshCw size={ICON_PX} />
             </button>
@@ -101,6 +98,7 @@ export function Proxy() {
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
         <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} managementKey={managementKey()} maskedManagementKey={maskOf(managementKey())} />
         <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
+        <ManagementLockouts />
       </section>
 
       <section class="card">

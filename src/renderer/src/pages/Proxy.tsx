@@ -105,7 +105,7 @@ export function Proxy() {
         <div class="row">
           <div class="spacer">
             <h2 class="card-title" style={{ margin: 0 }}>Custom proxy settings</h2>
-            <p class="secondary" style={{ margin: '4px 0 0' }}>Keys in config.user.yaml are merged into the proxy config and applied when you save. App settings win where they overlap.</p>
+            <div class="list-row-help">Keys in config.user.yaml are merged into the proxy config and applied when you save. App settings win where they overlap.</div>
           </div>
           <button class="btn" onClick={() => void window.api.openPath('userConfig')}><FilePen size={ICON_PX} /> Edit config.user.yaml</button>
         </div>

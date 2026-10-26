@@ -10,6 +10,10 @@ export interface LimitWindow {
   usedPercent: number | null;
   resetsAt: string | null;
   status: 'allowed' | 'allowed_warning' | 'rejected' | null;
+  /** Window length; null when the provider does not say. */
+  durationMs: number | null;
+  /** Model-, feature- or spend-specific window; only unscoped windows describe the account and drive routing. */
+  scoped: boolean;
 }
 
 export interface Credential {
@@ -31,6 +35,8 @@ export interface Credential {
   observedAt: string | null;
   /** The account the proxy would pick for a new conversation on this provider. */
   nextPick: boolean;
+  /** The "use this account" override; it takes traffic ahead of the routing strategy while available. */
+  preferred: boolean;
   windows: LimitWindow[];
 }
 
@@ -59,6 +65,8 @@ export interface HistorySample {
   at: string;
   /** credential id → window key → used percent. */
   used: Record<string, Record<string, number>>;
+  /** credential id → window key → reset time (epoch ms), when known. Absent in samples saved before resets were stored. */
+  resets?: Record<string, Record<string, number>>;
 }
 
 export interface OAuthProvider {
@@ -107,6 +115,20 @@ export interface ActivityEvent {
   latencyMs: number;
   /** Time to first token; null when not measured (non-streaming or failed). */
   ttftMs: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+}
+
+/** Requests and tokens for one local day, account and model; kept after that day's request log expires. */
+export interface ActivityDayTotal {
+  /** Local calendar day, YYYY-MM-DD. */
+  day: string;
+  provider: string;
+  authIndex: string | null;
+  model: string;
+  requests: number;
+  failed: number;
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;

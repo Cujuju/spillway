@@ -10,7 +10,7 @@ export function LimitBar(props: { window: LimitWindow }) {
   const shownValue = () => {
     const u = used();
     if (u === null) return '—';
-    return `${Math.round(t().value === 'remaining' ? 100 - u : u)}%`;
+    return `${Math.round(t().value === 'remaining' ? Math.max(0, 100 - u) : u)}%`;
   };
   const fill = () => {
     const u = used();

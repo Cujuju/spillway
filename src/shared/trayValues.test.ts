@@ -4,8 +4,8 @@ import { readTray, shownPercent, trayIconText, trayLevel } from './trayValues';
 
 const cred = (id: string, used: number, patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
-  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false,
-  windows: [{ key: 'five_hour', label: '5-hour', usedPercent: used, resetsAt: `2026-10-25T0${used % 9}:00:00Z`, status: 'allowed' }],
+  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
+  windows: [{ key: 'five_hour', label: '5-hour', usedPercent: used, resetsAt: `2026-10-25T0${used % 9}:00:00Z`, status: 'allowed', durationMs: null, scoped: false }],
   ...patch,
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', strategy: 'soonest-reset', credentials });

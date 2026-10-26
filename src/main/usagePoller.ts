@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { Notification } from 'electron';
 import { maskEmails } from '@shared/privacy';
 import type { UsageSnapshot } from '@shared/types';
+import { rollPastResets } from '@shared/usageWindows';
 import { history } from './historyStore';
 import { management } from './managementClient';
 import { proxy } from './proxySupervisor';
@@ -40,7 +41,8 @@ class UsagePoller extends EventEmitter {
     return this.last;
   }
 
-  private accept(snapshot: UsageSnapshot): UsageSnapshot {
+  private accept(fetched: UsageSnapshot): UsageSnapshot {
+    const snapshot = rollPastResets(fetched, Date.parse(fetched.fetchedAt));
     for (const event of diffUsage(this.last, snapshot)) notify(event);
     this.last = snapshot;
     this.lastError = null;

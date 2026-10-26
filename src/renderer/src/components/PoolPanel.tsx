@@ -1,8 +1,6 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import type { Credential } from '@shared/types';
-import {
-  depletionAt, drainRatePerHour, drainSeries, pastSeries, poolSummary, poolWindowKey, project, windowPeriodMs,
-} from '../lib/forecast';
+import { depletionAt, drainRatePerHour, drainSeries, pastSeries, poolSummary, poolWindowKey, project } from '../lib/forecast';
 import { dayTime } from '../lib/format';
 import { providerVar } from '../lib/providers';
 import { history, now, settings, updateSettings } from '../store';
@@ -18,16 +16,16 @@ const DRAIN_HEADROOM = 1.2;
 const MIN_DRAIN_AXIS = 5;
 
 /** Pool figures, remaining/drain chart and forecast for one provider (Theo's summary block). */
-export function PoolPanel(props: { provider: string; credentials: Credential[] }) {
+export function PoolPanel(props: { provider: string; credentials: Credential[]; strategy: string }) {
   const [chosenKey, setChosenKey] = createSignal<string | null>(null);
   const [tab, setTab] = createSignal<'remaining' | 'drain'>('remaining');
 
   const windowOptions = createMemo(() => {
-    const seen = new Map<string, string>();
-    for (const c of props.credentials) for (const w of c.windows) if (!seen.has(w.key)) seen.set(w.key, w.label);
+    const seen = new Map<string, { label: string; durationMs: number | null }>();
+    for (const c of props.credentials) for (const w of c.windows) if (!seen.has(w.key)) seen.set(w.key, w);
     return [...seen]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => (windowPeriodMs(a.value) ?? Infinity) - (windowPeriodMs(b.value) ?? Infinity));
+      .sort(([, a], [, b]) => (a.durationMs ?? Infinity) - (b.durationMs ?? Infinity))
+      .map(([value, w]) => ({ value, label: w.label }));
   });
   const key = () => {
     const k = chosenKey();
@@ -44,9 +42,9 @@ export function PoolPanel(props: { provider: string; credentials: Credential[] }
     const k = key();
     const s = summary();
     if (!k || !s) return [];
-    return [...pastSeries(history(), ids(), k, from()), { t: now(), remaining: s.remaining }];
+    return [...pastSeries(history(), props.credentials, k, from()), { t: now(), remaining: s.remaining }];
   });
-  const projection = createMemo(() => (key() ? project(props.credentials, key()!, rate() ?? 0, now(), days()) : null));
+  const projection = createMemo(() => (key() ? project(props.credentials, key()!, rate() ?? 0, now(), days(), props.strategy) : null));
   const drain = createMemo(() => (key() ? drainSeries(history(), ids(), key()!, from()) : []));
   const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...drain().map((p) => p.remaining)) * DRAIN_HEADROOM));
   const emptyAt = () => (rate() ? depletionAt(projection()?.points ?? []) : null);

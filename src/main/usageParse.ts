@@ -7,13 +7,34 @@ const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v
 const s = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const STATUSES = ['allowed', 'allowed_warning', 'rejected'] as const;
+const MS_PER_SECOND = 1000;
+const HOUR_MS = 3_600_000;
+
+/** Proxies older than duration_seconds: infer the length from the key the proxy assigns. */
+function legacyDurationMs(key: string): number | null {
+  const k = key.toLowerCase();
+  if (/five_hour|5h|primary/.test(k)) return 5 * HOUR_MS;
+  if (/daily|day_1|24h/.test(k)) return 24 * HOUR_MS;
+  if (/seven_day|weekly|7d|secondary/.test(k)) return 7 * 24 * HOUR_MS;
+  if (/month/.test(k)) return 30 * 24 * HOUR_MS;
+  return null;
+}
 
 function parseWindow(raw: unknown): LimitWindow | null {
   const w = obj(raw);
   const key = s(w.key);
   if (!key) return null;
   const status = STATUSES.find((st) => st === w.status) ?? null;
-  return { key, label: s(w.label) ?? key, usedPercent: n(w.used_percent), resetsAt: s(w.resets_at), status };
+  const seconds = n(w.duration_seconds);
+  return {
+    key,
+    label: s(w.label) ?? key,
+    usedPercent: n(w.used_percent),
+    resetsAt: s(w.resets_at),
+    status,
+    durationMs: 'duration_seconds' in w ? (seconds && seconds > 0 ? seconds * MS_PER_SECOND : null) : legacyDurationMs(key),
+    scoped: w.scoped === true,
+  };
 }
 
 function parseCredential(raw: unknown): Credential | null {
@@ -39,6 +60,7 @@ function parseCredential(raw: unknown): Credential | null {
     observedAt: s(c.observed_at),
     lastUsedAt: s(c.last_used_at),
     nextPick: c.next_pick === true,
+    preferred: c.preferred === true,
     windows,
   };
 }

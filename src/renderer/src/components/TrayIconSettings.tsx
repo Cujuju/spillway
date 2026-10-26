@@ -2,7 +2,6 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-solid';
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
 import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, trayIconText, windowLabel } from '@shared/trayValues';
-import { windowPeriodMs } from '../lib/forecast';
 import { isMac } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
@@ -40,13 +39,15 @@ export function TrayIconSettings() {
   });
   const [provider, setProvider] = createSignal('claude');
   const windows = createMemo(() => {
-    const seen = new Map<string, string>();
+    const seen = new Map<string, { label: string; durationMs: number | null }>();
     for (const c of snapshot()?.credentials ?? []) {
       if (c.provider !== provider()) continue;
-      for (const w of c.windows) if (!seen.has(w.key)) seen.set(w.key, w.label);
+      for (const w of c.windows) if (!seen.has(w.key)) seen.set(w.key, w);
     }
-    for (const key of FALLBACK_WINDOWS[provider()] ?? []) if (!seen.has(key)) seen.set(key, windowLabel(key));
-    return [...seen].map(([key, label]) => ({ key, label })).sort((a, b) => (windowPeriodMs(a.key) ?? Infinity) - (windowPeriodMs(b.key) ?? Infinity));
+    for (const key of FALLBACK_WINDOWS[provider()] ?? []) if (!seen.has(key)) seen.set(key, { label: windowLabel(key), durationMs: null });
+    return [...seen]
+      .sort(([, a], [, b]) => (a.durationMs ?? Infinity) - (b.durationMs ?? Infinity))
+      .map(([key, w]) => ({ key, label: w.label }));
   });
   const [windowKey, setWindowKey] = createSignal('');
   const [scope, setScope] = createSignal<TrayIconScope>('active');

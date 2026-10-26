@@ -122,7 +122,7 @@ export function Dashboard() {
         </nav>
 
         <Show when={provider()} keyed>
-          {(p) => <PoolPanel provider={p} credentials={providerCreds()} />}
+          {(p) => <PoolPanel provider={p} credentials={providerCreds()} strategy={snapshot()?.strategy ?? ''} />}
         </Show>
 
         <div class="toolbar">

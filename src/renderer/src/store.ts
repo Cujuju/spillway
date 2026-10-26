@@ -1,6 +1,7 @@
 import { createMemo, createRoot, createSignal } from 'solid-js';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
+import { rollPastResets } from '@shared/usageWindows';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { MAX_ACTIVITY_EVENTS, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
@@ -10,12 +11,18 @@ const api = window.api;
 
 export const [page, setPage] = createSignal<Page>('dashboard');
 export const [settings, setSettingsSignal] = createSignal<AppSettings>(DEFAULT_SETTINGS);
+/** Ticks every 30 s so countdowns re-render without each component owning a timer. */
+export const [now, setNow] = createSignal(Date.now());
 const [rawSnapshot, setRawSnapshot] = createSignal<UsageSnapshot | null>(null);
 export const setSnapshot = setRawSnapshot;
-/** What the UI shows: the latest snapshot, emails masked unless "Show emails" is on. Module-lifetime root. */
+/**
+ * What the UI shows: the latest snapshot with windows past their reset rolled to zero, emails masked
+ * unless "Show emails" is on. Module-lifetime root.
+ */
 export const snapshot = createRoot(() =>
   createMemo(() => {
-    const s = rawSnapshot();
+    const raw = rawSnapshot();
+    const s = raw && rollPastResets(raw, now());
     return s && !settings().dashboard.showEmails ? maskSnapshot(s) : s;
   }),
 );
@@ -26,8 +33,6 @@ export const [logs, setLogs] = createSignal<LogLine[]>([]);
 export const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
-/** Ticks every 30 s so countdowns re-render without each component owning a timer. */
-export const [now, setNow] = createSignal(Date.now());
 
 const CLOCK_TICK_MS = 30_000;
 const MAX_LOG_LINES = 2000;

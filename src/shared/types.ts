@@ -169,6 +169,18 @@ export interface ClientSetupStatus {
   error: string | null;
 }
 
+/** An app running the client: it keeps the settings it started with. */
+export interface ClientProcess {
+  pid: number;
+  app: string;
+}
+
+export interface ClientSetupResult {
+  statuses: ClientSetupStatus[];
+  /** Codex only: apps running a Codex, which keeps its old settings until restarted. Null when the process list could not be read. */
+  restart: ClientProcess[] | null;
+}
+
 /** Update check and download progress, shown under Settings → Updates. */
 export type UpdateStatus =
   | { state: 'unavailable'; reason: string }

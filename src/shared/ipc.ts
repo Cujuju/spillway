@@ -1,6 +1,6 @@
 import type { AppSettings } from './settings';
 import type {
-  ActivityDayTotal, ActivityEvent, ClientId, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
+  ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -22,8 +22,8 @@ export interface DesktopApi {
   pickProxyExecutable(): Promise<string | null>;
   /** Whether each client's own config points at this proxy with the current endpoint and key. */
   clientSetupStatus(): Promise<ClientSetupStatus[]>;
-  applyClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
-  undoClientSetup(client: ClientId): Promise<ClientSetupStatus[]>;
+  applyClientSetup(client: ClientId): Promise<ClientSetupResult>;
+  undoClientSetup(client: ClientId): Promise<ClientSetupResult>;
 
   updateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<void>;

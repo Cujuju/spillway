@@ -1,18 +1,22 @@
 import { createResource, createSignal, For, Show } from 'solid-js';
-import type { ClientId, ClientSetupState, ClientSetupStatus } from '@shared/types';
+import type { ClientId, ClientProcess, ClientSetupResult, ClientSetupState } from '@shared/types';
 import { Notice } from './ui';
 
 const CLIENTS: { id: ClientId; label: string; help: string }[] = [
   { id: 'claude', label: 'Claude Code', help: 'Writes the endpoint and key into its settings.' },
-  { id: 'codex', label: 'Codex', help: 'Adds a default "spillway" provider. Codex asks Spillway for the key, so it is never written to its config.' },
+  { id: 'codex', label: 'Codex', help: 'Points its own OpenAI provider at the proxy and signs it in with the pool. The key is never written to its config.' },
 ];
 /** Shared by every config client: Apply backs up the file first. */
 const BACKUP_NOTE = 'Undo restores the backup.';
+/** A running Codex keeps its old settings, and its calls fail until restarted. */
+const RESTART_UNKNOWN = 'Restart any app running Codex (in T3 Code, start a new Codex session): it keeps its old settings until then.';
+const restartNote = (apps: ClientProcess[]) =>
+  `Restart ${apps.map((a) => a.app).join(', ')} (in T3 Code, start a new Codex session): ${apps.length === 1 ? 'it runs' : 'they run'} Codex with its old settings, and its calls fail until then.`;
 
 const STATE: Record<ClientSetupState, { label: string; tone: string; title: string }> = {
   'not-applied': { label: 'Not applied', tone: '', title: 'This client does not use the proxy through its config file.' },
   applied: { label: 'Applied', tone: 'green', title: 'The config file points at this proxy and gets the current key.' },
-  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port, key or app location changed since it was applied. Re-apply to update it.' },
+  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port or key changed since it was applied. Re-apply to update it.' },
 };
 
 /** Apply/Undo of the proxy endpoint and key in each client's own config file; main keeps a backup. */
@@ -24,12 +28,17 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
   );
   const [busy, setBusy] = createSignal<ClientId | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [restart, setRestart] = createSignal<string | null>(null);
 
-  const act = async (client: ClientId, fn: (c: ClientId) => Promise<ClientSetupStatus[]>) => {
+  const act = async (client: ClientId, fn: (c: ClientId) => Promise<ClientSetupResult>) => {
     setBusy(client);
     setError(null);
+    setRestart(null);
     try {
-      mutate(await fn(client));
+      const result = await fn(client);
+      mutate(result.statuses);
+      if (result.restart === null) setRestart(RESTART_UNKNOWN);
+      else if (result.restart.length) setRestart(restartNote(result.restart));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -71,6 +80,9 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
           );
         }}
       </For>
+      <Show when={restart()}>
+        <Notice tone="warn">{restart()}</Notice>
+      </Show>
       <Show when={error()}>
         <Notice tone="error">{error()}</Notice>
       </Show>

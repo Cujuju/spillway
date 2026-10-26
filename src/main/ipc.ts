@@ -4,6 +4,7 @@ import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
+import { runningCodexApps } from './codexProcesses';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
@@ -33,6 +34,10 @@ const clientStatuses = () => {
   const files = clientConfigFiles();
   return CLIENT_IDS.map((c) => clientStatus(c, files[c], clientTarget()));
 };
+/** A running Codex keeps its old URLs but reloads auth.json, then sends one side's login to the other. */
+async function setupResult(client: ClientId) {
+  return { statuses: clientStatuses(), restart: client === 'codex' ? await runningCodexApps() : [] };
+}
 /** The id comes from the renderer; only known clients map to a file. */
 function clientFile(client: ClientId): string {
   if (!CLIENT_IDS.includes(client)) throw new Error(`Unknown client ${String(client)}`);
@@ -86,11 +91,11 @@ const handlers: Handlers = {
   clientSetupStatus: () => clientStatuses(),
   applyClientSetup: (client) => {
     applyClient(client, clientFile(client), clientTarget());
-    return clientStatuses();
+    return setupResult(client);
   },
   undoClientSetup: (client) => {
     undoClient(client, clientFile(client));
-    return clientStatuses();
+    return setupResult(client);
   },
   updateStatus: () => updates.status(),
   checkForUpdates: () => updates.check(),

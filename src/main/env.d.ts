@@ -2,6 +2,8 @@
 declare const __UPDATE_PUBLIC_KEY__: string;
 /** Spillway's version (appVersion.ts), from git history. Set by electron.vite.config.ts. */
 declare const __APP_VERSION__: string;
+/** Spillway's build ID (gitBuild in appVersion.ts): short hash, MODIFIED_SUFFIX if built from uncommitted changes. */
+declare const __APP_BUILD__: string;
 
 declare namespace Electron {
   interface App {

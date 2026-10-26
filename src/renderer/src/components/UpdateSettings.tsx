@@ -8,7 +8,7 @@ type Of<K extends UpdateStatus['state']> = Extract<UpdateStatus, { state: K }>;
 
 /** Settings → Updates: version, check, download and install. Main verifies every file before install. */
 export function UpdateSettings() {
-  const [version] = createResource(() => window.api.appVersion());
+  const [build] = createResource(() => window.api.appBuild());
   const [status, setStatus] = createSignal<UpdateStatus | null>(null);
   void window.api.updateStatus().then(setStatus);
   onCleanup(window.api.onUpdateStatus(setStatus));
@@ -26,7 +26,7 @@ export function UpdateSettings() {
         <Toggle value={settings().updates.autoCheck} onChange={(v) => void updateSettings((d) => void (d.updates.autoCheck = v))} />
       </SettingRow>
       <SettingRow
-        label={`Version ${version() ?? ''}`}
+        label={`Version ${build()?.version ?? ''}`}
         help={`Updates are verified against this app's signing key before they install.${isMac ? ' On macOS, open the downloaded disk image and drag the app to Applications.' : ''}`}
       >
         <Switch

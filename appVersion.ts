@@ -1,6 +1,7 @@
 // Spillway's one version, derived from git history so every build of a commit agrees:
 // a `feat` commit bumps minor and resets patch; any other commit bumps patch.
 import { execFileSync } from 'node:child_process';
+import { MODIFIED_SUFFIX } from './src/shared/buildInfo.ts';
 
 /** Pre-1.0: breaking changes bump minor, like any feature. */
 const MAJOR = 0;
@@ -30,4 +31,13 @@ export function appVersion(repoDir: string): string {
   const revs = ['HEAD', ...features.map((c) => `^${c.hash}`)].join('\n');
   const patches = git(repoDir, ['rev-list', '--no-merges', '--count', '--stdin'], `${revs}\n`);
   return `${MAJOR}.${features.length}.${patches}`;
+}
+
+/**
+ * Build ID of the checkout at `repoDir`: its short commit hash, plus MODIFIED_SUFFIX when the working
+ * tree has uncommitted or untracked changes, since a build compiles those too.
+ */
+export function gitBuild(repoDir: string): string {
+  const hash = git(repoDir, ['rev-parse', '--short', 'HEAD']);
+  return git(repoDir, ['status', '--porcelain']) ? `${hash}${MODIFIED_SUFFIX}` : hash;
 }

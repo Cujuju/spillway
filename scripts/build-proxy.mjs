@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitBuild } from '../appVersion.ts';
 
 const ALL_TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64'];
 const GOOS = { win32: 'windows', darwin: 'darwin', linux: 'linux' };
@@ -22,6 +23,16 @@ if (!existsSync(path.join(src, 'go.mod'))) {
   process.exit(1);
 }
 
+/**
+ * Stamps the binary like upstream's release workflow; the proxy reports these in its X-CPA-* headers.
+ * Version is the newest upstream release tag in the fork, so the fork must never add its own v* tags.
+ */
+function ldflags() {
+  const baseTag = execFileSync('git', ['describe', '--tags', '--abbrev=0', '--match', 'v*', 'HEAD'], { cwd: src, encoding: 'utf8' }).trim();
+  const stamp = { Version: baseTag, Commit: gitBuild(src), BuildDate: new Date().toISOString() };
+  return ['-s', '-w', ...Object.entries(stamp).map(([name, value]) => `-X main.${name}=${value}`)].join(' ');
+}
+
 for (const target of targets) {
   const [platform, arch] = target.split('-');
   if (!GOOS[platform] || !GOARCH[arch]) {
@@ -35,7 +46,7 @@ for (const target of targets) {
   mkdirSync(outDir, { recursive: true });
   // CGO off: a pure-Go binary cross-compiles from any host. Go ad-hoc signs darwin/arm64 output.
   const env = { ...process.env, GOOS: GOOS[platform], GOARCH: GOARCH[arch], CGO_ENABLED: '0' };
-  execFileSync('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
+  execFileSync('go', ['build', '-trimpath', '-ldflags', ldflags(), '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
   copyFileSync(built, path.join(outDir, name));
   console.log(`proxy binary → ${path.join(outDir, name)}`);
 }

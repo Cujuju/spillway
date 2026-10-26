@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
@@ -65,7 +66,7 @@ const OPEN_PATHS = {
 } as const;
 
 const handlers: Handlers = {
-  appVersion: () => app.getVersion(),
+  appBuild: () => parseBuildInfo(app.getVersion(), __APP_BUILD__, null),
   getSettings: () => getSettings(),
   setSettings: (next) => applySettings(next),
   proxyStatus: () => proxy.getStatus(),

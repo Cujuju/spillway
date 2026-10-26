@@ -1,3 +1,4 @@
+import { parseBuildInfo, type BuildInfo } from '@shared/buildInfo';
 import type { OAuthStart, OAuthStatus, UsageSnapshot } from '@shared/types';
 import { parseUsageSnapshot } from './usageParse';
 
@@ -23,6 +24,10 @@ class ManagementClient {
   }
 
   private async request(method: string, path: string, body?: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
+    return (await this.send(method, path, body, timeoutMs)).data;
+  }
+
+  private async send(method: string, path: string, body: unknown, timeoutMs: number): Promise<{ data: unknown; headers: Headers }> {
     if (!this.base) throw new ManagementError('Proxy not configured', 0);
     const res = await fetch(`${this.base}${path}`, {
       method,
@@ -44,15 +49,16 @@ class ManagementClient {
       const message = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : `HTTP ${res.status}`;
       throw new ManagementError(message, res.status);
     }
-    return data;
+    return { data, headers: res.headers };
   }
 
-  async ping(): Promise<boolean> {
+  /** The proxy's version and build from its management headers; null while it does not answer. */
+  async ping(): Promise<BuildInfo | null> {
     try {
-      await this.request('GET', '/config/routing/strategy', undefined, PING_TIMEOUT_MS);
-      return true;
+      const { headers } = await this.send('GET', '/config/routing/strategy', undefined, PING_TIMEOUT_MS);
+      return parseBuildInfo(headers.get('X-CPA-VERSION'), headers.get('X-CPA-COMMIT'), headers.get('X-CPA-BUILD-DATE'));
     } catch {
-      return false;
+      return null;
     }
   }
 

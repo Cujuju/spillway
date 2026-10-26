@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appVersion } from './appVersion.ts';
+import { appVersion, gitBuild } from './appVersion.ts';
+import { MODIFIED_SUFFIX } from './src/shared/buildInfo.ts';
 
 let root: string;
 let repo: string;
@@ -59,5 +60,15 @@ describe('appVersion', () => {
 
   it('refuses a checkout without commits', () => {
     expect(() => appVersion(repo)).toThrow(/git history/);
+  });
+});
+
+describe('gitBuild', () => {
+  it('is the short hash, marked modified while the tree has uncommitted files', () => {
+    commit('fix: a');
+    const hash = git('rev-parse', '--short', 'HEAD').trim();
+    expect(gitBuild(repo)).toBe(hash);
+    writeFileSync(join(repo, 'new.txt'), 'x');
+    expect(gitBuild(repo)).toBe(`${hash}${MODIFIED_SUFFIX}`);
   });
 });

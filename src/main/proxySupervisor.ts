@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createWriteStream, existsSync, renameSync, type FSWatcher, type WriteStream } from 'node:fs';
+import type { BuildInfo } from '@shared/buildInfo';
 import type { LogLine, ProxyStatus } from '@shared/types';
 import { appPaths, resolveProxyExecutable } from './paths';
 import { newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
@@ -36,6 +37,7 @@ class ProxySupervisor extends EventEmitter {
     executablePath: null,
     endpoint: '',
     userConfigError: null,
+    build: null,
   };
 
   /** Rewrites config.yaml from settings and config.user.yaml; a running proxy reloads it. */
@@ -100,7 +102,7 @@ class ProxySupervisor extends EventEmitter {
     management.configure(endpoint, password);
     this.stopping = false;
     this.rotateLogFile();
-    this.setStatus({ state: 'starting', executablePath: exe, port, endpoint, lastError: null, pid: null, startedAt: null });
+    this.setStatus({ state: 'starting', executablePath: exe, port, endpoint, lastError: null, pid: null, startedAt: null, build: null });
     this.log('app', `starting ${exe} on port ${port}`);
 
     // -parent-pid makes the proxy exit if this app dies without stopping it.
@@ -120,22 +122,25 @@ class ProxySupervisor extends EventEmitter {
     child.on('exit', (code, signal) => this.onExit(child, code, signal));
     this.setStatus({ pid: child.pid ?? null });
 
-    if (await this.waitReady(child)) {
-      this.setStatus({ state: 'running', startedAt: new Date().toISOString() });
+    const build = await this.waitReady(child);
+    if (build) {
+      this.setStatus({ state: 'running', startedAt: new Date().toISOString(), build });
       this.emit('ready');
     }
   }
 
-  private async waitReady(child: ChildProcess): Promise<boolean> {
+  /** The proxy's build once it answers; null if it exits or times out first. */
+  private async waitReady(child: ChildProcess): Promise<BuildInfo | null> {
     const deadline = Date.now() + READY_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (this.proc !== child) return false;
-      if (await management.ping()) return true;
+      if (this.proc !== child) return null;
+      const build = await management.ping();
+      if (build) return build;
       await sleep(READY_POLL_MS);
     }
     this.log('app', `proxy did not answer within ${READY_TIMEOUT_MS / 1000}s`);
     this.setStatus({ lastError: 'Proxy did not become ready' });
-    return false;
+    return null;
   }
 
   private onExit(child: ChildProcess, code: number | null, signal: NodeJS.Signals | null): void {
@@ -143,10 +148,10 @@ class ProxySupervisor extends EventEmitter {
     this.proc = null;
     this.log('app', `proxy exited (code=${code}, signal=${signal})`);
     if (this.stopping) {
-      this.setStatus({ state: 'stopped', pid: null, startedAt: null });
+      this.setStatus({ state: 'stopped', pid: null, startedAt: null, build: null });
       return;
     }
-    this.setStatus({ state: 'crashed', pid: null, startedAt: null, lastError: `Exited with code ${code ?? signal}` });
+    this.setStatus({ state: 'crashed', pid: null, startedAt: null, build: null, lastError: `Exited with code ${code ?? signal}` });
     this.emit('crashed', code);
     this.scheduleRestart();
   }

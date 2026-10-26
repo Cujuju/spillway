@@ -1,3 +1,4 @@
+import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
   ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, UpdateStatus, UsageSnapshot,
@@ -7,7 +8,8 @@ import type {
 export interface DesktopApi {
   platform: string;
 
-  appVersion(): Promise<string>;
+  /** Spillway's own version and build. */
+  appBuild(): Promise<BuildInfo>;
   getSettings(): Promise<AppSettings>;
   setSettings(next: AppSettings): Promise<AppSettings>;
 
@@ -82,7 +84,7 @@ export interface DesktopApi {
 
 /** invoke channels: name → method on DesktopApi. */
 export const INVOKE = {
-  appVersion: 'app:version',
+  appBuild: 'app:build',
   getSettings: 'settings:get',
   setSettings: 'settings:set',
   proxyStatus: 'proxy:status',

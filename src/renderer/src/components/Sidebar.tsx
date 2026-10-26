@@ -1,6 +1,7 @@
 import { Activity as ActivityIcon, Gauge, ScrollText, Server, Settings as SettingsIcon, Users } from 'lucide-solid';
 import { For, type JSX } from 'solid-js';
 import { page, setPage, snapshot, type Page } from '../store';
+import { BuildCard } from './BuildCard';
 import { ProxyStateDot, proxyStatusText } from './ProxyState';
 
 const ICON_PX = 15;
@@ -50,6 +51,7 @@ export function Sidebar() {
           </>
         )}
       </For>
+      <BuildCard />
     </nav>
   );
 }

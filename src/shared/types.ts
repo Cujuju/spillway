@@ -1,4 +1,5 @@
 /** IPC contract shared by main, preload and renderer. */
+import type { BuildInfo } from './buildInfo';
 
 export type ProviderId = string;
 
@@ -73,6 +74,8 @@ export interface ProxyStatus {
   endpoint: string;
   /** Why config.user.yaml was ignored; null when it applied or does not exist. */
   userConfigError: string | null;
+  /** The running proxy's version and build, from its management headers; null until it answers. */
+  build: BuildInfo | null;
 }
 
 /** One stored point of the usage history used for drain rate and the chart. */

@@ -27,6 +27,9 @@ const UPTIME_MIN_MS = 60_000;
 
 const proxyState = () => proxyStatus()?.state ?? 'stopped';
 
+/** e.g. "Running", "Not installed". */
+export const proxyStateLabel = (): string => LABELS[proxyState()];
+
 /** e.g. "Proxy running · up 3h 12m". */
 export function proxyStatusText(): string {
   const label = `Proxy ${LABELS[proxyState()].toLowerCase()}`;

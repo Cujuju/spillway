@@ -1,6 +1,7 @@
 import { Copy, Eye, EyeOff, FilePen, FolderOpen, Play, RotateCw, Square } from 'lucide-solid';
 import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js';
 import { ClientSetup } from '../components/ClientSetup';
+import { T3CodeSetup } from '../components/T3CodeSetup';
 import { Notice } from '../components/ui';
 import { logs, proxyStatus, setLogs } from '../store';
 
@@ -96,6 +97,7 @@ export function Proxy() {
           </button>
         </div>
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
+        <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
         <p class="secondary">Or point Claude Code at the proxy with environment variables:</p>
         <div class="row" style={{ 'margin-bottom': '6px' }}>
           <div class="seg">

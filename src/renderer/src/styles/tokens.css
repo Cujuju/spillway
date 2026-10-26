@@ -30,7 +30,6 @@
   --titlebar-height: 36px;
   /* Larger than the 24 px taskbar icon. scripts/make-icon.ps1 TITLEBAR_ICON_PX must match. */
   --titlebar-icon-size: 28px;
-  --sidebar-width: 208px;
 
   --shadow-floating: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
 

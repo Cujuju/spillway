@@ -90,7 +90,8 @@ a {
 }
 .shell-body {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  /* Sidebar is as wide as its widest item. */
+  grid-template-columns: max-content 1fr;
   min-height: 0;
 }
 .page {
@@ -166,6 +167,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  white-space: nowrap;
 }
 .sidebar-group {
   margin: 14px 8px 4px;

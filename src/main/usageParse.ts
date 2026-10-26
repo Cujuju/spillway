@@ -88,7 +88,7 @@ function numberDuplicateLabels(creds: Credential[]): Credential[] {
     if (counts.get(key(c))! < 2) continue;
     const n = (taken.get(key(c)) ?? 0) + 1;
     taken.set(key(c), n);
-    numbered.set(c.id, `${c.label}${n}`);
+    numbered.set(c.id, `${c.label} ${n}`);
   }
   return creds.map((c) => (numbered.has(c.id) ? { ...c, label: numbered.get(c.id)! } : c));
 }

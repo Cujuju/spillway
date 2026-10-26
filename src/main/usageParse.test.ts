@@ -26,7 +26,7 @@ describe('credential label', () => {
         { id: 'd', provider: 'claude', email: 'four@pm.me' },
       ],
     }).credentials.map((c) => c.label);
-    expect(labels).toEqual(['gmail.com2', 'gmail.com1', 'gmail.com', 'pm.me']);
+    expect(labels).toEqual(['gmail.com 2', 'gmail.com 1','gmail.com', 'pm.me']);
   });
 });
 

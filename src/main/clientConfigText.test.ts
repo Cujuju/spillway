@@ -106,6 +106,16 @@ describe('Codex config.toml', () => {
     expect(undoCodex(applyCodex(original, target))).toBe(original);
   });
 
+  it('sends ChatGPT account calls to the proxy and reads the login from auth.json', () => {
+    const own = 'chatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n';
+    const out = applyCodex(own, target);
+    expect(out).toContain('\nchatgpt_base_url = "http://127.0.0.1:8317/backend-api/"\ncli_auth_credentials_store = "file"\n');
+    // The user's values would be duplicate keys: turned off, and restored by undo.
+    expect(out).toContain(`${DISABLED_PREFIX}chatgpt_base_url = "https://example.test/"`);
+    expect(out).toContain(`${DISABLED_PREFIX}cli_auth_credentials_store = "keyring"`);
+    expect(undoCodex(out)).toBe(own);
+  });
+
   it('re-applies idempotently and updates values', () => {
     const once = applyCodex(original, target);
     expect(applyCodex(once, target)).toBe(once);

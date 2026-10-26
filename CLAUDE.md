@@ -20,6 +20,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - The app authenticates with a per-launch supervisor password (`MANAGEMENT_SUPERVISOR_PASSWORD`), exempt from the loopback IP ban. Other wrong keys still ban 127.0.0.1 for 30 minutes.
 - Outside tools (T3 Code's CLIProxyAPI usage hub) use the stable `managementKey` in `secrets.bin`, written to `management.secret-key`; never rotate it per launch.
 - Codex gets the client key by running `Spillway --print-client-key` (`[model_providers.spillway.auth]`); never write the key into `config.toml`.
+- Codex's account calls (usage, plan) go to the proxy's `/backend-api/` via `chatgpt_base_url`, authenticated by the pool login Apply writes to `auth.json` (`src/main/codexPoolAuth.ts`). Its token derives from the client key and must stay in `access.api-keys`. Codex's own ChatGPT login is never used.
 - Claude Code gets the client key as `ANTHROPIC_CUSTOM_HEADERS: X-Api-Key: <key>` (`src/shared/claudeEnv.ts`), never `ANTHROPIC_AUTH_TOKEN`: token mode drops Claude Code out of its subscription login, and it then ignores the proxy's usage-limit headers (T3 Code snooze).
 - Proxy settings reach the proxy by rewriting `config.yaml` (`proxy.applyConfig()`); the proxy hot-reloads it. Don't add management PUTs for settings the app owns.
 

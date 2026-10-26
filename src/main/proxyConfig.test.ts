@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { DEFAULT_SETTINGS } from '@shared/settings';
+import { codexPoolToken } from './codexPoolAuth';
 import { buildProxyConfig } from './proxyConfig';
 
 const base = {
@@ -11,6 +12,8 @@ const base = {
   userConfig: '',
 };
 
+/** Codex sends the pool token on account calls, so the proxy must accept it beside the client key. */
+const appKeys = ['client"key', codexPoolToken('client"key')];
 
 const build = (over: Partial<typeof base> = {}) => buildProxyConfig({ ...base, ...over });
 const parsed = (over: Partial<typeof base> = {}) => parse(build(over).yaml);
@@ -23,7 +26,7 @@ describe('buildProxyConfig', () => {
     expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'session-affinity': true, 'session-affinity-ttl': '60m' });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
-    expect(cfg.access['api-keys']).toEqual(['client"key']);
+    expect(cfg.access['api-keys']).toEqual(appKeys);
   });
 
   it('writes the stable management key for outside tools; the app itself uses the supervisor password', () => {
@@ -51,7 +54,7 @@ describe('buildProxyConfig', () => {
     expect(cfg.routing.strategy).toBe('soonest-reset');
     expect(cfg.routing.retry).toEqual({ 'request-retry': 3 });
     expect(cfg.debug).toBe(true);
-    expect(cfg.access['api-keys']).toEqual(['lan-key', 'client"key']);
+    expect(cfg.access['api-keys']).toEqual(['lan-key', ...appKeys]);
     expect(yaml).toContain('# my tweaks');
   });
 

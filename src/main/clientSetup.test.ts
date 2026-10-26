@@ -11,8 +11,11 @@ vi.mock('./settingsStore', () => ({
 }));
 
 const { applyClient, BACKUP_SUFFIX, clientConfigFiles, clientStatus, undoClient } = await import('./clientSetup');
+const { CODEX_AUTH_FILE, codexPoolAuthJson } = await import('./codexPoolAuth');
 
 const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', keyCommand: { command: '/apps/spillway', args: ['--print-client-key'] } };
+const userLogin = '{"auth_mode":"chatgpt","tokens":{"refresh_token":"rt_user"}}\n';
+const codexAuth = () => path.join(path.dirname(files.codex), CODEX_AUTH_FILE);
 let home: string;
 let files: ReturnType<typeof clientConfigFiles>;
 
@@ -57,6 +60,33 @@ describe('client setup files', () => {
       expect(existsSync(files[client])).toBe(false);
       expect(existsSync(`${files[client]}${BACKUP_SUFFIX}`)).toBe(false);
     }
+    expect(existsSync(codexAuth())).toBe(false);
+    expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
+  });
+
+  it('Codex: swaps in the pool login, keeps the user\'s, and undo puts it back', () => {
+    mkdirSync(path.dirname(codexAuth()), { recursive: true });
+    writeFileSync(codexAuth(), userLogin);
+    applyClient('codex', files.codex, target);
+    expect(readFileSync(codexAuth(), 'utf8')).toBe(codexPoolAuthJson(target.key));
+    expect(readFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, 'utf8')).toBe(userLogin);
+
+    // A new key makes the login out of date; re-applying keeps the user's backup, not the old pool login.
+    expect(clientStatus('codex', files.codex, { ...target, key: 'k2' }, home).state).toBe('out-of-date');
+    applyClient('codex', files.codex, { ...target, key: 'k2' });
+    expect(readFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, 'utf8')).toBe(userLogin);
+
+    undoClient('codex', files.codex);
+    expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
+    expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
+  });
+
+  it('Codex: a login made after apply shows out of date, and undo leaves it in place', () => {
+    applyClient('codex', files.codex, target);
+    writeFileSync(codexAuth(), userLogin);
+    expect(clientStatus('codex', files.codex, target, home).state).toBe('out-of-date');
+    undoClient('codex', files.codex);
+    expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
   });
 
   it('a rejected edit leaves the file and backup untouched', () => {

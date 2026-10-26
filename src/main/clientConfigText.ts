@@ -112,16 +112,20 @@ export const claudeIsEmpty = (text: string) => Object.keys(parseSettings(text)).
 
 // ── Codex: config.toml provider ──────────────────────────────────
 // Text-level edit, no TOML parser. Residual: a multi-line string holding a line that starts with `[`
-// or `model_provider =` can be mistaken for a table header or a root key.
+// or one of the root keys below can be mistaken for a table header or a root key.
 
 export const CODEX_PROVIDER_ID = 'spillway';
 const BLOCK_TAG = '# >>> spillway';
 const BLOCK_BEGIN = `${BLOCK_TAG}: added by ${APP_NAME}; remove it with Undo in the app`;
 const BLOCK_END = '# <<< spillway';
-/** Prefix for a root `model_provider` line the apply turned off; undo removes it. */
+/** Prefix for a root line setting a key the apply owns, turned off by the apply; undo removes it. */
 export const DISABLED_PREFIX = '# spillway disabled: ';
 /** The proxy serves the OpenAI API under /v1; Codex posts to <base_url>/responses. */
 const OPENAI_PATH = '/v1';
+/** Codex sends ChatGPT account calls (usage, plan, plugins) under chatgpt_base_url; the proxy answers as the pool. */
+const BACKEND_PATH = '/backend-api/';
+/** Codex must read the pool login from auth.json, not a keyring login. */
+const AUTH_STORE = 'file';
 /** 0: Codex keeps the key until the proxy rejects it, then reruns the command. The key changes only on regenerate. */
 const KEY_REFRESH_INTERVAL_MS = 0;
 /**
@@ -131,7 +135,8 @@ const KEY_REFRESH_INTERVAL_MS = 0;
 const KEY_COMMAND_TIMEOUT_MS = 15_000;
 
 const TABLE_HEADER = /^\s*\[/;
-const ROOT_MODEL_PROVIDER = /^\s*model_provider\s*=/;
+/** Root keys the apply sets; an existing line for one would be a duplicate key. */
+const ROOT_OWNED_KEY = /^\s*(model_provider|chatgpt_base_url|cli_auth_credentials_store)\s*=/;
 const OWN_PROVIDER_ELSEWHERE = new RegExp(
   `^\\s*(\\[\\s*model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[\\].]|model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[.=])`,
 );
@@ -175,7 +180,11 @@ const firstTable = (lines: string[]) => {
 function codexBlocks(target: ClientTarget): [root: string[], provider: string[]] {
   const { command, args } = target.keyCommand;
   return [
-    [`model_provider = ${tomlString(CODEX_PROVIDER_ID)}`],
+    [
+      `model_provider = ${tomlString(CODEX_PROVIDER_ID)}`,
+      `chatgpt_base_url = ${tomlString(`${target.endpoint}${BACKEND_PATH}`)}`,
+      `cli_auth_credentials_store = ${tomlString(AUTH_STORE)}`,
+    ],
     [
       `[model_providers.${CODEX_PROVIDER_ID}]`,
       `name = ${tomlString(APP_NAME)}`,
@@ -198,7 +207,7 @@ export function applyCodex(text: string | null, target: ClientTarget): string {
     throw new Error(`config.toml already defines model_providers.${CODEX_PROVIDER_ID}; rename or remove it, then try again`);
   }
   const rootEnd = firstTable(outside);
-  const body = outside.map((l, i) => (i < rootEnd && ROOT_MODEL_PROVIDER.test(l) ? `${DISABLED_PREFIX}${l}` : l));
+  const body = outside.map((l, i) => (i < rootEnd && ROOT_OWNED_KEY.test(l) ? `${DISABLED_PREFIX}${l}` : l));
   const [root, provider] = codexBlocks(target);
   const wrap = (lines: string[]) => [BLOCK_BEGIN, ...lines, BLOCK_END];
   // Root key first: everything after a table header belongs to that table.
@@ -216,8 +225,8 @@ export function codexState(text: string | null, target: ClientTarget): ClientSet
   if (blocks.length === 0) return 'not-applied';
   const current =
     JSON.stringify(blocks) === JSON.stringify(codexBlocks(target)) &&
-    // A root model_provider added since would clash with ours (duplicate key).
-    !outside.slice(0, firstTable(outside)).some((l) => ROOT_MODEL_PROVIDER.test(l));
+    // A root key of ours added since would clash (duplicate key).
+    !outside.slice(0, firstTable(outside)).some((l) => ROOT_OWNED_KEY.test(l));
   return current ? 'applied' : 'out-of-date';
 }
 

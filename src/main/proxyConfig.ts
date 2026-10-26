@@ -1,6 +1,7 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import { APP_NAME } from '@shared/app';
 import type { AppSettings } from '@shared/settings';
+import { codexPoolToken } from './codexPoolAuth';
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
@@ -57,14 +58,15 @@ function parseUserConfig(text: string): { doc: Document; error: string | null } 
   return { doc, error: null };
 }
 
-/** The app's client key is always accepted; keys the user added in config.user.yaml stay. */
-function ensureClientKey(doc: Document, key: string): void {
+/** The app's client keys are always accepted; keys the user added in config.user.yaml stay. */
+function ensureClientKeys(doc: Document, required: string[]): void {
   const keys = doc.getIn(['access', 'api-keys']);
-  if (isSeq(keys)) {
-    if (!(keys.toJSON() as unknown[]).includes(key)) keys.add(key);
+  if (!isSeq(keys)) {
+    doc.setIn(['access', 'api-keys'], required);
     return;
   }
-  doc.setIn(['access', 'api-keys'], [key]);
+  const present = keys.toJSON() as unknown[];
+  for (const key of required) if (!present.includes(key)) keys.add(key);
 }
 
 /** Builds config.yaml: config.user.yaml with the app-owned keys applied on top. Comments in the user file are kept. */
@@ -72,7 +74,8 @@ export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
   const { doc, error } = parseUserConfig(input.userConfig);
   if (doc.contents === null) doc.contents = doc.createNode({});
   for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
-  ensureClientKey(doc, input.clientApiKey);
+  // Codex sends the pool token on its account calls (auth.json), the client key on model calls.
+  ensureClientKeys(doc, [input.clientApiKey, codexPoolToken(input.clientApiKey)]);
   doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
   return { yaml: doc.toString(), userConfigError: error };
 }

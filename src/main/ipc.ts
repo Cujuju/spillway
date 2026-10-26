@@ -6,7 +6,6 @@ import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
-import { clientKeyCommand } from './keyCommand';
 import { management } from './managementClient';
 import { appPaths, PROXY_EXE_NAME } from './paths';
 import { ensureUserConfigFile } from './proxyLaunch';
@@ -29,7 +28,7 @@ function credentialName(id: string): string {
 
 const keys = () => ({ clientApiKey: getSecrets().clientApiKey, managementKey: getSecrets().managementKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
 
-const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey, keyCommand: clientKeyCommand() });
+const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey });
 const clientStatuses = () => {
   const files = clientConfigFiles();
   return CLIENT_IDS.map((c) => clientStatus(c, files[c], clientTarget()));

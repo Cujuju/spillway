@@ -3,8 +3,7 @@ import {
   applyClaude, applyCodex, claudeState, codexState, DISABLED_PREFIX, undoClaude, undoCodex,
 } from './clientConfigText';
 
-const keyCommand = { command: 'C:\\Apps\\Spillway\\Spillway.exe', args: ['--print-client-key'] };
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', keyCommand };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
 const moved = { ...target, endpoint: 'http://127.0.0.1:9000' };
 
 describe('Claude Code settings.json', () => {
@@ -84,35 +83,31 @@ describe('Claude Code settings.json', () => {
 
 describe('Codex config.toml', () => {
   const original = '# my config\nmodel = "gpt-5"\nmodel_provider = "openai"\n\n[model_providers.other]\nname = "x"\nmodel_provider = "kept"\n';
+  const rootBlock =
+    'openai_base_url = "http://127.0.0.1:8317/backend-api/codex"\n' +
+    'chatgpt_base_url = "http://127.0.0.1:8317/backend-api/"\ncli_auth_credentials_store = "file"\n';
 
-  it('adds the provider and makes it the default, disabling the old root model_provider', () => {
+  it('points the built-in OpenAI provider at the proxy, disabling a root model_provider', () => {
     const out = applyCodex(original, target);
-    const lines = out.split('\n');
-    expect(lines[1]).toBe('model_provider = "spillway"');
+    expect(out.split('\n')[1]).toBe('openai_base_url = "http://127.0.0.1:8317/backend-api/codex"');
+    expect(out).toContain(rootBlock);
+    // Any provider but the built-in one would bypass the proxy and lose Codex's OpenAI-only tools.
     expect(out).toContain(`${DISABLED_PREFIX}model_provider = "openai"`);
     // Inside a table it is a different key: untouched.
     expect(out).toContain('\nmodel_provider = "kept"\n');
-    expect(out).toContain(
-      '[model_providers.spillway]\nname = "Spillway"\nbase_url = "http://127.0.0.1:8317/v1"\nwire_api = "responses"\n' +
-        '[model_providers.spillway.auth]\ncommand = "C:\\\\Apps\\\\Spillway\\\\Spillway.exe"\nargs = ["--print-client-key"]\n' +
-        'refresh_interval_ms = 0\n',
-    );
-    // The command fetches the key; it is never written.
+    // Codex authenticates with the pool login in auth.json; the key is never written here.
     expect(out).not.toContain('k1');
-    expect(out.indexOf('[model_providers.spillway]')).toBeGreaterThan(out.indexOf('[model_providers.other]'));
+    expect(out).not.toContain('[model_providers.spillway');
   });
 
   it('undo restores the original exactly', () => {
     expect(undoCodex(applyCodex(original, target))).toBe(original);
   });
 
-  it('sends ChatGPT account calls to the proxy and reads the login from auth.json', () => {
-    const own = 'chatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n';
+  it("turns off the user's own values for the keys it sets, and undo restores them", () => {
+    const own = 'openai_base_url = "https://example.test/v1"\nchatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n';
     const out = applyCodex(own, target);
-    expect(out).toContain('\nchatgpt_base_url = "http://127.0.0.1:8317/backend-api/"\ncli_auth_credentials_store = "file"\n');
-    // The user's values would be duplicate keys: turned off, and restored by undo.
-    expect(out).toContain(`${DISABLED_PREFIX}chatgpt_base_url = "https://example.test/"`);
-    expect(out).toContain(`${DISABLED_PREFIX}cli_auth_credentials_store = "keyring"`);
+    for (const line of own.trim().split('\n')) expect(out).toContain(`${DISABLED_PREFIX}${line}`);
     expect(undoCodex(out)).toBe(own);
   });
 
@@ -120,14 +115,25 @@ describe('Codex config.toml', () => {
     const once = applyCodex(original, target);
     expect(applyCodex(once, target)).toBe(once);
     const again = applyCodex(once, moved);
-    expect(again).toContain('base_url = "http://127.0.0.1:9000/v1"');
-    expect(again.match(/\[model_providers.spillway\]/g)).toHaveLength(1);
+    expect(again).toContain('openai_base_url = "http://127.0.0.1:9000/backend-api/codex"');
+    expect(again.match(/openai_base_url = /g)).toHaveLength(1);
     expect(undoCodex(again)).toBe(original);
+  });
+
+  it('replaces an older apply that used a custom provider', () => {
+    const marker = '# >>> spillway: added by Spillway; remove it with Undo in the app\n';
+    const older =
+      `${marker}model_provider = "spillway"\n# <<< spillway\n${original}` +
+      `${marker}[model_providers.spillway]\nname = "Spillway"\n# <<< spillway\n`;
+    expect(codexState(older, target)).toBe('out-of-date');
+    const out = applyCodex(older, target);
+    expect(out).toBe(applyCodex(original, target));
+    expect(undoCodex(out)).toBe(original);
   });
 
   it('creates config from a missing file and undoes to empty', () => {
     const out = applyCodex(null, target);
-    expect(out).toContain('model_provider = "spillway"');
+    expect(out).toContain(rootBlock);
     expect(undoCodex(out)).toBe('');
   });
 
@@ -136,11 +142,6 @@ describe('Codex config.toml', () => {
     const out = applyCodex(crlf, target);
     expect(/[^\r]\n/.test(out)).toBe(false);
     expect(undoCodex(out)).toBe(crlf);
-  });
-
-  it('refuses when the file already defines the provider', () => {
-    expect(() => applyCodex('[model_providers.spillway]\nname = "mine"\n', target)).toThrow(/already defines/);
-    expect(() => applyCodex('[model_providers."spillway".http_headers]\n', target)).toThrow(/already defines/);
   });
 
   it('refuses an unterminated block', () => {
@@ -152,15 +153,9 @@ describe('Codex config.toml', () => {
     expect(codexState(original, target)).toBe('not-applied');
     expect(codexState(out, target)).toBe('applied');
     expect(codexState(out, moved)).toBe('out-of-date');
-    // A regenerated key needs no re-apply: Codex reruns the command after a 401.
+    // The key is not in config.toml; the pool login in auth.json tracks it (clientSetup.ts).
     expect(codexState(out, { ...target, key: 'k2' })).toBe('applied');
-    expect(codexState(out, { ...target, keyCommand: { ...keyCommand, command: 'D:\\Spillway.exe' } })).toBe('out-of-date');
-    // Older applies stored the key itself; applying again replaces it.
-    const legacy = out.replace(/\[model_providers\.spillway\.auth\][^#]*/, 'experimental_bearer_token = "k1"\n');
-    expect(legacy).toContain('experimental_bearer_token');
-    expect(codexState(legacy, target)).toBe('out-of-date');
-    expect(applyCodex(legacy, target)).toBe(out);
-    // A root model_provider added later clashes with ours.
+    // A root model_provider added later would route around the proxy.
     expect(codexState(out.replace('# my config', 'model_provider = "openai"'), target)).toBe('out-of-date');
   });
 });

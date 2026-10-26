@@ -5,7 +5,6 @@ import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
-import { isPrintClientKeyLaunch, runPrintClientKey } from './keyCommand';
 import { appIconPath } from './paths';
 import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
@@ -81,10 +80,7 @@ function wireEvents(): void {
   });
 }
 
-// Checked before the lock: print-key mode runs beside the app and must not wake it.
-if (isPrintClientKeyLaunch()) {
-  runPrintClientKey();
-} else if (!app.requestSingleInstanceLock()) {
+if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   // Windows groups notifications and taskbar entries by this id.

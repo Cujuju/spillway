@@ -13,7 +13,7 @@ vi.mock('./settingsStore', () => ({
 const { applyClient, BACKUP_SUFFIX, clientConfigFiles, clientStatus, undoClient } = await import('./clientSetup');
 const { CODEX_AUTH_FILE, codexPoolAuthJson } = await import('./codexPoolAuth');
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', keyCommand: { command: '/apps/spillway', args: ['--print-client-key'] } };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
 const userLogin = '{"auth_mode":"chatgpt","tokens":{"refresh_token":"rt_user"}}\n';
 const codexAuth = () => path.join(path.dirname(files.codex), CODEX_AUTH_FILE);
 let home: string;
@@ -90,10 +90,10 @@ describe('client setup files', () => {
   });
 
   it('a rejected edit leaves the file and backup untouched', () => {
-    const own = '[model_providers.spillway]\nname = "mine"\n';
+    const own = '# >>> spillway\nmodel = "o3"\n';
     mkdirSync(path.dirname(files.codex), { recursive: true });
     writeFileSync(files.codex, own);
-    expect(() => applyClient('codex', files.codex, target)).toThrow(/already defines/);
+    expect(() => applyClient('codex', files.codex, target)).toThrow(/without/);
     expect(readFileSync(files.codex, 'utf8')).toBe(own);
     expect(existsSync(`${files.codex}${BACKUP_SUFFIX}`)).toBe(false);
   });

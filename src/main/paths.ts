@@ -68,8 +68,5 @@ const resourcePath = (file: string) =>
 /** 256 px PNG: notifications and the macOS menu bar. */
 export const appIconPath = () => resourcePath('icon.png');
 
-/** Codex's key command entry (resources/print-client-key.cjs); a plain file, so Electron can run it as Node. */
-export const printClientKeyLauncherPath = () => resourcePath('print-client-key.cjs');
-
 /** Window and tray icon. Windows gets the .ico: its pre-resampled 16-32 px sizes are sharper than Electron scaling the 256 px PNG. */
 export const shellIconPath = () => resourcePath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');

@@ -15,8 +15,6 @@ const config: Configuration = {
     // Notification and macOS tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.
     { from: 'resources/icon.png', to: 'icon.png' },
     { from: 'resources/icon.ico', to: 'icon.ico' },
-    // Codex's key command entry; outside app.asar so Electron in Node mode can load it.
-    { from: 'resources/print-client-key.cjs', to: 'print-client-key.cjs' },
   ],
   // Update feed. Builds write app-update.yml and latest*.yml from it but never publish (package runs
   // with --publish never); scripts/release.mts signs the files and uploads them.

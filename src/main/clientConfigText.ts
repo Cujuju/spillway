@@ -8,18 +8,10 @@ import {
   CLAUDE_BASE_URL_VAR, CLAUDE_HEADERS_VAR, CLAUDE_KEY_HEADER, CLAUDE_TOKEN_VAR, claudeKeyHeader,
 } from '@shared/claudeEnv';
 
-/** A program that prints the client key to stdout. */
-export interface KeyCommand {
-  command: string;
-  args: string[];
-}
-
 export interface ClientTarget {
   /** e.g. http://127.0.0.1:8317 */
   endpoint: string;
   key: string;
-  /** Codex fetches the key with this instead of storing it. */
-  keyCommand: KeyCommand;
 }
 
 const CRLF = '\r\n';
@@ -110,36 +102,28 @@ export function claudeState(text: string | null, target: ClientTarget, applied: 
 /** True when settings.json holds nothing, so undoing a created file can delete it. */
 export const claudeIsEmpty = (text: string) => Object.keys(parseSettings(text)).length === 0;
 
-// ── Codex: config.toml provider ──────────────────────────────────
+// ── Codex: config.toml root keys ─────────────────────────────────
 // Text-level edit, no TOML parser. Residual: a multi-line string holding a line that starts with `[`
 // or one of the root keys below can be mistaken for a table header or a root key.
 
-export const CODEX_PROVIDER_ID = 'spillway';
 const BLOCK_TAG = '# >>> spillway';
 const BLOCK_BEGIN = `${BLOCK_TAG}: added by ${APP_NAME}; remove it with Undo in the app`;
 const BLOCK_END = '# <<< spillway';
 /** Prefix for a root line setting a key the apply owns, turned off by the apply; undo removes it. */
 export const DISABLED_PREFIX = '# spillway disabled: ';
-/** The proxy serves the OpenAI API under /v1; Codex posts to <base_url>/responses. */
-const OPENAI_PATH = '/v1';
+/**
+ * Codex's built-in OpenAI provider posts model, image and compaction calls under openai_base_url. Keeping that
+ * provider (not a custom one) keeps every feature Codex gates on it, such as the image tool.
+ */
+const CODEX_API_PATH = '/backend-api/codex';
 /** Codex sends ChatGPT account calls (usage, plan, plugins) under chatgpt_base_url; the proxy answers as the pool. */
 const BACKEND_PATH = '/backend-api/';
 /** Codex must read the pool login from auth.json, not a keyring login. */
 const AUTH_STORE = 'file';
-/** 0: Codex keeps the key until the proxy rejects it, then reruns the command. The key changes only on regenerate. */
-const KEY_REFRESH_INTERVAL_MS = 0;
-/**
- * Print-key mode measured ~0.4 s warm. A timeout fails the Codex session until restart, so allow far more
- * than Codex's 5 s default for a cold start after boot.
- */
-const KEY_COMMAND_TIMEOUT_MS = 15_000;
 
 const TABLE_HEADER = /^\s*\[/;
-/** Root keys the apply sets; an existing line for one would be a duplicate key. */
-const ROOT_OWNED_KEY = /^\s*(model_provider|chatgpt_base_url|cli_auth_credentials_store)\s*=/;
-const OWN_PROVIDER_ELSEWHERE = new RegExp(
-  `^\\s*(\\[\\s*model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[\\].]|model_providers\\s*\\.\\s*"?${CODEX_PROVIDER_ID}"?\\s*[.=])`,
-);
+/** Root keys the apply sets, plus model_provider: any provider but the built-in one would bypass the proxy. */
+const ROOT_OWNED_KEY = /^\s*(model_provider|openai_base_url|chatgpt_base_url|cli_auth_credentials_store)\s*=/;
 
 /** TOML basic strings accept JSON's string escapes. */
 const tomlString = (s: string) => JSON.stringify(s);
@@ -176,42 +160,21 @@ const firstTable = (lines: string[]) => {
   return i === -1 ? lines.length : i;
 };
 
-/** Lines inside the root block and the provider block, without their markers. */
-function codexBlocks(target: ClientTarget): [root: string[], provider: string[]] {
-  const { command, args } = target.keyCommand;
-  return [
-    [
-      `model_provider = ${tomlString(CODEX_PROVIDER_ID)}`,
-      `chatgpt_base_url = ${tomlString(`${target.endpoint}${BACKEND_PATH}`)}`,
-      `cli_auth_credentials_store = ${tomlString(AUTH_STORE)}`,
-    ],
-    [
-      `[model_providers.${CODEX_PROVIDER_ID}]`,
-      `name = ${tomlString(APP_NAME)}`,
-      `base_url = ${tomlString(`${target.endpoint}${OPENAI_PATH}`)}`,
-      `wire_api = ${tomlString('responses')}`,
-      // Codex runs this for the key, so the key itself is never written here.
-      `[model_providers.${CODEX_PROVIDER_ID}.auth]`,
-      `command = ${tomlString(command)}`,
-      `args = [${args.map(tomlString).join(', ')}]`,
-      `refresh_interval_ms = ${KEY_REFRESH_INTERVAL_MS}`,
-      `timeout_ms = ${KEY_COMMAND_TIMEOUT_MS}`,
-    ],
-  ];
-}
+/** The root block's lines, without its markers. */
+const codexRootBlock = (target: ClientTarget): string[] => [
+  `openai_base_url = ${tomlString(`${target.endpoint}${CODEX_API_PATH}`)}`,
+  `chatgpt_base_url = ${tomlString(`${target.endpoint}${BACKEND_PATH}`)}`,
+  `cli_auth_credentials_store = ${tomlString(AUTH_STORE)}`,
+];
 
 export function applyCodex(text: string | null, target: ClientTarget): string {
   const original = text ?? '';
+  // Dropping every earlier block also removes an older apply's provider table.
   const { outside } = partition(original);
-  if (outside.some((l) => OWN_PROVIDER_ELSEWHERE.test(l))) {
-    throw new Error(`config.toml already defines model_providers.${CODEX_PROVIDER_ID}; rename or remove it, then try again`);
-  }
   const rootEnd = firstTable(outside);
   const body = outside.map((l, i) => (i < rootEnd && ROOT_OWNED_KEY.test(l) ? `${DISABLED_PREFIX}${l}` : l));
-  const [root, provider] = codexBlocks(target);
-  const wrap = (lines: string[]) => [BLOCK_BEGIN, ...lines, BLOCK_END];
-  // Root key first: everything after a table header belongs to that table.
-  return joinLines([...wrap(root), ...body, ...wrap(provider)], eolOf(original));
+  // Root keys first: everything after a table header belongs to that table.
+  return joinLines([BLOCK_BEGIN, ...codexRootBlock(target), BLOCK_END, ...body], eolOf(original));
 }
 
 export function undoCodex(text: string): string {
@@ -219,12 +182,12 @@ export function undoCodex(text: string): string {
   return joinLines(outside.map((l) => (l.startsWith(DISABLED_PREFIX) ? l.slice(DISABLED_PREFIX.length) : l)), eolOf(text));
 }
 
-/** Applied only when both blocks match what apply would write now, so any changed field shows as out of date. */
+/** Applied only when the blocks match what apply would write now, so any changed field shows as out of date. */
 export function codexState(text: string | null, target: ClientTarget): ClientSetupState {
   const { outside, blocks } = partition(text ?? '');
   if (blocks.length === 0) return 'not-applied';
   const current =
-    JSON.stringify(blocks) === JSON.stringify(codexBlocks(target)) &&
+    JSON.stringify(blocks) === JSON.stringify([codexRootBlock(target)]) &&
     // A root key of ours added since would clash (duplicate key).
     !outside.slice(0, firstTable(outside)).some((l) => ROOT_OWNED_KEY.test(l));
   return current ? 'applied' : 'out-of-date';

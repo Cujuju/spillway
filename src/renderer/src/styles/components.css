@@ -189,9 +189,11 @@
 }
 /* Page-level notices and cards stack with one gap; .dash-header supplies the gap above the first. */
 .notice + .notice,
-.notice + .card,
-.card + .card {
+.notice + .card {
   margin-top: var(--page-gap);
+}
+.card + .card {
+  margin-top: var(--card-gap);
 }
 
 .badge {
@@ -247,8 +249,8 @@
   z-index: 50;
 }
 .dialog {
-  /* One spacing for edges, blocks (title, subtitle, content, actions) and items in a list, matching the page inset. */
-  --dialog-gap: var(--page-pad);
+  /* Between the title, subtitle, content and actions: the card gap, so blocks space like the cards in them. */
+  --dialog-gap: var(--card-gap);
   align-self: start;
   width: min(560px, calc(100vw - 48px));
   max-height: calc(100vh - 96px);
@@ -257,8 +259,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-floating);
-  /* The title is trimmed to its caps, so the top inset is the visible gap. */
-  padding: var(--dialog-gap);
+  /* The page inset. The title is trimmed to its caps, so the top inset is the visible gap. */
+  padding: var(--page-pad);
 }
 /* Whole-pixel height: a fractional cap height would shift everything below off the pixel grid. */
 .dialog > .card-title {

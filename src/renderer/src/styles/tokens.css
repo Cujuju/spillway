@@ -17,7 +17,11 @@
   /* Inset of a page, and of dialogs so they match it. */
   --page-pad: 20px;
   /* Vertical gap between page-level blocks: header, notices, cards. */
-  --page-gap: 16px;
+  --page-gap: 14px;
+  /* Between titled sections of a page. */
+  --section-gap: 20px;
+  /* Between neighbouring cards, everywhere; dialogs also use it between their blocks. */
+  --card-gap: 8px;
 
   --radius-btn: 6px;
   --radius-card: 10px;

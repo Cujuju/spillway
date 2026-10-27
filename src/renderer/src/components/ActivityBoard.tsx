@@ -7,8 +7,8 @@ import { METRIC_OPTIONS } from './activityFormat';
 import { ADD_CHOICES, PANELS, type ActivityData } from './activityPanels';
 import { Seg } from './ui';
 
-/** Gap between tiles; it is also the divider's grab area. */
-const TILE_GAP_PX = 12;
+/** CSS token for the gap between tiles (also the divider's grab area), shared with every other card gap. */
+const TILE_GAP_TOKEN = '--card-gap';
 const ICON_PX = 14;
 /** Select value meaning "nothing picked", so the menu reads as a button. */
 const NO_CHOICE = '';
@@ -47,6 +47,8 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   });
   const specFor = (id: string) => panels()[id] ?? (props.placing?.id === id ? props.placing.spec : undefined);
   const minFor = (id: string) => PANELS[specFor(id)?.kind ?? 'trend'].minSize;
+  const tileGapPx = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(TILE_GAP_TOKEN));
+  if (!Number.isFinite(tileGapPx)) throw new Error(`${TILE_GAP_TOKEN} is not set in tokens.css`);
 
   /** Saves the tree and drops charts no longer in it, in one write. */
   const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }) => {
@@ -67,7 +69,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
         class="activity-board"
         layout={layout()}
         onLayoutChange={(next) => void save(next)}
-        gapPx={TILE_GAP_PX}
+        gapPx={tileGapPx}
         minSize={minFor}
         // A full board still takes charts: neighbours give way, and the board grows taller; the page scrolls.
         placement="reflow"

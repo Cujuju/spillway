@@ -10,8 +10,8 @@
   --pool-line-edge: 4px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: var(--card-gap);
+  margin-bottom: var(--page-gap);
 }
 .notice + .pool-cards {
   margin-top: var(--page-gap);

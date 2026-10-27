@@ -96,11 +96,12 @@
   --pool-line-inset: 6px;
   display: grid;
   grid-template-columns: var(--pool-line-label) minmax(0, 1fr) var(--pool-line-pct) var(--pool-line-reset);
+  /* As tall as the label's capitals; the larger percent overflows it evenly. */
+  grid-template-rows: 1cap;
   align-items: center;
   gap: 8px;
   margin: 0 calc(-1 * var(--pool-line-inset));
-  /* The text's line box already adds ~5px above the capitals; 1px brings the visible gap to the 6px side inset. */
-  padding: 1px var(--pool-line-inset);
+  padding: var(--pool-line-inset);
   border: 0;
   border-radius: var(--radius-btn);
   background: none;
@@ -109,6 +110,16 @@
   font-size: var(--text-xs);
   text-align: left;
   cursor: pointer;
+}
+/* Text boxes trimmed to cap height and baseline, so the padding is the visible gap on every side at any scale. */
+.pool-line > * {
+  text-box: trim-both cap alphabetic;
+}
+/* Icons span baseline to cap height, like the text, so they never stretch the row. */
+.pool-line svg {
+  width: 1cap;
+  height: 1cap;
+  vertical-align: baseline;
 }
 .pool-line:hover {
   background: color-mix(in srgb, var(--color-surface-input) 50%, transparent);
@@ -137,9 +148,6 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-.pool-line-reset svg {
-  vertical-align: -0.125em;
 }
 /* One segment per account, as wide as its pool share, filled to what it has left. */
 .pool-segments {

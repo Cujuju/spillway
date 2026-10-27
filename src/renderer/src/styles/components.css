@@ -3,11 +3,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--spacing-1_5);
   height: var(--control-height);
-  padding: 0 12px;
+  padding: 0 var(--spacing-3);
   font-size: var(--text-xs);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   background: var(--color-surface-input);
   color: var(--color-text);
@@ -18,7 +18,7 @@
   background: var(--color-surface-hover);
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 .btn.primary {
@@ -31,7 +31,7 @@
 }
 .btn.danger {
   color: var(--color-red-light);
-  border-color: color-mix(in srgb, var(--color-red) 40%, transparent);
+  border-color: var(--color-danger-border);
   background: var(--color-red-subtle);
 }
 .btn.ghost {
@@ -57,17 +57,18 @@
   background: var(--color-text-soft);
 }
 .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: var(--icon-btn-size);
+  height: var(--icon-btn-size);
   padding: 0;
 }
 
 /* ── On/Off toggle (StockApp OnOffToggle) and segmented control ── */
 .toggle {
-  width: 44px;
+  --toggle-width: 44px;
+  width: var(--toggle-width);
   height: var(--control-height);
   font-size: var(--text-xs);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   background: var(--color-surface-input);
   color: var(--color-text-secondary);
@@ -85,17 +86,17 @@
 }
 .seg {
   display: inline-flex;
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   overflow: hidden;
 }
 .seg button {
-  /* The .seg border adds 1px top and bottom. */
-  height: calc(var(--control-height) - 2px);
-  padding: 0 10px;
+  /* The .seg border adds one line top and bottom. */
+  height: calc(var(--control-height) - 2 * var(--border-width));
+  padding: 0 var(--spacing-2_5);
   font-size: var(--text-xs);
   border: 0;
-  border-right: 1px solid var(--color-border);
+  border-right: var(--border-width) solid var(--color-border);
   background: var(--color-surface-input);
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -112,9 +113,9 @@
 .input,
 .select {
   height: var(--control-height);
-  padding: 0 8px;
+  padding: 0 var(--spacing-2);
   font-size: var(--text-sm);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   background: var(--color-surface-input);
   color: var(--color-text);
@@ -122,17 +123,23 @@
 }
 .input:focus,
 .select:focus {
-  outline: 1px solid var(--color-accent-border);
+  outline: var(--border-width) solid var(--color-accent-border);
 }
 /* A number with its unit inside the box: the label is the visible input, the inner input is bare. */
+/* Fits a setting's number and unit; narrow fits a table's priority. */
 .number-field {
+  --number-field-width: 90px;
+  width: var(--number-field-width);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-1);
   cursor: text;
 }
+.number-field.narrow {
+  --number-field-width: 70px;
+}
 .number-field:focus-within {
-  outline: 1px solid var(--color-accent-border);
+  outline: var(--border-width) solid var(--color-accent-border);
 }
 .number-field input {
   flex: 1;
@@ -160,11 +167,17 @@
 }
 
 /* ── Cards and settings rows ───────────────────────────────────── */
+/* One inset on every side; a card title is trimmed to its capitals so the inset is the visible gap. */
 .card {
+  --card-pad: var(--spacing-4);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
-  padding: 16px 20px;
+  padding: var(--card-pad);
+}
+/* Its content (a table) sets its own inset. */
+.card.flush {
+  padding: 0;
 }
 /* Card wash: --card-wash-hue fades left to right over the card's fill. Set the fill as background-color; a `background` shorthand erases the wash. */
 .card-wash {
@@ -177,15 +190,20 @@
 .card-title {
   font-size: var(--text-header);
   font-weight: 600;
-  margin: 0 0 4px;
+  margin: 0;
+}
+/* Trimmed to its capitals and snapped to a whole pixel, so what follows never lands on a half pixel. */
+.card .card-title {
+  text-box: trim-both cap alphabetic;
+  height: round(1cap, 1px);
 }
 .section-label {
   font-size: var(--text-xxs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-section);
   color: var(--color-text-disabled);
-  margin: 0 0 10px;
+  margin: 0 0 var(--spacing-2_5);
 }
 /* Page-level notices and cards stack with one gap; .dash-header supplies the gap above the first. */
 .notice + .notice,
@@ -195,14 +213,20 @@
 .card + .card {
   margin-top: var(--card-gap);
 }
+/* Text sets fractional heights. Page-level blocks round theirs up, so each block starts on a whole pixel, where borders and text don't drift apart. */
+.page-inner > *,
+.page-section > * {
+  height: calc-size(auto, round(up, size, 1px));
+}
 
 .badge {
   --badge-height: 20px;
+  --badge-pad-x: 7px;
   display: inline-flex;
   align-items: center;
   height: var(--badge-height);
   flex-shrink: 0;
-  padding: 0 7px;
+  padding: 0 var(--badge-pad-x);
   border-radius: calc(var(--badge-height) * var(--chip-radius-ratio));
   font-size: var(--text-xxs);
   font-weight: 600;
@@ -243,20 +267,24 @@
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.6);
+  background: var(--color-backdrop);
   display: grid;
   place-items: center;
-  z-index: 50;
+  z-index: var(--z-dialog);
 }
 .dialog {
   /* Between the title, subtitle, content and actions: the card gap, so blocks space like the cards in them. */
   --dialog-gap: var(--card-gap);
   align-self: start;
-  width: min(560px, calc(100vw - 48px));
-  max-height: calc(100vh - 96px);
+  /* Widest a dialog grows, and the window margin it keeps across and down. */
+  --dialog-max-width: 560px;
+  --dialog-clearance-x: var(--spacing-6);
+  --dialog-clearance-y: 48px;
+  width: min(var(--dialog-max-width), calc(100vw - 2 * var(--dialog-clearance-x)));
+  max-height: calc(100vh - 2 * var(--dialog-clearance-y));
   overflow-y: auto;
   background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-floating);
   /* The page inset. The title is trimmed to its caps, so the top inset is the visible gap. */
@@ -272,7 +300,7 @@
 .dialog-sub {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
   margin: 0 0 var(--dialog-gap);
   color: var(--color-text-secondary);
 }
@@ -283,26 +311,26 @@
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--spacing-2);
   margin-top: var(--dialog-gap);
 }
 
 .notice {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--spacing-2_5);
+  padding: var(--spacing-2_5) var(--spacing-3);
   border-radius: var(--radius-btn);
   font-size: var(--text-xs);
-  line-height: 1.5;
+  line-height: var(--leading-body);
   background: var(--color-amber-subtle);
   color: var(--color-amber);
-  border: 1px solid color-mix(in srgb, var(--color-amber) 35%, transparent);
+  border: var(--border-width) solid var(--color-amber-border);
 }
 .notice.error {
   background: var(--color-red-subtle);
   color: var(--color-red-light);
-  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+  border-color: var(--color-red-border);
 }
 .notice.info {
   background: var(--color-accent-subtle);
@@ -315,28 +343,37 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px 16px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-divider);
+  gap: var(--spacing-2) var(--spacing-4);
+  padding: var(--spacing-2_5) 0;
+  border-bottom: var(--border-width) solid var(--color-divider);
 }
 .list-row:last-child {
   border-bottom: 0;
 }
+/* The card's inset is the gap at its edges, so a row adds none there. */
+.card > .list-row:first-child {
+  padding-top: 0;
+}
+.card > .list-row:last-child {
+  padding-bottom: 0;
+}
 .list-row-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
   font-size: var(--text-sm);
   line-height: var(--setting-label-line-height);
 }
+/* Help under a setting label: a small gap, smaller still for a path. */
 .list-row-help {
+  --help-gap: 3px;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  margin-top: 3px;
-  line-height: 1.45;
+  margin-top: var(--help-gap);
+  line-height: var(--leading-help);
 }
 .list-row-help.path {
-  margin-top: 1px;
+  --help-gap: 1px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -348,7 +385,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--spacing-2);
   min-width: 0;
 }
 /* A wide control (picker, path) sits under the text at full width. */
@@ -360,18 +397,18 @@
 }
 /* A sub-setting indents its text only, so its control stays right-aligned. */
 .list-row.nested .list-row-text {
-  margin-left: 4px;
-  padding-left: 14px;
-  border-left: 2px solid var(--color-border);
+  margin-left: var(--spacing-1);
+  padding-left: var(--spacing-3_5);
+  border-left: var(--border-width-strong) solid var(--color-border);
 }
 .list-row-actions .main-action {
   min-width: var(--list-action-min-width);
 }
 .list-row-detail {
   grid-column: 1 / -1;
-  padding: 10px 12px;
+  padding: var(--spacing-2_5) var(--spacing-3);
   background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
 }
 .snippet {
@@ -387,7 +424,7 @@
   display: inline-flex;
   align-items: stretch;
   height: var(--control-height);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   background: var(--color-surface-sunken);
   font-size: var(--text-xs);
@@ -399,21 +436,21 @@
 .chip-value {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 var(--spacing-2);
 }
 .chip-label {
   color: var(--color-text-muted);
-  border-right: 1px solid var(--color-border);
+  border-right: var(--border-width) solid var(--color-border);
 }
 .chip-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   /* Square buttons: the chip's inner height. */
-  width: calc(var(--control-height) - 2px);
+  width: calc(var(--control-height) - 2 * var(--border-width));
   padding: 0;
   border: 0;
-  border-left: 1px solid var(--color-border);
+  border-left: var(--border-width) solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -423,10 +460,21 @@
   color: var(--color-text);
 }
 .chip-btn:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
-/* CopyButton's confirmation, for both the chip and the labelled button. */
+/* A badge that copies a value when clicked (Models dialog versions). */
+button.badge {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+button.badge:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+/* Copy confirmation: CopyButton (chip or labelled) and copy badges. */
+button.badge.copied,
 .chip-btn.copied,
 .chip-btn.copied:hover:not(:disabled),
 .btn.copied,
@@ -439,9 +487,9 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
   background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
-  padding: 10px 12px;
+  padding: var(--spacing-2_5) var(--spacing-3);
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;

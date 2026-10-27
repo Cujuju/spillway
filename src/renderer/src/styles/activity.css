@@ -12,30 +12,31 @@
 
 /* ── Stat strip: one card, cells split by 1px rules that survive wrapping ── */
 .stat-strip {
+  --stat-cell-min: 112px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(var(--stat-cell-min), 1fr));
+  gap: var(--border-width);
   padding: 0;
   overflow: hidden;
   background: var(--color-border);
 }
 .stat-cell {
-  padding: 10px 14px;
+  padding: var(--spacing-2_5) var(--spacing-3_5);
   background: var(--color-surface);
   min-width: 0;
 }
 .stat-label {
   font-size: var(--text-xxs);
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
 .stat-value {
-  margin-top: 2px;
-  font-size: 17px;
+  margin-top: var(--spacing-0_5);
+  font-size: var(--text-stat);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--leading-tight);
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
@@ -48,8 +49,8 @@
 .chart-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: var(--spacing-2_5);
+  margin-bottom: var(--spacing-1_5);
 }
 .chart-head .section-label {
   margin: 0;
@@ -57,7 +58,7 @@
 /* The mode toggle is taller than the label line. */
 .heat-head {
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: var(--spacing-2_5);
 }
 .chart-head-note {
   margin-left: auto;
@@ -68,19 +69,19 @@
   position: relative;
 }
 .trend svg:focus-visible {
-  outline: 2px solid var(--color-accent-border);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--color-accent-border);
+  outline-offset: var(--focus-ring-offset);
 }
 .tip-title {
   color: var(--color-text-secondary);
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: var(--spacing-1);
 }
 .tip-row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  line-height: 1.6;
+  gap: var(--spacing-3);
+  line-height: var(--leading-loose);
   font-variant-numeric: tabular-nums;
 }
 .tip-row strong {
@@ -92,46 +93,59 @@
 }
 
 /* ── Heatmap: 24 flexible columns fill the card ──────────────────── */
+/* Shared by the grid and its legend: day-label column, cell gap, cell sizes, and the accent share per level. */
+.heat-card {
+  --heat-label-col: 34px;
+  --heat-gap: 3px;
+  --heat-cell-min: 6px;
+  --heat-cell-height: 16px;
+  --heat-legend-cell: 10px;
+  --heat-l1: 30%;
+  --heat-l2: 55%;
+  --heat-l3: 78%;
+}
+/* 24 columns: one per hour. */
 .heat {
   display: grid;
-  grid-template-columns: 34px repeat(24, minmax(6px, 1fr));
-  gap: 3px;
+  grid-template-columns: var(--heat-label-col) repeat(24, minmax(var(--heat-cell-min), 1fr));
+  gap: var(--heat-gap);
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
 }
 .heat-hour {
   white-space: nowrap;
-  line-height: 1.6;
+  line-height: var(--leading-loose);
 }
 .heat-day {
   align-self: center;
 }
 .heat-cell {
-  height: 16px;
-  border-radius: 3px;
+  height: var(--heat-cell-height);
+  border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
 }
 .heat-cell:hover,
 .heat-cell:focus-visible {
-  outline: 1px solid var(--color-text-secondary);
+  outline: var(--border-width) solid var(--color-text-secondary);
 }
 /* One hue, light to dark: the accent mixed into the card surface. */
-.heat-cell.l1 { background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface)); }
-.heat-cell.l2 { background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface)); }
-.heat-cell.l3 { background: color-mix(in srgb, var(--color-accent) 78%, var(--color-surface)); }
+.heat-cell.l1 { background: color-mix(in srgb, var(--color-accent) var(--heat-l1), var(--color-surface)); }
+.heat-cell.l2 { background: color-mix(in srgb, var(--color-accent) var(--heat-l2), var(--color-surface)); }
+.heat-cell.l3 { background: color-mix(in srgb, var(--color-accent) var(--heat-l3), var(--color-surface)); }
 .heat-cell.l4 { background: var(--color-accent); }
 .heat-legend {
   display: flex;
   align-items: center;
-  gap: 3px;
-  margin-top: 10px;
-  padding-left: 37px;
+  gap: var(--heat-gap);
+  margin-top: var(--spacing-2_5);
+  /* Starts under the first hour column. */
+  padding-left: calc(var(--heat-label-col) + var(--heat-gap));
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
 }
 .heat-legend .heat-cell {
-  width: 10px;
-  height: 10px;
+  width: var(--heat-legend-cell);
+  height: var(--heat-legend-cell);
 }
 
 /* ── Dense tables: columns shrink to fit; headers wrap, values don't ── */
@@ -143,12 +157,12 @@
   font-size: var(--text-xs);
 }
 .table.dense th {
-  padding: 8px;
+  padding: var(--spacing-2);
   vertical-align: bottom;
-  line-height: 1.3;
+  line-height: var(--leading-tight);
 }
 .table.dense td {
-  padding: 6px 8px;
+  padding: var(--spacing-1_5) var(--spacing-2);
   white-space: nowrap;
 }
 .table.dense tbody tr:hover td {
@@ -164,23 +178,24 @@
 /* The card edge needs more inset than the gap between columns. */
 .table.dense th:first-child,
 .table.dense td:first-child {
-  padding-left: 12px;
+  padding-left: var(--spacing-3);
 }
 .table.dense th:last-child,
 .table.dense td:last-child {
-  padding-right: 12px;
+  padding-right: var(--spacing-3);
 }
 /* Takes the leftover width and truncates, so numeric columns never scroll. */
 .table td.fill {
+  --fill-col-share: 30%;
   max-width: 0;
-  width: 30%;
+  width: var(--fill-col-share);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cell-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
   min-width: 0;
 }
 .cell-name > span {
@@ -192,24 +207,27 @@
   font-weight: 600;
   color: var(--color-text);
 }
+/* One step in from the dense table's edge inset. */
 .table tr.child-row td:first-child {
-  padding-left: 22px;
+  padding-left: calc(var(--spacing-3) + var(--spacing-2_5));
 }
 /* A failed request's error, on its own line under the request. */
 .table tr.has-error td {
   border-bottom: 0;
 }
-/* Indented to the account text: 12px inset + 14px glyph + 8px gap. */
+/* Indented to the account text: edge inset + small glyph + gap. */
 .table.dense tr.error-row td {
   padding-top: 0;
-  padding-left: 34px;
+  padding-left: calc(var(--spacing-3) + var(--glyph-size-sm) + var(--spacing-2));
   max-width: 0;
   color: var(--color-red-light);
 }
 .share-bar {
-  min-width: 40px;
-  height: 6px;
-  border-radius: 3px;
+  --share-bar-min: 40px;
+  --share-bar-height: 6px;
+  min-width: var(--share-bar-min);
+  height: var(--share-bar-height);
+  border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
   overflow: hidden;
 }
@@ -219,12 +237,12 @@
   background: var(--color-accent);
 }
 .more-row {
-  padding: 10px;
+  padding: var(--spacing-2_5);
   text-align: center;
-  border-top: 1px solid var(--color-border);
+  border-top: var(--border-width) solid var(--color-border);
 }
 .chart-note {
   margin-top: var(--page-gap);
   font-size: var(--text-xs);
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }

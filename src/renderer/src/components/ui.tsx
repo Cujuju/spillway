@@ -63,16 +63,15 @@ export function SettingsGroup(props: { title?: string; children: JSX.Element }) 
   );
 }
 
-/** Number input that commits on blur or Enter, clamped by the settings normalizer. `unit` shows inside the box, after the number. */
-export function NumberField(props: { value: number; onCommit: (v: number) => void; min?: number; max?: number; width?: number; unit?: string }) {
-  const DEFAULT_WIDTH_PX = 90;
+/** Number input that commits on blur or Enter, clamped by the settings normalizer. `unit` shows inside the box, after the number; `narrow` fits a short number in a table. */
+export function NumberField(props: { value: number; onCommit: (v: number) => void; min?: number; max?: number; narrow?: boolean; unit?: string }) {
   const commit = (el: HTMLInputElement) => {
     const v = Number(el.value);
     if (Number.isFinite(v) && v !== props.value) props.onCommit(v);
     else el.value = String(props.value);
   };
   return (
-    <label class="input number-field" style={{ width: `${props.width ?? DEFAULT_WIDTH_PX}px` }}>
+    <label class="input number-field" classList={{ narrow: props.narrow }}>
       <input
         class="tabular"
         type="number"
@@ -127,11 +126,13 @@ export function Dialog(props: { title: string; onClose: () => void; children: JS
 }
 
 /** Provider brand mark; providers without one get a coloured tile with their initial. */
-export function ProviderGlyph(props: { provider: string; size?: number }) {
-  const DEFAULT_PX = 18;
+/** Glyph sizes, from tokens.css: small in dense tables, medium by default, large on pickers. */
+const GLYPH_SIZE = { sm: 'var(--glyph-size-sm)', md: 'var(--glyph-size)', lg: 'var(--glyph-size-lg)' } as const;
+
+export function ProviderGlyph(props: { provider: string; size?: keyof typeof GLYPH_SIZE }) {
   const uid = createUniqueId();
   const logo = () => providerLogo(props.provider, uid);
-  const px = () => `${props.size ?? DEFAULT_PX}px`;
+  const px = () => GLYPH_SIZE[props.size ?? 'md'];
   return (
     <Show
       when={logo()}
@@ -189,20 +190,27 @@ export function ExpandRow(props: { label: string; help: string; action: string; 
 const COPIED_SHOWN_MS = 1500;
 const COPY_ICON_PX = 14;
 
+/** Copies a value and remembers it for a moment, so the control that copied it can confirm. */
+export function createCopier() {
+  const [copied, setCopied] = createSignal<string | null>(null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const copy = async (value: string) => {
+    await window.api.copyText(value);
+    setCopied(value);
+    clearTimeout(timer);
+    timer = setTimeout(() => setCopied(null), COPIED_SHOWN_MS);
+  };
+  return { copied, copy };
+}
+
 /**
  * Copies `value` and confirms with a check for a moment.
  * `chip` renders the icon-only chip button; otherwise a button labelled `label`.
  */
 export function CopyButton(props: { value: string; what: string; label?: string; chip?: boolean; ghost?: boolean; disabled?: boolean }) {
-  const [copied, setCopied] = createSignal(false);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(timer));
-  const copy = async () => {
-    await window.api.copyText(props.value);
-    setCopied(true);
-    clearTimeout(timer);
-    timer = setTimeout(() => setCopied(false), COPIED_SHOWN_MS);
-  };
+  const copier = createCopier();
+  const copied = () => copier.copied() === props.value;
   const title = () => (copied() ? 'Copied' : `Copy ${props.what}`);
   return (
     <button
@@ -212,7 +220,7 @@ export function CopyButton(props: { value: string; what: string; label?: string;
       title={title()}
       aria-label={title()}
       disabled={props.disabled}
-      onClick={() => void copy()}
+      onClick={() => void copier.copy(props.value)}
     >
       <Show when={copied()} fallback={<Copy size={COPY_ICON_PX} />}>
         <Check size={COPY_ICON_PX} />

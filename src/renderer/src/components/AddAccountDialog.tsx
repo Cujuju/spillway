@@ -103,7 +103,7 @@ export function AddAccountDialog(props: { onClose: () => void }) {
             <For each={OAUTH_PROVIDERS}>
               {(p) => (
                 <button class="provider-card" onClick={() => void start(p.id)}>
-                  <ProviderGlyph provider={p.id} size={28} />
+                  <ProviderGlyph provider={p.id} size="lg" />
                   <span>
                     <strong>{p.label}</strong>
                     <span class="muted">{p.hint}</span>

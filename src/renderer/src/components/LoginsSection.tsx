@@ -8,6 +8,7 @@ import { CredentialActions, renewSummary } from './CredentialActions';
 import { ResetCreditButton } from './ResetCreditButton';
 import { ShowEmailsButton } from './ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from './ui';
+import { providerVar } from '../lib/providers';
 import { now, proxyStatus, snapshot } from '../store';
 
 const ICON_PX = 14;
@@ -102,7 +103,7 @@ export function LoginsSection() {
         <Notice tone="info">{info()}</Notice>
       </Show>
 
-      <div class="card" style={{ padding: 0 }}>
+      <div class="card flush">
         <table class="table">
           <thead>
             <tr>
@@ -115,13 +116,13 @@ export function LoginsSection() {
             </tr>
           </thead>
           <tbody>
-            <For each={creds()} fallback={<tr><td colSpan={6} class="muted" style={{ padding: '24px', 'text-align': 'center' }}>No accounts yet. Use “Add account” to sign in.</td></tr>}>
+            <For each={creds()} fallback={<tr><td colSpan={6} class="muted empty-row">No accounts yet. Use “Add account” to sign in.</td></tr>}>
               {(c) => (
-                <tr classList={{ disabled: c.disabled }}>
+                <tr class="card-wash" classList={{ disabled: c.disabled }} style={{ '--card-wash-hue': providerVar(c.provider) }}>
                   <td>
                     <div class="row">
                       <ProviderGlyph provider={c.provider} />
-                      <div style={{ 'min-width': 0 }}>
+                      <div class="shrink">
                         <input
                           class="input inline-edit"
                           value={c.note ?? ''}
@@ -138,7 +139,7 @@ export function LoginsSection() {
                     </div>
                   </td>
                   <td>
-                    <div class="row" style={{ gap: '6px' }}>
+                    <div class="row tight">
                       <span title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span>
                       <Show when={c.resetCredits?.available}>
                         <ResetCreditButton
@@ -152,7 +153,7 @@ export function LoginsSection() {
                   </td>
                   <td>{statusBadge(c, now())}</td>
                   <td>
-                    <NumberField value={c.priority} width={70} onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
+                    <NumberField value={c.priority} narrow onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
                   </td>
                   <td>
                     <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void act(() => window.api.setCredentialDisabled(c.id, !on))} />

@@ -4,6 +4,7 @@ import { FAMILY_INFO, type ApiProviderGroup, type ApiProviderTarget } from '@sha
 import { LoginsSection } from '../components/LoginsSection';
 import { ProviderDialog } from '../components/ProviderDialog';
 import { Dialog, Notice, ProviderGlyph } from '../components/ui';
+import { providerVar } from '../lib/providers';
 
 const ICON_PX = 14;
 
@@ -64,7 +65,7 @@ export function Providers() {
           <Notice tone="error">{error()}</Notice>
         </Show>
 
-        <div class="card" style={{ padding: 0 }}>
+        <div class="card flush">
           <table class="table">
             <thead>
               <tr>
@@ -81,14 +82,14 @@ export function Providers() {
                 each={groups()}
                 fallback={
                   <tr>
-                    <td colSpan={6} class="muted" style={{ padding: '24px', 'text-align': 'center' }}>
+                    <td colSpan={6} class="muted empty-row">
                       {list.loading ? 'Loading…' : 'No API keys yet. Use “Add provider” to add one.'}
                     </td>
                   </tr>
                 }
               >
                 {(g) => (
-                  <tr classList={{ disabled: g.disabled }}>
+                  <tr class="card-wash" classList={{ disabled: g.disabled }} style={{ '--card-wash-hue': providerVar(FAMILY_INFO[g.family].glyph) }}>
                     <td>
                       <div class="row">
                         <ProviderGlyph provider={FAMILY_INFO[g.family].glyph} />

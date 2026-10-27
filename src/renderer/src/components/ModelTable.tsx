@@ -26,7 +26,7 @@ export function ModelTable(props: { models: ModelRow[]; total: Summary; metric: 
         <For each={props.models} fallback={<tr><td colSpan={MODEL_COLUMN_COUNT} class="muted">No requests in this range.</td></tr>}>
           {(m) => (
             <tr>
-              <td class="fill" title={m.model}><div class="cell-name"><ProviderGlyph provider={m.provider} size={14} /><span class="tabular">{m.model || '—'}</span></div></td>
+              <td class="fill" title={m.model}><div class="cell-name"><ProviderGlyph provider={m.provider} size="sm" /><span class="tabular">{m.model || '—'}</span></div></td>
               <td class="tabular num">{m.summary.requests.toLocaleString()}</td>
               <TokenCell v={m.summary.inputTokens} />
               <TokenCell v={m.summary.outputTokens} />

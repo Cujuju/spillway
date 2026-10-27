@@ -4,7 +4,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--spacing-4);
   margin-bottom: var(--page-gap);
 }
 /* Actions share the title's row; a subtitle hangs below the title alone. */
@@ -15,34 +15,34 @@
 .dash-title {
   font-size: var(--text-title);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--tracking-title);
   margin: 0;
   text-box: trim-start cap alphabetic;
 }
 .dash-sub {
-  margin-top: 8px;
+  margin-top: var(--spacing-2);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
-  padding-left: 10px;
-  border-left: 3px solid var(--color-green);
+  padding-left: var(--spacing-2_5);
+  border-left: var(--border-width-accent) solid var(--color-green);
 }
 .dash-sub .loaded {
   color: var(--color-green);
 }
 .dash-actions {
   display: flex;
-  gap: 10px;
+  gap: var(--spacing-2_5);
   align-items: center;
 }
 
 .provider-glyph {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
+  border-radius: var(--radius-glyph);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: var(--color-background);
   flex-shrink: 0;
@@ -62,21 +62,21 @@
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-divider);
-  margin-bottom: 12px;
+  padding-bottom: var(--spacing-3);
+  border-bottom: var(--border-width) solid var(--color-divider);
+  margin-bottom: var(--spacing-3);
 }
 .summary-tabs {
   display: flex;
-  gap: 18px;
-  border-bottom: 1px solid var(--color-divider);
-  margin: 0 0 8px;
+  gap: var(--spacing-4_5);
+  border-bottom: var(--border-width) solid var(--color-divider);
+  margin: 0 0 var(--spacing-2);
 }
 .summary-tabs > button {
   background: none;
   border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0 2px 8px;
+  border-bottom: var(--border-width-strong) solid transparent;
+  padding: 0 var(--spacing-0_5) var(--spacing-2);
   color: var(--color-text-secondary);
   font-size: var(--text-md);
   cursor: pointer;
@@ -86,29 +86,32 @@
   border-bottom-color: var(--pool-color, var(--color-accent-light));
 }
 .legend {
+  padding-bottom: var(--spacing-2);
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: var(--spacing-4_5);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
 }
 .legend .dot {
-  width: 8px;
-  height: 8px;
+  width: var(--dot-size);
+  height: var(--dot-size);
   border-radius: 50%;
   background: var(--pool-color);
   display: inline-block;
-  margin-right: 6px;
+  margin-right: var(--spacing-1_5);
 }
+/* Dashes drawn close together so they read as one dashed line. */
 .legend .dash {
+  --legend-dash-tracking: -1px;
   color: var(--pool-color);
-  letter-spacing: -1px;
-  margin-right: 6px;
+  letter-spacing: var(--legend-dash-tracking);
+  margin-right: var(--spacing-1_5);
 }
 .chart {
   width: 100%;
   display: block;
-  margin-top: 6px;
+  margin-top: var(--spacing-1_5);
 }
 /* Smallest height that keeps five y-axis labels apart. */
 .quota-chart {
@@ -125,22 +128,23 @@
 }
 .chart text {
   font-family: var(--font-text);
-  font-size: 11px;
+  font-size: var(--text-xs);
   fill: var(--color-text-muted);
 }
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: var(--spacing-2_5);
+  margin-bottom: var(--spacing-3_5);
 }
 .search {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
+  --search-height: 36px;
+  gap: var(--spacing-2);
+  height: var(--search-height);
+  padding: 0 var(--spacing-3);
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--color-text-secondary);
@@ -156,10 +160,12 @@
 /* Rows share one name column sized to the widest name (up to 280px), so bars line up and no row reserves empty space. */
 .account-list {
   --limit-min: 150px;
-  --limit-gap: 12px;
+  --limit-gap: var(--spacing-3);
   display: grid;
-  grid-template-columns: fit-content(280px) minmax(0, 1fr);
-  column-gap: 16px;
+  /* Widest the account name column grows. */
+  --account-name-max: 280px;
+  grid-template-columns: fit-content(var(--account-name-max)) minmax(0, 1fr);
+  column-gap: var(--spacing-4);
 }
 .account-list > .empty-state {
   grid-column: 1 / -1;
@@ -169,31 +175,32 @@
   display: grid;
   grid-template-columns: subgrid;
   align-items: center;
-  padding: 12px 4px;
-  border-bottom: 1px solid var(--color-divider);
+  padding: var(--spacing-3) var(--spacing-1);
+  border-bottom: var(--border-width) solid var(--color-divider);
 }
 .account-row.disabled {
-  opacity: 0.55;
+  opacity: var(--opacity-off);
 }
 .account-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: var(--text-md);
 }
 /* Sized to the name line, so the button adds no height to the row. */
 .account-name > .icon-btn {
+  --name-btn-size: 24px;
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: var(--name-btn-size);
+  height: var(--name-btn-size);
 }
 .account-meta {
-  margin-top: 6px;
+  margin-top: var(--spacing-1_5);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
-  line-height: 1.6;
+  line-height: var(--leading-loose);
 }
 .account-meta .back {
   color: var(--color-red-light);
@@ -209,7 +216,7 @@
 .limit-head {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--spacing-2);
   font-size: var(--text-sm);
 }
 .limit-head .value {
@@ -217,17 +224,17 @@
   font-variant-numeric: tabular-nums;
 }
 .limit-bar {
-  height: 5px;
+  height: var(--bar-height);
   border-radius: var(--radius-pill);
   background: var(--color-surface-input);
-  margin: 8px 0;
+  margin: var(--spacing-2) 0;
   overflow: hidden;
 }
 .limit-bar > div {
   height: 100%;
   border-radius: var(--radius-pill);
   background: var(--color-green);
-  transition: width 300ms ease;
+  transition: width var(--duration-bar) ease;
 }
 .limit-bar.warn > div {
   background: var(--color-amber);
@@ -243,20 +250,21 @@
   white-space: nowrap;
 }
 .reset-time svg {
-  vertical-align: -0.125em;
-  margin-right: 0.3em;
+  vertical-align: var(--icon-baseline-shift);
+  margin-right: var(--icon-text-gap);
 }
 .limit.empty {
-  opacity: 0.45;
+  opacity: var(--opacity-dim);
 }
 
 .empty-state {
+  --empty-state-pad-y: 56px;
   text-align: center;
-  padding: 56px 24px;
+  padding: var(--empty-state-pad-y) var(--spacing-6);
   color: var(--color-text-secondary);
 }
 .empty-state h3 {
   color: var(--color-text);
   font-size: var(--text-header);
-  margin: 12px 0 6px;
+  margin: var(--spacing-3) 0 var(--spacing-1_5);
 }

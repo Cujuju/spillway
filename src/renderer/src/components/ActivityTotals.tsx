@@ -84,7 +84,7 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
                   <tr class="child-row">
                     <td class="fill" title={props.account(r.authIndex)}>
                       <div class="cell-name">
-                        <ProviderGlyph provider={r.provider} size={14} />
+                        <ProviderGlyph provider={r.provider} size="sm" />
                         <span>{props.account(r.authIndex)}</span>
                       </div>
                     </td>

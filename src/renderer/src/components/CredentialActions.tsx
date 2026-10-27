@@ -3,7 +3,7 @@ import { createResource, createSignal, For, Show } from 'solid-js';
 import type { Credential, CredentialRenewResult } from '@shared/types';
 import { familyName, groupModelFamilies } from '../lib/modelFamilies';
 import { providerVar } from '../lib/providers';
-import { Dialog, ProviderGlyph } from './ui';
+import { createCopier, Dialog, ProviderGlyph } from './ui';
 
 const ICON_PX = 14;
 
@@ -74,6 +74,8 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
   const [models] = createResource(() => window.api.credentialModels(props.credential.id));
   const families = () => groupModelFamilies(models() ?? []);
   const count = () => models()?.length ?? 0;
+  const copier = createCopier();
+  const copied = (id: string) => copier.copied() === id;
   return (
     <Dialog title="Models" onClose={props.onClose} actions={<button class="btn" onClick={props.onClose}>Close</button>}>
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
@@ -100,9 +102,15 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
                       <div class="model-family-older">
                         <For each={f.older}>
                           {(v) => (
-                            <span class="badge selectable" title={v.model.id}>
+                            <button
+                              type="button"
+                              class="badge"
+                              classList={{ copied: copied(v.model.id) }}
+                              title={copied(v.model.id) ? 'Copied' : `Copy ${v.model.id}`}
+                              onClick={() => void copier.copy(v.model.id)}
+                            >
                               {v.label}
-                            </span>
+                            </button>
                           )}
                         </For>
                       </div>

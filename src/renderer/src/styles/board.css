@@ -14,13 +14,15 @@
   --twm-text-muted: var(--color-text-muted);
   --twm-shadow: var(--shadow-floating);
   --twm-radius: var(--radius-card);
+  /* Dividers grab wider than the card gap they sit in. */
+  --twm-handle-grab: var(--spacing-3);
 }
 .board-tile {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 12px 16px;
+  padding: var(--spacing-3) var(--spacing-4);
 }
 .board-tile-head {
   align-items: center;
@@ -67,9 +69,10 @@
   display: grid;
   place-items: center;
   height: 100%;
-  border: 1px dashed var(--color-border);
+  border: var(--border-width) dashed var(--color-border);
   border-radius: var(--radius-card);
 }
 .share-cell {
-  width: 12%;
+  --share-col-share: 12%;
+  width: var(--share-col-share);
 }

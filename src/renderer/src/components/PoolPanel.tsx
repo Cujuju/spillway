@@ -42,7 +42,7 @@ export function PoolPanel(props: { models: PoolModel[] }) {
           <button classList={{ active: tab() === 'remaining' }} onClick={() => setTab('remaining')}>Remaining quota</button>
           <button classList={{ active: tab() === 'drain' }} onClick={() => setTab('drain')}>Drain rate</button>
           <span class="spacer" />
-          <div class="legend" style={{ 'padding-bottom': '8px' }}>
+          <div class="legend">
             <Show when={!single()}>
               <For each={shown()}>
                 {(m) => <span style={{ '--pool-color': providerVar(m.provider()) }}><span class="dot" />{providerLabel(m.provider())}</span>}

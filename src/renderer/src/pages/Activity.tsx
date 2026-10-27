@@ -108,7 +108,7 @@ export function Activity() {
                       <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
                       <td class="fill" title={`${accountName(e.authIndex)} · ${e.model || 'no model'}`}>
                         <div class="cell-name">
-                          <ProviderGlyph provider={e.provider} size={14} />
+                          <ProviderGlyph provider={e.provider} size="sm" />
                           <span>{accountName(e.authIndex)} <span class="muted">· {e.model || '—'}</span></span>
                         </div>
                       </td>

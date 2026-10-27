@@ -43,7 +43,7 @@ export function ProviderCards(props: CardsProps) {
           // A charted scoped line stays visible while folded.
           const shown = () => p.lines().filter((l) => !l.scoped || expanded() || l.id === props.chosenLine);
           return (
-            <div class="pool-card" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
+            <div class="pool-card card-wash" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
               <div class="pool-card-top">
                 {/* The card's keyboard target; its click bubbles to the card. */}
                 <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>

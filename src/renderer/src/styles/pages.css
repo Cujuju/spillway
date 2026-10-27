@@ -6,7 +6,7 @@
   }
 }
 .spin {
-  animation: spin 900ms linear infinite;
+  animation: spin var(--duration-spin) linear infinite;
 }
 
 /* ── Add account ─────────────────────────────────────────────────── */
@@ -14,15 +14,15 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap);
-  margin-top: 12px;
+  margin-top: var(--spacing-3);
 }
 .provider-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
   text-align: left;
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
   color: var(--color-text);
@@ -35,15 +35,15 @@
 .provider-card > span:last-child {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--spacing-0_5);
   min-width: 0;
   font-size: var(--text-sm);
 }
 .oauth-wait {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 0;
+  gap: var(--spacing-2_5);
+  padding: var(--spacing-3_5) 0;
   font-size: var(--text-md);
 }
 
@@ -52,11 +52,8 @@
 .section-head {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
+  gap: var(--spacing-4);
   margin-bottom: var(--page-gap);
-}
-.section-head .card-title {
-  margin: 0;
 }
 .page-section + .page-section {
   margin-top: var(--section-gap);
@@ -73,26 +70,26 @@
   font-size: var(--text-xxs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-label);
   color: var(--color-text-muted);
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-divider);
+  padding: var(--spacing-2_5) var(--spacing-3_5);
+  border-bottom: var(--border-width) solid var(--color-divider);
 }
 .table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-divider);
+  padding: var(--spacing-2_5) var(--spacing-3_5);
+  border-bottom: var(--border-width) solid var(--color-divider);
   vertical-align: middle;
 }
 .table tr:last-child td {
   border-bottom: 0;
 }
 .table tr.disabled td {
-  opacity: 0.55;
+  opacity: var(--opacity-off);
 }
 /* AI Providers tables (the non-dense ones) sit 16px from their card's edge on every side.
    Header text is trimmed to its caps, so the top inset is the visible gap. */
 .table:not(.dense) {
-  --table-edge: 16px;
+  --table-edge: var(--spacing-4);
 }
 .table:not(.dense) :is(th, td):first-child {
   padding-left: var(--table-edge);
@@ -108,14 +105,15 @@
   padding-bottom: var(--table-edge);
 }
 .inline-edit {
-  --inline-edit-inset: 4px;
+  --inline-edit-inset: var(--spacing-1);
   background: transparent;
   border-color: transparent;
   font-weight: 600;
   padding-left: var(--inline-edit-inset);
   /* Pulls the text (past padding and 1px border) into line with the row below; the hover border sits outside. */
-  margin-left: calc(-1 * (var(--inline-edit-inset) + 1px));
-  width: 260px;
+  --inline-edit-width: 260px;
+  margin-left: calc(-1 * (var(--inline-edit-inset) + var(--border-width)));
+  width: var(--inline-edit-width);
   max-width: 100%;
 }
 /* The placeholder is the account's current name, not a hint. */
@@ -133,13 +131,13 @@
   overflow-y: auto;
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
-  line-height: 1.55;
+  line-height: var(--leading-log);
   white-space: pre-wrap;
   word-break: break-all;
   background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
-  padding: 8px 10px;
+  padding: var(--spacing-2) var(--spacing-2_5);
 }
 .log-err {
   color: var(--color-red-light);
@@ -151,8 +149,9 @@
 /* ── Settings ────────────────────────────────────────────────────── */
 .settings {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 24px;
+  --settings-nav-width: 180px;
+  grid-template-columns: var(--settings-nav-width) minmax(0, 1fr);
+  gap: var(--spacing-6);
   align-items: start;
 }
 .settings-nav {
@@ -160,24 +159,24 @@
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--spacing-0_5);
 }
 .settings-body {
   min-width: 0;
 }
 .tray-list {
-  margin-top: 10px;
+  margin-top: var(--spacing-2_5);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing-1_5);
 }
 .tray-item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-2_5);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
   background: var(--color-surface-sunken);
   font-size: var(--text-sm);
@@ -185,8 +184,8 @@
 .tray-item img {
   flex-shrink: 0;
   box-sizing: content-box;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--spacing-1);
+  border-radius: var(--radius-sm);
 }
 /* Second line of a tray item, under its title. */
 .tray-look {
@@ -194,35 +193,35 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
 }
-/* Approximate Windows taskbar colours, so the preview matches what the tray shows. */
 .tray-item img.taskbar-dark {
-  background: #101010;
+  background: var(--color-taskbar-dark);
 }
 .tray-item img.taskbar-light {
-  background: #eeeeee;
+  background: var(--color-taskbar-light);
 }
 .tray-add {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
 }
 
 /* ── Theme picker ── */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  --theme-card-min: 132px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--theme-card-min), 1fr));
   gap: var(--card-gap);
   width: 100%;
 }
 .theme-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
-  border: 1px solid var(--color-border);
+  gap: var(--spacing-1_5);
+  padding: var(--spacing-1_5);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface-sunken);
   color: var(--color-text-secondary);
@@ -236,11 +235,11 @@
 }
 .theme-card.active {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  box-shadow: 0 0 0 var(--border-width) var(--color-accent);
   color: var(--color-text);
 }
 .theme-card-label {
-  padding: 0 2px;
+  padding: 0 var(--spacing-0_5);
 }
 /* System: the light preview overlays the dark one, clipped to the right half. */
 .theme-split {
@@ -251,17 +250,25 @@
   inset: 0;
   clip-path: inset(0 0 0 50%);
 }
+/* A miniature window: sidebar, card with text lines, accent dots. */
 .theme-preview {
+  --mini-height: 64px;
+  --mini-side-width: 14px;
+  --mini-card-gap: 5px;
+  --mini-card-pad: 7px;
+  --mini-line-long: 80%;
+  --mini-line-short: 50%;
+  --mini-accent-width: 18px;
   display: flex;
-  gap: 6px;
-  height: 64px;
-  padding: 6px;
+  gap: var(--spacing-1_5);
+  height: var(--mini-height);
+  padding: var(--spacing-1_5);
   border-radius: var(--radius-btn);
   background: var(--color-background);
 }
 .theme-preview-side {
-  width: 14px;
-  border-radius: 3px;
+  width: var(--mini-side-width);
+  border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
   flex-shrink: 0;
 }
@@ -270,54 +277,54 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 7px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  gap: var(--mini-card-gap);
+  padding: var(--mini-card-pad);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
 }
 .theme-preview-line {
-  height: 5px;
-  width: 80%;
-  border-radius: 3px;
+  height: var(--bar-height);
+  width: var(--mini-line-long);
+  border-radius: var(--radius-xs);
   background: var(--color-text);
 }
 .theme-preview-line.short {
-  width: 50%;
+  width: var(--mini-line-short);
   background: var(--color-text-muted);
 }
 .theme-preview-dots {
   display: flex;
-  gap: 4px;
+  gap: var(--spacing-1);
   margin-top: auto;
 }
 .theme-preview-dots span {
-  width: 8px;
-  height: 8px;
+  width: var(--dot-size);
+  height: var(--dot-size);
   border-radius: 50%;
 }
 .theme-preview-dots .theme-preview-accent {
-  width: 18px;
+  width: var(--mini-accent-width);
   border-radius: var(--radius-pill);
   background: var(--color-accent);
 }
 
 /* ── Client setup details ────────────────────────────────────────── */
 .env-var {
-  margin-bottom: 6px;
+  margin-bottom: var(--spacing-1_5);
 }
 .env-var:last-child {
   margin-bottom: 0;
 }
 /* One titled set of copyable fields; spacing alone separates sets. */
 .setup-group + .setup-group {
-  margin-top: 14px;
+  margin-top: var(--spacing-3_5);
 }
 .setup-fields {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--spacing-1_5);
+  margin-top: var(--spacing-2);
 }
 /* A full-width chip: label, value, copy icon. */
 .setup-field {
@@ -327,7 +334,8 @@
 /* Fits the longest name, ANTHROPIC_CUSTOM_HEADERS (scaled from 170px for a 20-character name), so values line up. */
 .setup-field .chip-label {
   flex-shrink: 0;
-  min-width: 205px;
+  --setup-label-width: 205px;
+  min-width: var(--setup-label-width);
 }
 /* Block, not flex, so a long value ends in an ellipsis. Values sit right, labels left. */
 .setup-field .chip-value {
@@ -343,9 +351,9 @@
 /* Logins' Models dialog: one washed card per family. Name and newest version share a line; earlier versions sit below. */
 .model-families {
   /* Card inset on every side; the head line is trimmed to its caps, so this is the visible gap. */
-  --family-pad: 14px;
+  --family-pad: var(--spacing-3_5);
   /* Name line to the version badges: tighter than the inset, so they read as one group. */
-  --family-row-gap: 10px;
+  --family-row-gap: var(--spacing-2_5);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -355,7 +363,7 @@
 }
 .model-family {
   padding: var(--family-pad);
-  border: 1px solid var(--color-divider);
+  border: var(--border-width) solid var(--color-divider);
   border-radius: var(--radius-card);
   background-color: var(--color-surface-sunken);
 }
@@ -364,7 +372,7 @@
   height: round(1cap, 1px);
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--spacing-1_5);
   font-size: var(--text-md);
 }
 .model-family-head > * {
@@ -380,7 +388,7 @@
 }
 .model-family-id {
   margin-left: auto;
-  padding-left: 12px;
+  padding-left: var(--spacing-3);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   overflow: hidden;
@@ -390,8 +398,13 @@
 .model-family-older {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--spacing-1);
   margin-top: var(--family-row-gap);
+}
+/* A table's placeholder when it has no rows. */
+.table td.empty-row {
+  padding: var(--spacing-6);
+  text-align: center;
 }
 /* Table rows' icon actions sit right, on one line. */
 .table td.row-actions {
@@ -403,12 +416,12 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--spacing-3_5);
 }
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing-1_5);
 }
 .form-field > span:first-child {
   font-weight: 600;
@@ -421,5 +434,5 @@
 .form-list-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
 }

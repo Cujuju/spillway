@@ -75,7 +75,7 @@ export function Proxy() {
 
       <section class="card">
         <div class="row wrap">
-          <h2 class="card-title spacer" style={{ margin: 0 }}>Connect clients</h2>
+          <h2 class="card-title spacer">Connect clients</h2>
           <span class="chip">
             <span class="chip-label">Endpoint</span>
             <span class="chip-value selectable">{endpoint() || '—'}</span>
@@ -104,7 +104,7 @@ export function Proxy() {
       <section class="card">
         <div class="row">
           <div class="spacer">
-            <h2 class="card-title" style={{ margin: 0 }}>Custom proxy settings</h2>
+            <h2 class="card-title">Custom proxy settings</h2>
             <div class="list-row-help">Keys in config.user.yaml are merged into the proxy config and applied when you save. App settings win where they overlap.</div>
           </div>
           <button class="btn" onClick={() => void window.api.openPath('userConfig')}><FilePen size={ICON_PX} /> Edit config.user.yaml</button>

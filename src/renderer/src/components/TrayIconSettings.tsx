@@ -111,7 +111,7 @@ export function TrayIconSettings() {
             {(spec, i) => (
               <div class="tray-item">
                 <img class={taskbarDark() ? 'taskbar-dark' : 'taskbar-light'} src={preview(spec).src} width={PREVIEW_CSS_PX} height={PREVIEW_CSS_PX} alt="" />
-                <div class="spacer" style={{ 'min-width': 0 }}>
+                <div class="spacer shrink">
                   <div>{preview(spec).reading.title}</div>
                   <div class="muted truncate">{describe(spec)} · {preview(spec).reading.source}</div>
                 </div>

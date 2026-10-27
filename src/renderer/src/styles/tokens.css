@@ -12,7 +12,58 @@
   --text-header: 16px;
   /* Page titles: one step above card titles (--text-header), not a hero size. */
   --text-title: 20px;
+  /* Activity stat-strip figures: between card titles and page titles. */
+  --text-stat: 17px;
   --text-hero: 40px;
+  /* Inline icons sit on the text baseline, a little apart from their label. */
+  --icon-baseline-shift: -0.125em;
+  --icon-text-gap: 0.3em;
+
+  /* Letter spacing: uppercase labels, sidebar group headings, the title bar, page titles. */
+  --tracking-label: 0.06em;
+  --tracking-section: 0.08em;
+  --tracking-titlebar: 0.04em;
+  --tracking-title: -0.01em;
+
+  /* Line heights: figures, help and notices, logs, chart labels and tooltips. */
+  --leading-tight: 1.3;
+  --leading-help: 1.45;
+  --leading-body: 1.5;
+  --leading-log: 1.55;
+  --leading-loose: 1.6;
+
+  /* Spacing scale (StockApp's): --spacing-N is N × 4px; _5 is a half step. */
+  --spacing-0_5: 2px;
+  --spacing-1: 4px;
+  --spacing-1_5: 6px;
+  --spacing-2: 8px;
+  --spacing-2_5: 10px;
+  --spacing-3: 12px;
+  --spacing-3_5: 14px;
+  --spacing-4: 16px;
+  --spacing-4_5: 18px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+
+  /* Lines: hairline borders and rules, scrollbar and tab-underline strokes, accent bars. */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+  --border-width-accent: 3px;
+  /* Keyboard focus ring. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* Disabled controls; rows switched off (accounts, providers); dimmed secondary text. */
+  --opacity-disabled: 0.5;
+  --opacity-off: 0.55;
+  --opacity-dim: 0.45;
+
+  --z-raised: 1;
+  --z-dialog: 50;
+
+  /* Bar fills ease to new values; the busy spinner turns once per period. */
+  --duration-bar: 300ms;
+  --duration-spin: 900ms;
 
   /* Inset of a page, and of dialogs so they match it. */
   --page-pad: 20px;
@@ -23,12 +74,29 @@
   /* Between neighbouring cards, everywhere; dialogs also use it between their blocks. */
   --card-gap: 8px;
 
+  /* Small marks: heat cells, bars, swatches. */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  /* Provider glyph tiles. */
+  --radius-glyph: 5px;
   --radius-btn: 6px;
   --radius-card: 10px;
   /* Round ends: bars, tracks and swatches only; chips, badges and buttons stay rounded rectangles. */
   --radius-pill: 999px;
   /* Chips and badges round a quarter of their height. */
   --chip-radius-ratio: 0.25;
+
+  /* Provider glyphs: the default, and the small one in dense tables. */
+  --glyph-size: 18px;
+  --glyph-size-sm: 14px;
+  --glyph-size-lg: 28px;
+  /* Legend and tooltip colour dots; thin progress bars; square icon buttons; scrollbars. */
+  --dot-size: 8px;
+  --bar-height: 5px;
+  --icon-btn-size: 32px;
+  --scrollbar-size: 10px;
+  /* Widest a page's content grows. */
+  --page-max-width: 1180px;
 
   /* One height for buttons, inputs, toggles and segments so settings rows line up. */
   --control-height: 28px;
@@ -37,12 +105,24 @@
   --titlebar-height: 36px;
   /* Larger than the 24 px taskbar icon. scripts/make-icon.ps1 TITLEBAR_ICON_PX must match. */
   --titlebar-icon-size: 28px;
+  /* Windows caption buttons are 46px wide; macOS needs 80px clear for the traffic lights (main/window.ts). */
+  --titlebar-btn-width: 46px;
+  --titlebar-traffic-lights: 80px;
 
   /* Card wash (StockApp's): hue share at a washed card's left edge, and the width fraction where it has faded out. */
   --card-wash-pct: 0.08;
   --card-wash-stop: 1;
 
   --shadow-floating: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
+
+  /* Behind dialogs. */
+  --color-backdrop: rgba(2, 6, 23, 0.6);
+  /* Windows caption close button on hover. */
+  --color-caption-close: #e81123;
+  --color-on-caption-close: #fff;
+  /* Approximate Windows taskbar colours, so tray previews match what the tray shows. */
+  --color-taskbar-dark: #101010;
+  --color-taskbar-light: #eeeeee;
 
   /* Provider identity colours; Claude matches Theo's dashboard orange. */
   --provider-claude: #d97757;
@@ -66,6 +146,14 @@
   --color-green-subtle: color-mix(in srgb, var(--color-green) 10%, transparent);
   --color-amber-subtle: color-mix(in srgb, var(--color-amber) 12%, transparent);
   --color-red-subtle: color-mix(in srgb, var(--color-red) 19%, transparent);
+  /* Notice borders, and the stronger danger-button border. */
+  --color-amber-border: color-mix(in srgb, var(--color-amber) 35%, transparent);
+  --color-red-border: color-mix(in srgb, var(--color-red) 35%, transparent);
+  --color-danger-border: color-mix(in srgb, var(--color-red) 40%, transparent);
+  /* Hovered rows and nav buttons; the active nav button's ring. */
+  --color-row-hover: color-mix(in srgb, var(--color-surface-input) 50%, transparent);
+  --color-nav-hover: color-mix(in srgb, var(--color-surface-input) 40%, transparent);
+  --color-nav-active-ring: color-mix(in srgb, var(--color-accent-light) 28%, transparent);
   /* xAI's brand mark is monochrome, so it follows the text colour. */
   --provider-xai: var(--color-text);
 }

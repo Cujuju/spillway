@@ -32,7 +32,7 @@ export function AccountRow(props: { credential: Credential }) {
 
   return (
     <div class="account-row" classList={{ disabled: c().disabled }}>
-      <div style={{ 'min-width': 0 }}>
+      <div class="shrink">
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>

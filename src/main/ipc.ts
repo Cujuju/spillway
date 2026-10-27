@@ -5,7 +5,8 @@ import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
-import { applyDraft, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
+import { applyDraft, firstEnabledKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
+import { listUpstreamModels } from './upstreamModels';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
@@ -207,6 +208,7 @@ const handlers: Handlers = {
   setApiKeyEnabled: (family, name, id, enabled) => editUserConfig((doc) => setKeyEnabled(doc, family, name, id, enabled)),
   saveApiProvider: (draft, target) => editUserConfig((doc) => applyDraft(doc, draft, target)),
   deleteApiProvider: (family, name) => editUserConfig((doc) => removeGroup(doc, family, name)),
+  upstreamModels: (request) => listUpstreamModels(request, (t) => firstEnabledKey(parseForEdit(readUserConfig()), t.family, t.name)),
   setLimitTrays: (images) => syncLimitTrays(images),
   setAppTooltip: (text) => setAppTrayTooltip(text),
   taskbarDark: () => taskbarDark(),

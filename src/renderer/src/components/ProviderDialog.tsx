@@ -1,7 +1,7 @@
-import { Plus, X } from 'lucide-solid';
-import { createSignal, For, Index, Show, untrack } from 'solid-js';
+import { ListPlus, Plus, X } from 'lucide-solid';
+import { createSignal, createUniqueId, For, Index, Show, untrack } from 'solid-js';
 import {
-  API_KEY_FAMILIES, FAMILY_INFO, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
+  API_KEY_FAMILIES, FAMILY_INFO, MODEL_LISTS, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
 import { Dialog, Notice, Toggle } from './ui';
 
@@ -36,6 +36,30 @@ export function ProviderDialog(props: {
     setNewKey('');
   };
   const setModel = (i: number, patch: Partial<ApiModelAlias>) => setModels(models().map((m, j) => (j === i ? { ...m, ...patch } : m)));
+
+  const modelListId = createUniqueId();
+  const [available, setAvailable] = createSignal<string[]>([]);
+  const [loadingModels, setLoadingModels] = createSignal(false);
+  const [modelsError, setModelsError] = createSignal<string | null>(null);
+  const listable = () => !!MODEL_LISTS[family()];
+  const unpicked = () => available().filter((id) => !models().some((m) => m.name.trim() === id));
+  const loadModels = async () => {
+    setLoadingModels(true);
+    setModelsError(null);
+    try {
+      // A typed or newly added key is tried first; a saved group falls back to its own key in the main process.
+      const key = newKey().trim() || newKeys()[0] || null;
+      setAvailable(await window.api.upstreamModels({ family: family(), baseUrl: baseUrl(), key, target: props.target }));
+    } catch (e) {
+      setModelsError((e as Error).message);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+  const pickModel = (select: HTMLSelectElement) => {
+    if (select.value) setModels([...models(), { name: select.value, alias: null }]);
+    select.value = '';
+  };
 
   const save = async () => {
     // A key typed but not yet added with + is still meant to be saved.
@@ -77,7 +101,7 @@ export function ProviderDialog(props: {
       <div class="form">
         <label class="form-field">
           <span>Type</span>
-          <select class="select" value={family()} disabled={!!props.target} onChange={(e) => setFamily(e.currentTarget.value as ApiKeyFamily)}>
+          <select class="select" value={family()} disabled={!!props.target} onChange={(e) => { setFamily(e.currentTarget.value as ApiKeyFamily); setAvailable([]); }}>
             <For each={API_KEY_FAMILIES}>{(f) => <option value={f}>{FAMILY_INFO[f].label}</option>}</For>
           </select>
           <span class="form-help">{info().hint}</span>
@@ -88,7 +112,7 @@ export function ProviderDialog(props: {
         </label>
         <label class="form-field">
           <span>Base URL{info().baseUrlRequired ? '' : ' (optional)'}</span>
-          <input class="input" value={baseUrl()} placeholder={info().baseUrlRequired ? 'https://…/v1' : 'Provider default'} onInput={(e) => setBaseUrl(e.currentTarget.value)} />
+          <input class="input" value={baseUrl()} placeholder={info().baseUrlRequired ? 'https://…/v1' : 'Provider default'} onInput={(e) => { setBaseUrl(e.currentTarget.value); setAvailable([]); }} />
         </label>
         <label class="form-field">
           <span>Prefix (optional)</span>
@@ -127,12 +151,15 @@ export function ProviderDialog(props: {
 
         <div class="form-field">
           <span>Models (optional)</span>
-          <span class="form-help">Empty serves the provider's own model list. An alias is the name clients ask for.</span>
+          <span class="form-help">
+            Empty serves the provider's own model list. An alias is the name clients ask for.
+            {listable() ? ' Load models to pick from what the key can use.' : ''}
+          </span>
           {/* Index, not For: each edit replaces the row's object, and For would remount the row and drop focus. */}
           <Index each={models()}>
             {(m, i) => (
               <div class="form-list-row">
-                <input class="input spacer" value={m().name} placeholder="Upstream model" onInput={(e) => setModel(i, { name: e.currentTarget.value })} />
+                <input class="input spacer" list={modelListId} value={m().name} placeholder="Upstream model" onInput={(e) => setModel(i, { name: e.currentTarget.value })} />
                 <input class="input spacer" value={m().alias ?? ''} placeholder="Alias (optional)" onInput={(e) => setModel(i, { alias: e.currentTarget.value })} />
                 <button class="btn ghost icon-btn" title="Remove model" onClick={() => setModels(models().filter((_, j) => j !== i))}>
                   <X size={ICON_PX} />
@@ -140,9 +167,30 @@ export function ProviderDialog(props: {
               </div>
             )}
           </Index>
-          <div>
+          <datalist id={modelListId}>
+            <For each={available()}>{(id) => <option value={id} />}</For>
+          </datalist>
+          <div class="form-list-row">
             <button class="btn ghost" onClick={() => setModels([...models(), { name: '', alias: null }])}><Plus size={ICON_PX} /> Add model</button>
+            <Show when={listable()}>
+              <Show
+                when={available().length}
+                fallback={
+                  <button class="btn ghost" disabled={loadingModels()} onClick={() => void loadModels()}>
+                    <ListPlus size={ICON_PX} /> {loadingModels() ? 'Loading…' : 'Load models'}
+                  </button>
+                }
+              >
+                <select class="select" value="" aria-label="Add a model from the provider" onChange={(e) => pickModel(e.currentTarget)}>
+                  <option value="">Pick a model…</option>
+                  <For each={unpicked()}>{(id) => <option value={id}>{id}</option>}</For>
+                </select>
+              </Show>
+            </Show>
           </div>
+          <Show when={modelsError()}>
+            <Notice tone="error">{modelsError()}</Notice>
+          </Show>
         </div>
 
         <Show when={family() === 'openai-compatibility'}>

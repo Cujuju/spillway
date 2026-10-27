@@ -88,6 +88,14 @@ export function setKeyEnabled(doc: Document, family: ApiKeyFamily, name: string,
   else node.set('disabled', true);
 }
 
+/** The group's first enabled key, raw; main-process only, for calls the proxy does not make (model lists). */
+export function firstEnabledKey(doc: Document, family: ApiKeyFamily, name: string): string | null {
+  const keys = findGroup(doc, family, name)?.get('keys');
+  if (!isSeq(keys)) return null;
+  const node = keys.items.find((n) => keyOf(n) !== null && !(isMap(n) && n.get('disabled') === true));
+  return node ? keyOf(node) : null;
+}
+
 /** Sets `key` to a trimmed value, or removes it when empty. */
 function setOptional(group: YAMLMap, key: string, value: string): void {
   const v = value.trim();

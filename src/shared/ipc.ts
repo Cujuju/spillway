@@ -1,4 +1,4 @@
-import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget } from './apiProviders';
+import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
@@ -76,6 +76,8 @@ export interface DesktopApi {
   /** Adds a group (target null) or updates one, then applies the config; returns the groups after. */
   saveApiProvider(draft: ApiProviderDraft, target: ApiProviderTarget): Promise<ApiProviderGroup[]>;
   deleteApiProvider(family: ApiKeyFamily, name: string): Promise<ApiProviderGroup[]>;
+  /** Model ids the upstream serves, for the editor's model picker. Saved keys stay in the main process. */
+  upstreamModels(request: UpstreamModelsRequest): Promise<string[]>;
 
   setLimitTrays(images: { id: string; png1x: string; png2x: string; tooltip: string }[]): Promise<void>;
   setAppTooltip(text: string): Promise<void>;
@@ -151,6 +153,7 @@ export const INVOKE = {
   setApiKeyEnabled: 'providers:key-enabled',
   saveApiProvider: 'providers:save',
   deleteApiProvider: 'providers:delete',
+  upstreamModels: 'providers:models',
   setLimitTrays: 'tray:limits',
   setAppTooltip: 'tray:tooltip',
   taskbarDark: 'tray:taskbar-dark',

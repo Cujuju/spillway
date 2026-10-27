@@ -15,6 +15,23 @@ export const FAMILY_INFO: Record<ApiKeyFamily, { label: string; glyph: string; b
   'openai-compatibility': { label: 'OpenAI-compatible', glyph: 'openai-compatibility', baseUrlRequired: true, keysOptional: true, hint: 'Any OpenAI-style endpoint (OpenRouter, a local server, …)' },
 };
 
+/**
+ * Families whose model list the editor can read, by API style. Others keep typed model names.
+ * Claude base URLs omit /v1 (the proxy appends /v1/messages); OpenAI-compatible ones include it.
+ */
+export const MODEL_LISTS: Partial<Record<ApiKeyFamily, { style: 'anthropic' | 'openai'; defaultBaseUrl: string }>> = {
+  claude: { style: 'anthropic', defaultBaseUrl: 'https://api.anthropic.com' },
+  'openai-compatibility': { style: 'openai', defaultBaseUrl: '' },
+};
+
+/** Asks an upstream for its models. `key` is a key typed in the editor; null uses the edited group's first enabled saved key. */
+export interface UpstreamModelsRequest {
+  family: ApiKeyFamily;
+  baseUrl: string;
+  key: string | null;
+  target: ApiProviderTarget;
+}
+
 /** A saved key as the renderer sees it: never the key itself. */
 export interface ApiKeyRef {
   /** Stable fingerprint of the key, used to keep it on save. */

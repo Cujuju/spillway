@@ -237,7 +237,7 @@
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-.reset-time > span {
+.reset-time {
   white-space: nowrap;
 }
 .reset-time svg {

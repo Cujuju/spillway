@@ -1,4 +1,5 @@
-import { createMemo, createRoot, createSignal } from 'solid-js';
+import { createComputed, createRoot, createSignal } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
@@ -25,17 +26,23 @@ export const [settings, setSettingsSignal] = createSignal<AppSettings>(DEFAULT_S
 export const [now, setNow] = createSignal(Date.now());
 const [rawSnapshot, setRawSnapshot] = createSignal<UsageSnapshot | null>(null);
 export const setSnapshot = setRawSnapshot;
+const [view, setView] = createStore<{ snapshot: UsageSnapshot | null }>({ snapshot: null });
 /**
- * What the UI shows: the latest snapshot with windows past their reset rolled to zero, emails masked
- * unless "Show emails" is on. Module-lifetime root.
+ * Diffed into a store keyed by credential id, so each poll keeps object identity: keyed lists
+ * (`<For>`) keep their rows and row-local state (open dialogs, spinners) instead of remounting.
  */
-export const snapshot = createRoot(() =>
-  createMemo(() => {
+createRoot(() =>
+  createComputed(() => {
     const raw = rawSnapshot();
     const s = raw && rollPastResets(raw, now());
-    return s && !settings().dashboard.showEmails ? maskSnapshot(s) : s;
+    setView('snapshot', reconcile(s && !settings().dashboard.showEmails ? maskSnapshot(s) : s, { key: 'id' }));
   }),
 );
+/**
+ * What the UI shows: the latest snapshot with windows past their reset rolled to zero, emails masked
+ * unless "Show emails" is on. A read-only store; copy before mutating or sending over IPC.
+ */
+export const snapshot = (): UsageSnapshot | null => view.snapshot;
 export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);

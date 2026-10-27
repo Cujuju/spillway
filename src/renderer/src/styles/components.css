@@ -320,7 +320,7 @@
 
 .notice {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-2_5);
   padding: var(--spacing-2_5) var(--spacing-3);
   border-radius: var(--radius-btn);

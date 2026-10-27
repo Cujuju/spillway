@@ -1,6 +1,6 @@
 import { Download, KeyRound, ListTree } from 'lucide-solid';
 import { createResource, createSignal, For, Show } from 'solid-js';
-import type { Credential, CredentialRenewResult } from '@shared/types';
+import type { Credential, CredentialModel, CredentialRenewResult } from '@shared/types';
 import { Dialog } from './ui';
 
 const ICON_PX = 14;
@@ -62,25 +62,48 @@ export function CredentialActions(props: {
   );
 }
 
+/** Numeric-aware ID order: each family groups together and its versions ascend. */
+const byId = (a: CredentialModel, b: CredentialModel) => a.id.localeCompare(b.id, undefined, { numeric: true });
+const hasOwnName = (m: CredentialModel) => !!m.displayName && m.displayName !== m.id;
+
 function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
   const [models] = createResource(() => window.api.credentialModels(props.credential.id));
+  const sorted = () => [...(models() ?? [])].sort(byId);
+  // The Name column shows only when some model has a name of its own.
+  const named = () => sorted().some(hasOwnName);
+  const count = () => sorted().length;
   return (
-    <Dialog title={`Models · ${props.credential.label}`} onClose={props.onClose} actions={<button class="btn" onClick={props.onClose}>Close</button>}>
+    <Dialog title="Models" onClose={props.onClose} actions={<button class="btn" onClick={props.onClose}>Close</button>}>
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
         <Show when={!models.error} fallback={<p class="secondary">Could not load models: {(models.error as Error).message}</p>}>
-          <Show when={models()?.length} fallback={<p class="muted">The proxy lists no models for this account. It may be disabled or not loaded yet.</p>}>
-            <ul class="model-list">
-              <For each={models()}>
-                {(m) => (
-                  <li>
-                    <span class="selectable">{m.id}</span>
-                    <Show when={m.displayName && m.displayName !== m.id}>
-                      <span class="muted"> · {m.displayName}</span>
-                    </Show>
-                  </li>
-                )}
-              </For>
-            </ul>
+          <Show when={count()} fallback={<p class="muted">The proxy lists no models for this account. It may be disabled or not loaded yet.</p>}>
+            <p class="dialog-sub">
+              {props.credential.label} serves {count()} {count() === 1 ? 'model' : 'models'}.
+            </p>
+            <table class="table model-table">
+              <thead>
+                <tr>
+                  <Show when={named()}>
+                    <th>Name</th>
+                  </Show>
+                  <th>Model ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={sorted()}>
+                  {(m) => (
+                    <tr>
+                      <Show when={named()}>
+                        <td>{m.displayName ?? m.id}</td>
+                      </Show>
+                      <td class="selectable" classList={{ secondary: named() }}>
+                        {m.id}
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
           </Show>
         </Show>
       </Show>

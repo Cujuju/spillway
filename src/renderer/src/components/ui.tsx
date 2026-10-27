@@ -1,5 +1,6 @@
 import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from 'lucide-solid';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { resetParts } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
 import { providerLogo, providerVar } from '../lib/providers';
@@ -88,20 +89,23 @@ export function NumberField(props: { value: number; onCommit: (v: number) => voi
   );
 }
 
+/** Modal rendered on <body>, so it never inherits styles from where it's opened (e.g. a right-aligned table cell). */
 export function Dialog(props: { title: string; onClose: () => void; children: JSX.Element; actions?: JSX.Element }) {
   const onKey = (e: KeyboardEvent) => e.key === 'Escape' && props.onClose();
   onMount(() => window.addEventListener('keydown', onKey));
   onCleanup(() => window.removeEventListener('keydown', onKey));
   return (
-    <div class="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-      <div class="dialog" role="dialog" aria-label={props.title}>
-        <h2 class="card-title">{props.title}</h2>
-        {props.children}
-        <Show when={props.actions}>
-          <div class="dialog-actions">{props.actions}</div>
-        </Show>
+    <Portal>
+      <div class="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
+        <div class="dialog" role="dialog" aria-label={props.title}>
+          <h2 class="card-title">{props.title}</h2>
+          {props.children}
+          <Show when={props.actions}>
+            <div class="dialog-actions">{props.actions}</div>
+          </Show>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 

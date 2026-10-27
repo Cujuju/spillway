@@ -1,5 +1,5 @@
-import { Layers, RotateCcw } from 'lucide-solid';
-import { For, Show } from 'solid-js';
+import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
+import { createSignal, For, Show } from 'solid-js';
 import { providerLabel, trayLevel } from '@shared/trayValues';
 import { compactDuration } from '../lib/format';
 import { providerVar } from '../lib/providers';
@@ -19,13 +19,13 @@ interface CardsProps {
   showAll: boolean;
   total: number;
   selected: string | null;
-  /** Window length the chart shows; its line is highlighted on every card. */
-  windowMs: string | null;
+  /** Line id the chart shows; matching lines are highlighted on every card. */
+  chosenLine: string | null;
   onSelect: (id: string) => void;
-  onWindow: (ms: string) => void;
+  onLine: (id: string) => void;
 }
 
-/** Provider cards: each filters the page to its provider and shows every window length, one line each. */
+/** Provider cards: each filters the page to its provider and lists its windows; model and spend windows fold away. */
 export function ProviderCards(props: CardsProps) {
   return (
     <div class="pool-cards">
@@ -36,23 +36,46 @@ export function ProviderCards(props: CardsProps) {
       </Show>
       <For each={props.pools}>
         {(p) => {
-          const chosen = () => p.lines().find((l) => l.ms === props.windowMs);
+          const [expanded, setExpanded] = createSignal(false);
+          const chosen = () => p.lines().find((l) => l.id === props.chosenLine);
           const rate = () => chosen()?.model.rate();
+          const folded = () => p.lines().filter((l) => l.scoped).length;
+          // A charted scoped line stays visible while folded.
+          const shown = () => p.lines().filter((l) => !l.scoped || expanded() || l.id === props.chosenLine);
           return (
             <div class="pool-card" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
-              {/* The card's keyboard target; its click bubbles to the card. */}
-              <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>
-                <ProviderGlyph provider={p.id} />
-                <span class="pool-card-name">{providerLabel(p.id)}</span>
-                <span class="count">{p.count()}</span>
-                <span class="pool-card-plans truncate" title="Accounts count by plan size">{p.lines()[0]?.model.plans()}</span>
-                <span class="spacer" />
-                <Show when={rate() != null}>
-                  <span class="pool-card-rate" title="Drain rate of the highlighted window">~{rate()!.toFixed(1)}%/h</span>
+              <div class="pool-card-top">
+                {/* The card's keyboard target; its click bubbles to the card. */}
+                <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>
+                  <ProviderGlyph provider={p.id} />
+                  <span class="pool-card-name">{providerLabel(p.id)}</span>
+                  <span class="count">{p.count()}</span>
+                  <span class="pool-card-plans truncate" title="Accounts count by plan size">{p.lines()[0]?.model.plans()}</span>
+                  <span class="spacer" />
+                  <Show when={rate() != null}>
+                    <span class="pool-card-rate" title="Drain rate of the highlighted window">~{rate()!.toFixed(1)}%/h</span>
+                  </Show>
+                </button>
+                <Show when={folded()}>
+                  <button
+                    type="button"
+                    class="pool-card-more"
+                    aria-expanded={expanded()}
+                    title={expanded() ? 'Hide model and spend windows' : 'Show model and spend windows'}
+                    onClick={(e) => {
+                      // Folds only; the provider filter stays.
+                      e.stopPropagation();
+                      setExpanded(!expanded());
+                    }}
+                  >
+                    <Show when={expanded()} fallback={<>+{folded()} <ChevronDown size={ICON_PX} /></>}>
+                      <ChevronUp size={ICON_PX} />
+                    </Show>
+                  </button>
                 </Show>
-              </button>
-              <For each={p.lines()} fallback={<span class="muted">Not loaded yet</span>}>
-                {(l) => <WindowLine line={l} chosen={l.ms === props.windowMs} onPick={() => props.onWindow(l.ms)} />}
+              </div>
+              <For each={shown()} fallback={<span class="pool-card-empty muted">Not loaded yet</span>}>
+                {(l) => <WindowLine line={l} chosen={l.id === props.chosenLine} onPick={() => props.onLine(l.id)} />}
               </For>
             </div>
           );

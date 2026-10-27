@@ -1,14 +1,13 @@
-/* Provider cards: one per provider plus All; each window length is a line, the chart's own highlighted. */
+/* Provider cards: one per provider plus All; each window is a line, the charted one highlighted. */
 .pool-cards {
   /* Fits the header (glyph, name, count, plan, rate) and a full window line. */
   --pool-card-min: 260px;
-  --pool-line-label: 48px;
+  /* Room for "Spend limit $250"; longer labels truncate. */
+  --pool-line-label-max: 120px;
   /* Highlight to text on every side. */
   --pool-line-inset: 6px;
   /* Highlight to card border, beside and below the last line. */
   --pool-line-edge: 4px;
-  --pool-line-pct: 40px;
-  --pool-line-reset: 64px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -17,11 +16,13 @@
 .notice + .pool-cards {
   margin-top: var(--page-gap);
 }
+/* Window lines share the card's columns (label, bar, percent, reset), so they line up. */
 .pool-card {
   flex: 1 1 var(--pool-card-min);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: fit-content(var(--pool-line-label-max)) minmax(0, 1fr) auto auto;
+  align-content: start;
+  gap: 4px 8px;
   padding: 7px calc(var(--pool-line-edge) + var(--pool-line-inset)) var(--pool-line-edge);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
@@ -40,7 +41,7 @@
 }
 .pool-card.all {
   flex: 0 0 auto;
-  flex-direction: row;
+  display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 16px;
@@ -61,7 +62,18 @@
   display: grid;
   place-items: center;
 }
+.pool-card-top,
+.pool-card-empty {
+  grid-column: 1 / -1;
+}
+.pool-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .pool-card-head {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -74,7 +86,27 @@
   text-align: left;
   cursor: pointer;
 }
+/* Folds the model and spend windows. */
+.pool-card-more {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.pool-card-more:hover {
+  background: var(--color-surface-input);
+  color: var(--color-text);
+}
 .pool-card-head:focus-visible,
+.pool-card-more:focus-visible,
 .pool-card.all:focus-visible,
 .pool-line:focus-visible {
   outline: 2px solid var(--color-accent-border);
@@ -95,14 +127,17 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
-/* Bleeds into the card padding so the highlight has room around the text, which stays aligned with the header. */
+/*
+ * Bleeds into the card padding so the highlight has room around the text, which stays aligned with
+ * the header. Margin and padding cancel at the edges, so the subgrid's items sit on the card's tracks.
+ */
 .pool-line {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: var(--pool-line-label) minmax(0, 1fr) var(--pool-line-pct) var(--pool-line-reset);
+  grid-template-columns: subgrid;
   /* As tall as the label's capitals; the larger percent overflows it evenly. */
   grid-template-rows: 1cap;
   align-items: center;
-  gap: 8px;
   margin: 0 calc(-1 * var(--pool-line-inset));
   padding: var(--pool-line-inset);
   border: 0;

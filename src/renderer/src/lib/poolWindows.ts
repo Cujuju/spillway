@@ -1,4 +1,4 @@
-import type { Credential } from '@shared/types';
+import type { Credential, LimitWindow } from '@shared/types';
 import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
 
@@ -17,6 +17,22 @@ export function durationChoices(pools: Credential[][]): WindowChoice[] {
     for (const c of creds) for (const w of c.windows) if (!w.scoped && w.durationMs && !seen.has(w.durationMs)) seen.set(w.durationMs, w.label);
   }
   return [...seen].sort(([a], [b]) => a - b).map(([ms, label]) => ({ value: String(ms), label }));
+}
+
+/**
+ * Chart selection ids. Account-wide windows of one length chart together across providers
+ * (each provider's weekly); a scoped window (model, spend) charts alone.
+ */
+export const lengthLineId = (ms: string) => `length:${ms}`;
+export const scopedLineId = (key: string) => `scoped:${key}`;
+
+/** One provider's scoped windows (model, feature, spend), shortest first. */
+export function scopedChoices(credentials: Credential[]): WindowChoice[] {
+  const seen = new Map<string, LimitWindow>();
+  for (const c of credentials) for (const w of c.windows) if (w.scoped && !seen.has(w.key)) seen.set(w.key, w);
+  return [...seen.values()]
+    .sort((a, b) => (a.durationMs ?? Infinity) - (b.durationMs ?? Infinity))
+    .map((w) => ({ value: w.key, label: w.label }));
 }
 
 /** The account-wide window key of this length, or null when the provider has none. */

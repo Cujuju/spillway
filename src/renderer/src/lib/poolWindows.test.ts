@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, LimitWindow } from '@shared/types';
-import { durationChoices, keyForDuration, nextResetAt, poolSegments, valueAt } from './poolWindows';
+import { durationChoices, keyForDuration, nextResetAt, poolSegments, scopedChoices, valueAt } from './poolWindows';
 
 const H = 3_600_000;
 const win = (key: string, label: string, durationMs: number | null, scoped = false): LimitWindow =>
@@ -13,6 +13,11 @@ const codex = [cred([win('primary', '5-hour', 5 * H), win('secondary', 'Weekly',
 describe('window choices', () => {
   it('groups several providers by account-wide length', () => {
     expect(durationChoices([claude, codex])).toEqual([{ value: String(5 * H), label: '5-hour' }, { value: String(168 * H), label: 'Weekly' }]);
+  });
+  it('lists a provider\'s scoped windows, shortest first, unknown length last', () => {
+    const spend = cred([win('spend', 'Spend limit', null, true), win('five_hour', '5-hour', 5 * H)]);
+    expect(scopedChoices([...claude, spend])).toEqual([{ value: 'seven_day_fable', label: 'Weekly · Fable' }, { value: 'spend', label: 'Spend limit' }]);
+    expect(scopedChoices(codex)).toEqual([]);
   });
   it('finds each provider its own key for a length, skipping scoped windows', () => {
     expect(keyForDuration(claude, 168 * H)).toBe('seven_day');

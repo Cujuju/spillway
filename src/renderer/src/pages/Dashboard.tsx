@@ -9,7 +9,7 @@ import { ALL_PROVIDERS as ALL, ProviderCards } from '../components/ProviderCards
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Notice } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
-import { durationChoices } from '../lib/poolWindows';
+import { durationChoices, lengthLineId } from '../lib/poolWindows';
 import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } from '../store';
 
 const ICON_PX = 14;
@@ -24,7 +24,7 @@ const resetAt = (c: Credential, key: string | null) => {
 
 export function Dashboard() {
   const [chosen, setChosen] = createSignal<string | null>(null);
-  const [chosenWindow, setChosenWindow] = createSignal<string | null>(null);
+  const [chosenLine, setChosenLine] = createSignal<string | null>(null);
   const [query, setQuery] = createSignal('');
   const [refreshing, setRefreshing] = createSignal(false);
 
@@ -46,17 +46,19 @@ export function Dashboard() {
   const credsOf = (id: string) => creds().filter((c) => c.provider === id);
   const providerCreds = createMemo(() => (provider() === ALL ? creds() : credsOf(provider() ?? '')));
 
-  // Window lengths across providers (5-hour, weekly); the chart shows one, the longest by default.
+  // Window lengths across providers (5-hour, weekly). The chart shows one card line; the longest length by default.
   const lengths = createMemo(() => durationChoices(providers().map((p) => credsOf(p.id))));
-  const windowMs = () => {
-    const w = chosenWindow();
-    return w && lengths().some((l) => l.value === w) ? w : (lengths().at(-1)?.value ?? null);
-  };
   const cards = createProviderPools(() => providers().map((p) => p.id), credsOf, lengths, () => snapshot()?.strategy ?? '');
+  const lineId = () => {
+    const c = chosenLine();
+    if (c && cards().some((p) => p.lines().some((l) => l.id === c))) return c;
+    const longest = lengths().at(-1)?.value;
+    return longest ? lengthLineId(longest) : null;
+  };
   const chartModels = () =>
     cards()
       .filter((c) => provider() === ALL || c.id === provider())
-      .flatMap((c) => c.lines().filter((l) => l.ms === windowMs()).map((l) => l.model));
+      .flatMap((c) => c.lines().filter((l) => l.id === lineId()).map((l) => l.model));
   // Each provider sorts by its own widest window; keys differ between providers.
   const sortKeys = createMemo(() => new Map(providers().map((p) => [p.id, poolWindowKey(credsOf(p.id))])));
   const loaded = () => creds().filter((c) => c.windows.some((w) => w.usedPercent !== null)).length;
@@ -136,9 +138,9 @@ export function Dashboard() {
           showAll={multi()}
           total={creds().length}
           selected={provider()}
-          windowMs={windowMs()}
+          chosenLine={lineId()}
           onSelect={setChosen}
-          onWindow={setChosenWindow}
+          onLine={setChosenLine}
         />
         <PoolPanel models={chartModels()} />
 

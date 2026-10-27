@@ -45,9 +45,9 @@
 }
 /* Theo-style pills in the dashboard header. */
 .btn.pill {
-  height: 36px;
-  padding: 0 18px;
-  font-size: var(--text-sm);
+  height: var(--control-height);
+  padding: 0 12px;
+  font-size: var(--text-body);
   border-radius: var(--radius-pill);
   background: transparent;
 }

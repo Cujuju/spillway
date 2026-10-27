@@ -17,8 +17,8 @@
   flex: 1 1 var(--pool-card-min);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 9px 12px;
+  gap: 4px;
+  padding: 7px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface-sunken);
@@ -90,15 +90,15 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
-/* Bleeds into the card padding so the highlight has room around the text. */
+/* Bleeds into the card padding so the highlight has room around the text, which stays aligned with the header. */
 .pool-line {
-  --pool-line-inset: 4px;
+  --pool-line-inset: 6px;
   display: grid;
   grid-template-columns: var(--pool-line-label) minmax(0, 1fr) var(--pool-line-pct) var(--pool-line-reset);
   align-items: center;
   gap: 8px;
   margin: 0 calc(-1 * var(--pool-line-inset));
-  padding: 1px var(--pool-line-inset);
+  padding: 3px var(--pool-line-inset);
   border: 0;
   border-radius: var(--radius-btn);
   background: none;

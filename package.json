@@ -9,7 +9,7 @@
     "dev": "node scripts/build-proxy.mjs --keep-last-good && electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "node scripts/build-linked.mjs && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "proxy:build": "node scripts/build-proxy.mjs",
     "package": "electron-vite build && electron-builder --publish never",

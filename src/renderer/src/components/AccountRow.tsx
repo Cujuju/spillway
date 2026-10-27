@@ -10,7 +10,7 @@ const ICON_PX = 13;
 /** The proxy's on-demand usage lookup (POST /usage/refresh) supports Claude OAuth accounts only. */
 const LIVE_LOOKUP_PROVIDER = 'claude';
 
-/** One account in Theo's list: name + state, limit bars, refresh. */
+/** One account in Theo's list: name, refresh and state, then limit bars. */
 export function AccountRow(props: { credential: Credential }) {
   const c = () => props.credential;
   const [busy, setBusy] = createSignal(false);
@@ -38,6 +38,11 @@ export function AccountRow(props: { credential: Credential }) {
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>
+          <Show when={c().provider === LIVE_LOOKUP_PROVIDER && !c().disabled}>
+            <button class="btn ghost icon-btn" disabled={busy()} onClick={refresh} title="Refresh quota" aria-label="Refresh quota">
+              <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
+            </button>
+          </Show>
           <Show when={!c().disabled && benchedFor() === 0 && c().nextPick}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
@@ -64,13 +69,6 @@ export function AccountRow(props: { credential: Credential }) {
         <For each={c().windows} fallback={<span class="muted">No limit data yet — refresh to look it up.</span>}>
           {(w) => <LimitBar window={w} />}
         </For>
-      </div>
-      <div class="account-actions">
-        <Show when={c().provider === LIVE_LOOKUP_PROVIDER && !c().disabled}>
-          <button class="btn ghost" disabled={busy()} onClick={refresh} title="Look up this account's limits now">
-            <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} /> Refresh quota
-          </button>
-        </Show>
       </div>
     </div>
   );

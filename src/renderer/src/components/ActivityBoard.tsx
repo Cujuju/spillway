@@ -101,7 +101,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
                     <X size={ICON_PX} />
                   </button>
                 </header>
-                <div class="board-tile-body">{def.body(spec, props.data)}</div>
+                <div class="board-tile-body">{def.body(spec, props.data, tile.id)}</div>
               </section>
             </Show>
           );

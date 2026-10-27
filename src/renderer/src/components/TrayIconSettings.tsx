@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-solid';
-import { createMemo, createSignal, For, Show } from 'solid-js';
+import { createMemo, For, Show } from 'solid-js';
 import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
 import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdInUnit, trayIconText, windowLabel } from '@shared/trayValues';
+import { isString, persistedSignal } from '../lib/persisted';
 import { isMac } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
@@ -40,7 +41,7 @@ export function TrayIconSettings() {
     for (const c of snapshot()?.credentials ?? []) seen.add(c.provider);
     return [...seen];
   });
-  const [provider, setProvider] = createSignal('claude');
+  const [provider, setProvider] = persistedSignal('trayIcons.provider', 'claude', isString);
   const windows = createMemo(() => {
     const seen = new Map<string, { label: string; durationMs: number | null }>();
     for (const c of snapshot()?.credentials ?? []) {
@@ -52,9 +53,9 @@ export function TrayIconSettings() {
       .sort(([, a], [, b]) => (a.durationMs ?? Infinity) - (b.durationMs ?? Infinity))
       .map(([key, w]) => ({ key, label: w.label }));
   });
-  const [windowKey, setWindowKey] = createSignal('');
-  const [scope, setScope] = createSignal<TrayIconScope>('active');
-  const [credentialId, setCredentialId] = createSignal('');
+  const [windowKey, setWindowKey] = persistedSignal('trayIcons.window', '', isString);
+  const [scope, setScope] = persistedSignal<TrayIconScope>('trayIcons.scope', 'active', SCOPES.map((s) => s.value));
+  const [credentialId, setCredentialId] = persistedSignal('trayIcons.account', '', isString);
   const accounts = () => (snapshot()?.credentials ?? []).filter((c) => c.provider === provider());
 
   const effectiveWindow = () => (windows().some((w) => w.key === windowKey()) ? windowKey() : (windows()[0]?.key ?? ''));

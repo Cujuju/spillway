@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from 'solid-js';
 import { ChartTip, type TipRow } from './ChartTip';
 import { heatGrid, hourLabel, metricValue, type HeatMode, type Metric, type Summary } from '../lib/activityStats';
 import type { ActivityBucket } from '@shared/types';
+import { persistedSignal } from '../lib/persisted';
 import { Seg } from './ui';
 
 /** Shades above empty; matches `.heat-cell.l1`–`.l4` in activity.css. */
@@ -11,6 +12,7 @@ const HOUR_LABEL_STEP = 6;
 /** Empty plus each shade, for the legend. */
 const SHADES = Array.from({ length: LEVELS + 1 }, (_, l) => l);
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const HEAT_MODES = [{ value: 'week', label: 'Last 7 days' }, { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over the last 30 days' }] as const;
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** "America/Los_Angeles" → "Los Angeles". */
 const zoneLabel = zone.split('/').pop()!.replace(/_/g, ' ');
@@ -21,13 +23,17 @@ export function heatLevel(value: number, max: number): number {
 }
 
 export function ActivityHeatmap(props: {
+  /** The board tile's id, so each heatmap tile keeps its own mode. */
+  tileId: string;
   rows: ActivityBucket[];
   now: number;
   metric: Metric;
   format: (s: Summary) => string;
   tooltip: (s: Summary) => TipRow[];
 }) {
-  const [mode, setMode] = createSignal<HeatMode>('week');
+  // A tile's id is fixed for life (ActivityBoard).
+  // oxlint-disable-next-line solid/reactivity
+  const [mode, setMode] = persistedSignal<HeatMode>(`activity.heatMode.${props.tileId}`, 'week', HEAT_MODES.map((m) => m.value));
   const [tip, setTip] = createSignal<{ cell: HTMLElement; title: string; s: Summary } | null>(null);
   const grid = createMemo(() => heatGrid(props.rows, mode(), props.now));
   const max = createMemo(() => Math.max(0, ...grid().flatMap((r) => r.cells.map((c) => metricValue(c, props.metric)))));
@@ -40,7 +46,7 @@ export function ActivityHeatmap(props: {
     <div class="heat-card">
       <div class="chart-head heat-head">
         <span class="chart-head-note" title={zone}>{zoneLabel} time</span>
-        <Seg value={mode()} options={[{ value: 'week', label: 'Last 7 days' }, { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over the last 30 days' }] as const} onChange={setMode} />
+        <Seg value={mode()} options={HEAT_MODES} onChange={setMode} />
       </div>
       <div class="heat" role="grid" aria-label="Activity by day and hour" onPointerLeave={() => setTip(null)}>
         <div />

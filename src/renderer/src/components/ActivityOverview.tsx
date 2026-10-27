@@ -1,6 +1,7 @@
 import { createMemo, createSignal, Show } from 'solid-js';
 import { bucketStarts, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
+import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, now } from '../store';
 import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
 import { costText, countRows, hitRate, savings } from './activityFormat';
@@ -24,7 +25,7 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
 
 /** Range and totals stay on top; the charts below are tiles the user arranges. */
 export function ActivityOverview() {
-  const [range, setRange] = createSignal<Range>('7d');
+  const [range, setRange] = persistedSignal<Range>('activity.range', '7d', RANGE_OPTIONS.map((o) => o.value));
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
 
   const starts = createMemo(() => bucketStarts(range(), now()));

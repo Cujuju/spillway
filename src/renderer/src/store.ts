@@ -6,17 +6,20 @@ import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { rangeDays } from './lib/activityStats';
+import { persistedSignal } from './lib/persisted';
 import { MAX_ACTIVITY_EVENTS, type ActivityBucket, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
-export type Page = 'dashboard' | 'providers' | 'activity' | 'proxy' | 'logs' | 'settings';
+const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings'] as const;
+export type Page = (typeof PAGES)[number];
 
 const api = window.api;
 
-export const [page, setPage] = createSignal<Page>('dashboard');
+export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
-export type SettingsSection = 'general' | 'appearance' | 'trayIcons' | 'proxy' | 'dashboard' | 'notifications' | 'updates' | 'advanced';
+const SETTINGS_SECTIONS = ['general', 'appearance', 'trayIcons', 'proxy', 'dashboard', 'notifications', 'updates', 'advanced'] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 /** Lives here, not in the Settings page, so other views can open a section directly. */
-export const [settingsSection, setSettingsSection] = createSignal<SettingsSection>('general');
+export const [settingsSection, setSettingsSection] = persistedSignal<SettingsSection>('settingsSection', 'general', SETTINGS_SECTIONS);
 export function openSettings(section: SettingsSection): void {
   setSettingsSection(section);
   setPage('settings');

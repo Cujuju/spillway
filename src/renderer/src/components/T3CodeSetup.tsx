@@ -19,7 +19,7 @@ export function T3CodeSetup(props: { endpoint: string; clientKey: string; masked
     { name: 'Management key', value: props.managementKey, shown: props.maskedManagementKey },
   ];
   return (
-    <ExpandRow label="T3 Code" help="Covered by Apply above, unless its Claude provider has its own home folder." action="Steps">
+    <ExpandRow stateKey="proxy.t3Code" label="T3 Code" help="Covered by Apply above, unless its Claude provider has its own home folder." action="Steps">
       <SetupGroup
         title="Claude provider with its own home folder"
         help={

@@ -9,6 +9,7 @@ import { ALL_PROVIDERS as ALL, ProviderCards } from '../components/ProviderCards
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Notice } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
+import { isString, isStringOrNull, persistedSignal } from '../lib/persisted';
 import { durationChoices, lengthLineId } from '../lib/poolWindows';
 import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } from '../store';
 
@@ -23,9 +24,10 @@ const resetAt = (c: Credential, key: string | null) => {
 };
 
 export function Dashboard() {
-  const [chosen, setChosen] = createSignal<string | null>(null);
-  const [chosenLine, setChosenLine] = createSignal<string | null>(null);
-  const [query, setQuery] = createSignal('');
+  // A stored pick that no longer exists falls back below (provider(), lineId()).
+  const [chosen, setChosen] = persistedSignal<string | null>('dashboard.provider', null, isStringOrNull);
+  const [chosenLine, setChosenLine] = persistedSignal<string | null>('dashboard.line', null, isStringOrNull);
+  const [query, setQuery] = persistedSignal('dashboard.query', '', isString);
   const [refreshing, setRefreshing] = createSignal(false);
 
   const creds = () => snapshot()?.credentials ?? [];

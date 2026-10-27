@@ -34,7 +34,7 @@ interface PanelDef {
   hasMetric: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
   minSize: TileSize;
-  body: (spec: () => ActivityPanelSpec, data: ActivityData) => JSX.Element;
+  body: (spec: () => ActivityPanelSpec, data: ActivityData, tileId: string) => JSX.Element;
 }
 
 export const PANELS: Record<ActivityPanelKind, PanelDef> = {
@@ -64,8 +64,8 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'By hour',
     hasMetric: true,
     minSize: { width: 380, height: 260 },
-    body: (spec, data) => (
-      <ActivityHeatmap rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
+    body: (spec, data, tileId) => (
+      <ActivityHeatmap tileId={tileId} rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),
   },
   models: {

@@ -1,5 +1,6 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
+import { createMemo, For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
+import { persistedSignal } from '../lib/persisted';
 import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
@@ -13,6 +14,7 @@ const MIN_DRAIN_AXIS = 5;
 /** Pool figures are percent of the whole pool. */
 const POOL_FULL = 100;
 
+const POOL_TABS = ['remaining', 'drain'] as const;
 const days = () => settings().dashboard.forecastDays;
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
@@ -21,7 +23,7 @@ const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
  * The chart takes the panel's spare height.
  */
 export function PoolPanel(props: { models: PoolModel[] }) {
-  const [tab, setTab] = createSignal<'remaining' | 'drain'>('remaining');
+  const [tab, setTab] = persistedSignal('dashboard.poolTab', 'remaining', POOL_TABS);
   const shown = createMemo(() => props.models.filter((m) => m.summary()));
   const single = () => shown().length === 1;
   const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...shown().flatMap((m) => m.drain().map((p) => p.remaining))) * DRAIN_HEADROOM));

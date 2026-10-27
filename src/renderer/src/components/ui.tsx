@@ -3,6 +3,7 @@ import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX }
 import { Portal } from 'solid-js/web';
 import { resetParts } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
+import { isBoolean, persistedSignal } from '../lib/persisted';
 import { providerLogo, providerVar } from '../lib/providers';
 
 /** StockApp-style On/Off toggle. */
@@ -163,8 +164,10 @@ export function ResetTime(props: { at: string | number; now: number }) {
 const CHEVRON_PX = 14;
 
 /** A list row whose details open in an inset panel beneath it. */
-export function ExpandRow(props: { label: string; help: string; action: string; children: JSX.Element }) {
-  const [open, setOpen] = createSignal(false);
+export function ExpandRow(props: { stateKey: string; label: string; help: string; action: string; children: JSX.Element }) {
+  // A row's key is fixed, so reading it once is safe.
+  // oxlint-disable-next-line solid/reactivity
+  const [open, setOpen] = persistedSignal(`expand.${props.stateKey}`, false, isBoolean);
   return (
     <div class="list-row">
       <div class="list-row-text">

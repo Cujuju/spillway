@@ -11,13 +11,21 @@ const TOGGLE_ICON_PX = 12;
 const TOGGLE_KEY = 'b';
 const TOGGLE_SHORTCUT = isMac ? '⌘B' : 'Ctrl+B';
 
-const NAV: { group: string; items: { id: Page; label: string; icon: () => JSX.Element }[] }[] = [
+interface NavItem {
+  id: Page;
+  label: string;
+  icon: () => JSX.Element;
+  /** Draws a rule above the item, setting it apart from the views before it. */
+  dividerBefore?: boolean;
+}
+
+const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Monitor',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: () => <Gauge size={ICON_PX} /> },
-      { id: 'providers', label: 'Providers', icon: () => <Network size={ICON_PX} /> },
       { id: 'activity', label: 'Activity', icon: () => <ActivityIcon size={ICON_PX} /> },
+      { id: 'providers', label: 'Providers', icon: () => <Network size={ICON_PX} />, dividerBefore: true },
     ],
   },
   {
@@ -57,6 +65,10 @@ export function Sidebar() {
             <div class="sidebar-group">{collapsed() ? '' : group.group}</div>
             <For each={group.items}>
               {(item) => (
+                <>
+                <Show when={item.dividerBefore}>
+                  <div class="sidebar-divider" role="separator" />
+                </Show>
                 <button
                   class="nav-btn"
                   classList={{ active: page() === item.id }}
@@ -74,6 +86,7 @@ export function Sidebar() {
                     <span class="badge">{accountCount()}</span>
                   </Show>
                 </button>
+                </>
               )}
             </For>
           </>

@@ -195,6 +195,15 @@ a {
 .sidebar-group:first-child {
   margin-top: var(--spacing-1);
 }
+.sidebar-divider {
+  flex-shrink: 0;
+  height: var(--border-width);
+  margin: var(--spacing-1_5) var(--spacing-2);
+  background: var(--color-border);
+}
+.sidebar.collapsed .sidebar-divider {
+  margin: var(--spacing-2) var(--spacing-1);
+}
 .nav-btn {
   display: flex;
   align-items: center;

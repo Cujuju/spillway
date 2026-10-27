@@ -7,6 +7,7 @@ import { ActivityTotals } from '../components/ActivityTotals';
 import { TokenCell } from '../components/TokenCell';
 import { Notice, ProviderGlyph, Seg } from '../components/ui';
 import { dayLabel, usd } from '../lib/format';
+import { isString, persistedSignal } from '../lib/persisted';
 import { activity, proxyStatus, settings, snapshot } from '../store';
 
 const MS_PER_SECOND = 1000;
@@ -17,6 +18,8 @@ const PAGE_SIZE = MAX_ACTIVITY_EVENTS;
 /** Day picker value for the live recent list. */
 const RECENT = '';
 const REQUEST_COLUMN_COUNT = 10;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const;
+const FILTERS = [{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const;
 
 const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
 const requestCost = (e: ActivityEvent) => {
@@ -25,13 +28,20 @@ const requestCost = (e: ActivityEvent) => {
 };
 
 export function Activity() {
-  const [view, setView] = createSignal<'overview' | 'requests' | 'totals'>('overview');
-  const [filter, setFilter] = createSignal<'all' | 'failed'>('all');
-  const [day, setDay] = createSignal(RECENT);
+  const [view, setView] = persistedSignal('activity.view', 'overview', VIEWS.map((v) => v.value));
+  const [filter, setFilter] = persistedSignal('activity.filter', 'all', FILTERS.map((f) => f.value));
+  const [day, setDay] = persistedSignal('activity.day', RECENT, isString);
   const [days, setDays] = createSignal<string[]>([]);
   const [stored, setStored] = createSignal<ActivityEvent[]>([]);
   const [limit, setLimit] = createSignal(PAGE_SIZE);
-  onMount(() => void window.api.activityDays().then(setDays));
+  onMount(() =>
+    void window.api.activityDays().then((list) => {
+      setDays(list);
+      // Reload a restored day, or fall back to Recent if its file is gone.
+      const d = day();
+      if (d) pickDay(list.includes(d) ? d : RECENT);
+    }),
+  );
 
   const pickDay = (d: string) => {
     setDay(d);
@@ -61,7 +71,7 @@ export function Activity() {
     <>
       <header class="dash-header title-row">
         <h1 class="dash-title">Activity</h1>
-        <Seg value={view()} options={[{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const} onChange={setView} />
+        <Seg value={view()} options={VIEWS} onChange={setView} />
       </header>
 
       <Show when={proxyStatus()?.state !== 'running'}>
@@ -80,7 +90,7 @@ export function Activity() {
             <option value={RECENT}>Recent</option>
             <For each={days()}>{(d) => <option value={d}>{dayLabel(d)}</option>}</For>
           </select>
-          <Seg value={filter()} options={[{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const} onChange={setFilter} />
+          <Seg value={filter()} options={FILTERS} onChange={setFilter} />
           <span class="spacer" />
           <span class="toolbar-note">{source().length.toLocaleString()} {scope()} · {failedCount()} failed · newest first</span>
         </div>

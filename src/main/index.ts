@@ -1,4 +1,4 @@
-import { app, nativeTheme, Notification } from 'electron';
+import { app, nativeTheme, Notification, session } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { activityLog } from './activityLog';
@@ -112,6 +112,8 @@ if (!app.requestSingleInstanceLock()) {
     // Stop the proxy gracefully before the process exits.
     e.preventDefault();
     markQuitting();
+    // Writes the renderer's saved view state (localStorage) to disk before exit.
+    session.defaultSession.flushStorageData();
     usage.stop();
     activity.stop();
     history.flush();

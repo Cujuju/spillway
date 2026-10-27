@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
-import { createSignal, For, Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { providerLabel, trayLevel } from '@shared/trayValues';
 import { compactDuration } from '../lib/format';
+import { isBoolean, persistedSignal } from '../lib/persisted';
 import { providerVar } from '../lib/providers';
 import { now, settings } from '../store';
 import type { PoolLine, ProviderPool } from './poolModel';
@@ -36,7 +37,7 @@ export function ProviderCards(props: CardsProps) {
       </Show>
       <For each={props.pools}>
         {(p) => {
-          const [expanded, setExpanded] = createSignal(false);
+          const [expanded, setExpanded] = persistedSignal(`dashboard.cardExpanded.${p.id}`, false, isBoolean);
           const chosen = () => p.lines().find((l) => l.id === props.chosenLine);
           const rate = () => chosen()?.model.rate();
           const folded = () => p.lines().filter((l) => l.scoped).length;

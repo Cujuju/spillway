@@ -1,11 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { EVENTS, INVOKE, SEND, type DesktopApi } from '@shared/ipc';
+import { unwrapRemoteError } from '@shared/ipcError';
 
 type Fn = (...args: unknown[]) => unknown;
 const api: Record<string, unknown> = { platform: process.platform };
 
 for (const [method, channel] of Object.entries(INVOKE)) {
-  api[method] = ((...args: unknown[]) => ipcRenderer.invoke(channel, ...args)) satisfies Fn;
+  api[method] = ((...args: unknown[]) => ipcRenderer.invoke(channel, ...args).catch(unwrapRemoteError)) satisfies Fn;
 }
 for (const [method, channel] of Object.entries(SEND)) {
   api[method] = (() => ipcRenderer.send(channel)) satisfies Fn;

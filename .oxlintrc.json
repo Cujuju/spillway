@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Same rule set as StockApp, MoManga and ChattyPop.
+  // Default categories are off so a new oxlint release cannot add rules silently.
+  "categories": { "correctness": "off" },
+  "plugins": ["typescript"],
+  "jsPlugins": [{ "name": "budget", "specifier": "eslint-plugin-comment-budget" }],
+  "options": { "typeAware": true },
+  // Mirrors .comment-budget.json "ignore".
+  "ignorePatterns": ["**/node_modules/**", "**/out/**", "**/dist/**", "**/release/**", "**/*.d.ts", "**/.*/**", "**/.*", "resources/**"],
+  "overrides": [
+    {
+      // Comment budget: 30 words a block (.comment-budget.json).
+      "files": ["**/*.{ts,tsx,mts}"],
+      "rules": { "budget/comment-budget": "error" }
+    },
+    {
+      // Promise safety: tsc cannot see an un-awaited Promise. `void` marks deliberate fire-and-forget.
+      "files": ["src/**/*.{ts,tsx}"],
+      "rules": {
+        "typescript/no-floating-promises": "error",
+        "typescript/no-misused-promises": "error",
+        "typescript/await-thenable": "error"
+      }
+    },
+    {
+      // No swallowed errors: a catch rethrows, surfaces, logs, or states why the failure is expected.
+      "files": ["src/**/*.{ts,tsx}"],
+      "rules": { "no-empty": "error" }
+    },
+    {
+      // Solid correctness: eslint-plugin-solid runs inside oxlint; ESLint is only its runtime library.
+      "files": ["src/renderer/**/*.{ts,tsx}"],
+      "jsPlugins": ["eslint-plugin-solid"],
+      "rules": {
+        "solid/jsx-no-duplicate-props": "error",
+        "solid/jsx-no-undef": ["error", { "typescriptEnabled": true }],
+        "solid/jsx-uses-vars": "error",
+        "solid/no-innerhtml": "error",
+        "solid/jsx-no-script-url": "error",
+        "solid/components-return-once": "warn",
+        "solid/no-destructure": "error",
+        "solid/prefer-for": "error",
+        "solid/reactivity": "warn",
+        "solid/event-handlers": "warn",
+        "solid/imports": "warn",
+        "solid/style-prop": "warn",
+        "solid/no-react-deps": "warn",
+        "solid/no-react-specific-props": "warn",
+        "solid/self-closing-comp": "warn"
+      }
+    },
+    {
+      // Tests stub throwing APIs freely; the guard is for shipped code.
+      "files": ["**/*.test.{ts,tsx}"],
+      "rules": { "no-empty": "off" }
+    }
+  ]
+}

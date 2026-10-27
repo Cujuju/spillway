@@ -34,17 +34,23 @@ export function CredentialActions(props: {
       setBusy(false);
     }
   };
-  const renew = () =>
-    run(async () => {
-      const s = renewSummary(await window.api.renewCredentials(props.credential.id));
-      if (s.error) props.onError(s.error);
-      else if (s.ok) props.onDone(`${props.credential.label}: login renewed.`);
+  const renew = () => {
+    const { id, label } = props.credential;
+    const { onDone, onError } = props;
+    return run(async () => {
+      const s = renewSummary(await window.api.renewCredentials(id));
+      if (s.error) onError(s.error);
+      else if (s.ok) onDone(`${label}: login renewed.`);
     });
-  const exportFile = () =>
-    run(async () => {
-      const saved = await window.api.exportCredential(props.credential.id);
-      if (saved) props.onDone(`Saved ${props.credential.label}'s login file to ${saved}. It holds the account's tokens; keep it private.`);
+  };
+  const exportFile = () => {
+    const { id, label } = props.credential;
+    const { onDone } = props;
+    return run(async () => {
+      const saved = await window.api.exportCredential(id);
+      if (saved) onDone(`Saved ${label}'s login file to ${saved}. It holds the account's tokens; keep it private.`);
     });
+  };
 
   return (
     <>

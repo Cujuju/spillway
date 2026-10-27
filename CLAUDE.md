@@ -32,7 +32,8 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - Platforms: Windows and macOS. Proxy binaries live in `resources/bin/<platform>-<arch>/` (Node names); `scripts/build-proxy.mjs`, `electron-builder.yml` (`${platform}-${arch}`) and `src/main/paths.ts` must agree. UI wording for tray/taskbar comes from `src/renderer/src/lib/platform.ts`.
 
 ## Checks
-`pnpm typecheck && pnpm test && pnpm build`. Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
+`pnpm lint && pnpm typecheck && pnpm test && pnpm build`. Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
+`pnpm lint` is oxlint with the StockApp/MoManga/ChattyPop rule set (`.oxlintrc.json`); warnings fail it.
 `pnpm typecheck` first rebuilds the `link:` toolkit packages (`scripts/build-linked.mjs`): their types come from their gitignored `dist/`.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.
 

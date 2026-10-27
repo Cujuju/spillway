@@ -1,0 +1,7 @@
+{
+  "wordCap": 30,
+  "redirect": "the commit message or a GitHub issue",
+  "ignore": ["**/node_modules/**", "**/out/**", "**/dist/**", "**/release/**", "**/*.d.ts", "**/.*/**", "**/.*", "resources/**"],
+  "linted": ["**/*.ts", "**/*.tsx", "**/*.mts"],
+  "exempt": []
+}

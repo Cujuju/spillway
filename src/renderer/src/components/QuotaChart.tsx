@@ -63,7 +63,10 @@ export function QuotaChart(props: QuotaChartProps) {
   // Overlapping fills muddy each other, so only a lone series gets one.
   const single = () => props.series.length === 1;
 
-  const yTicks = createMemo(() => Array.from({ length: Y_TICKS + 1 }, (_, i) => (props.yMax * i) / Y_TICKS));
+  const yTicks = createMemo(() => {
+    const max = props.yMax;
+    return Array.from({ length: Y_TICKS + 1 }, (_, i) => (max * i) / Y_TICKS);
+  });
   const xTicks = createMemo(() => {
     const daily = span() > HOURLY_TICK_MAX_DAYS * DAY_MS;
     const step = daily ? DAY_MS : HOURLY_TICK_STEP_MS;

@@ -22,12 +22,13 @@ export function openSettings(section: SettingsSection): void {
   setPage('settings');
 }
 /**
- * State from main that lists render. Each update is diffed in, keyed by `id`, so unchanged objects keep
- * their identity: `<For>` keeps rows and their local state (open dialogs, focus, spinners) instead of
- * remounting them. The value is a read-only store; `unwrap` it before cloning or sending it over IPC.
+ * State from main that lists render, diffed in by `id` so unchanged objects keep identity and `<For>`
+ * keeps rows' local state. Read-only; `unwrap` before cloning or IPC.
  */
 function createReconciled<T>(initial: T): [get: () => T, set: (next: T) => void] {
   const [state, setState] = createStore({ value: initial });
+  // The getter is an accessor: callers read it inside their own tracked scopes.
+  // oxlint-disable-next-line solid/reactivity
   return [() => state.value, (next) => setState('value', reconcile(next, { key: 'id' }))];
 }
 

@@ -124,6 +124,8 @@ export function ProviderGlyph(props: { provider: string; size?: number }) {
         </span>
       }
     >
+      {/* Bundled SVGs (lib/providers.ts), inlined so currentColor follows the theme. */}
+      {/* oxlint-disable-next-line solid/no-innerhtml */}
       <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }} innerHTML={logo()} />
     </Show>
   );

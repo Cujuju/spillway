@@ -65,15 +65,19 @@ export function Dashboard() {
 
   const rows = createMemo(() => {
     const q = query().trim().toLowerCase();
-    const keyOf = (c: Credential) => sortKeys().get(c.provider) ?? null;
-    const list = providerCreds().filter((c) => !q || [c.label, c.email ?? '', c.name, c.note ?? ''].some((s) => s.toLowerCase().includes(q)));
     const sort = settings().dashboard.accountSort;
-    return [...list].sort((a, b) => {
-      if (a.disabled !== b.disabled) return Number(a.disabled) - Number(b.disabled);
-      if (sort === 'name') return a.label.localeCompare(b.label);
-      if (sort === 'usage') return (used(a, keyOf(a)) ?? Infinity) - (used(b, keyOf(b)) ?? Infinity);
-      return resetAt(a, keyOf(a)) - resetAt(b, keyOf(b));
+    const list = providerCreds()
+      .filter((c) => !q || [c.label, c.email ?? '', c.name, c.note ?? ''].some((s) => s.toLowerCase().includes(q)))
+      .map((c) => {
+        const key = sortKeys().get(c.provider) ?? null;
+        return { c, used: used(c, key) ?? Infinity, resetAt: resetAt(c, key) };
+      });
+    list.sort((a, b) => {
+      if (a.c.disabled !== b.c.disabled) return Number(a.c.disabled) - Number(b.c.disabled);
+      if (sort === 'name') return a.c.label.localeCompare(b.c.label);
+      return sort === 'usage' ? a.used - b.used : a.resetAt - b.resetAt;
     });
+    return list.map((r) => r.c);
   });
 
   const refreshAll = async () => {
@@ -97,7 +101,7 @@ export function Dashboard() {
         </div>
         <div class="dash-actions">
           <ShowEmailsButton class="btn page-action" />
-          <button class="btn page-action solid" disabled={refreshing() || proxyState() !== 'running'} onClick={refreshAll}>
+          <button class="btn page-action solid" disabled={refreshing() || proxyState() !== 'running'} onClick={() => void refreshAll()}>
             <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} /> Refresh all credentials
           </button>
         </div>

@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-solid';
-import { createSignal, For, Index, Show } from 'solid-js';
+import { createSignal, For, Index, Show, untrack } from 'solid-js';
 import {
   API_KEY_FAMILIES, FAMILY_INFO, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
@@ -16,7 +16,7 @@ export function ProviderDialog(props: {
   onSaved: (groups: ApiProviderGroup[]) => void;
 }) {
   // Seeded once from the group being edited; the dialog owns the draft from here.
-  const start = props.group;
+  const start = untrack(() => props.group);
   const [family, setFamily] = createSignal<ApiKeyFamily>(start?.family ?? 'openai-compatibility');
   const [name, setName] = createSignal(start?.name ?? '');
   const [baseUrl, setBaseUrl] = createSignal(start?.baseUrl ?? '');

@@ -40,7 +40,7 @@ export function AccountRow(props: { credential: Credential }) {
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
           <Show when={LIVE_LOOKUP_PROVIDERS.has(c().provider) && !c().disabled}>
-            <button class="btn ghost icon-btn" disabled={busy()} onClick={refresh} title="Refresh quota" aria-label="Refresh quota">
+            <button class="btn ghost icon-btn" disabled={busy()} onClick={() => void refresh()} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
           </Show>

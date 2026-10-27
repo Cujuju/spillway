@@ -67,7 +67,10 @@ export function TrayIconSettings() {
   });
   const duplicate = () => t().items.some((i) => i.id === specId(draft()));
   const canAdd = () => !!effectiveWindow() && (scope() !== 'account' || !!effectiveCredential()) && !duplicate();
-  const add = () => set((d) => void d.items.push({ id: specId(draft()), ...draft(), look: DEFAULT_TRAY_LOOK }));
+  const add = () => {
+    const spec = draft();
+    set((d) => void d.items.push({ id: specId(spec), ...spec, look: DEFAULT_TRAY_LOOK }));
+  };
   const move = (index: number, delta: number) =>
     set((d) => {
       const [item] = d.items.splice(index, 1);
@@ -119,7 +122,10 @@ export function TrayIconSettings() {
                   look={spec.look}
                   provider={spec.provider}
                   savedColors={t().savedColors}
-                  onChange={(look) => set((d) => void (d.items[i()]!.look = look))}
+                  onChange={(look) => {
+                    const index = i();
+                    set((d) => void (d.items[index]!.look = look));
+                  }}
                   onSavedColorsChange={(colors) => set((d) => void (d.savedColors = colors))}
                 />
               </div>

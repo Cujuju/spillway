@@ -94,7 +94,8 @@ export function TrendChart(props: TrendChartProps) {
   });
   const yTicks = createMemo(() => {
     const count = props.yTicks ?? DEFAULT_Y_TICKS;
-    return Array.from({ length: count + 1 }, (_, i) => (yMax() * i) / count);
+    const max = yMax();
+    return Array.from({ length: count + 1 }, (_, i) => (max * i) / count);
   });
 
   const pick = (e: PointerEvent) => {

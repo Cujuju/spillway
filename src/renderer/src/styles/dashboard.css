@@ -178,6 +178,9 @@
   padding: var(--spacing-3) var(--spacing-1);
   border-bottom: var(--border-width) solid var(--color-divider);
 }
+.account-row:last-child {
+  border-bottom: 0;
+}
 .account-row.disabled {
   opacity: var(--opacity-off);
 }

@@ -322,11 +322,6 @@
   text-overflow: ellipsis;
 }
 
-/* Line under a dialog's title. */
-.dialog-sub {
-  margin: 0 0 12px;
-  color: var(--color-text-secondary);
-}
 /* Logins' Models dialog: one washed card per family. Name and newest version share a line; earlier versions sit below. */
 .model-families-sub {
   display: flex;
@@ -334,6 +329,10 @@
   gap: 8px;
 }
 .model-families {
+  /* Card inset on every side; the head line is trimmed to its caps, so this is the visible gap. */
+  --family-pad: 14px;
+  /* Name line to the version badges: tighter than the inset, so they read as one group. */
+  --family-row-gap: 10px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -342,16 +341,21 @@
   gap: 8px;
 }
 .model-family {
-  padding: 12px 14px;
+  padding: var(--family-pad);
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-card);
   background-color: var(--color-surface-sunken);
 }
+/* Whole-pixel height: a fractional cap height makes stacked cards alternate a pixel in height. */
 .model-family-head {
+  height: round(1cap, 1px);
   display: flex;
   align-items: baseline;
   gap: 6px;
   font-size: var(--text-md);
+}
+.model-family-head > * {
+  text-box: trim-both cap alphabetic;
 }
 .model-family-name {
   font-weight: 600;
@@ -374,7 +378,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: var(--family-row-gap);
 }
 /* Table rows' icon actions sit right, on one line. */
 .table td.row-actions {

@@ -89,6 +89,23 @@ export function NumberField(props: { value: number; onCommit: (v: number) => voi
   );
 }
 
+/**
+ * Centres a dialog vertically on a whole pixel. At a half-pixel offset, borders and text round
+ * in opposite directions, so paddings drift by 1px.
+ */
+function centreOnWholePixel(panel: HTMLElement) {
+  const place = () => {
+    panel.style.marginTop = `${Math.max(0, Math.floor((window.innerHeight - panel.offsetHeight) / 2))}px`;
+  };
+  const observer = new ResizeObserver(place);
+  observer.observe(panel);
+  window.addEventListener('resize', place);
+  onCleanup(() => {
+    observer.disconnect();
+    window.removeEventListener('resize', place);
+  });
+}
+
 /** Modal rendered on <body>, so it never inherits styles from where it's opened (e.g. a right-aligned table cell). */
 export function Dialog(props: { title: string; onClose: () => void; children: JSX.Element; actions?: JSX.Element }) {
   const onKey = (e: KeyboardEvent) => e.key === 'Escape' && props.onClose();
@@ -97,7 +114,7 @@ export function Dialog(props: { title: string; onClose: () => void; children: JS
   return (
     <Portal>
       <div class="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-        <div class="dialog" role="dialog" aria-label={props.title}>
+        <div class="dialog" role="dialog" aria-label={props.title} ref={centreOnWholePixel}>
           <h2 class="card-title">{props.title}</h2>
           {props.children}
           <Show when={props.actions}>

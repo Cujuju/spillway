@@ -237,6 +237,7 @@
 }
 
 /* ── Dialog ─────────────────────────────────────────────────────── */
+/* Centres dialogs across; Dialog sets the top margin so they sit on a whole pixel down. */
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -246,6 +247,13 @@
   z-index: 50;
 }
 .dialog {
+  /* One inset on every side. The title is trimmed to its caps, so the top inset is the visible gap. */
+  --dialog-pad: 22px;
+  /* Between the title block, the content and the actions. */
+  --dialog-gap: 16px;
+  /* Between the title and a subtitle under it. */
+  --dialog-sub-gap: 8px;
+  align-self: start;
   width: min(560px, calc(100vw - 48px));
   max-height: calc(100vh - 96px);
   overflow-y: auto;
@@ -253,13 +261,27 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-floating);
-  padding: 20px 22px;
+  padding: var(--dialog-pad);
+}
+/* Whole-pixel height: a fractional cap height would shift everything below off the pixel grid. */
+.dialog > .card-title {
+  text-box: trim-both cap alphabetic;
+  height: round(1cap, 1px);
+  margin-bottom: var(--dialog-gap);
+}
+.dialog > .card-title:has(+ .dialog-sub) {
+  margin-bottom: var(--dialog-sub-gap);
+}
+/* Line under a dialog title. */
+.dialog-sub {
+  margin: 0 0 var(--dialog-gap);
+  color: var(--color-text-secondary);
 }
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: var(--dialog-gap);
 }
 
 .notice {

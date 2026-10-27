@@ -72,6 +72,7 @@ export interface DesktopApi {
   credentialModels(credentialId: string): Promise<CredentialModel[]>;
   /** API-key upstreams from config.user.yaml's `api-keys` section; keys arrive masked. */
   apiProviders(): Promise<ApiProviderList>;
+  setApiKeyEnabled(family: ApiKeyFamily, name: string, id: string, enabled: boolean): Promise<ApiProviderGroup[]>;
   /** Adds a group (target null) or updates one, then applies the config; returns the groups after. */
   saveApiProvider(draft: ApiProviderDraft, target: ApiProviderTarget): Promise<ApiProviderGroup[]>;
   deleteApiProvider(family: ApiKeyFamily, name: string): Promise<ApiProviderGroup[]>;
@@ -147,6 +148,7 @@ export const INVOKE = {
   renewCredentials: 'cred:renew',
   credentialModels: 'cred:models',
   apiProviders: 'providers:list',
+  setApiKeyEnabled: 'providers:key-enabled',
   saveApiProvider: 'providers:save',
   deleteApiProvider: 'providers:delete',
   setLimitTrays: 'tray:limits',

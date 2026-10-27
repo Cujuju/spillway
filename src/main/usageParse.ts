@@ -72,6 +72,7 @@ function parseCredential(raw: unknown): Credential | null {
   const windows = Array.isArray(c.windows) ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null) : [];
   const note = s(c.note);
   const email = s(c.email);
+  const apiKey = obj(c.api_key);
   return {
     id,
     name: s(c.name) ?? id,
@@ -80,6 +81,7 @@ function parseCredential(raw: unknown): Credential | null {
     label: note ?? emailDomain(email) ?? s(c.label) ?? email ?? id,
     note,
     email,
+    apiKey: s(apiKey.masked) ? { masked: s(apiKey.masked)!, success: Math.max(0, n(apiKey.success) ?? 0), failed: Math.max(0, n(apiKey.failed) ?? 0) } : null,
     disabled: c.disabled === true,
     status: s(c.status) ?? 'unknown',
     statusMessage: s(c.status_message),

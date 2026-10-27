@@ -40,7 +40,10 @@ export function readGroups(doc: Document): ApiProviderGroup[] {
       if (!isMap(item)) continue;
       const name = str(item.get('name'));
       if (!name) continue;
-      const keys = isSeq(item.get('keys')) ? (item.get('keys') as YAMLSeq).items.map(keyOf).filter((k): k is string => k !== null) : [];
+      const keys = isSeq(item.get('keys')) ? (item.get('keys') as YAMLSeq).items.flatMap((node) => {
+        const key = keyOf(node);
+        return key ? [{ id: keyId(key), masked: maskKey(key), ...(isMap(node) && node.get('disabled') === true ? { disabled: true } : {}) }] : [];
+      }) : [];
       const models = isSeq(item.get('models'))
         ? (item.get('models') as YAMLSeq).items.flatMap((m) => {
             const model = isMap(m) ? str(m.get('name')) : null;
@@ -53,7 +56,7 @@ export function readGroups(doc: Document): ApiProviderGroup[] {
         baseUrl: str(item.get('base-url')),
         prefix: str(item.get('prefix')),
         disabled: item.get('disabled') === true,
-        keys: keys.map((k) => ({ id: keyId(k), masked: maskKey(k) })),
+        keys,
         models,
       });
     }
@@ -73,6 +76,16 @@ function findGroup(doc: Document, family: ApiKeyFamily, name: string): YAMLMap |
   const seq = doc.getIn([ROOT, family]);
   if (!isSeq(seq)) return null;
   return (seq.items.find((i) => isMap(i) && i.get('name') === name) as YAMLMap | undefined) ?? null;
+}
+
+/** Changes a key's routing state without removing its secret or per-key options. */
+export function setKeyEnabled(doc: Document, family: ApiKeyFamily, name: string, id: string, enabled: boolean): void {
+  const group = findGroup(doc, family, name);
+  const keys = group?.get('keys');
+  const node = isSeq(keys) ? keys.items.find((n) => { const k = keyOf(n); return k !== null && keyId(k) === id; }) : null;
+  if (!isMap(node)) throw new Error(CHANGED_ON_DISK);
+  if (enabled) node.delete('disabled');
+  else node.set('disabled', true);
 }
 
 /** Sets `key` to a trimmed value, or removes it when empty. */

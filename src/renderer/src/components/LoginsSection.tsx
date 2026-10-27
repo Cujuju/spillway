@@ -33,7 +33,7 @@ export function LoginsSection() {
   const [info, setInfo] = createSignal<string | null>(null);
   const running = () => proxyStatus()?.state === 'running';
   const creds = () =>
-    [...(snapshot()?.credentials ?? [])].sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
+    (snapshot()?.credentials ?? []).filter((c) => !c.apiKey).sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
 
   const report = (m: string) => { setError(null); setInfo(m); };
   const fail = (m: string) => { setInfo(null); setError(m); };

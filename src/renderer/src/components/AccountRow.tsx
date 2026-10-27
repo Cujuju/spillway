@@ -3,7 +3,7 @@ import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { compactDuration } from '../lib/format';
-import { now } from '../store';
+import { now, setPage } from '../store';
 import { LimitBar } from './LimitBar';
 import { ProviderGlyph, ResetTime } from './ui';
 
@@ -36,16 +36,25 @@ export function AccountRow(props: { credential: Credential }) {
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>
+          <Show when={c().apiKey}><span class="badge">API key</span></Show>
+          <Show when={c().apiKey && state() === 'ready'}><span class="badge">Ready</span></Show>
+          <Show when={c().apiKey}><button class="btn ghost" onClick={() => setPage('providers')}>Manage key</button></Show>
           <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
-          <Show when={LIVE_LOOKUP_PROVIDERS.has(c().provider) && !c().disabled}>
+          <Show when={!c().apiKey && LIVE_LOOKUP_PROVIDERS.has(c().provider) && !c().disabled}>
             <button class="btn ghost icon-btn" disabled={busy()} onClick={() => void refresh()} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
           </Show>
         </div>
         <div class="account-meta">
+          <Show when={c().apiKey}>
+            {(key) => <>
+              <div>{key().masked}</div>
+              <div title="Requests since the proxy started">{key().success} succeeded · {key().failed} failed</div>
+            </>}
+          </Show>
           <Show when={c().email && c().email !== c().label}>
             <div class="truncate">{c().email}</div>
           </Show>
@@ -64,7 +73,7 @@ export function AccountRow(props: { credential: Credential }) {
         </div>
       </div>
       <div class="limits">
-        <For each={c().windows} fallback={<span class="muted">No limit data yet — refresh to look it up.</span>}>
+        <For each={c().windows} fallback={<span class="muted">{c().apiKey ? 'No quota reported for this API key.' : 'No limit data yet — refresh to look it up.'}</span>}>
           {(w) => <LimitBar window={w} />}
         </For>
       </div>

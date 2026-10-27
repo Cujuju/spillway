@@ -5,7 +5,7 @@ import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
-import { applyDraft, parseForEdit, readGroups, removeGroup } from './apiProviders';
+import { applyDraft, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
@@ -204,6 +204,7 @@ const handlers: Handlers = {
   },
   credentialModels: (id) => management.credentialModels(credentialName(id)),
   apiProviders: () => listApiProviders(),
+  setApiKeyEnabled: (family, name, id, enabled) => editUserConfig((doc) => setKeyEnabled(doc, family, name, id, enabled)),
   saveApiProvider: (draft, target) => editUserConfig((doc) => applyDraft(doc, draft, target)),
   deleteApiProvider: (family, name) => editUserConfig((doc) => removeGroup(doc, family, name)),
   setLimitTrays: (images) => syncLimitTrays(images),

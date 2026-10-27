@@ -96,7 +96,7 @@ export function Dashboard() {
         <div>
           <h1 class="dash-title">Quota Management</h1>
           <div class="dash-sub">
-            {creds().length} credentials · <span class="loaded">{loaded()} loaded</span>
+            {creds().length} credentials · <span class="loaded">{loaded()} with quota data</span>
           </div>
         </div>
         <div class="dash-actions">
@@ -129,8 +129,8 @@ export function Dashboard() {
         when={creds().length > 0}
         fallback={
           <div class="empty-state">
-            <h3>No accounts yet</h3>
-            <p>Sign in to a Claude, Codex or other subscription account and the proxy will rotate between them.</p>
+            <h3>No credentials yet</h3>
+            <p>Add a subscription login or an API key in AI Providers to start routing requests.</p>
             <button class="btn primary" onClick={() => setPage('providers')}>
               <Plus size={ICON_PX} /> Add account
             </button>

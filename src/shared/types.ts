@@ -51,6 +51,8 @@ export interface Credential {
   label: string;
   note: string | null;
   email: string | null;
+  /** Config-backed upstream key; request counts are since the proxy started. Raw keys never cross IPC. */
+  apiKey?: { masked: string; success: number; failed: number } | null;
   lastUsedAt: string | null;
   disabled: boolean;
   status: string;

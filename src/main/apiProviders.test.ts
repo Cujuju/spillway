@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApiProviderDraft } from '@shared/apiProviders';
-import { applyDraft, keyId, maskKey, parseForEdit, readGroups, removeGroup } from './apiProviders';
+import { applyDraft, keyId, maskKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 
 const USER = `# my notes
 routing:
@@ -70,6 +70,22 @@ describe('applyDraft', () => {
 });
 
 describe('removeGroup', () => {
+  it('disables and re-enables one key without losing keys, comments or per-key settings', () => {
+    const doc = parseForEdit(USER);
+    const first = keyId('sk-ant-aaaaaaaaaaaa1111');
+    setKeyEnabled(doc, 'claude', 'work', first, false);
+    const reopened = parseForEdit(doc.toString());
+    expect(readGroups(reopened)[0]!.keys).toEqual([
+      { id: first, masked: 'sk-a…1111', disabled: true },
+      { id: keyId('sk-ant-bbbbbbbbbbbb2222'), masked: 'sk-a…2222' },
+    ]);
+    expect(reopened.toString()).toContain('weight: 3');
+    expect(reopened.toString()).toContain('# keep me');
+    setKeyEnabled(reopened, 'claude', 'work', first, true);
+    expect(reopened.toString()).not.toContain('disabled:');
+    expect(readGroups(reopened)[0]!.keys).toEqual(readGroups(parseForEdit(USER))[0]!.keys);
+    expect(() => setKeyEnabled(reopened, 'claude', 'work', 'gone', false)).toThrow(/changed since/);
+  });
   it('drops the group and the emptied section, keeping the rest', () => {
     const doc = parseForEdit(USER);
     removeGroup(doc, 'claude', 'work');

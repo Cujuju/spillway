@@ -41,6 +41,7 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['management', 'allow-remote'], false],
     [['management', 'disable-control-panel'], true],
     [['routing', 'strategy'], p.strategy],
+    [['routing', 'prefer-oauth'], true],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],

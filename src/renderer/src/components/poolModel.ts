@@ -42,7 +42,7 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, chartFrom()) : []));
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));
   const resetAt = () => (key() ? nextResetAt(pool().credentials, key()!, now()) : null);
-  const plans = () => [...new Set(pool().credentials.filter((c) => !c.disabled).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
+  const plans = () => [...new Set(pool().credentials.filter((c) => !c.disabled && !c.apiKey).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
   return { provider: () => pool().provider, summary, rate, past, projection, drain, segments, resetAt, plans };
 }
 

@@ -102,6 +102,7 @@ export function ProviderDialog(props: {
             {(k) => (
               <div class="form-list-row">
                 <span class="spacer">{k.masked}</span>
+                <Show when={k.disabled}><span class="badge">Off</span></Show>
                 <button class="btn ghost icon-btn" title="Remove key" onClick={() => setKeepKeys(keepKeys().filter((id) => id !== k.id))}>
                   <X size={ICON_PX} />
                 </button>

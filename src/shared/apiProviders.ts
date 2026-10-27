@@ -20,6 +20,7 @@ export interface ApiKeyRef {
   /** Stable fingerprint of the key, used to keep it on save. */
   id: string;
   masked: string;
+  disabled?: boolean;
 }
 
 export interface ApiModelAlias {

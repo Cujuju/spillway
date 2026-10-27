@@ -3,7 +3,7 @@ import { createResource, createSignal, For, Show } from 'solid-js';
 import { FAMILY_INFO, type ApiProviderGroup, type ApiProviderTarget } from '@shared/apiProviders';
 import { LoginsSection } from '../components/LoginsSection';
 import { ProviderDialog } from '../components/ProviderDialog';
-import { Dialog, Notice, ProviderGlyph } from '../components/ui';
+import { Dialog, Notice, ProviderGlyph, Toggle } from '../components/ui';
 import { providerVar } from '../lib/providers';
 
 const ICON_PX = 14;
@@ -14,8 +14,22 @@ export function Providers() {
   const [editing, setEditing] = createSignal<{ target: ApiProviderTarget; group: ApiProviderGroup | null } | null>(null);
   const [deleting, setDeleting] = createSignal<ApiProviderGroup | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [toggling, setToggling] = createSignal(false);
   const groups = () => list()?.groups ?? [];
   const fileError = () => list()?.error ?? null;
+
+  const toggleKey = async (g: ApiProviderGroup, id: string, enabled: boolean) => {
+    setToggling(true);
+    setError(null);
+    try {
+      mutate({ groups: await window.api.setApiKeyEnabled(g.family, g.name, id, enabled), error: null });
+    } catch (e) {
+      setError((e as Error).message);
+      void refetch();
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const remove = async (g: ApiProviderGroup) => {
     setDeleting(null);
@@ -99,7 +113,14 @@ export function Providers() {
                     </td>
                     <td>{FAMILY_INFO[g.family].label}</td>
                     <td class="truncate" title={g.baseUrl ?? undefined}>{g.baseUrl ?? <span class="muted">Default</span>}</td>
-                    <td title={g.keys.map((k) => k.masked).join('\n') || undefined}>{g.keys.length}</td>
+                    <td>
+                      <For each={g.keys} fallback={<span class="muted">No key</span>}>
+                        {(k) => <div class="form-list-row">
+                          <span>{k.masked}</span>
+                          <Toggle value={!k.disabled} disabled={toggling() || !!fileError()} label={`Enable ${k.masked}`} onChange={(enabled) => void toggleKey(g, k.id, enabled)} />
+                        </div>}
+                      </For>
+                    </td>
                     <td title={g.models.map((m) => (m.alias ? `${m.alias} → ${m.name}` : m.name)).join('\n') || undefined}>
                       {g.models.length || <span class="muted">All</span>}
                     </td>

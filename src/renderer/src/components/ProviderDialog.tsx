@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-solid';
-import { createSignal, For, Show } from 'solid-js';
+import { createSignal, For, Index, Show } from 'solid-js';
 import {
   API_KEY_FAMILIES, FAMILY_INFO, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
@@ -127,17 +127,18 @@ export function ProviderDialog(props: {
         <div class="form-field">
           <span>Models (optional)</span>
           <span class="form-help">Empty serves the provider's own model list. An alias is the name clients ask for.</span>
-          <For each={models()}>
+          {/* Index, not For: each edit replaces the row's object, and For would remount the row and drop focus. */}
+          <Index each={models()}>
             {(m, i) => (
               <div class="form-list-row">
-                <input class="input spacer" value={m.name} placeholder="Upstream model" onInput={(e) => setModel(i(), { name: e.currentTarget.value })} />
-                <input class="input spacer" value={m.alias ?? ''} placeholder="Alias (optional)" onInput={(e) => setModel(i(), { alias: e.currentTarget.value })} />
-                <button class="btn ghost icon-btn" title="Remove model" onClick={() => setModels(models().filter((_, j) => j !== i()))}>
+                <input class="input spacer" value={m().name} placeholder="Upstream model" onInput={(e) => setModel(i, { name: e.currentTarget.value })} />
+                <input class="input spacer" value={m().alias ?? ''} placeholder="Alias (optional)" onInput={(e) => setModel(i, { alias: e.currentTarget.value })} />
+                <button class="btn ghost icon-btn" title="Remove model" onClick={() => setModels(models().filter((_, j) => j !== i))}>
                   <X size={ICON_PX} />
                 </button>
               </div>
             )}
-          </For>
+          </Index>
           <div>
             <button class="btn ghost" onClick={() => setModels([...models(), { name: '', alias: null }])}><Plus size={ICON_PX} /> Add model</button>
           </div>

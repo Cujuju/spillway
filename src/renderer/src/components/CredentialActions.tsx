@@ -1,8 +1,9 @@
 import { Download, KeyRound, ListTree } from 'lucide-solid';
 import { createResource, createSignal, For, Show } from 'solid-js';
-import type { Credential, CredentialModel, CredentialRenewResult } from '@shared/types';
-import { groupModelFamilies } from '../lib/modelFamilies';
-import { Dialog } from './ui';
+import type { Credential, CredentialRenewResult } from '@shared/types';
+import { familyName, groupModelFamilies } from '../lib/modelFamilies';
+import { providerVar } from '../lib/providers';
+import { Dialog, ProviderGlyph } from './ui';
 
 const ICON_PX = 14;
 
@@ -63,8 +64,6 @@ export function CredentialActions(props: {
   );
 }
 
-const hasOwnName = (m: CredentialModel) => !!m.displayName && m.displayName !== m.id;
-
 function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
   const [models] = createResource(() => window.api.credentialModels(props.credential.id));
   const families = () => groupModelFamilies(models() ?? []);
@@ -74,30 +73,34 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
         <Show when={!models.error} fallback={<p class="secondary">Could not load models: {(models.error as Error).message}</p>}>
           <Show when={count()} fallback={<p class="muted">The proxy lists no models for this account. It may be disabled or not loaded yet.</p>}>
-            <p class="dialog-sub">
-              {props.credential.label} serves {count()} {count() === 1 ? 'model' : 'models'}. Hover an earlier version for its ID.
-            </p>
-            <ul class="model-families">
+            <div class="dialog-sub model-families-sub">
+              <ProviderGlyph provider={props.credential.provider} />
+              <span>
+                {props.credential.label} · {count()} {count() === 1 ? 'model' : 'models'}
+              </span>
+            </div>
+            <ul class="model-families" style={{ '--family-color': providerVar(props.credential.provider) }}>
               <For each={families()}>
                 {(f) => (
-                  <li>
-                    <div class="model-family-head">
-                      <span class="model-family-name">{f.latest.model.displayName ?? f.latest.model.id}</span>
-                      <Show when={hasOwnName(f.latest.model)}>
-                        <span class="secondary selectable">{f.latest.model.id}</span>
+                  <li class="model-family">
+                    <span class="model-family-version">{f.latest.version.length ? f.latest.label : ''}</span>
+                    <div class="model-family-body">
+                      <div class="model-family-head">
+                        <span class="model-family-name">{familyName(f)}</span>
+                        <span class="model-family-id selectable">{f.latest.model.id}</span>
+                      </div>
+                      <Show when={f.older.length}>
+                        <div class="model-family-older">
+                          <For each={f.older}>
+                            {(v) => (
+                              <span class="badge selectable" title={v.model.id}>
+                                {v.label}
+                              </span>
+                            )}
+                          </For>
+                        </div>
                       </Show>
                     </div>
-                    <Show when={f.older.length}>
-                      <div class="model-family-older">
-                        <For each={f.older}>
-                          {(v) => (
-                            <span class="selectable" title={v.model.id}>
-                              {v.label}
-                            </span>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
                   </li>
                 )}
               </For>

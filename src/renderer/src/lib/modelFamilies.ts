@@ -69,3 +69,11 @@ export function groupModelFamilies(models: CredentialModel[]): ModelFamily[] {
       return { key, latest, older };
     });
 }
+
+/** Short family name from the newest model's display name, minus its version and maker: "Claude Opus 5.5" → "Opus". */
+export function familyName(f: ModelFamily): string {
+  const words = (f.latest.model.displayName ?? f.key).split(/[\s-]+/).filter((w) => w !== f.latest.label);
+  const maker = f.key.split('-')[0]?.toLowerCase();
+  const rest = words[0]?.toLowerCase() === maker && words.length > 1 ? words.slice(1) : words;
+  return rest.join(' ') || f.key;
+}

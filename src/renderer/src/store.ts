@@ -1,5 +1,5 @@
 import { createComputed, createRoot, createSignal } from 'solid-js';
-import { createStore, reconcile } from 'solid-js/store';
+import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
@@ -21,28 +21,34 @@ export function openSettings(section: SettingsSection): void {
   setSettingsSection(section);
   setPage('settings');
 }
-export const [settings, setSettingsSignal] = createSignal<AppSettings>(DEFAULT_SETTINGS);
+/**
+ * State from main that lists render. Each update is diffed in, keyed by `id`, so unchanged objects keep
+ * their identity: `<For>` keeps rows and their local state (open dialogs, focus, spinners) instead of
+ * remounting them. The value is a read-only store; `unwrap` it before cloning or sending it over IPC.
+ */
+function createReconciled<T>(initial: T): [get: () => T, set: (next: T) => void] {
+  const [state, setState] = createStore({ value: initial });
+  return [() => state.value, (next) => setState('value', reconcile(next, { key: 'id' }))];
+}
+
+export const [settings, setSettingsSignal] = createReconciled<AppSettings>(DEFAULT_SETTINGS);
 /** Ticks on each wall-clock minute so countdowns re-render without each component owning a timer. */
 export const [now, setNow] = createSignal(Date.now());
 const [rawSnapshot, setRawSnapshot] = createSignal<UsageSnapshot | null>(null);
 export const setSnapshot = setRawSnapshot;
-const [view, setView] = createStore<{ snapshot: UsageSnapshot | null }>({ snapshot: null });
-/**
- * Diffed into a store keyed by credential id, so each poll keeps object identity: keyed lists
- * (`<For>`) keep their rows and row-local state (open dialogs, spinners) instead of remounting.
- */
+const [shownSnapshot, setShownSnapshot] = createReconciled<UsageSnapshot | null>(null);
 createRoot(() =>
   createComputed(() => {
     const raw = rawSnapshot();
     const s = raw && rollPastResets(raw, now());
-    setView('snapshot', reconcile(s && !settings().dashboard.showEmails ? maskSnapshot(s) : s, { key: 'id' }));
+    setShownSnapshot(s && !settings().dashboard.showEmails ? maskSnapshot(s) : s);
   }),
 );
 /**
  * What the UI shows: the latest snapshot with windows past their reset rolled to zero, emails masked
- * unless "Show emails" is on. A read-only store; copy before mutating or sending over IPC.
+ * unless "Show emails" is on.
  */
-export const snapshot = (): UsageSnapshot | null => view.snapshot;
+export const snapshot = shownSnapshot;
 export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
@@ -67,7 +73,7 @@ export async function saveSettings(next: AppSettings): Promise<void> {
 
 /** Applies `fn` to a copy of the current settings and saves it. */
 export function updateSettings(fn: (draft: AppSettings) => void): Promise<void> {
-  const draft = structuredClone(settings());
+  const draft = structuredClone(unwrap(settings()));
   fn(draft);
   return saveSettings(draft);
 }

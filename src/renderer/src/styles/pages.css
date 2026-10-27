@@ -312,36 +312,66 @@
   margin: 0 0 12px;
   color: var(--color-text-secondary);
 }
-/* Accounts' Models dialog: one row per family, its newest model over smaller, indented earlier versions. */
+/* Accounts' Models dialog: one tile per family, tinted with the provider's colour (--family-color).
+   Tiles share one grid (subgrid), so version numbers line up in a column as wide as the widest. */
+.model-families-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .model-families {
+  --family-tint: 7%;
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px;
 }
-.model-families > li {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--color-divider);
+.model-family {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  column-gap: 14px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--color-divider);
+  border-left: 3px solid var(--family-color);
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--family-color) var(--family-tint), var(--color-surface-sunken));
 }
-.model-families > li:last-child {
-  border-bottom: 0;
+.model-family-version {
+  font-size: var(--text-title);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--family-color);
+}
+.model-family-body {
+  min-width: 0;
 }
 .model-family-head {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  gap: 16px;
+  gap: 10px;
 }
 .model-family-name {
+  font-size: var(--text-md);
   font-weight: 600;
+}
+.model-family-id {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .model-family-older {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 10px;
-  margin-top: 3px;
-  padding-left: 12px;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  gap: 4px;
+  margin-top: 6px;
 }
 /* Accounts table: the row's icon actions sit right, on one line. */
 .table td.row-actions {

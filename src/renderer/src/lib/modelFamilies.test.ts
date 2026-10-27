@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CredentialModel } from '@shared/types';
-import { groupModelFamilies } from './modelFamilies';
+import { familyName, groupModelFamilies } from './modelFamilies';
 
 const model = (id: string): CredentialModel => ({ id, displayName: null, ownedBy: null });
 const ids = [
@@ -44,5 +44,13 @@ describe('groupModelFamilies', () => {
 
   it('labels a model without a version by its ID', () => {
     expect(groupModelFamilies([model('kimi-k2-thinking')])[0]?.latest.label).toBe('kimi-k2-thinking');
+  });
+
+  it('names a family by its newest model, without version or maker', () => {
+    const named = (id: string, displayName: string | null) => familyName(groupModelFamilies([{ id, displayName, ownedBy: null }])[0]!);
+    expect(named('claude-opus-5-5', 'Claude Opus 5.5')).toBe('Opus');
+    expect(named('claude-haiku-4-5-20251001', 'Claude 4.5 Haiku')).toBe('Haiku');
+    expect(named('gpt-5', 'GPT 5')).toBe('GPT');
+    expect(named('gpt-5.1-codex', null)).toBe('codex');
   });
 });

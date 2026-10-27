@@ -15,6 +15,10 @@ export interface TrayReading {
 export const KNOWN_WINDOW_LABELS: Record<string, string> = { five_hour: '5-hour', seven_day: 'Weekly' };
 export const windowLabel = (key: string) => KNOWN_WINDOW_LABELS[key] ?? key;
 
+/** Percent of one provider's pool left in `windowKey`, accounts weighted by plan size (renderer `poolRemaining`). */
+export type PoolRemaining = (credentials: Credential[], windowKey: string) => number;
+
+const FULL = 100;
 const usable = (c: Credential) => !c.disabled;
 const windowOf = (c: Credential, key: string) => c.windows.find((w) => w.key === key);
 const earliest = (dates: (string | null)[]) =>
@@ -28,7 +32,11 @@ export function providerLabel(provider: string): string {
 }
 
 /** Computes what one tray icon shows from the latest snapshot. */
-export function readTray(spec: Pick<TrayIconSpec, 'provider' | 'windowKey' | 'scope' | 'credentialId'>, snapshot: UsageSnapshot | null): TrayReading {
+export function readTray(
+  spec: Pick<TrayIconSpec, 'provider' | 'windowKey' | 'scope' | 'credentialId'>,
+  snapshot: UsageSnapshot | null,
+  poolRemaining: PoolRemaining,
+): TrayReading {
   const accounts = (snapshot?.credentials ?? []).filter((c) => c.provider === spec.provider && usable(c));
   const withWindow = accounts.filter((c) => windowOf(c, spec.windowKey)?.usedPercent != null);
   const label = withWindow.length ? windowOf(withWindow[0]!, spec.windowKey)!.label : windowLabel(spec.windowKey);
@@ -51,11 +59,9 @@ export function readTray(spec: Pick<TrayIconSpec, 'provider' | 'windowKey' | 'sc
     const w = windowOf(c, spec.windowKey)!;
     return { usedPercent: w.usedPercent, resetsAt: w.resetsAt, title, source: `${c.label} (least left)` };
   }
-  // Pool: average used across accounts, so 100 means every account is exhausted.
-  const used = withWindow.map((c) => windowOf(c, spec.windowKey)!.usedPercent!);
-  const avg = used.reduce((a, b) => a + b, 0) / used.length;
+  // Pool: the Dashboard's figure, so 100 used means every account is exhausted.
   return {
-    usedPercent: avg,
+    usedPercent: FULL - poolRemaining(withWindow, spec.windowKey),
     resetsAt: earliest(withWindow.map((c) => windowOf(c, spec.windowKey)!.resetsAt)),
     title,
     source: `${withWindow.length} accounts pooled`,

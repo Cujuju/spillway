@@ -1,5 +1,4 @@
 import { createMemo, createSignal, For, mapArray, Show } from 'solid-js';
-import { resetText } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
 import { poolWindowKey } from '../lib/forecast';
 import { dayTime } from '../lib/format';
@@ -8,7 +7,7 @@ import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, createPoolModel, type PoolInput, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
-import { ProviderGlyph, Seg } from './ui';
+import { ProviderGlyph, ResetTime, Seg } from './ui';
 
 const FORECAST_DAY_CHOICES = [1, 3, 7, 14] as const;
 /** Headroom above the busiest drain sample so the line never touches the top edge. */
@@ -21,10 +20,6 @@ const POOL_FULL = 100;
 const days = () => settings().dashboard.forecastDays;
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const rateText = (m: PoolModel) => (m.rate() === null ? 'Collecting history for drain rate…' : `~${m.rate()!.toFixed(1)}%/hour`);
-const nextResetText = (m: PoolModel) => {
-  const r = m.projection()?.nextReset;
-  return r ? `Next reset ${resetText(r.at, now())} · +${Math.round(r.restores)}% of pool` : 'No reset in range';
-};
 const paceText = (m: PoolModel) =>
   m.rate() === null ? '' : m.emptyAt() ? `Pool runs dry ~${dayTime(m.emptyAt()!)}` : `Lasts the next ${daysText(days())} at this pace`;
 
@@ -129,7 +124,9 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
             {(m) => (
               <div class="chart-foot-row">
                 <Show when={!single()}><ProviderGlyph provider={m.provider()} size={12} /></Show>
-                <span>{nextResetText(m)}</span>
+                <Show when={m.projection()?.nextReset} fallback={<span>No reset in range</span>}>
+                  {(r) => <span>Next reset <ResetTime at={r().at} now={now()} /> · +{Math.round(r().restores)}% of pool</span>}
+                </Show>
                 <span class="spacer" />
                 <span>{paceText(m)}</span>
               </div>

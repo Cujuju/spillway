@@ -273,6 +273,11 @@
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
+.reset-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
 .limit.empty {
   opacity: 0.45;
 }

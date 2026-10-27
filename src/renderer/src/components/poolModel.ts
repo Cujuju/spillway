@@ -17,6 +17,10 @@ export interface PoolInput {
 export const chartFrom = () => now() - settings().dashboard.drainLookbackHours * HOUR_MS;
 export const chartTo = () => now() + settings().dashboard.forecastDays * DAY_MS;
 
+/** Percent of the pool left in `key` now, by the Dashboard's math; tray icons and the tray tooltip read it. */
+export const poolRemaining = (credentials: Credential[], key: string) =>
+  poolSummary(credentials, key, poolShares(history(), credentials, key, activityBuckets())).remaining;
+
 /**
  * One provider's pool for window `key`: remaining, drain rate, history and projection.
  * Accounts weigh by plan size, so a Pro and a Max account add up by what they hold.

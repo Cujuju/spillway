@@ -1,7 +1,8 @@
+import { Show } from 'solid-js';
 import type { LimitWindow } from '@shared/types';
 import { trayLevel } from '@shared/trayValues';
-import { resetText } from '@shared/resetTime';
 import { now, settings } from '../store';
+import { ResetTime } from './ui';
 
 /** One limit column: label, percent, bar, reset caption (Theo's per-account cells). */
 export function LimitBar(props: { window: LimitWindow }) {
@@ -17,10 +18,6 @@ export function LimitBar(props: { window: LimitWindow }) {
     return u === null ? 0 : t().value === 'remaining' ? Math.max(0, 100 - u) : Math.min(100, u);
   };
   const level = () => (props.window.status === 'rejected' ? 'critical' : trayLevel(used(), t().warnAtPercentUsed, t().criticalAtPercentUsed));
-  const caption = () => {
-    const r = props.window.resetsAt;
-    return r ? resetText(r, now()) : 'No reset pending';
-  };
   return (
     <div class="limit" classList={{ empty: used() === null }} title={props.window.resetsAt ? new Date(props.window.resetsAt).toLocaleString() : undefined}>
       <div class="limit-head">
@@ -30,7 +27,9 @@ export function LimitBar(props: { window: LimitWindow }) {
       <div class="limit-bar" classList={{ warn: level() === 'warn', critical: level() === 'critical' }}>
         <div style={{ width: `${fill()}%` }} />
       </div>
-      <div class="limit-foot truncate">{caption()}</div>
+      <div class="limit-foot truncate">
+        <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
+      </div>
     </div>
   );
 }

@@ -1,11 +1,10 @@
 import { RefreshCw } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
-import { resetText } from '@shared/resetTime';
 import type { Credential } from '@shared/types';
 import { compactDuration } from '../lib/format';
 import { now } from '../store';
 import { LimitBar } from './LimitBar';
-import { ProviderGlyph } from './ui';
+import { ProviderGlyph, ResetTime } from './ui';
 
 const ICON_PX = 13;
 /** The proxy's on-demand usage lookup (POST /usage/refresh) supports Claude OAuth accounts only. */
@@ -51,7 +50,7 @@ export function AccountRow(props: { credential: Credential }) {
             <div>Disabled</div>
           </Show>
           <Show when={!c().disabled && benchedFor() > 0}>
-            <div class="back">Limited · back {resetText(c().cooldownUntil!, now())}</div>
+            <div class="back">Limited · <ResetTime at={c().cooldownUntil!} now={now()} /></div>
           </Show>
           <Show when={c().statusMessage && benchedFor() === 0}>
             <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>

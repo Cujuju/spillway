@@ -21,7 +21,7 @@ function notify(event: UsageEvent): void {
   let body = '';
   if (event.kind === 'limitHit' && n.limitHit) {
     title = `${name(event.credential)}: ${event.windowLabel} limit reached`;
-    body = event.resetsAt ? `Resets ${resetText(event.resetsAt, Date.now())}` : 'Switching to the next account.';
+    body = event.resetsAt ? resetText(event.resetsAt, Date.now()) : 'Switching to the next account.';
   } else if (event.kind === 'limitReset' && n.limitReset) {
     title = `${name(event.credential)}: ${event.windowLabel} limit reset`;
     body = 'The account is available again.';

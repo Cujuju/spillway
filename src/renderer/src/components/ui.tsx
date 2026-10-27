@@ -1,5 +1,6 @@
-import { Check, ChevronDown, ChevronUp, Copy } from 'lucide-solid';
+import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from 'lucide-solid';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { resetParts } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
 import { providerLogo, providerVar } from '../lib/providers';
 
@@ -121,6 +122,17 @@ export function ProviderGlyph(props: { provider: string; size?: number }) {
     >
       <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }} innerHTML={logo()} />
     </Show>
+  );
+}
+
+/** Reset countdown: icon, time left, local reset time. The icon scales with the surrounding text. */
+export function ResetTime(props: { at: string | number; now: number }) {
+  const parts = () => resetParts(props.at, props.now);
+  return (
+    <span class="reset-time">
+      <RotateCcw size="1em" role="img" aria-label="Resets in" />
+      {parts().left} · {parts().clock}
+    </span>
   );
 }
 

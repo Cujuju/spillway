@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, CredentialPlan, LimitWindow } from '@shared/types';
+import { readTray } from '@shared/trayValues';
 import { depletionAt, poolSummary, poolWindowKey, project } from './forecast';
 import { poolShares, type AccountShare } from './poolCapacity';
 
@@ -52,6 +53,15 @@ describe('poolSummary', () => {
     expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBeCloseTo(90);
     creds[1]!.windows[0]!.usedPercent = 100;
     expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBeCloseTo(75);
+  });
+  it('is what a pool tray icon shows, weighted by plan', () => {
+    const creds = [weekly('max', 0, H, { plan: MAX_5X }), weekly('pro', 0, H, { plan: PRO })];
+    creds[1]!.windows[0]!.usedPercent = 100;
+    const remaining = (cs: Credential[], key: string) => poolSummary(cs, key, poolShares([], cs, key, [])).remaining;
+    const spec = { provider: 'claude', windowKey: 'five_hour', scope: 'pool' as const };
+    const snapshot = { fetchedAt: '', strategy: 'soonest-reset', credentials: creds };
+    // Plain average would read 55% used; by plan it is 100 - 75.
+    expect(readTray(spec, snapshot, remaining).usedPercent).toBeCloseTo(25);
   });
 });
 

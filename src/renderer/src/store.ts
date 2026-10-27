@@ -2,6 +2,7 @@ import { createMemo, createRoot, createSignal } from 'solid-js';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
+import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { rangeDays } from './lib/activityStats';
 import { MAX_ACTIVITY_EVENTS, type ActivityBucket, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
@@ -20,7 +21,7 @@ export function openSettings(section: SettingsSection): void {
   setPage('settings');
 }
 export const [settings, setSettingsSignal] = createSignal<AppSettings>(DEFAULT_SETTINGS);
-/** Ticks every 30 s so countdowns re-render without each component owning a timer. */
+/** Ticks on each wall-clock minute so countdowns re-render without each component owning a timer. */
 export const [now, setNow] = createSignal(Date.now());
 const [rawSnapshot, setRawSnapshot] = createSignal<UsageSnapshot | null>(null);
 export const setSnapshot = setRawSnapshot;
@@ -45,7 +46,6 @@ export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
 
-const CLOCK_TICK_MS = 30_000;
 const MAX_LOG_LINES = 2000;
 /** History refetch after a snapshot is cheap (local file) and keeps the chart current. */
 const HISTORY_REFRESH_MS = 5 * 60_000;
@@ -107,9 +107,17 @@ export async function initStore(): Promise<void> {
     bucketsReload = setTimeout(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets), ACTIVITY_RELOAD_DEBOUNCE_MS);
   });
 
-  setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+  tickEachMinute();
   setInterval(() => void api.usageHistory().then(setHistory), HISTORY_REFRESH_MS);
   prefersDark.addEventListener('change', () => applyTheme(settings().general.theme));
+}
+
+/** Re-aims at the next minute from the wall clock each time, so ticks never drift off it. */
+function tickEachMinute(): void {
+  setTimeout(() => {
+    setNow(Date.now());
+    tickEachMinute();
+  }, msToNextMinute(Date.now()));
 }
 
 export { applyTheme };

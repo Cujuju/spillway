@@ -9,6 +9,8 @@ const cred = (id: string, used: number, patch: Partial<Credential> = {}): Creden
   ...patch,
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', strategy: 'soonest-reset', credentials });
+/** Stand-in pool reader: the renderer passes poolRemaining (Dashboard math, tested in forecast.test). */
+const evenPool = (cs: Credential[], key: string) => cs.reduce((sum, c) => sum + 100 - c.windows.find((w) => w.key === key)!.usedPercent!, 0) / cs.length;
 const spec = (scope: 'active' | 'pool' | 'lowest' | 'account', credentialId?: string) =>
   ({ id: 'x', provider: 'claude', windowKey: 'five_hour', scope, credentialId });
 
@@ -16,19 +18,19 @@ describe('readTray', () => {
   const s = snap(cred('a', 20), cred('b', 80, { nextPick: true }), cred('c', 50, { disabled: true }));
 
   it('active follows the next-pick account', () => {
-    expect(readTray(spec('active'), s)).toMatchObject({ usedPercent: 80, source: 'b' });
+    expect(readTray(spec('active'), s, evenPool)).toMatchObject({ usedPercent: 80, source: 'b' });
   });
-  it('pool averages enabled accounts only', () => {
-    expect(readTray(spec('pool'), s).usedPercent).toBe(50);
+  it('pool reads the pool helper over enabled accounts only', () => {
+    expect(readTray(spec('pool'), s, evenPool).usedPercent).toBe(50);
   });
   it('lowest shows the most used account', () => {
-    expect(readTray(spec('lowest'), s).usedPercent).toBe(80);
+    expect(readTray(spec('lowest'), s, evenPool).usedPercent).toBe(80);
   });
   it('account reads one account', () => {
-    expect(readTray(spec('account', 'a'), s).usedPercent).toBe(20);
+    expect(readTray(spec('account', 'a'), s, evenPool).usedPercent).toBe(20);
   });
   it('reports no data without a snapshot', () => {
-    expect(readTray(spec('pool'), null).usedPercent).toBeNull();
+    expect(readTray(spec('pool'), null, evenPool).usedPercent).toBeNull();
   });
 });
 

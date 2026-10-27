@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockText, resetText, untilText } from './resetTime';
+import { clockText, msToNextMinute, RESET_GLYPH, resetParts, resetText, untilText } from './resetTime';
 
 const M = 60_000;
 const H = 60 * M;
@@ -28,10 +28,28 @@ describe('clockText', () => {
   });
 });
 
+describe('resetParts', () => {
+  it('counts whole minutes, so the countdown agrees with the shown reset time', () => {
+    const at = NOW + 3 * H + 12 * M + 30_000;
+    expect(resetParts(at, NOW)).toEqual({ left: '3h 12m', clock: time(at) });
+    expect(resetParts(at, NOW + 45_000).left).toBe('3h 12m');
+    expect(resetParts(at, NOW + M).left).toBe('3h 11m');
+  });
+  it('reads "any moment" within the reset minute', () => {
+    expect(resetParts(NOW + 30_000, NOW).left).toBe('any moment');
+  });
+});
+
 describe('resetText', () => {
-  it('joins time left and reset time', () => {
+  it('marks the countdown with the reset glyph', () => {
     const at = NOW + 3 * H + 12 * M;
-    expect(resetText(new Date(at).toISOString(), NOW)).toBe(`in 3h 12m · ${time(at)}`);
-    expect(resetText(NOW + 30_000, NOW)).toBe(`any moment · ${time(NOW + 30_000)}`);
+    expect(resetText(new Date(at).toISOString(), NOW)).toBe(`${RESET_GLYPH} 3h 12m · ${time(at)}`);
+  });
+});
+
+describe('msToNextMinute', () => {
+  it('lands on the next wall-clock minute', () => {
+    expect(msToNextMinute(NOW)).toBe(M);
+    expect(msToNextMinute(NOW + 45_500)).toBe(14_500);
   });
 });

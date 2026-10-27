@@ -5,6 +5,7 @@ import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdIn
 import { isMac } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
+import { poolRemaining } from './poolModel';
 import { TrayIconLookEditor } from './TrayIconLookEditor';
 import { NumberField, Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 
@@ -74,7 +75,7 @@ export function TrayIconSettings() {
     });
 
   const preview = (spec: TrayIconSpec) => {
-    const r = readTray(spec, snapshot());
+    const r = readTray(spec, snapshot(), poolRemaining);
     const text = trayIconText(shownPercent(r.usedPercent, t().value));
     return { src: drawTrayIcon(TRAY_PX_2X, text, paintFor(spec, taskbarDark())), reading: r };
   };

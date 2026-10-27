@@ -84,15 +84,20 @@ export function setKeyEnabled(doc: Document, family: ApiKeyFamily, name: string,
   const keys = group?.get('keys');
   const node = isSeq(keys) ? keys.items.find((n) => { const k = keyOf(n); return k !== null && keyId(k) === id; }) : null;
   if (!isMap(node)) throw new Error(CHANGED_ON_DISK);
+  setNodeEnabled(node, enabled);
+}
+
+function setNodeEnabled(node: YAMLMap, enabled: boolean): void {
   if (enabled) node.delete('disabled');
   else node.set('disabled', true);
 }
 
-/** The group's first enabled key, raw; main-process only, for calls the proxy does not make (model lists). */
-export function firstEnabledKey(doc: Document, family: ApiKeyFamily, name: string): string | null {
+/** A raw key for reading the upstream's model list (free, no routing), main-process only. Prefers an enabled key; a switched-off key still works. */
+export function modelListKey(doc: Document, family: ApiKeyFamily, name: string): string | null {
   const keys = findGroup(doc, family, name)?.get('keys');
   if (!isSeq(keys)) return null;
-  const node = keys.items.find((n) => keyOf(n) !== null && !(isMap(n) && n.get('disabled') === true));
+  const usable = keys.items.filter((n) => keyOf(n) !== null);
+  const node = usable.find((n) => !(isMap(n) && n.get('disabled') === true)) ?? usable[0];
   return node ? keyOf(node) : null;
 }
 
@@ -103,8 +108,8 @@ function setOptional(group: YAMLMap, key: string, value: string): void {
   else group.delete(key);
 }
 
-/** Kept keys stay as they are (with their per-key settings), in file order; new keys follow. */
-function nextKeys(group: YAMLMap, keep: string[], added: string[]): YAMLSeq {
+/** Kept keys keep their per-key settings, in file order, switched on or off per `off`; new keys follow. */
+function nextKeys(group: YAMLMap, keep: string[], off: string[], added: string[]): YAMLSeq {
   const saved = isSeq(group.get('keys')) ? (group.get('keys') as YAMLSeq).items : [];
   const savedIds = new Set(saved.map((n) => keyOf(n)).filter((k): k is string => k !== null).map(keyId));
   if (keep.some((id) => !savedIds.has(id))) throw new Error(CHANGED_ON_DISK);
@@ -112,7 +117,8 @@ function nextKeys(group: YAMLMap, keep: string[], added: string[]): YAMLSeq {
   const present = new Set<string>();
   for (const node of saved) {
     const k = keyOf(node);
-    if (k && keep.includes(keyId(k)) && !present.has(k)) {
+    if (k && isMap(node) && keep.includes(keyId(k)) && !present.has(k)) {
+      setNodeEnabled(node, !off.includes(keyId(k)));
       seq.add(node);
       present.add(k);
     }
@@ -161,7 +167,7 @@ export function applyDraft(doc: Document, draft: ApiProviderDraft, target: ApiPr
   setOptional(group, 'prefix', draft.prefix);
   if (draft.family === 'openai-compatibility' && draft.disabled) group.set('disabled', true);
   else group.delete('disabled');
-  const keys = nextKeys(group, draft.keepKeys, draft.newKeys);
+  const keys = nextKeys(group, draft.keepKeys, draft.offKeys, draft.newKeys);
   if (keys.items.length) group.set('keys', keys);
   else group.delete('keys');
   const models = nextModels(group, draft.models);

@@ -23,6 +23,7 @@ export function ProviderDialog(props: {
   const [prefix, setPrefix] = createSignal(start?.prefix ?? '');
   const [disabled, setDisabled] = createSignal(start?.disabled ?? false);
   const [keepKeys, setKeepKeys] = createSignal(start?.keys.map((k) => k.id) ?? []);
+  const [offKeys, setOffKeys] = createSignal(start?.keys.filter((k) => k.disabled).map((k) => k.id) ?? []);
   const [newKey, setNewKey] = createSignal('');
   const [newKeys, setNewKeys] = createSignal<string[]>([]);
   const [models, setModels] = createSignal<ApiModelAlias[]>(start?.models ?? []);
@@ -71,6 +72,7 @@ export function ProviderDialog(props: {
       prefix: prefix(),
       disabled: disabled(),
       keepKeys: keepKeys(),
+      offKeys: offKeys().filter((id) => keepKeys().includes(id)),
       newKeys: pending ? [...newKeys(), pending] : newKeys(),
       models: models().map((m) => ({ name: m.name.trim(), alias: m.alias?.trim() || null })),
     };
@@ -126,7 +128,11 @@ export function ProviderDialog(props: {
             {(k) => (
               <div class="form-list-row">
                 <span class="spacer">{k.masked}</span>
-                <Show when={k.disabled}><span class="badge">Off</span></Show>
+                <Toggle
+                  value={!offKeys().includes(k.id)}
+                  label={`Use key ${k.masked}`}
+                  onChange={(on) => setOffKeys(on ? offKeys().filter((id) => id !== k.id) : [...offKeys(), k.id])}
+                />
                 <button class="btn ghost icon-btn" title="Remove key" onClick={() => setKeepKeys(keepKeys().filter((id) => id !== k.id))}>
                   <X size={ICON_PX} />
                 </button>

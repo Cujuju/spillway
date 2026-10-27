@@ -12,7 +12,7 @@ export async function listUpstreamModels(req: UpstreamModelsRequest, savedKey: (
   const list = MODEL_LISTS[req.family];
   if (!list) throw new Error(`Spillway cannot read the model list of ${FAMILY_INFO[req.family].label} providers. Type the model names.`);
   const key = req.key?.trim() || (req.target ? savedKey(req.target) : null);
-  if (!key && !FAMILY_INFO[req.family].keysOptional) throw new Error('Add an enabled API key first.');
+  if (!key && !FAMILY_INFO[req.family].keysOptional) throw new Error('Add an API key first.');
   const base = (req.baseUrl.trim() || list.defaultBaseUrl).replace(/\/+$/, '');
   if (!base) throw new Error('Enter the base URL first.');
 

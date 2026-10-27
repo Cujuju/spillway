@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApiProviderDraft } from '@shared/apiProviders';
-import { applyDraft, keyId, maskKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
+import { applyDraft, keyId, maskKey, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 
 const USER = `# my notes
 routing:
@@ -20,7 +20,7 @@ api-keys:
 `;
 
 const draft = (over: Partial<ApiProviderDraft>): ApiProviderDraft => ({
-  family: 'claude', name: 'work', baseUrl: '', prefix: '', disabled: false, keepKeys: [], newKeys: [], models: [], ...over,
+  family: 'claude', name: 'work', baseUrl: '', prefix: '', disabled: false, keepKeys: [], offKeys: [], newKeys: [], models: [], ...over,
 });
 
 describe('readGroups', () => {
@@ -61,11 +61,33 @@ describe('applyDraft', () => {
     ]);
   });
 
+  it('switches kept keys on and off, keeping their per-key settings', () => {
+    const [a, b] = [keyId('sk-ant-aaaaaaaaaaaa1111'), keyId('sk-ant-bbbbbbbbbbbb2222')];
+    const doc = parseForEdit(USER);
+    const target = { family: 'claude', name: 'work' } as const;
+    applyDraft(doc, draft({ keepKeys: [a, b], offKeys: [a] }), target);
+    expect(readGroups(doc)[0]!.keys.map((k) => k.disabled ?? false)).toEqual([true, false]);
+    expect(doc.toString()).toContain('weight: 3');
+    applyDraft(doc, draft({ keepKeys: [a, b], offKeys: [b] }), target);
+    expect(readGroups(doc)[0]!.keys.map((k) => k.disabled ?? false)).toEqual([false, true]);
+  });
+
   it('rejects a key id the file no longer has, a duplicate name, and a missing key', () => {
     const doc = parseForEdit(USER);
     expect(() => applyDraft(doc, draft({ keepKeys: ['0000000000000000'] }), { family: 'claude', name: 'work' })).toThrow(/changed since/);
     expect(() => applyDraft(doc, draft({ newKeys: ['k'] }), null)).toThrow(/already exists/);
     expect(() => applyDraft(doc, draft({ name: 'other' }), null)).toThrow(/at least one API key/);
+  });
+});
+
+describe('modelListKey', () => {
+  it('prefers an enabled key and falls back to a switched-off one', () => {
+    const doc = parseForEdit(USER);
+    setKeyEnabled(doc, 'claude', 'work', keyId('sk-ant-aaaaaaaaaaaa1111'), false);
+    expect(modelListKey(doc, 'claude', 'work')).toBe('sk-ant-bbbbbbbbbbbb2222');
+    setKeyEnabled(doc, 'claude', 'work', keyId('sk-ant-bbbbbbbbbbbb2222'), false);
+    expect(modelListKey(doc, 'claude', 'work')).toBe('sk-ant-aaaaaaaaaaaa1111');
+    expect(modelListKey(doc, 'claude', 'missing')).toBeNull();
   });
 });
 

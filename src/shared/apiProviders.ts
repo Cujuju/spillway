@@ -67,6 +67,8 @@ export interface ApiProviderDraft {
   disabled: boolean;
   /** Ids of saved keys to keep; saved keys not listed are removed. */
   keepKeys: string[];
+  /** Ids of kept keys switched off; the other kept keys are on. */
+  offKeys: string[];
   newKeys: string[];
   models: ApiModelAlias[];
 }

@@ -2,10 +2,10 @@ import { createEffect } from 'solid-js';
 import { APP_NAME } from '@shared/app';
 import { resetText } from '@shared/resetTime';
 import { providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
-import { poolSummary, poolWindowKey } from '../lib/forecast';
-import { poolShares } from '../lib/poolCapacity';
+import { poolWindowKey } from '../lib/forecast';
 import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
-import { activityBuckets, history, now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
+import { now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
+import { poolRemaining } from './poolModel';
 
 /** Windows truncates tray tooltips past 127 characters. */
 const TOOLTIP_MAX = 127;
@@ -23,7 +23,7 @@ export function TrayIconSync() {
       return;
     }
     const images = t.items.map((spec) => {
-      const reading = readTray(spec, snap);
+      const reading = readTray(spec, snap, poolRemaining);
       const shown = shownPercent(reading.usedPercent, t.value);
       const text = trayIconText(shown);
       const paint = paintFor(spec, darkTaskbar);
@@ -48,8 +48,7 @@ export function TrayIconSync() {
       const creds = snap!.credentials.filter((c) => c.provider === provider);
       const key = poolWindowKey(creds);
       if (!key) continue;
-      const s = poolSummary(creds, key, poolShares(history(), creds, key, activityBuckets()));
-      lines.push(`${providerLabel(provider)}: ${Math.round(s.remaining)}% of pool left`);
+      lines.push(`${providerLabel(provider)}: ${Math.round(poolRemaining(creds, key))}% of pool left`);
     }
     void window.api.setAppTooltip(clip(lines.join('\n')));
   });

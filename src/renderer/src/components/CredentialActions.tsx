@@ -1,6 +1,7 @@
 import { Download, KeyRound, ListTree } from 'lucide-solid';
 import { createResource, createSignal, For, Show } from 'solid-js';
 import type { Credential, CredentialModel, CredentialRenewResult } from '@shared/types';
+import { groupModelFamilies } from '../lib/modelFamilies';
 import { Dialog } from './ui';
 
 const ICON_PX = 14;
@@ -62,48 +63,45 @@ export function CredentialActions(props: {
   );
 }
 
-/** Numeric-aware ID order: each family groups together and its versions ascend. */
-const byId = (a: CredentialModel, b: CredentialModel) => a.id.localeCompare(b.id, undefined, { numeric: true });
 const hasOwnName = (m: CredentialModel) => !!m.displayName && m.displayName !== m.id;
 
 function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
   const [models] = createResource(() => window.api.credentialModels(props.credential.id));
-  const sorted = () => [...(models() ?? [])].sort(byId);
-  // The Name column shows only when some model has a name of its own.
-  const named = () => sorted().some(hasOwnName);
-  const count = () => sorted().length;
+  const families = () => groupModelFamilies(models() ?? []);
+  const count = () => models()?.length ?? 0;
   return (
     <Dialog title="Models" onClose={props.onClose} actions={<button class="btn" onClick={props.onClose}>Close</button>}>
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
         <Show when={!models.error} fallback={<p class="secondary">Could not load models: {(models.error as Error).message}</p>}>
           <Show when={count()} fallback={<p class="muted">The proxy lists no models for this account. It may be disabled or not loaded yet.</p>}>
             <p class="dialog-sub">
-              {props.credential.label} serves {count()} {count() === 1 ? 'model' : 'models'}.
+              {props.credential.label} serves {count()} {count() === 1 ? 'model' : 'models'}. Hover an earlier version for its ID.
             </p>
-            <table class="table model-table">
-              <thead>
-                <tr>
-                  <Show when={named()}>
-                    <th>Name</th>
-                  </Show>
-                  <th>Model ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={sorted()}>
-                  {(m) => (
-                    <tr>
-                      <Show when={named()}>
-                        <td>{m.displayName ?? m.id}</td>
+            <ul class="model-families">
+              <For each={families()}>
+                {(f) => (
+                  <li>
+                    <div class="model-family-head">
+                      <span class="model-family-name">{f.latest.model.displayName ?? f.latest.model.id}</span>
+                      <Show when={hasOwnName(f.latest.model)}>
+                        <span class="secondary selectable">{f.latest.model.id}</span>
                       </Show>
-                      <td class="selectable" classList={{ secondary: named() }}>
-                        {m.id}
-                      </td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
+                    </div>
+                    <Show when={f.older.length}>
+                      <div class="model-family-older">
+                        <For each={f.older}>
+                          {(v) => (
+                            <span class="selectable" title={v.model.id}>
+                              {v.label}
+                            </span>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </li>
+                )}
+              </For>
+            </ul>
           </Show>
         </Show>
       </Show>

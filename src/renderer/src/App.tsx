@@ -19,8 +19,8 @@ export function App() {
       <div class="shell-body">
         <Sidebar />
         <main class="page">
-          {/* The log view fills the page height instead of scrolling the page. */}
-          <div class="page-inner" classList={{ fill: page() === 'logs' || page() === 'activity' }}>
+          {/* These pages give their spare height to one child (log view, board, quota chart) instead of leaving it blank. */}
+          <div class="page-inner" classList={{ fill: page() === 'logs' || page() === 'activity' || page() === 'dashboard' }}>
             <Switch>
               <Match when={page() === 'dashboard'}><Dashboard /></Match>
               <Match when={page() === 'accounts'}><Accounts /></Match>

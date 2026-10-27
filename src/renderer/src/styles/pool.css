@@ -20,16 +20,6 @@
   letter-spacing: -0.02em;
   color: var(--pool-color);
 }
-.chart-foot {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-}
-.chart-foot-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .quota-chart svg:focus-visible {
   outline: 2px solid var(--color-accent-border);
   outline-offset: 2px;

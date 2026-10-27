@@ -6,8 +6,6 @@ import { ChartTip } from './ChartTip';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
-/** Must match `.chart { height }` in dashboard.css. */
-const HEIGHT = 300;
 const PAD = { left: 48, right: 12, top: 12, bottom: 26 };
 const Y_TICKS = 4;
 /** Spans up to this many days get 6-hour ticks; longer spans tick daily. */
@@ -36,24 +34,29 @@ export interface QuotaChartProps {
   ariaLabel: string;
 }
 
-/** Lines over time: solid history, dashed projection, a "Now" marker, and a crosshair readout. */
+/** Lines over time: solid history, dashed projection, a "Now" marker, and a crosshair readout. Fills its host's height. */
 export function QuotaChart(props: QuotaChartProps) {
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
+  const [height, setHeight] = createSignal(0);
   const [hoverT, setHoverT] = createSignal<number | null>(null);
   const [pointer, setPointer] = createSignal({ x: 0, y: 0 });
   onMount(() => {
-    const ro = new ResizeObserver(([e]) => e && setWidth(Math.max(200, e.contentRect.width)));
+    const ro = new ResizeObserver(([e]) => {
+      if (!e) return;
+      setWidth(Math.max(200, e.contentRect.width));
+      setHeight(e.contentRect.height);
+    });
     ro.observe(host);
     onCleanup(() => ro.disconnect());
   });
 
   const plotW = () => width() - PAD.left - PAD.right;
-  const plotH = HEIGHT - PAD.top - PAD.bottom;
+  const plotH = () => height() - PAD.top - PAD.bottom;
   const span = () => Math.max(1, props.to - props.from);
   const x = (t: number) => PAD.left + ((t - props.from) / span()) * plotW();
   const tAt = (px: number) => props.from + ((px - PAD.left) / plotW()) * span();
-  const y = (v: number) => PAD.top + plotH - (Math.min(props.yMax, Math.max(0, v)) / Math.max(1, props.yMax)) * plotH;
+  const y = (v: number) => PAD.top + plotH() - (Math.min(props.yMax, Math.max(0, v)) / Math.max(1, props.yMax)) * plotH();
   const path = (pts: SeriesPoint[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.remaining).toFixed(1)}`).join('');
   const area = (pts: SeriesPoint[]) =>
     pts.length ? `${path(pts)}L${x(pts.at(-1)!.t).toFixed(1)},${y(0)}L${x(pts[0]!.t).toFixed(1)},${y(0)}Z` : '';
@@ -107,7 +110,7 @@ export function QuotaChart(props: QuotaChartProps) {
 
   return (
     <div ref={host} class="quota-chart" onPointerMove={onMove} onPointerLeave={() => setHoverT(null)}>
-      <svg class="chart" width={width()} height={HEIGHT} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => setHoverT(null)}>
+      <svg class="chart" width={width()} height={height()} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => setHoverT(null)}>
         <defs>
           <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stop-color={props.series[0]?.color} stop-opacity="0.28" />
@@ -122,7 +125,7 @@ export function QuotaChart(props: QuotaChartProps) {
             </>
           )}
         </For>
-        <For each={xTicks()}>{(tick) => <text x={x(tick.t)} y={HEIGHT - 6} text-anchor="middle">{tick.label}</text>}</For>
+        <For each={xTicks()}>{(tick) => <text x={x(tick.t)} y={height() - 6} text-anchor="middle">{tick.label}</text>}</For>
         <For each={props.series}>
           {(s) => (
             <>

@@ -1,13 +1,12 @@
 import { createMemo, createSignal, For, mapArray, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import { poolWindowKey } from '../lib/forecast';
-import { dayTime } from '../lib/format';
 import { durationChoices, keyChoices, keyForDuration } from '../lib/poolWindows';
 import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, createPoolModel, type PoolInput, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
-import { ProviderGlyph, ResetTime, Seg } from './ui';
+import { ProviderGlyph, Seg } from './ui';
 
 const FORECAST_DAY_CHOICES = [1, 3, 7, 14] as const;
 /** Headroom above the busiest drain sample so the line never touches the top edge. */
@@ -20,12 +19,11 @@ const POOL_FULL = 100;
 const days = () => settings().dashboard.forecastDays;
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const rateText = (m: PoolModel) => (m.rate() === null ? 'Collecting history for drain rate…' : `~${m.rate()!.toFixed(1)}%/hour`);
-const paceText = (m: PoolModel) =>
-  m.rate() === null ? '' : m.emptyAt() ? `Pool runs dry ~${dayTime(m.emptyAt()!)}` : `Lasts the next ${daysText(days())} at this pace`;
 
 /**
  * Pool figures, remaining/drain chart and forecast. One provider shows its own windows; several
  * share one chart, a line each, matched by window length (each provider's 5-hour, or weekly).
+ * The chart takes the panel's spare height.
  */
 export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
   const [chosen, setChosen] = createSignal<string | null>(null);
@@ -60,15 +58,16 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
       future: kind === 'remaining' ? m.projection()?.points : undefined,
     }));
   const color = () => (single() ? providerVar(props.pools[0]!.provider) : undefined);
+  // Also shown with no data, so a window without data never strands the user.
+  const windowSwitch = () => (
+    <Show when={options().length > 1}>
+      <Seg value={choice() ?? ''} options={options()} onChange={setChosen} />
+    </Show>
+  );
 
   return (
     <section class="summary" style={{ '--pool-color': color() }}>
-      <Show when={options().length > 1}>
-        <div style={{ 'margin-bottom': '12px' }}>
-          <Seg value={choice() ?? ''} options={options()} onChange={setChosen} />
-        </div>
-      </Show>
-      <Show when={shown().length} fallback={<div class="muted">No limit data for these accounts yet.</div>}>
+      <Show when={shown().length} fallback={<div class="row">{windowSwitch()}<span class="muted">No limit data for these accounts yet.</span></div>}>
         <Show
           when={single()}
           fallback={
@@ -106,6 +105,7 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
             </Show>
+            {windowSwitch()}
             <select class="select" value={days()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastDays = Number(e.currentTarget.value); })}>
               <For each={FORECAST_DAY_CHOICES}>{(n) => <option value={n}>Next {daysText(n)}</option>}</For>
             </select>
@@ -119,20 +119,6 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
         >
           <QuotaChart series={series('remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Remaining quota chart" />
         </Show>
-        <div class="chart-foot" classList={{ stacked: !single() }}>
-          <For each={shown()}>
-            {(m) => (
-              <div class="chart-foot-row">
-                <Show when={!single()}><ProviderGlyph provider={m.provider()} size={12} /></Show>
-                <Show when={m.projection()?.nextReset} fallback={<span>No reset in range</span>}>
-                  {(r) => <span>Next reset <ResetTime at={r().at} now={now()} /> · +{Math.round(r().restores)}% of pool</span>}
-                </Show>
-                <span class="spacer" />
-                <span>{paceText(m)}</span>
-              </div>
-            )}
-          </For>
-        </div>
       </Show>
     </section>
   );

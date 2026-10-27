@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, CredentialPlan, LimitWindow } from '@shared/types';
 import { readTray } from '@shared/trayValues';
-import { depletionAt, poolSummary, poolWindowKey, project } from './forecast';
+import { poolSummary, poolWindowKey, project } from './forecast';
 import { poolShares, type AccountShare } from './poolCapacity';
 
 const H = 3_600_000;
@@ -165,16 +165,13 @@ describe('project: reset cadence', () => {
   });
 });
 
-describe('project: edges / depletionAt', () => {
+describe('project: edges', () => {
   it('drains to exactly zero', () => {
-    expect(depletionAt(run([weekly('a', 90, null)], 'seven_day', 10, 'soonest-reset').points)).toBe(NOW + H);
+    const p = run([weekly('a', 90, null)], 'seven_day', 10, 'soonest-reset');
+    expect(p.points.find((x) => x.remaining <= 0)?.t).toBe(NOW + H);
   });
   it('stays flat without drain', () => {
     const p = run([weekly('a', 30, null)], 'seven_day', 0, 'soonest-reset');
     expect(new Set(p.points.map((x) => x.remaining))).toEqual(new Set([70]));
-  });
-  it('finds the first empty point', () => {
-    expect(depletionAt([{ t: 1, remaining: 5 }, { t: 2, remaining: 0 }])).toBe(2);
-    expect(depletionAt([{ t: 1, remaining: 5 }])).toBeNull();
   });
 });

@@ -219,8 +219,3 @@ export function project(
   }
   return { points, nextReset };
 }
-
-/** First projected time the pool hits zero, or null if it lasts the whole projection. */
-export function depletionAt(points: SeriesPoint[]): number | null {
-  return points.find((p) => p.remaining <= 0)?.t ?? null;
-}

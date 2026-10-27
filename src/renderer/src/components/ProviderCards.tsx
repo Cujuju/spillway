@@ -80,7 +80,7 @@ function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void
         props.onPick();
       }}
     >
-      <span class="pool-line-label truncate">{props.line.label()}</span>
+      <span class="pool-line-label">{props.line.label()}</span>
       <span class="pool-segments">
         <For each={m().segments()}>
           {(s) => (

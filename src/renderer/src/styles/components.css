@@ -247,12 +247,8 @@
   z-index: 50;
 }
 .dialog {
-  /* One inset on every side. The title is trimmed to its caps, so the top inset is the visible gap. */
-  --dialog-pad: 22px;
-  /* Between the title block, the content and the actions. */
-  --dialog-gap: 16px;
-  /* Between the title and a subtitle under it. */
-  --dialog-sub-gap: 8px;
+  /* One spacing for edges, blocks (title, subtitle, content, actions) and items in a list, matching the page inset. */
+  --dialog-gap: var(--page-pad);
   align-self: start;
   width: min(560px, calc(100vw - 48px));
   max-height: calc(100vh - 96px);
@@ -261,7 +257,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-floating);
-  padding: var(--dialog-pad);
+  /* The title is trimmed to its caps, so the top inset is the visible gap. */
+  padding: var(--dialog-gap);
 }
 /* Whole-pixel height: a fractional cap height would shift everything below off the pixel grid. */
 .dialog > .card-title {
@@ -269,13 +266,16 @@
   height: round(1cap, 1px);
   margin-bottom: var(--dialog-gap);
 }
-.dialog > .card-title:has(+ .dialog-sub) {
-  margin-bottom: var(--dialog-sub-gap);
-}
-/* Line under a dialog title. */
+/* Line under a dialog title: an optional icon centred on the text's capitals. */
 .dialog-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 var(--dialog-gap);
   color: var(--color-text-secondary);
+}
+.dialog-sub-text {
+  text-box: trim-both cap alphabetic;
 }
 .dialog-actions {
   display: flex;

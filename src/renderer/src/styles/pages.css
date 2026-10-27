@@ -323,11 +323,6 @@
 }
 
 /* Logins' Models dialog: one washed card per family. Name and newest version share a line; earlier versions sit below. */
-.model-families-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .model-families {
   /* Card inset on every side; the head line is trimmed to its caps, so this is the visible gap. */
   --family-pad: 14px;
@@ -338,7 +333,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--dialog-gap);
 }
 .model-family {
   padding: var(--family-pad);

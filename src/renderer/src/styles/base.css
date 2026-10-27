@@ -96,7 +96,7 @@ a {
 }
 .page {
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--page-pad);
   min-width: 0;
 }
 .page-inner {

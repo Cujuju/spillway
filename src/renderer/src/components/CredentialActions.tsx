@@ -79,9 +79,9 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
         <Show when={!models.error} fallback={<p class="secondary">Could not load models: {(models.error as Error).message}</p>}>
           <Show when={count()} fallback={<p class="muted">The proxy lists no models for this account. It may be disabled or not loaded yet.</p>}>
-            <div class="dialog-sub model-families-sub">
+            <div class="dialog-sub">
               <ProviderGlyph provider={props.credential.provider} />
-              <span>
+              <span class="dialog-sub-text">
                 {props.credential.label} · {count()} {count() === 1 ? 'model' : 'models'}
               </span>
             </div>

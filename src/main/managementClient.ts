@@ -1,5 +1,5 @@
 import { parseBuildInfo, type BuildInfo } from '@shared/buildInfo';
-import { RESET_CREDIT_OUTCOMES, type ManagementLockout, type OAuthStart, type OAuthStatus, type ResetCreditOutcome, type UsageSnapshot } from '@shared/types';
+import { RESET_CREDIT_OUTCOMES, type CredentialModel, type CredentialRenewResult, type ManagementLockout,type OAuthStart, type OAuthStatus, type ResetCreditOutcome, type UsageSnapshot } from '@shared/types';
 import { parseUsageSnapshot } from './usageParse';
 
 /** Management calls are loopback; anything slower means the proxy is wedged. */
@@ -24,18 +24,19 @@ class ManagementClient {
   }
 
   private async request(method: string, path: string, body?: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
-    return (await this.send(method, path, body, timeoutMs)).data;
+    return (await this.send(method, path, body === undefined ? undefined : JSON.stringify(body), timeoutMs)).data;
   }
 
-  private async send(method: string, path: string, body: unknown, timeoutMs: number): Promise<{ data: unknown; headers: Headers }> {
+  /** `bodyText` is sent verbatim as JSON; `text` is the response before parsing. */
+  private async send(method: string, path: string, bodyText: string | undefined, timeoutMs: number): Promise<{ data: unknown; text: string; headers: Headers }> {
     if (!this.base) throw new ManagementError('Proxy not configured', 0);
     const res = await fetch(`${this.base}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.key}`,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(bodyText === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: bodyText,
       signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await res.text();
@@ -49,7 +50,7 @@ class ManagementClient {
       const message = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : `HTTP ${res.status}`;
       throw new ManagementError(message, res.status);
     }
-    return { data, headers: res.headers };
+    return { data, text, headers: res.headers };
   }
 
   /** The proxy's version and build from its management headers; null while it does not answer. */
@@ -117,6 +118,33 @@ class ManagementClient {
     await this.request('DELETE', `/credentials?${new URLSearchParams({ name })}`);
   }
 
+  /** Saves a login file under `name`, replacing one with the same name. The proxy validates the JSON. */
+  async uploadCredential(name: string, json: string): Promise<void> {
+    await this.send('POST', `/credentials?${new URLSearchParams({ name })}`, json, REQUEST_TIMEOUT_MS);
+  }
+
+  /** The login file's exact bytes as the proxy stores them. */
+  async downloadCredential(name: string): Promise<string> {
+    return (await this.send('GET', `/credentials/download?${new URLSearchParams({ name })}`, undefined, REQUEST_TIMEOUT_MS)).text;
+  }
+
+  async credentialModels(name: string): Promise<CredentialModel[]> {
+    return parseCredentialModels(await this.request('GET', `/credentials/models?${new URLSearchParams({ name })}`));
+  }
+
+  /** Forces a token refresh for one account, or every account when `name` is omitted. */
+  async renewCredentials(name?: string): Promise<CredentialRenewResult> {
+    if (name) {
+      try {
+        await this.request('POST', '/credentials/refresh', { name }, REFRESH_TIMEOUT_MS);
+        return { renewed: 1, failed: [] };
+      } catch (err) {
+        return { renewed: 0, failed: [{ name, error: err instanceof Error ? err.message : String(err) }] };
+      }
+    }
+    return parseRenewAll(await this.request('POST', '/credentials/refresh', { all: true }, REFRESH_TIMEOUT_MS));
+  }
+
   /** Opens the live request stream (server-sent events); the caller reads and closes the body. */
   async events(signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
     if (!this.base) throw new ManagementError('Proxy not configured', 0);
@@ -140,6 +168,25 @@ class ManagementClient {
 }
 
 export const management = new ManagementClient();
+
+const optStr = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+
+/** Reads `{ models: [{ id, display_name?, owned_by? }] }`; rows without an id are dropped. */
+export function parseCredentialModels(data: unknown): CredentialModel[] {
+  const rows = (data as { models?: unknown } | null)?.models;
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((r: Record<string, unknown>) =>
+    typeof r?.id === 'string' && r.id ? [{ id: r.id, displayName: optStr(r.display_name), ownedBy: optStr(r.owned_by) }] : [],
+  );
+}
+
+/** Reads `{ results: [{ id, success, error? }] }` from a refresh of every account. */
+export function parseRenewAll(data: unknown): CredentialRenewResult {
+  const rows = (data as { results?: unknown } | null)?.results;
+  const list = Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+  const failed = list.filter((r) => r?.success !== true).map((r) => ({ name: String(r?.id ?? '?'), error: optStr(r?.error) ?? 'Refresh failed' }));
+  return { renewed: list.length - failed.length, failed };
+}
 
 /** Reads `{ lockouts: [{ ip, failures, failures_allowed, locked_until }] }`; malformed rows are dropped. */
 export function parseLockouts(data: unknown): ManagementLockout[] {

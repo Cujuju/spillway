@@ -1,9 +1,10 @@
-import { Plus, Trash2 } from 'lucide-solid';
+import { KeyRound, Plus, Trash2, Upload } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from '../components/AddAccountDialog';
+import { CredentialActions, renewSummary } from '../components/CredentialActions';
 import { ResetCreditButton } from '../components/ResetCreditButton';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
@@ -32,6 +33,30 @@ export function Accounts() {
   const creds = () =>
     [...(snapshot()?.credentials ?? [])].sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
 
+  const report = (m: string) => { setError(null); setInfo(m); };
+  const fail = (m: string) => { setInfo(null); setError(m); };
+  const [renewingAll, setRenewingAll] = createSignal(false);
+  const renewAll = async () => {
+    setRenewingAll(true);
+    await act(async () => {
+      const s = renewSummary(await window.api.renewCredentials());
+      if (s.error) fail([s.ok, s.error].filter(Boolean).join(' '));
+      else report(s.ok ?? 'No accounts have a login token to renew.');
+    });
+    setRenewingAll(false);
+  };
+  const importFiles = () =>
+    act(async () => {
+      const r = await window.api.importCredentials();
+      if (!r) return;
+      const parts = [
+        r.imported.length ? `Added ${r.imported.length} ${r.imported.length === 1 ? 'account' : 'accounts'}.` : '',
+        r.replaced.length ? `Replaced ${r.replaced.join(', ')}.` : '',
+      ].filter(Boolean);
+      if (r.failed.length) fail([...parts, `Could not import: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`].join(' '));
+      else report(parts.join(' ') || 'Nothing imported.');
+    });
+
   const act = async (fn: () => Promise<void>) => {
     setError(null);
     setInfo(null);
@@ -51,6 +76,12 @@ export function Accounts() {
         </div>
         <div class="dash-actions">
           <ShowEmailsButton />
+          <button class="btn" disabled={!running() || renewingAll()} title="Refresh every account's login token now" onClick={() => void renewAll()}>
+            <KeyRound size={ICON_PX} class={renewingAll() ? 'spin' : undefined} /> Renew logins
+          </button>
+          <button class="btn" disabled={!running()} title="Add accounts from saved login files (.json)" onClick={() => void importFiles()}>
+            <Upload size={ICON_PX} /> Import
+          </button>
           <button class="btn primary" disabled={!running()} title={running() ? undefined : 'Start the proxy first'} onClick={() => setAdding(true)}>
             <Plus size={ICON_PX} /> Add account
           </button>
@@ -125,7 +156,8 @@ export function Accounts() {
                   <td>
                     <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void act(() => window.api.setCredentialDisabled(c.id, !on))} />
                   </td>
-                  <td style={{ 'text-align': 'right' }}>
+                  <td class="row-actions">
+                    <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} />
                     <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
                       <Trash2 size={ICON_PX} />
                     </button>

@@ -119,6 +119,26 @@ export type OAuthStatus =
   | { status: 'ok' }
   | { status: 'error'; error: string };
 
+/** A model an account serves, from the proxy's model registry. */
+export interface CredentialModel {
+  id: string;
+  displayName: string | null;
+  ownedBy: string | null;
+}
+
+/** Login files picked for import; `replaced` names overwrote an account that already existed. */
+export interface CredentialImportResult {
+  imported: string[];
+  replaced: string[];
+  failed: { name: string; error: string }[];
+}
+
+/** Login renewal; `failed` lists accounts whose token refresh errored. */
+export interface CredentialRenewResult {
+  renewed: number;
+  failed: { name: string; error: string }[];
+}
+
 export interface ProxyKeys {
   clientApiKey: string;
   /** For outside tools that read the proxy's management API (T3 Code's usage provider). */

@@ -306,3 +306,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Accounts: models an account serves, one per line; the dialog scrolls a long list. */
+.model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Accounts table: the row's icon actions sit right, on one line. */
+.table td.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}

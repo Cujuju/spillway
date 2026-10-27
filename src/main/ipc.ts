@@ -6,6 +6,7 @@ import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
+import { exportLoginFile, importLoginFiles } from './credentialFiles';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
 import { management } from './managementClient';
@@ -168,6 +169,18 @@ const handlers: Handlers = {
     await management.deleteCredential(credentialName(id));
     await usage.poll();
   },
+  importCredentials: async () => {
+    const result = await importLoginFiles(new Set(usage.latest()?.credentials.map((c) => c.name)));
+    if (result && result.imported.length + result.replaced.length > 0) await usage.poll();
+    return result;
+  },
+  exportCredential: (id) => exportLoginFile(credentialName(id)),
+  renewCredentials: async (id) => {
+    const result = await management.renewCredentials(id ? credentialName(id) : undefined);
+    await usage.poll();
+    return result;
+  },
+  credentialModels: (id) => management.credentialModels(credentialName(id)),
   setLimitTrays: (images) => syncLimitTrays(images),
   setAppTooltip: (text) => setAppTrayTooltip(text),
   taskbarDark: () => taskbarDark(),

@@ -1,7 +1,7 @@
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDayTotal, ActivityEvent, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -62,6 +62,13 @@ export interface DesktopApi {
   setCredentialNote(credentialId: string, note: string): Promise<void>;
   setCredentialPriority(credentialId: string, priority: number): Promise<void>;
   deleteCredential(credentialId: string): Promise<void>;
+  /** Asks for login files and adds them as accounts; null when cancelled. */
+  importCredentials(): Promise<CredentialImportResult | null>;
+  /** Asks where to save the account's login file; the saved path, or null when cancelled. */
+  exportCredential(credentialId: string): Promise<string | null>;
+  /** Refreshes one account's login token, or every account's when omitted. */
+  renewCredentials(credentialId?: string): Promise<CredentialRenewResult>;
+  credentialModels(credentialId: string): Promise<CredentialModel[]>;
 
   setLimitTrays(images: { id: string; png1x: string; png2x: string; tooltip: string }[]): Promise<void>;
   setAppTooltip(text: string): Promise<void>;
@@ -129,6 +136,10 @@ export const INVOKE = {
   setCredentialNote: 'cred:note',
   setCredentialPriority: 'cred:priority',
   deleteCredential: 'cred:delete',
+  importCredentials: 'cred:import',
+  exportCredential: 'cred:export',
+  renewCredentials: 'cred:renew',
+  credentialModels: 'cred:models',
   setLimitTrays: 'tray:limits',
   setAppTooltip: 'tray:tooltip',
   taskbarDark: 'tray:taskbar-dark',

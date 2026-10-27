@@ -109,10 +109,14 @@
   font-weight: 600;
 }
 
+/* Segoe UI sets capitals about 1px below the middle of the line box at control sizes (measured on screen); the lift recentres them. */
+:root[data-platform='win32'] {
+  --control-text-lift: 1px;
+}
 .input,
 .select {
   height: var(--control-height);
-  padding: 0 var(--spacing-2);
+  padding: 0 var(--spacing-2) calc(2 * var(--control-text-lift, 0px));
   font-size: var(--text-sm);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);

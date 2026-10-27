@@ -151,6 +151,7 @@
 }
 .search input {
   flex: 1;
+  padding: 0 0 calc(2 * var(--control-text-lift, 0px));
   border: 0;
   background: transparent;
   outline: none;

@@ -25,6 +25,12 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ trayIcons: { savedColors: ['#112233', '#12345678', 4, 'blue'] } }).trayIcons.savedColors).toEqual(['#112233']);
   });
 
+  it('defaults the sidebar expanded and keeps a stored choice', () => {
+    expect(normalizeSettings({}).general.sidebarCollapsed).toBe(false);
+    expect(normalizeSettings({ general: { sidebarCollapsed: true } }).general.sidebarCollapsed).toBe(true);
+    expect(normalizeSettings({ general: { sidebarCollapsed: 'yes' } }).general.sidebarCollapsed).toBe(false);
+  });
+
   it('defaults update auto-check on and keeps a stored choice', () => {
     expect(normalizeSettings({}).updates.autoCheck).toBe(true);
     expect(normalizeSettings({ updates: { autoCheck: false } }).updates.autoCheck).toBe(false);

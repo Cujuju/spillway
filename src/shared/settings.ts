@@ -39,6 +39,8 @@ export interface AppSettings {
     /** 'system' or a theme id from themes.ts. */
     theme: string;
     confirmQuit: boolean;
+    /** Sidebar shows icons only. */
+    sidebarCollapsed: boolean;
   };
   proxy: {
     autoStart: boolean;
@@ -114,6 +116,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     minimizeToTray: false,
     theme: 'dracula',
     confirmQuit: false,
+    sidebarCollapsed: false,
   },
   proxy: {
     autoStart: true,
@@ -211,6 +214,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       minimizeToTray: bool(g.minimizeToTray, d.general.minimizeToTray),
       theme: pick(g.theme, THEME_CHOICES, d.general.theme),
       confirmQuit: bool(g.confirmQuit, d.general.confirmQuit),
+      sidebarCollapsed: bool(g.sidebarCollapsed, d.general.sidebarCollapsed),
     },
     proxy: {
       autoStart: bool(p.autoStart, d.proxy.autoStart),

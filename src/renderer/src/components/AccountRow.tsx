@@ -8,8 +8,8 @@ import { LimitBar } from './LimitBar';
 import { ProviderGlyph, ResetTime } from './ui';
 
 const ICON_PX = 13;
-/** The proxy's on-demand usage lookup (POST /usage/refresh) supports Claude OAuth accounts only. */
-const LIVE_LOOKUP_PROVIDER = 'claude';
+/** Providers the proxy's on-demand usage lookup (POST /usage/refresh) supports. */
+const LIVE_LOOKUP_PROVIDERS = new Set(['claude', 'codex']);
 
 /** One account in Theo's list: name, refresh and state, then limit bars. */
 export function AccountRow(props: { credential: Credential }) {
@@ -39,7 +39,7 @@ export function AccountRow(props: { credential: Credential }) {
           <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
-          <Show when={c().provider === LIVE_LOOKUP_PROVIDER && !c().disabled}>
+          <Show when={LIVE_LOOKUP_PROVIDERS.has(c().provider) && !c().disabled}>
             <button class="btn ghost icon-btn" disabled={busy()} onClick={refresh} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>

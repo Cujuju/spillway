@@ -38,11 +38,10 @@ const config: Configuration = {
     icon: 'resources/icon-1024.png',
     category: 'public.app-category.developer-tools',
     darkModeSupport: true,
-    // Ad-hoc signature: Apple Silicon refuses unsigned apps, and no Developer ID is configured.
-    // Runs when built on the Mac that uses it; a downloaded copy is blocked by Gatekeeper.
-    // Hardened runtime would reject Electron's pre-signed frameworks under ad-hoc signing.
-    // Developer ID build: pnpm package -c.mac.identity="Developer ID Application: …" -c.mac.hardenedRuntime=true
+    // Ad-hoc signature: Apple Silicon refuses unsigned apps; no Developer ID set. Works on the building
+    // Mac; downloaded copies hit Gatekeeper. Hardened runtime rejects Electron's frameworks under ad-hoc signing.
     identity: '-',
+    // Developer ID build: pnpm package -c.mac.identity="Developer ID Application: …" -c.mac.hardenedRuntime=true
     hardenedRuntime: false,
   },
   dmg: { artifactName: '${productName}-${version}-${arch}.${ext}' },

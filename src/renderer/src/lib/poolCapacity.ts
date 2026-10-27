@@ -3,12 +3,8 @@ import { consumedBetween } from '@shared/usageWindows';
 import { consumed } from './poolHistory';
 
 /**
- * How big each account's limit windows are, so accounts on different plans add up correctly.
- * Sizes are in Pro 5-hour sessions: the session window holds the plan multiplier (Max 5x = 5).
- * A plan without a published multiple (Team, Enterprise, Codex) is measured instead: the API-cost
- * dollars its logged requests spent per 1% of its session window (see sessionSizes).
- * Longer windows don't scale by the same multiple, so each account's own history measures them:
- * the session percent it used per 1% of the window.
+ * Account window sizes, in Pro 5-hour sessions, so plans add up. Session size is the plan multiplier,
+ * else measured (sessionSizes). Longer windows use each account's measured session-to-window ratio.
  */
 
 /** Plan size when the proxy reports none (other providers, older proxies, Team): Pro-sized. */
@@ -57,10 +53,8 @@ function costBetween(buckets: ActivityBucket[], from: number, to: number): numbe
 }
 
 /**
- * API-cost dollars a full session window holds, from the account's logged requests and how far
- * its session window moved meanwhile; null until it has moved MIN_SIZED_PERCENT while logged.
- * Use outside the proxy (claude.ai, another machine) moves the window without logged cost, so
- * the size reads low.
+ * API-cost dollars a session window holds: logged cost over how far the window moved. Null below
+ * MIN_SIZED_PERCENT. Use outside the proxy moves the window without cost, so it reads low.
  */
 export function measuredSessionUsd(samples: HistorySample[], buckets: ActivityBucket[], c: Credential, session: string): number | null {
   const hourly = buckets.filter((b) => !b.wholeDay);
@@ -82,10 +76,8 @@ export function measuredSessionUsd(samples: HistorySample[], buckets: ActivityBu
 }
 
 /**
- * Session window size per account, in Pro sessions when any plan is known. A published plan
- * multiple wins. Otherwise a measured size is converted with the dollars per Pro session that
- * known-plan accounts in the pool measured. A pool with no known plan compares measured dollars
- * directly, giving unmeasured accounts the mean. Anything else counts as Pro-sized.
+ * Session window size per account, in Pro sessions: the plan multiple, else measured dollars over
+ * the known-plan accounts' dollars per Pro session. Otherwise Pro-sized.
  */
 export function sessionSizes(samples: HistorySample[], buckets: ActivityBucket[], accounts: Credential[]): Map<string, number> {
   const usd = new Map(accounts.map((c) => {
@@ -100,6 +92,7 @@ export function sessionSizes(samples: HistorySample[], buckets: ActivityBucket[]
     const measured = usd.get(c.id) ?? null;
     if (multiplier(c) !== null) return [c.id, multiplier(c)!];
     if (measured !== null && usdPerPro !== null) return [c.id, measured / usdPerPro];
+    // No known plan in the pool: compare measured dollars directly; unmeasured accounts get the mean.
     if (!anyKnown && meanUsd !== null) return [c.id, measured ?? meanUsd];
     return [c.id, UNKNOWN_PLAN_MULTIPLIER];
   }));
@@ -107,11 +100,7 @@ export function sessionSizes(samples: HistorySample[], buckets: ActivityBucket[]
 
 /**
  * Per-account share of the pool for `key` and the cost of 1 pool-percent in each window.
- * A window's ratio comes from the account's own history, else the mean of accounts on the same
- * tier, else the mean of all measured accounts. With none, shares assume the window scales with
- * the plan, and the window gets no cost, so it does not cap the forecast.
- * Uses all of `samples` and `buckets` (logged requests, for plans without a published size): plans change rarely. For a scoped `key`, other traffic also moves the
- * session window, so its size runs high.
+ * Uses all of `samples` and `buckets`: plans change rarely.
  */
 export function poolShares(samples: HistorySample[], credentials: Credential[], key: string, buckets: ActivityBucket[]): Map<string, AccountShare> {
   const accounts = credentials.filter((c) => !c.disabled && c.windows.some((w) => w.key === key && w.usedPercent !== null));
@@ -125,6 +114,7 @@ export function poolShares(samples: HistorySample[], credentials: Credential[], 
     }
     measured.set(c.id, ratios);
   }
+  // Own history, else the mean of same-tier accounts, else of all measured accounts.
   const ratioFor = (c: Credential, windowKey: string): number | null => {
     if (windowKey === sessionWindow(c)?.key) return 1;
     const own = measured.get(c.id)!.get(windowKey);
@@ -132,7 +122,9 @@ export function poolShares(samples: HistorySample[], credentials: Credential[], 
     const of = (cs: Credential[]) => mean(cs.flatMap((x) => measured.get(x.id)!.get(windowKey) ?? []));
     return of(accounts.filter((x) => c.plan && x.plan?.tier === c.plan.tier)) ?? of(accounts);
   };
+  // For a scoped `key`, other traffic also moves the session window, so its size runs high.
   const session = sessionSizes(samples, buckets, accounts);
+  // No ratio: the window scales with the plan and gets no cost, so it doesn't cap the forecast.
   const sizes = new Map(accounts.map((c) => {
     const multiplier = session.get(c.id)!;
     return [c.id, new Map(c.windows.map((w) => {

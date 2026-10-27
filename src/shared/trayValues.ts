@@ -75,8 +75,8 @@ export function shownPercent(usedPercent: number | null, value: TrayIconValue): 
 }
 
 /**
- * Converts a threshold between percent used (how it is stored) and the icon's unit, so Warn at and
- * Critical at read the same way as the digits. Its own inverse: apply it again to store.
+ * Converts a threshold between percent used (stored) and the icon's unit, so Warn at and Critical at
+ * match the digits. Its own inverse: apply again to store.
  */
 export const thresholdInUnit = (percent: number, value: TrayIconValue) => (value === 'remaining' ? 100 - percent : percent);
 

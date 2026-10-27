@@ -1,7 +1,6 @@
 /**
- * The ChatGPT login Codex reads from auth.json while Spillway serves its account calls (chatgpt_base_url).
- * The proxy sends each call as the pool's routed Codex account; the id token carries that account's email,
- * so usage views (T3 Code) match Codex's reading to the hub's account instead of listing it twice.
+ * ChatGPT login Codex reads from auth.json for its account calls. The id token carries the routed
+ * account's email, so usage views (T3 Code) don't list that account twice.
  */
 import { createHash } from 'node:crypto';
 

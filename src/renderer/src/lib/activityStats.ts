@@ -118,8 +118,8 @@ const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
 const weekday = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short' });
 
 /**
- * Day-by-hour grid. "week": the last 7 local days, oldest first. "rhythm": every hour of `rows`
- * summed by weekday. Daily totals of expired days have no hour, so they are left out.
+ * Day-by-hour grid. "week": last 7 local days, oldest first. "rhythm": every hour of `rows` summed
+ * by weekday. Expired days' daily totals have no hour, so are left out.
  */
 export function heatGrid(rows: ActivityBucket[], mode: HeatMode, now: number): HeatRow[] {
   const hourly = rows.filter((r) => !r.wholeDay);

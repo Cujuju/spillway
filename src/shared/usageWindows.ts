@@ -1,8 +1,8 @@
 import type { HistorySample, LimitWindow, UsageSnapshot } from './types';
 
 /**
- * When a window resets next after one reset at `resetAt` has passed by `now`. A fixed-cadence
- * window resets every `durationMs`; any other starts on its next use, so the time is unknown (null).
+ * When a window next resets, once its reset at `resetAt` is past `now`. Fixed-cadence windows
+ * reset every `durationMs`; others restart on next use, so null.
  */
 export function nextResetAfter(w: Pick<LimitWindow, 'durationMs' | 'resetCadence'>, resetAt: number, now: number): number | null {
   if (w.resetCadence !== 'fixed' || !w.durationMs) return null;
@@ -43,14 +43,11 @@ export function resetBetween(a: HistorySample, b: HistorySample, id: string, key
   return resetAt !== undefined && resetAt <= Date.parse(b.at);
 }
 
-/**
- * Percent of one window used between two samples, or null when either lacks it.
- * After a reset the new window starts at zero, so all of `b` is new use. Without a recorded
- * reset a drop is not use (a reset in old samples, or a source correction).
- */
+/** Percent of one window used between two samples, or null when either lacks it. After a reset, all of `b` is new use. */
 export function consumedBetween(a: HistorySample, b: HistorySample, id: string, key: string): number | null {
   const before = a.used[id]?.[key];
   const after = b.used[id]?.[key];
   if (before === undefined || after === undefined) return null;
+  // Without a recorded reset, a drop is a reset in old samples or a source correction, not use.
   return resetBetween(a, b, id, key) ? after : Math.max(0, after - before);
 }

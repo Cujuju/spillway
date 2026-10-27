@@ -149,9 +149,8 @@ function split(tier: Account[], amount: number, t: number, share: (a: Account) =
 }
 
 /**
- * Spends `amount` the way the proxy routes: the preferred account first, then the highest
- * priority tier with room, in the strategy's order. Rotating strategies spread it over the
- * tier (by weight for weighted round robin). Benched accounts get none.
+ * Spends `amount` as the proxy routes: preferred account first, then highest priority tier with
+ * room. Rotating strategies spread it over the tier (by weight if weighted). Benched accounts get none.
  */
 function spend(accounts: Account[], amount: number, t: number, strategy: string): void {
   const weighted = strategy === WEIGHTED_ROUND_ROBIN;
@@ -196,12 +195,7 @@ export interface Projection {
   nextReset: { at: number; restores: number } | null;
 }
 
-/**
- * Projects the pool forward at a steady drain (pool %/hour), routed as the proxy would (`strategy`).
- * Rotation spreads requests, so each account takes an equal (or weighted) part of the absolute use.
- * An account takes use only while every account-wide window has room. Windows refill at their
- * resets: a fixed-cadence window every period, any other on its next use after the reset.
- */
+/** Projects the pool forward at a steady drain (pool %/hour), routed as the proxy would (`strategy`). */
 export function project(
   credentials: Credential[], key: string, perHour: number, now: number, days: number, strategy: string, shares: Map<string, AccountShare>,
 ): Projection {
@@ -212,8 +206,10 @@ export function project(
   const drainPerStep = (perHour * STEP_MS) / HOUR_MS;
 
   for (let t = now + STEP_MS; t <= end; t += STEP_MS) {
+    // Fixed-cadence windows refill every period; others on their next use after the reset.
     const { restored, firstAt } = applyResets(accounts, t);
     if (restored > 0 && !nextReset) nextReset = { at: firstAt, restores: restored };
+    // Rotation splits use equally (or by weight); an account takes use only while every account-wide window has room.
     spend(accounts, drainPerStep, t, strategy);
     points.push({ t, remaining: remainingOf(accounts) });
   }

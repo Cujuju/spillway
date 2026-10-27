@@ -88,8 +88,8 @@ function canBind(port: number, host: string): Promise<boolean> {
 }
 
 /**
- * True when another program holds the port. Both checks are needed: Windows lets a second socket bind a
- * specific address under another program's wildcard listener, so a bind test alone can miss it.
+ * True when another program holds the port. A bind test alone misses it: Windows lets a socket bind
+ * a specific address under another program's wildcard listener.
  */
 export async function portInUse(port: number, allowLan: boolean): Promise<boolean> {
   if (await acceptsConnection(port)) return true;

@@ -1,7 +1,6 @@
 /**
- * Env vars that send Claude Code through the proxy. The client key rides in a custom header, not
- * ANTHROPIC_AUTH_TOKEN, so Claude Code keeps its subscription login and reports the proxy's usage-limit
- * resets (T3 Code snoozes threads from them). In token mode Claude Code ignores those headers.
+ * Env vars that route Claude Code through the proxy. The key goes in a custom header, not
+ * ANTHROPIC_AUTH_TOKEN: token mode drops the subscription login and ignores usage-limit headers.
  */
 export const CLAUDE_BASE_URL_VAR = 'ANTHROPIC_BASE_URL';
 export const CLAUDE_HEADERS_VAR = 'ANTHROPIC_CUSTOM_HEADERS';

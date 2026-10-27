@@ -37,9 +37,8 @@ function hasReset(prev: HistorySample, next: HistorySample): boolean {
 }
 
 /**
- * Appends `next` and trims past retention. The newest point always lands so no use is lost:
- * it replaces the previous newest while that one sits within the spacing of the point before it,
- * unless a reset lies between them.
+ * Appends `next` and trims past retention. The newest point always lands; it replaces the previous
+ * newest when that one is within spacing of its predecessor and no reset lies between.
  */
 export function appendSample(samples: HistorySample[], next: HistorySample, now = Date.parse(next.at)): HistorySample[] {
   const last = samples.at(-1);

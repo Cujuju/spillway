@@ -23,8 +23,8 @@ const OUTLINE_PER_EDGE = 1 / 16;
 /** Rounded shape's corner radius as a share of the icon edge. */
 const CORNER_RATIO = 0.22;
 /**
- * fontRatio: digit height as a share of the edge. fitRatio: share of the inner width the digits may span;
- * wider text ("100") shrinks to fit. A circle leaves less width at the digits' top and bottom.
+ * fontRatio: digit height per edge. fitRatio: inner width share the digits may span; wider text
+ * shrinks. Circles narrow at the digits' top and bottom.
  */
 const SHAPE_TEXT: Record<TrayIconShape, { fontRatio: number; fitRatio: number }> = {
   square: { fontRatio: 0.62, fitRatio: 0.84 },

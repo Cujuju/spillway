@@ -1,7 +1,6 @@
 /**
- * API list prices, USD per million tokens, for estimating what proxied requests would cost on
- * the pay-as-you-go API. Checked 2026-10-26 against
- * platform.claude.com/docs/en/about-claude/pricing and developers.openai.com/api/docs/pricing.
+ * API list prices, USD per million tokens, to estimate pay-as-you-go cost of proxied requests. Sources:
+ * platform.claude.com/docs/en/about-claude/pricing, developers.openai.com/api/docs/pricing.
  */
 
 const PER_TOKEN = 1 / 1_000_000;
@@ -99,8 +98,8 @@ function priceOf(model: string): ModelPrice | null {
 }
 
 /**
- * List-price cost of one request, or null for a model without a known price.
- * Applied to a day's totals, the long-context step can't be told apart, so `long` rates are skipped.
+ * List-price cost of one request, or null for a model without a known price. A day's totals hide the
+ * long-context step, so `long` rates are skipped.
  */
 export function tokenCost(provider: string, model: string, t: TokenCounts, perRequest = true): Cost | null {
   const price = priceOf(model);

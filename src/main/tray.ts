@@ -28,9 +28,8 @@ let appTray: Tray | null = null;
 const limitTrays = new Map<string, Tray>();
 
 /**
- * Stable per-icon GUID so Windows remembers each icon's "always show" choice and macOS its menu bar position.
- * Windows binds a GUID to the first exe that registers it and rejects it from any other path, so the exe path
- * is part of the key: an installed copy, a dev build and a moved folder each get their own icons.
+ * Stable per-icon GUID so Windows keeps its "always show" choice and macOS its menu bar spot.
+ * Windows binds a GUID to one exe path, so the key includes it.
  */
 function guidFor(id: string): string {
   const h = createHash('sha1').update(`spillway:${process.execPath.toLowerCase()}:${id}`).digest('hex');

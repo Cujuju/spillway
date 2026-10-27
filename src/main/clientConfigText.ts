@@ -105,8 +105,8 @@ export function claudeState(text: string | null, target: ClientTarget, applied: 
 export const claudeIsEmpty = (text: string) => Object.keys(parseSettings(text)).length === 0;
 
 // ── Codex: config.toml root keys ─────────────────────────────────
-// Text-level edit, no TOML parser. Residual: a multi-line string holding a line that starts with `[`
-// or one of the root keys below can be mistaken for a table header or a root key.
+// Text-level edit, no TOML parser. Residual: a line inside a multi-line string that starts with `[`
+// or a root key is misread.
 
 const BLOCK_TAG = '# >>> spillway';
 const BLOCK_BEGIN = `${BLOCK_TAG}: added by ${APP_NAME}; remove it with Undo in the app`;
@@ -114,8 +114,8 @@ const BLOCK_END = '# <<< spillway';
 /** Prefix for a root line setting a key the apply owns, turned off by the apply; undo removes it. */
 export const DISABLED_PREFIX = '# spillway disabled: ';
 /**
- * Codex's built-in OpenAI provider posts model, image and compaction calls under openai_base_url. Keeping that
- * provider (not a custom one) keeps every feature Codex gates on it, such as the image tool.
+ * Codex's built-in OpenAI provider posts model, image and compaction calls under openai_base_url.
+ * Keeping that provider keeps features Codex gates on it, such as the image tool.
  */
 const CODEX_API_PATH = '/backend-api/codex';
 /** Codex sends ChatGPT account calls (usage, plan, plugins) under chatgpt_base_url; the proxy answers as the pool. */

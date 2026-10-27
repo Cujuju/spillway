@@ -52,8 +52,8 @@ function parsePublicKey(pem: string): KeyObject {
 }
 
 /**
- * Checks a downloaded file against its listing: its hash must be the listed one and the listing must be
- * signed by `publicKeyPem` for `version`. Returns the reason it failed, or null when it is genuine.
+ * Checks a download against its listing: the hash must match and the listing must be signed by
+ * `publicKeyPem` for `version`. Returns the failure reason, or null.
  */
 export function verifyFile(publicKeyPem: string, version: string, file: SignedFileInfo, actualSha512: string): string | null {
   if (!file.signature) return 'the update is not signed';

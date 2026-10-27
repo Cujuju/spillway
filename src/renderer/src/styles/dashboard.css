@@ -133,7 +133,7 @@
   border-bottom: 1px solid var(--color-divider);
   margin: 10px 0 8px;
 }
-.summary-tabs button {
+.summary-tabs > button {
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -142,7 +142,7 @@
   font-size: var(--text-md);
   cursor: pointer;
 }
-.summary-tabs button.active {
+.summary-tabs > button.active {
   color: var(--pool-color, var(--color-accent-light));
   border-bottom-color: var(--pool-color, var(--color-accent-light));
 }

@@ -1,7 +1,7 @@
 import { createEffect } from 'solid-js';
 import { APP_NAME } from '@shared/app';
 import { resetText } from '@shared/resetTime';
-import { providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
+import { percentText, providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
 import { poolWindowKey } from '../lib/forecast';
 import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
 import { now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
@@ -27,7 +27,7 @@ export function TrayIconSync() {
       const shown = shownPercent(reading.usedPercent, t.value);
       const text = trayIconText(shown);
       const paint = paintFor(spec, darkTaskbar);
-      const valueText = shown === null ? 'no data' : `${Math.round(shown)}% ${t.value}`;
+      const valueText = shown === null ? 'no data' : `${percentText(shown)}% ${t.value}`;
       const reset = reading.resetsAt ? ` · ${resetText(reading.resetsAt, time)}` : '';
       return {
         id: spec.id,
@@ -48,7 +48,7 @@ export function TrayIconSync() {
       const creds = snap!.credentials.filter((c) => c.provider === provider);
       const key = poolWindowKey(creds);
       if (!key) continue;
-      lines.push(`${providerLabel(provider)}: ${Math.round(poolRemaining(creds, key))}% of pool left`);
+      lines.push(`${providerLabel(provider)}: ${percentText(poolRemaining(creds, key))}% of pool left`);
     }
     void window.api.setAppTooltip(clip(lines.join('\n')));
   });

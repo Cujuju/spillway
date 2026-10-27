@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import type { LimitWindow } from '@shared/types';
-import { shownPercent, trayIconText } from '@shared/trayValues';
+import { percentText, shownPercent } from '@shared/trayValues';
 import { isExhausted, quotaColor } from '../lib/quotaColor';
 import { now, settings } from '../store';
 import { ResetTime } from './ui';
@@ -13,7 +13,7 @@ export function LimitBar(props: { window: LimitWindow }) {
   const t = () => settings().trayIcons;
   const used = () => props.window.usedPercent;
   const shown = () => shownPercent(used(), t().value);
-  const shownValue = () => (shown() === null ? '—' : `${trayIconText(shown())}%`);
+  const shownValue = () => (shown() === null ? '—' : `${percentText(shown())}%`);
   const fill = () => Math.min(BAR_FULL, shown() ?? 0);
   const rejected = () => props.window.status === 'rejected';
   return (

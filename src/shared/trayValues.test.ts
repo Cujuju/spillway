@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, UsageSnapshot } from './types';
-import { readTray, shownPercent, thresholdInUnit, trayIconText, trayLevel } from './trayValues';
+import { percentText, readTray, shownPercent, thresholdInUnit, trayIconText, trayLevel } from './trayValues';
 
 const cred = (id: string, used: number, patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
@@ -64,5 +64,15 @@ describe('shownPercent and trayIconText', () => {
     expect(shownPercent(104, 'remaining')).toBe(0);
     expect(trayIconText(shownPercent(null, 'remaining'))).toBe('–');
     expect(trayIconText(69.6)).toBe('70');
+  });
+
+  it('shows tenths below 1% so a sliver left never reads 0', () => {
+    expect(percentText(0)).toBe('0');
+    expect(percentText(0.4)).toBe('0.4');
+    expect(percentText(0.96)).toBe('0.9');
+    expect(percentText(0.02)).toBe('0.1');
+    expect(percentText(1.4)).toBe('1');
+    expect(trayIconText(0.4)).toBe('.4');
+    expect(trayIconText(0)).toBe('0');
   });
 });

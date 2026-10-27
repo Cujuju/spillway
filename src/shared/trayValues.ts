@@ -80,8 +80,18 @@ export function shownPercent(usedPercent: number | null, value: TrayIconValue): 
  */
 export const thresholdInUnit = (percent: number, value: TrayIconValue) => (value === 'remaining' ? 100 - percent : percent);
 
-/** Digits drawn on the icon; a dash when there is no data. */
-export const trayIconText = (shown: number | null) => (shown === null ? '–' : String(Math.round(shown)));
+/** Tenths per percent, the finest step shown. */
+const TENTHS = 10;
+
+/** Percent as text, a dash without data. Whole numbers, but tenths below 1 (floored, at least 0.1), so a sliver never reads 0. */
+export function percentText(shown: number | null): string {
+  if (shown === null) return '–';
+  if (shown > 0 && shown < 1) return (Math.max(1, Math.floor(shown * TENTHS)) / TENTHS).toFixed(1);
+  return String(Math.round(shown));
+}
+
+/** Digits drawn on the icon: percentText without the leading zero (".4"), to keep two glyphs. */
+export const trayIconText = (shown: number | null) => percentText(shown).replace(/^0\./, '.');
 
 export type TrayLevel = 'ok' | 'warn' | 'critical' | 'none';
 

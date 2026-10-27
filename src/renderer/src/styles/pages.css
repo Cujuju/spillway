@@ -159,7 +159,11 @@
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-0_5);
+}
+/* Rows touch; vertical padding gives the highlight room around the label. */
+.settings-nav .nav-btn {
+  height: auto;
+  padding-block: var(--spacing-1);
 }
 .settings-body {
   min-width: 0;

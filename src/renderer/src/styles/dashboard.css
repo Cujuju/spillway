@@ -209,6 +209,8 @@
 
 /* Rows share one name column sized to the widest name (up to 280px), so bars line up and no row reserves empty space. */
 .account-list {
+  --limit-min: 150px;
+  --limit-gap: 12px;
   display: grid;
   grid-template-columns: fit-content(280px) minmax(0, 1fr);
   column-gap: 16px;
@@ -250,10 +252,13 @@
 .account-meta .back {
   color: var(--color-red-light);
 }
+/* The bars block is as wide as the fullest row and hugs the right edge; spare width springs open before it. */
 .limits {
+  justify-self: end;
+  width: min(100%, calc(var(--limit-slots, 1) * (var(--limit-min) + var(--limit-gap)) - var(--limit-gap)));
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--limit-min), 1fr));
+  gap: var(--limit-gap);
 }
 .limit-head {
   display: flex;

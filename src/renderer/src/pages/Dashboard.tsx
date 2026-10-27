@@ -157,7 +157,8 @@ export function Dashboard() {
             <option value="name">Name</option>
           </select>
         </div>
-        <div class="account-list">
+        {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
+        <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>
           <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
             {(c) => <AccountRow credential={c} />}
           </For>

@@ -1,9 +1,8 @@
 import { Download, KeyRound, ListTree } from 'lucide-solid';
-import { createResource, createSignal, For, Show } from 'solid-js';
+import { createResource, createSignal, Show } from 'solid-js';
 import type { Credential, CredentialRenewResult } from '@shared/types';
-import { familyName, groupModelFamilies } from '../lib/modelFamilies';
-import { providerVar } from '../lib/providers';
-import { createCopier, Dialog, ProviderGlyph } from './ui';
+import { ModelFamilyList } from './ModelFamilyList';
+import { Dialog, ProviderGlyph } from './ui';
 
 const ICON_PX = 14;
 
@@ -72,10 +71,7 @@ export function CredentialActions(props: {
 
 function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
   const [models] = createResource(() => window.api.credentialModels(props.credential.id));
-  const families = () => groupModelFamilies(models() ?? []);
   const count = () => models()?.length ?? 0;
-  const copier = createCopier();
-  const copied = (id: string) => copier.copied() === id;
   return (
     <Dialog title="Models" onClose={props.onClose} actions={<button class="btn" onClick={props.onClose}>Close</button>}>
       <Show when={!models.loading} fallback={<p class="muted">Loading…</p>}>
@@ -87,38 +83,7 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
                 {props.credential.label} · {count()} {count() === 1 ? 'model' : 'models'}
               </span>
             </div>
-            <ul class="model-families" style={{ '--card-wash-hue': providerVar(props.credential.provider) }}>
-              <For each={families()}>
-                {(f) => (
-                  <li class="model-family card-wash">
-                    <div class="model-family-head">
-                      <span class="model-family-name">{familyName(f)}</span>
-                      <Show when={f.latest.version.length}>
-                        <span class="model-family-version">{f.latest.label}</span>
-                      </Show>
-                      <span class="model-family-id selectable">{f.latest.model.id}</span>
-                    </div>
-                    <Show when={f.older.length}>
-                      <div class="model-family-older">
-                        <For each={f.older}>
-                          {(v) => (
-                            <button
-                              type="button"
-                              class="badge"
-                              classList={{ copied: copied(v.model.id) }}
-                              title={copied(v.model.id) ? 'Copied' : `Copy ${v.model.id}`}
-                              onClick={() => void copier.copy(v.model.id)}
-                            >
-                              {v.label}
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </li>
-                )}
-              </For>
-            </ul>
+            <ModelFamilyList models={models() ?? []} provider={props.credential.provider} />
           </Show>
         </Show>
       </Show>

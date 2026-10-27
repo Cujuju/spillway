@@ -422,6 +422,27 @@
   gap: var(--spacing-1);
   margin-top: var(--family-row-gap);
 }
+/* Picker mode (API-key editor): the newest row is a button; a picked newest model gets the accent edge and a check. */
+.model-pick {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.model-family:has(.model-pick:hover) {
+  border-color: var(--color-border);
+}
+.model-family.picked {
+  border-color: var(--color-accent-border);
+}
+.model-family-check {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--color-accent-light);
+}
 /* A table's placeholder when it has no rows. */
 .table td.empty-row {
   padding: var(--spacing-6);

@@ -1,8 +1,10 @@
-import { ListPlus, Plus, X } from 'lucide-solid';
-import { createSignal, createUniqueId, For, Index, Show, untrack } from 'solid-js';
+import { Plus, X } from 'lucide-solid';
+import { createSignal, createUniqueId, For, Index, onMount, Show, untrack } from 'solid-js';
 import {
   API_KEY_FAMILIES, FAMILY_INFO, MODEL_LISTS, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
+import type { CredentialModel } from '@shared/types';
+import { ModelFamilyList } from './ModelFamilyList';
 import { Dialog, Notice, Toggle } from './ui';
 
 const ICON_PX = 13;
@@ -35,32 +37,41 @@ export function ProviderDialog(props: {
     const k = newKey().trim();
     if (k && !newKeys().includes(k)) setNewKeys([...newKeys(), k]);
     setNewKey('');
+    if (k && !available().length) void loadModels();
   };
   const setModel = (i: number, patch: Partial<ApiModelAlias>) => setModels(models().map((m, j) => (j === i ? { ...m, ...patch } : m)));
 
+  // The upstream's model list loads on open and whenever the type, base URL or key it depends on changes.
   const modelListId = createUniqueId();
-  const [available, setAvailable] = createSignal<string[]>([]);
+  const [available, setAvailable] = createSignal<CredentialModel[]>([]);
   const [loadingModels, setLoadingModels] = createSignal(false);
   const [modelsError, setModelsError] = createSignal<string | null>(null);
   const listable = () => !!MODEL_LISTS[family()];
-  const unpicked = () => available().filter((id) => !models().some((m) => m.name.trim() === id));
+  // A typed or newly added key first; an edited group falls back to its saved key in the main process.
+  const listKey = () => newKey().trim() || newKeys()[0] || null;
+  const canList = () => listable() && (!!listKey() || !!props.target || info().keysOptional) && (!!baseUrl().trim() || !info().baseUrlRequired);
+  let latestRequest = 0;
   const loadModels = async () => {
-    setLoadingModels(true);
+    const request = ++latestRequest;
     setModelsError(null);
+    if (!canList()) return setAvailable([]);
+    setLoadingModels(true);
     try {
-      // A typed or newly added key is tried first; a saved group falls back to its own key in the main process.
-      const key = newKey().trim() || newKeys()[0] || null;
-      setAvailable(await window.api.upstreamModels({ family: family(), baseUrl: baseUrl(), key, target: props.target }));
+      const list = await window.api.upstreamModels({ family: family(), baseUrl: baseUrl(), key: listKey(), target: props.target });
+      if (request === latestRequest) setAvailable(list);
     } catch (e) {
-      setModelsError((e as Error).message);
+      if (request === latestRequest) {
+        setAvailable([]);
+        setModelsError((e as Error).message);
+      }
     } finally {
-      setLoadingModels(false);
+      if (request === latestRequest) setLoadingModels(false);
     }
   };
-  const pickModel = (select: HTMLSelectElement) => {
-    if (select.value) setModels([...models(), { name: select.value, alias: null }]);
-    select.value = '';
-  };
+  onMount(() => void loadModels());
+  const isPicked = (id: string) => models().some((m) => m.name.trim() === id);
+  const togglePick = (id: string) =>
+    setModels(isPicked(id) ? models().filter((m) => m.name.trim() !== id) : [...models(), { name: id, alias: null }]);
 
   const save = async () => {
     // A key typed but not yet added with + is still meant to be saved.
@@ -103,7 +114,7 @@ export function ProviderDialog(props: {
       <div class="form">
         <label class="form-field">
           <span>Type</span>
-          <select class="select" value={family()} disabled={!!props.target} onChange={(e) => { setFamily(e.currentTarget.value as ApiKeyFamily); setAvailable([]); }}>
+          <select class="select" value={family()} disabled={!!props.target} onChange={(e) => { setFamily(e.currentTarget.value as ApiKeyFamily); void loadModels(); }}>
             <For each={API_KEY_FAMILIES}>{(f) => <option value={f}>{FAMILY_INFO[f].label}</option>}</For>
           </select>
           <span class="form-help">{info().hint}</span>
@@ -114,7 +125,7 @@ export function ProviderDialog(props: {
         </label>
         <label class="form-field">
           <span>Base URL{info().baseUrlRequired ? '' : ' (optional)'}</span>
-          <input class="input" value={baseUrl()} placeholder={info().baseUrlRequired ? 'https://…/v1' : 'Provider default'} onInput={(e) => { setBaseUrl(e.currentTarget.value); setAvailable([]); }} />
+          <input class="input" value={baseUrl()} placeholder={info().baseUrlRequired ? 'https://…/v1' : 'Provider default'} onInput={(e) => setBaseUrl(e.currentTarget.value)} onChange={() => void loadModels()} />
         </label>
         <label class="form-field">
           <span>Prefix (optional)</span>
@@ -150,7 +161,7 @@ export function ProviderDialog(props: {
             )}
           </For>
           <div class="form-list-row">
-            <input class="input spacer" type="password" autocomplete="off" value={newKey()} placeholder="Paste a key" onInput={(e) => setNewKey(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && addKey()} />
+            <input class="input spacer" type="password" autocomplete="off" value={newKey()} placeholder="Paste a key" onInput={(e) => setNewKey(e.currentTarget.value)} onChange={() => !available().length && void loadModels()} onKeyDown={(e) => e.key === 'Enter' && addKey()} />
             <button class="btn ghost icon-btn" title="Add key" onClick={addKey}><Plus size={ICON_PX} /></button>
           </div>
         </div>
@@ -159,7 +170,7 @@ export function ProviderDialog(props: {
           <span>Models (optional)</span>
           <span class="form-help">
             Empty serves the provider's own model list. An alias is the name clients ask for.
-            {listable() ? ' Load models to pick from what the key can use.' : ''}
+            {listable() ? ' Click a model below to add or remove it.' : ''}
           </span>
           {/* Index, not For: each edit replaces the row's object, and For would remount the row and drop focus. */}
           <Index each={models()}>
@@ -174,28 +185,24 @@ export function ProviderDialog(props: {
             )}
           </Index>
           <datalist id={modelListId}>
-            <For each={available()}>{(id) => <option value={id} />}</For>
+            <For each={available()}>{(m) => <option value={m.id} />}</For>
           </datalist>
           <div class="form-list-row">
             <button class="btn ghost" onClick={() => setModels([...models(), { name: '', alias: null }])}><Plus size={ICON_PX} /> Add model</button>
-            <Show when={listable()}>
-              <Show
-                when={available().length}
-                fallback={
-                  <button class="btn ghost" disabled={loadingModels()} onClick={() => void loadModels()}>
-                    <ListPlus size={ICON_PX} /> {loadingModels() ? 'Loading…' : 'Load models'}
-                  </button>
-                }
-              >
-                <select class="select" value="" aria-label="Add a model from the provider" onChange={(e) => pickModel(e.currentTarget)}>
-                  <option value="">Pick a model…</option>
-                  <For each={unpicked()}>{(id) => <option value={id}>{id}</option>}</For>
-                </select>
+          </div>
+          <Show when={listable()}>
+            <Show when={!modelsError()} fallback={
+              <Notice tone="error">
+                <span class="spacer">{modelsError()}</span>
+                <button class="btn" onClick={() => void loadModels()}>Retry</button>
+              </Notice>
+            }>
+              <Show when={!loadingModels()} fallback={<p class="form-help">Loading the provider's models…</p>}>
+                <Show when={available().length} fallback={<Show when={!canList()}><p class="form-help">{info().baseUrlRequired && !baseUrl().trim() ? 'Enter the base URL' : 'Add a key'} to see the provider's models.</p></Show>}>
+                  <ModelFamilyList models={available()} provider={FAMILY_INFO[family()].glyph} picked={isPicked} onPick={togglePick} />
+                </Show>
               </Show>
             </Show>
-          </div>
-          <Show when={modelsError()}>
-            <Notice tone="error">{modelsError()}</Notice>
           </Show>
         </div>
 

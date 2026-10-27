@@ -7,10 +7,17 @@ describe('listUpstreamModels', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('lists Anthropic models with the typed key and the version header', async () => {
-    const fetch = vi.fn(async () => ok([{ id: 'claude-sonnet-5-5' }, { id: 'claude-opus-5-5' }, { id: 'claude-opus-5-5' }]));
+    const fetch = vi.fn(async () => ok([
+      { id: 'claude-sonnet-5-5', display_name: 'Claude Sonnet 5.5' },
+      { id: 'claude-opus-5-5', display_name: 'Claude Opus 5.5' },
+      { id: 'claude-opus-5-5' },
+    ]));
     vi.stubGlobal('fetch', fetch);
-    const ids = await listUpstreamModels({ family: 'claude', baseUrl: '', key: 'sk-typed', target: null }, () => null);
-    expect(ids).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5']);
+    const models = await listUpstreamModels({ family: 'claude', baseUrl: '', key: 'sk-typed', target: null }, () => null);
+    expect(models).toEqual([
+      { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5', ownedBy: null },
+      { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', ownedBy: null },
+    ]);
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.anthropic.com/v1/models?limit=1000');
     expect(init.headers).toMatchObject({ 'x-api-key': 'sk-typed', 'anthropic-version': '2023-06-01' });

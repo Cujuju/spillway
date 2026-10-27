@@ -1,23 +1,26 @@
 import { Plus, Trash2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
+import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from '../components/AddAccountDialog';
 import { ResetCreditButton } from '../components/ResetCreditButton';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
-import { proxyStatus, snapshot } from '../store';
+import { now, proxyStatus, snapshot } from '../store';
 
 const ICON_PX = 14;
 /** Proxy rule (selector.go): only the highest available priority tier is picked from. */
 const PRIORITY_HELP = 'Higher tiers are used first; lower tiers only when every higher account is limited';
 
-function statusBadge(c: Credential) {
-  if (c.disabled) return <span class="badge">Disabled</span>;
-  if (c.cooldownUntil && Date.parse(c.cooldownUntil) > Date.now()) return <span class="badge red">Limited</span>;
-  if (c.nextPick) return <span class="badge green">Next pick</span>;
-  if (c.status === 'error') return <span class="badge red" title={c.statusMessage ?? undefined}>Error</span>;
-  return <span class="badge">Ready</span>;
+function statusBadge(c: Credential, at: number) {
+  switch (accountState(c, at)) {
+    case 'disabled': return <span class="badge">Disabled</span>;
+    case 'limited': return <span class="badge red">Limited</span>;
+    case 'next-pick': return <span class="badge green">Next pick</span>;
+    case 'error': return <span class="badge red" title={c.statusMessage ?? undefined}>Error</span>;
+    case 'ready': return <span class="badge">Ready</span>;
+  }
 }
 
 export function Accounts() {
@@ -115,7 +118,7 @@ export function Accounts() {
                       </Show>
                     </div>
                   </td>
-                  <td>{statusBadge(c)}</td>
+                  <td>{statusBadge(c, now())}</td>
                   <td>
                     <NumberField value={c.priority} width={70} onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
                   </td>

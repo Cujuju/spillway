@@ -3,7 +3,7 @@ import { bucketStarts, byModel, inRange, RANGES, series, summarize, type Range, 
 import { compactNumber, usd } from '../lib/format';
 import { activityBuckets, now } from '../store';
 import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
-import { countRows, hitRate, savings } from './activityFormat';
+import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
 import { Seg } from './ui';
 
@@ -60,7 +60,7 @@ export function ActivityOverview() {
       </div>
 
       <div class="card stat-strip">
-        <Stat label="API cost" value={usd(total().costUsd)} sub="at list prices" title="What these requests would cost on the pay-as-you-go API" />
+        <Stat label="API cost" value={costText(total())} sub="at list prices" title="What these requests would cost on the pay-as-you-go API" />
         <Stat label="Tokens" value={compactNumber(total().totalTokens)} sub={`${compactNumber(total().outputTokens)} output`} />
         <Stat label="Requests" value={total().requests.toLocaleString()} sub={`${total().failed.toLocaleString()} failed`} />
         <Stat label="Cache hit" value={hitRate(total())} sub={`${compactNumber(total().cachedTokens)} from cache`} title="Prompt tokens served from the prompt cache" />

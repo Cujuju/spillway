@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from 'solid-js';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
 import type { ActivityCounts, ActivityDayTotal } from '@shared/types';
-import { dayLabel, usd } from '../lib/format';
+import { dayLabel } from '../lib/format';
+import { costText } from './activityFormat';
 import { TokenCell } from './TokenCell';
 import { activity } from '../store';
 import { ProviderGlyph } from './ui';
@@ -28,7 +29,7 @@ function CountCells(props: { c: ActivityCounts; provider?: string }) {
       <TokenCell v={props.c.cachedTokens} />
       <TokenCell v={props.c.cacheWriteTokens} provider={props.provider} />
       <td class="tabular num" title={props.c.unpricedRequests ? `${n(props.c.unpricedRequests)} requests on models without a price are left out` : undefined}>
-        {props.c.unpricedRequests === props.c.requests ? '—' : usd(props.c.costUsd)}
+        {costText(props.c)}
       </td>
     </>
   );

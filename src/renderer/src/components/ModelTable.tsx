@@ -1,7 +1,7 @@
 import { For } from 'solid-js';
 import { metricValue, type Metric, type ModelRow, type Summary } from '../lib/activityStats';
-import { pct, usd } from '../lib/format';
-import { hitRate } from './activityFormat';
+import { pct } from '../lib/format';
+import { costText, hitRate } from './activityFormat';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
 
@@ -33,7 +33,7 @@ export function ModelTable(props: { models: ModelRow[]; total: Summary; metric: 
               <TokenCell v={m.summary.cachedTokens} />
               <TokenCell v={m.summary.cacheWriteTokens} provider={m.provider} />
               <td class="tabular num">{hitRate(m.summary)}</td>
-              <td class="tabular num">{m.summary.unpricedRequests === m.summary.requests ? '—' : usd(m.summary.costUsd)}</td>
+              <td class="tabular num">{costText(m.summary)}</td>
               <td class="share-cell"><div class="share-bar" title={pct(share(m.summary) * 100, 1)}><span style={{ width: `${share(m.summary) * 100}%` }} /></div></td>
             </tr>
           )}

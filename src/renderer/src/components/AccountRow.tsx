@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
+import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { compactDuration } from '../lib/format';
 import { now } from '../store';
@@ -14,10 +15,7 @@ const LIVE_LOOKUP_PROVIDER = 'claude';
 export function AccountRow(props: { credential: Credential }) {
   const c = () => props.credential;
   const [busy, setBusy] = createSignal(false);
-  const benchedFor = () => {
-    const until = c().cooldownUntil ? Date.parse(c().cooldownUntil!) : 0;
-    return until > now() ? until - now() : 0;
-  };
+  const state = () => accountState(c(), now());
   /** The proxy may not report last use; the line is hidden then. */
   const lastUsed = () => {
     const at = c().lastUsedAt ? Date.parse(c().lastUsedAt!) : 0;
@@ -43,7 +41,7 @@ export function AccountRow(props: { credential: Credential }) {
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
           </Show>
-          <Show when={!c().disabled && benchedFor() === 0 && c().nextPick}>
+          <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
         </div>
@@ -51,13 +49,13 @@ export function AccountRow(props: { credential: Credential }) {
           <Show when={c().email && c().email !== c().label}>
             <div class="truncate">{c().email}</div>
           </Show>
-          <Show when={c().disabled}>
+          <Show when={state() === 'disabled'}>
             <div>Disabled</div>
           </Show>
-          <Show when={!c().disabled && benchedFor() > 0}>
+          <Show when={state() === 'limited'}>
             <div class="back">Limited · <ResetTime at={c().cooldownUntil!} now={now()} /></div>
           </Show>
-          <Show when={c().statusMessage && benchedFor() === 0}>
+          <Show when={c().statusMessage && state() !== 'limited'}>
             <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>
           </Show>
           <Show when={lastUsed()}>

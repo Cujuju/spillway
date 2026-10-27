@@ -1,22 +1,19 @@
 import { Show } from 'solid-js';
 import type { LimitWindow } from '@shared/types';
-import { trayLevel } from '@shared/trayValues';
+import { shownPercent, trayIconText, trayLevel } from '@shared/trayValues';
 import { now, settings } from '../store';
 import { ResetTime } from './ui';
+
+/** Bar width at 100% shown. */
+const BAR_FULL = 100;
 
 /** One limit column: label, percent, bar, reset caption (Theo's per-account cells). */
 export function LimitBar(props: { window: LimitWindow }) {
   const t = () => settings().trayIcons;
   const used = () => props.window.usedPercent;
-  const shownValue = () => {
-    const u = used();
-    if (u === null) return '—';
-    return `${Math.round(t().value === 'remaining' ? Math.max(0, 100 - u) : u)}%`;
-  };
-  const fill = () => {
-    const u = used();
-    return u === null ? 0 : t().value === 'remaining' ? Math.max(0, 100 - u) : Math.min(100, u);
-  };
+  const shown = () => shownPercent(used(), t().value);
+  const shownValue = () => (shown() === null ? '—' : `${trayIconText(shown())}%`);
+  const fill = () => Math.min(BAR_FULL, shown() ?? 0);
   const level = () => (props.window.status === 'rejected' ? 'critical' : trayLevel(used(), t().warnAtPercentUsed, t().criticalAtPercentUsed));
   return (
     <div class="limit" classList={{ empty: used() === null }} title={props.window.resetsAt ? new Date(props.window.resetsAt).toLocaleString() : undefined}>

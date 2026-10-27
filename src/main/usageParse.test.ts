@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emailDomain, parseUsageSnapshot } from './usageParse';
+import { emailDomain, errorText, parseUsageSnapshot } from './usageParse';
 
 const parseOne = (fields: Record<string, unknown>) =>
   parseUsageSnapshot({ strategy: 'soonest-reset', credentials: [{ id: 'a', provider: 'claude', ...fields }] }).credentials[0]!;
@@ -10,6 +10,21 @@ describe('emailDomain', () => {
   it('is null without an email or domain', () => {
     expect(emailDomain(null)).toBeNull();
     expect(emailDomain('someone@')).toBeNull();
+  });
+});
+
+describe('errorText', () => {
+  it('reads the message from provider error bodies', () => {
+    const anthropic = '{"type":"error","error":{"type":"rate_limit_error","message":"Rate limited."},"request_id":"req_1"}';
+    expect(parseOne({ status_message: anthropic }).statusMessage).toBe('Rate limited.');
+    expect(errorText('{"error":"bad key"}')).toBe('bad key');
+    expect(errorText('{"message":"nope"}')).toBe('nope');
+  });
+  it('keeps plain text, invalid JSON and bodies without a message', () => {
+    expect(errorText('unauthorized')).toBe('unauthorized');
+    expect(errorText('{"error":')).toBe('{"error":');
+    expect(errorText('{"code":1}')).toBe('{"code":1}');
+    expect(errorText('')).toBeNull();
   });
 });
 

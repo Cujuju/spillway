@@ -64,6 +64,20 @@ function parseResetCredits(raw: unknown): ResetCredits | null {
   return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt };
 }
 
+/** The proxy keeps a provider's raw error body; show its message, e.g. `{"error":{"message":"…"}}` → "…". */
+export function errorText(raw: unknown): string | null {
+  const text = s(raw);
+  if (!text?.trimStart().startsWith('{')) return text;
+  let body: Obj;
+  try {
+    body = obj(JSON.parse(text));
+  } catch {
+    return text;
+  }
+  const error = obj(body.error);
+  return s(error.message) ?? s(body.error) ?? s(body.message) ?? s(body.detail) ?? text;
+}
+
 function parseCredential(raw: unknown): Credential | null {
   const c = obj(raw);
   const id = s(c.id);
@@ -87,7 +101,7 @@ function parseCredential(raw: unknown): Credential | null {
     apiKey,
     disabled: c.disabled === true,
     status: s(c.status) ?? 'unknown',
-    statusMessage: s(c.status_message),
+    statusMessage: errorText(c.status_message),
     priority: n(c.priority) ?? 0,
     cooldownUntil: s(c.cooldown_until),
     observedAt: s(c.observed_at),

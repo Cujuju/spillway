@@ -1,8 +1,9 @@
 import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
-import { providerLabel, trayLevel } from '@shared/trayValues';
+import { providerLabel } from '@shared/trayValues';
 import { compactDuration } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
+import { quotaColor } from '../lib/quotaColor';
 import { providerVar } from '../lib/providers';
 import { now, settings } from '../store';
 import type { PoolLine, ProviderPool } from './poolModel';
@@ -89,8 +90,6 @@ export function ProviderCards(props: CardsProps) {
 /** One window: a segment per account, the pool's percent left, and the time to its next reset. */
 function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void }) {
   const m = () => props.line.model;
-  const t = () => settings().trayIcons;
-  const level = (usedPercent: number, rejected: boolean) => (rejected ? 'critical' : trayLevel(usedPercent, t().warnAtPercentUsed, t().criticalAtPercentUsed));
   return (
     <button
       type="button"
@@ -109,7 +108,7 @@ function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void
         <For each={m().segments()}>
           {(s) => (
             <span style={{ 'flex-grow': s.share }}>
-              <span class={`fill ${level(s.usedPercent, s.rejected)}`} style={{ width: `${Math.max(0, FULL - s.usedPercent)}%` }} />
+              <span class="fill" style={{ width: `${Math.max(0, FULL - s.usedPercent)}%`, background: quotaColor(s.usedPercent, s.rejected) }} />
             </span>
           )}
         </For>

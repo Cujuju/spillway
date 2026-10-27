@@ -3,6 +3,7 @@ import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { compactDuration } from '../lib/format';
+import { isExhausted } from '../lib/quotaColor';
 import { now, setPage } from '../store';
 import { LimitBar } from './LimitBar';
 import { ProviderGlyph, ResetTime } from './ui';
@@ -16,6 +17,8 @@ export function AccountRow(props: { credential: Credential }) {
   const c = () => props.credential;
   const [busy, setBusy] = createSignal(false);
   const state = () => accountState(c(), now());
+  /** Limited with no spent window to show it (e.g. a cooldown after errors): the reset goes in the meta lines. */
+  const limitedUnshown = () => state() === 'limited' && !c().windows.some((w) => isExhausted(w.usedPercent, w.status === 'rejected'));
   /** The proxy may not report last use; the line is hidden then. */
   const lastUsed = () => {
     const at = c().lastUsedAt ? Date.parse(c().lastUsedAt!) : 0;
@@ -63,10 +66,10 @@ export function AccountRow(props: { credential: Credential }) {
           <Show when={state() === 'disabled'}>
             <div>Disabled</div>
           </Show>
-          <Show when={state() === 'limited'}>
+          <Show when={limitedUnshown()}>
             <div class="back">Limited · <ResetTime at={c().cooldownUntil!} now={now()} /></div>
           </Show>
-          <Show when={c().statusMessage && state() !== 'limited'}>
+          <Show when={c().statusMessage && !limitedUnshown()}>
             <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>
           </Show>
           <Show when={lastUsed()}>

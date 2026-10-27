@@ -216,13 +216,6 @@
 .pool-segments .fill {
   display: block;
   height: 100%;
-  background: var(--color-green);
-}
-.pool-segments .fill.warn {
-  background: var(--color-amber);
-}
-.pool-segments .fill.critical {
-  background: var(--color-red);
 }
 .quota-chart svg:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-accent-border);

@@ -98,10 +98,10 @@ export function TrayIconSettings() {
         <SettingRow label="Number shown" help="What the digits on each icon mean.">
           <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />
         </SettingRow>
-        <SettingRow label="Warn at" help={`Limit bars and icons turn amber at this ${thresholdWording()}.`}>
+        <SettingRow label="Warn at" help={`Tray icons turn amber at this ${thresholdWording()}.`}>
           <NumberField value={thresholdInUnit(t().warnAtPercentUsed, t().value)} unit="%" onCommit={(v) => set((d) => void (d.warnAtPercentUsed = thresholdInUnit(v, d.value)))} />
         </SettingRow>
-        <SettingRow label="Critical at" help={`Limit bars and icons turn red at this ${thresholdWording()}.`}>
+        <SettingRow label="Critical at" help={`Tray icons turn red at this ${thresholdWording()}.`}>
           <NumberField value={thresholdInUnit(t().criticalAtPercentUsed, t().value)} unit="%" onCommit={(v) => set((d) => void (d.criticalAtPercentUsed = thresholdInUnit(v, d.value)))} />
         </SettingRow>
       </SettingsGroup>

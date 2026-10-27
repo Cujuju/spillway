@@ -1,6 +1,7 @@
 import { Show } from 'solid-js';
 import type { LimitWindow } from '@shared/types';
-import { shownPercent, trayIconText, trayLevel } from '@shared/trayValues';
+import { shownPercent, trayIconText } from '@shared/trayValues';
+import { isExhausted, quotaColor } from '../lib/quotaColor';
 import { now, settings } from '../store';
 import { ResetTime } from './ui';
 
@@ -14,17 +15,17 @@ export function LimitBar(props: { window: LimitWindow }) {
   const shown = () => shownPercent(used(), t().value);
   const shownValue = () => (shown() === null ? '—' : `${trayIconText(shown())}%`);
   const fill = () => Math.min(BAR_FULL, shown() ?? 0);
-  const level = () => (props.window.status === 'rejected' ? 'critical' : trayLevel(used(), t().warnAtPercentUsed, t().criticalAtPercentUsed));
+  const rejected = () => props.window.status === 'rejected';
   return (
     <div class="limit" classList={{ empty: used() === null }} title={props.window.resetsAt ? new Date(props.window.resetsAt).toLocaleString() : undefined}>
       <div class="limit-head">
         <span class="truncate secondary">{props.window.label}</span>
         <span class="value">{shownValue()}</span>
       </div>
-      <div class="limit-bar" classList={{ warn: level() === 'warn', critical: level() === 'critical' }}>
-        <div style={{ width: `${fill()}%` }} />
+      <div class="limit-bar">
+        <div style={{ width: `${fill()}%`, background: quotaColor(used(), rejected()) }} />
       </div>
-      <div class="limit-foot">
+      <div class="limit-foot" classList={{ exhausted: isExhausted(used(), rejected()) }}>
         <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
       </div>
     </div>

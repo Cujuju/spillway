@@ -1,18 +1,10 @@
 import type { Credential } from '@shared/types';
+import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
 
 export interface WindowChoice {
   value: string;
   label: string;
-}
-
-/** One provider: each of its windows by key, shortest first. */
-export function keyChoices(credentials: Credential[]): WindowChoice[] {
-  const seen = new Map<string, { label: string; durationMs: number | null }>();
-  for (const c of credentials) for (const w of c.windows) if (!seen.has(w.key)) seen.set(w.key, w);
-  return [...seen]
-    .sort(([, a], [, b]) => (a.durationMs ?? Infinity) - (b.durationMs ?? Infinity))
-    .map(([value, w]) => ({ value, label: w.label }));
 }
 
 /**
@@ -31,6 +23,34 @@ export function durationChoices(pools: Credential[][]): WindowChoice[] {
 export function keyForDuration(credentials: Credential[], durationMs: number): string | null {
   for (const c of credentials) for (const w of c.windows) if (!w.scoped && w.durationMs === durationMs) return w.key;
   return null;
+}
+
+export interface PoolSegment {
+  id: string;
+  /** Fraction of the pool this account holds; segments' shares sum to 1. */
+  share: number;
+  usedPercent: number;
+  rejected: boolean;
+}
+
+/** One bar segment per account with data in window `key`: width by pool share, fill by its own use. */
+export function poolSegments(credentials: Credential[], key: string, shares: Map<string, AccountShare>): PoolSegment[] {
+  return credentials.flatMap((c) => {
+    const s = shares.get(c.id);
+    const w = c.windows.find((x) => x.key === key);
+    if (!s || !w || w.usedPercent === null) return [];
+    return [{ id: c.id, share: s.share, usedPercent: w.usedPercent, rejected: w.status === 'rejected' }];
+  });
+}
+
+/** Soonest reset of window `key` after `now` across the accounts; null when none is pending. */
+export function nextResetAt(credentials: Credential[], key: string, now: number): number | null {
+  let soonest: number | null = null;
+  for (const c of credentials) {
+    const at = Date.parse(c.windows.find((w) => w.key === key)?.resetsAt ?? '');
+    if (at > now && (soonest === null || at < soonest)) soonest = at;
+  }
+  return soonest;
 }
 
 /** Linear value at `t`; null outside the series. Points are in time order. */

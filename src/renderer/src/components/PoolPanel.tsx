@@ -1,12 +1,9 @@
-import { createMemo, createSignal, For, mapArray, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
-import { poolWindowKey } from '../lib/forecast';
-import { durationChoices, keyChoices, keyForDuration } from '../lib/poolWindows';
 import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
-import { chartFrom, chartTo, createPoolModel, type PoolInput, type PoolModel } from './poolModel';
+import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
-import { ProviderGlyph, Seg } from './ui';
 
 const FORECAST_DAY_CHOICES = [1, 3, 7, 14] as const;
 /** Headroom above the busiest drain sample so the line never touches the top edge. */
@@ -18,36 +15,15 @@ const POOL_FULL = 100;
 
 const days = () => settings().dashboard.forecastDays;
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
-const rateText = (m: PoolModel) => (m.rate() === null ? 'Collecting history for drain rate…' : `~${m.rate()!.toFixed(1)}%/hour`);
 
 /**
- * Pool figures, remaining/drain chart and forecast. One provider shows its own windows; several
- * share one chart, a line each, matched by window length (each provider's 5-hour, or weekly).
+ * Remaining/drain chart and forecast, a line per pool (the provider cards pick pools and window).
  * The chart takes the panel's spare height.
  */
-export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
-  const [chosen, setChosen] = createSignal<string | null>(null);
+export function PoolPanel(props: { models: PoolModel[] }) {
   const [tab, setTab] = createSignal<'remaining' | 'drain'>('remaining');
-  const single = () => props.pools.length === 1;
-
-  const options = createMemo(() => (single() ? keyChoices(props.pools[0]!.credentials) : durationChoices(props.pools.map((p) => p.credentials))));
-  // Default: one provider's widest window; for several, the longest length they share.
-  const choice = () => {
-    const c = chosen();
-    if (c && options().some((o) => o.value === c)) return c;
-    return single() ? poolWindowKey(props.pools[0]!.credentials) : (options().at(-1)?.value ?? null);
-  };
-  const keyFor = (pool: PoolInput) => {
-    const c = choice();
-    if (!c) return null;
-    return single() ? c : keyForDuration(pool.credentials, Number(c));
-  };
-
-  const models = mapArray(
-    () => props.pools,
-    (pool) => createPoolModel(() => pool, () => keyFor(pool), () => props.strategy),
-  );
-  const shown = createMemo(() => models().filter((m) => m.summary()));
+  const shown = createMemo(() => props.models.filter((m) => m.summary()));
+  const single = () => shown().length === 1;
   const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...shown().flatMap((m) => m.drain().map((p) => p.remaining))) * DRAIN_HEADROOM));
   const series = (kind: 'remaining' | 'drain') =>
     shown().map((m) => ({
@@ -57,40 +33,11 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
       past: kind === 'remaining' ? m.past() : m.drain(),
       future: kind === 'remaining' ? m.projection()?.points : undefined,
     }));
-  const color = () => (single() ? providerVar(props.pools[0]!.provider) : undefined);
-  // Also shown with no data, so a window without data never strands the user.
-  const windowSwitch = () => (
-    <Show when={options().length > 1}>
-      <Seg value={choice() ?? ''} options={options()} onChange={setChosen} />
-    </Show>
-  );
+  const color = () => (single() ? providerVar(shown()[0]!.provider()) : undefined);
 
   return (
     <section class="summary" style={{ '--pool-color': color() }}>
-      <Show when={shown().length} fallback={<div class="row">{windowSwitch()}<span class="muted">No limit data for these accounts yet.</span></div>}>
-        <Show
-          when={single()}
-          fallback={
-            <div class="summary-multi">
-              <For each={shown()}>
-                {(m) => (
-                  <div class="summary-pool" style={{ '--pool-color': providerVar(m.provider()) }}>
-                    <ProviderGlyph provider={m.provider()} />
-                    <span class="summary-mid">{Math.round(m.summary()!.remaining)}%</span>
-                    <span class="summary-of" title="Accounts count by plan size">{providerLabel(m.provider())} · {m.plans()}</span>
-                    <span class="summary-rate">{rateText(m)}</span>
-                  </div>
-                )}
-              </For>
-            </div>
-          }
-        >
-          <div class="summary-figures">
-            <span class="summary-big">{Math.round(shown()[0]!.summary()!.remaining)}%</span>
-            <span class="summary-of" title="Accounts count by plan size">of pool remaining · {shown()[0]!.plans()}</span>
-            <span class="summary-rate">{rateText(shown()[0]!)}</span>
-          </div>
-        </Show>
+      <Show when={shown().length} fallback={<div class="muted">No limit data for these accounts yet.</div>}>
         <div class="summary-tabs">
           <button classList={{ active: tab() === 'remaining' }} onClick={() => setTab('remaining')}>Remaining quota</button>
           <button classList={{ active: tab() === 'drain' }} onClick={() => setTab('drain')}>Drain rate</button>
@@ -105,7 +52,6 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
             </Show>
-            {windowSwitch()}
             <select class="select" value={days()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastDays = Number(e.currentTarget.value); })}>
               <For each={FORECAST_DAY_CHOICES}>{(n) => <option value={n}>Next {daysText(n)}</option>}</For>
             </select>

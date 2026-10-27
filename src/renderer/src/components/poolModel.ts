@@ -1,8 +1,9 @@
-import { createMemo } from 'solid-js';
+import { createMemo, mapArray } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { poolSummary, project } from '../lib/forecast';
 import { poolShares } from '../lib/poolCapacity';
 import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
+import { keyForDuration, nextResetAt, poolSegments, type WindowChoice } from '../lib/poolWindows';
 import { activityBuckets, history, now, settings } from '../store';
 
 const HOUR_MS = 3_600_000;
@@ -39,8 +40,39 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
     key() ? project(pool().credentials, key()!, rate() ?? 0, now(), settings().dashboard.forecastDays, strategy(), shares()) : null,
   );
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, chartFrom()) : []));
+  const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));
+  const resetAt = () => (key() ? nextResetAt(pool().credentials, key()!, now()) : null);
   const plans = () => [...new Set(pool().credentials.filter((c) => !c.disabled).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
-  return { provider: () => pool().provider, summary, rate, past, projection, drain, plans };
+  return { provider: () => pool().provider, summary, rate, past, projection, drain, segments, resetAt, plans };
 }
 
 export type PoolModel = ReturnType<typeof createPoolModel>;
+
+/** A provider's pool in one window length: a card line, and a chart line when its length is chosen. */
+export interface PoolLine {
+  /** Window length in ms, as `durationChoices` values it. */
+  ms: string;
+  label: () => string;
+  model: PoolModel;
+}
+
+export interface ProviderPool {
+  id: string;
+  count: () => number;
+  /** Lengths this provider has data for. */
+  lines: () => PoolLine[];
+}
+
+/** One model per provider and window length. Mapped by value, so each poll updates models in place. */
+export function createProviderPools(ids: () => string[], credsOf: (id: string) => Credential[], lengths: () => WindowChoice[], strategy: () => string) {
+  const values = createMemo(() => lengths().map((l) => l.value));
+  return mapArray(ids, (id): ProviderPool => {
+    const pool = () => ({ provider: id, credentials: credsOf(id) });
+    const all = mapArray(values, (ms) => ({
+      ms,
+      label: () => lengths().find((l) => l.value === ms)?.label ?? '',
+      model: createPoolModel(pool, () => keyForDuration(credsOf(id), Number(ms)), strategy),
+    }));
+    return { id, count: () => credsOf(id).length, lines: () => all().filter((l) => l.model.summary()) };
+  });
+}

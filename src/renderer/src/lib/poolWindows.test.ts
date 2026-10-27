@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, LimitWindow } from '@shared/types';
-import { durationChoices, keyChoices, keyForDuration, valueAt } from './poolWindows';
+import { durationChoices, keyForDuration, nextResetAt, poolSegments, valueAt } from './poolWindows';
 
 const H = 3_600_000;
 const win = (key: string, label: string, durationMs: number | null, scoped = false): LimitWindow =>
@@ -11,9 +11,6 @@ const claude = [cred([win('five_hour', '5-hour', 5 * H), win('seven_day', 'Weekl
 const codex = [cred([win('primary', '5-hour', 5 * H), win('secondary', 'Weekly', 168 * H)])];
 
 describe('window choices', () => {
-  it('lists one provider by key, shortest first', () => {
-    expect(keyChoices(claude).map((c) => c.value)).toEqual(['five_hour', 'seven_day', 'seven_day_fable']);
-  });
   it('groups several providers by account-wide length', () => {
     expect(durationChoices([claude, codex])).toEqual([{ value: String(5 * H), label: '5-hour' }, { value: String(168 * H), label: 'Weekly' }]);
   });
@@ -21,6 +18,26 @@ describe('window choices', () => {
     expect(keyForDuration(claude, 168 * H)).toBe('seven_day');
     expect(keyForDuration(codex, 168 * H)).toBe('secondary');
     expect(keyForDuration(codex, 24 * H)).toBeNull();
+  });
+});
+
+describe('card lines', () => {
+  const NOW = Date.parse('2026-01-01T00:00:00Z');
+  const at = (h: number) => new Date(NOW + h * H).toISOString();
+  const acct = (id: string, used: number | null, resetsAt: string | null, status: LimitWindow['status'] = null) =>
+    ({ id, windows: [{ ...win('seven_day', 'Weekly', 168 * H), usedPercent: used, resetsAt, status }] }) as Credential;
+  const accounts = [acct('max', 84, at(5)), acct('pro', 27, at(2), 'rejected'), acct('new', null, null), acct('unshared', 10, at(1))];
+  const shares = new Map([['max', { share: 5 / 6, cost: {} }], ['pro', { share: 1 / 6, cost: {} }], ['new', { share: 0, cost: {} }]]);
+
+  it('gives each shared account with data one segment, sized by its share', () => {
+    expect(poolSegments(accounts, 'seven_day', shares)).toEqual([
+      { id: 'max', share: 5 / 6, usedPercent: 84, rejected: false },
+      { id: 'pro', share: 1 / 6, usedPercent: 27, rejected: true },
+    ]);
+  });
+  it('finds the soonest pending reset and ignores past ones', () => {
+    expect(nextResetAt(accounts, 'seven_day', NOW)).toBe(NOW + H);
+    expect(nextResetAt(accounts, 'seven_day', NOW + 6 * H)).toBeNull();
   });
 });
 

@@ -1,19 +1,20 @@
-import { Layers, Plus, RefreshCw, Search } from 'lucide-solid';
+import { Plus, RefreshCw, Search } from 'lucide-solid';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AccountRow } from '../components/AccountRow';
 import { PoolPanel } from '../components/PoolPanel';
+import { createProviderPools } from '../components/poolModel';
+import { ALL_PROVIDERS as ALL, ProviderCards } from '../components/ProviderCards';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
-import { Notice, ProviderGlyph } from '../components/ui';
+import { Notice } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
+import { durationChoices } from '../lib/poolWindows';
 import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } from '../store';
 
 const ICON_PX = 14;
 /** Claude first: it is the provider this app was built around; the rest by account count. */
 const PRIMARY_PROVIDER = 'claude';
-/** Tab id for every provider on one chart. */
-const ALL = 'all';
 
 const used = (c: Credential, key: string | null) => c.windows.find((w) => w.key === key)?.usedPercent ?? null;
 const resetAt = (c: Credential, key: string | null) => {
@@ -23,6 +24,7 @@ const resetAt = (c: Credential, key: string | null) => {
 
 export function Dashboard() {
   const [chosen, setChosen] = createSignal<string | null>(null);
+  const [chosenWindow, setChosenWindow] = createSignal<string | null>(null);
   const [query, setQuery] = createSignal('');
   const [refreshing, setRefreshing] = createSignal(false);
 
@@ -43,9 +45,20 @@ export function Dashboard() {
   };
   const credsOf = (id: string) => creds().filter((c) => c.provider === id);
   const providerCreds = createMemo(() => (provider() === ALL ? creds() : credsOf(provider() ?? '')));
-  const pools = createMemo(() => (provider() === ALL ? providers().map((p) => p.id) : [provider()!]).map((id) => ({ provider: id, credentials: credsOf(id) })));
+
+  // Window lengths across providers (5-hour, weekly); the chart shows one, the longest by default.
+  const lengths = createMemo(() => durationChoices(providers().map((p) => credsOf(p.id))));
+  const windowMs = () => {
+    const w = chosenWindow();
+    return w && lengths().some((l) => l.value === w) ? w : (lengths().at(-1)?.value ?? null);
+  };
+  const cards = createProviderPools(() => providers().map((p) => p.id), credsOf, lengths, () => snapshot()?.strategy ?? '');
+  const chartModels = () =>
+    cards()
+      .filter((c) => provider() === ALL || c.id === provider())
+      .flatMap((c) => c.lines().filter((l) => l.ms === windowMs()).map((l) => l.model));
   // Each provider sorts by its own widest window; keys differ between providers.
-  const sortKeys = createMemo(() => new Map(pools().map((p) => [p.provider, poolWindowKey(p.credentials)])));
+  const sortKeys = createMemo(() => new Map(providers().map((p) => [p.id, poolWindowKey(credsOf(p.id))])));
   const loaded = () => creds().filter((c) => c.windows.some((w) => w.usedPercent !== null)).length;
 
   const rows = createMemo(() => {
@@ -118,29 +131,16 @@ export function Dashboard() {
           </div>
         }
       >
-        <nav class="provider-tabs">
-          <Show when={multi()}>
-            <button class="provider-tab" classList={{ active: provider() === ALL }} onClick={() => setChosen(ALL)}>
-              <Layers size={ICON_PX} />
-              All
-              <span class="count">{creds().length}</span>
-            </button>
-          </Show>
-          <For each={providers()}>
-            {(p) => (
-              <button class="provider-tab" classList={{ active: provider() === p.id }} onClick={() => setChosen(p.id)}>
-                <ProviderGlyph provider={p.id} />
-                {providerLabel(p.id)}
-                <span class="count">{p.count}</span>
-              </button>
-            )}
-          </For>
-        </nav>
-
-        {/* Keyed: a tab change starts the panel fresh, since window choices differ per tab. */}
-        <Show when={provider()} keyed>
-          {(_tab) => <PoolPanel pools={pools()} strategy={snapshot()?.strategy ?? ''} />}
-        </Show>
+        <ProviderCards
+          pools={cards()}
+          showAll={multi()}
+          total={creds().length}
+          selected={provider()}
+          windowMs={windowMs()}
+          onSelect={setChosen}
+          onWindow={setChosenWindow}
+        />
+        <PoolPanel models={chartModels()} />
 
         <div class="toolbar">
           <label class="search">

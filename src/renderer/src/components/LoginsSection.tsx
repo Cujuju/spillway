@@ -3,11 +3,11 @@ import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
-import { AddAccountDialog } from '../components/AddAccountDialog';
-import { CredentialActions, renewSummary } from '../components/CredentialActions';
-import { ResetCreditButton } from '../components/ResetCreditButton';
-import { ShowEmailsButton } from '../components/ShowEmailsButton';
-import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from '../components/ui';
+import { AddAccountDialog } from './AddAccountDialog';
+import { CredentialActions, renewSummary } from './CredentialActions';
+import { ResetCreditButton } from './ResetCreditButton';
+import { ShowEmailsButton } from './ShowEmailsButton';
+import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from './ui';
 import { now, proxyStatus, snapshot } from '../store';
 
 const ICON_PX = 14;
@@ -24,7 +24,8 @@ function statusBadge(c: Credential, at: number) {
   }
 }
 
-export function Accounts() {
+/** Signed-in subscription accounts (the proxy's login files), which the proxy rotates between. */
+export function LoginsSection() {
   const [adding, setAdding] = createSignal(false);
   const [deleting, setDeleting] = createSignal<Credential | null>(null);
   const [error, setError] = createSignal<string | null>(null);
@@ -68,11 +69,11 @@ export function Accounts() {
   };
 
   return (
-    <>
-      <header class="dash-header">
-        <div>
-          <h1 class="dash-title">Accounts</h1>
-          <div class="dash-sub">{creds().length} signed in · the proxy rotates between enabled accounts</div>
+    <section class="page-section">
+      <div class="section-head">
+        <div class="spacer">
+          <h2 class="card-title">Logins</h2>
+          <div class="list-row-help">{creds().length} signed in · the proxy rotates between enabled accounts</div>
         </div>
         <div class="dash-actions">
           <ShowEmailsButton />
@@ -86,7 +87,7 @@ export function Accounts() {
             <Plus size={ICON_PX} /> Add account
           </button>
         </div>
-      </header>
+      </div>
 
       <Show when={!running()}>
         <Notice>
@@ -199,6 +200,6 @@ export function Accounts() {
           </Dialog>
         )}
       </Show>
-    </>
+    </section>
   );
 }

@@ -14,7 +14,7 @@ export function renewSummary(r: CredentialRenewResult): { ok: string | null; err
   return { ok, error };
 }
 
-/** Row actions on the Accounts table: served models, token renewal and login-file export. */
+/** Row actions on the Logins table: served models, token renewal and login-file export. */
 export function CredentialActions(props: {
   credential: Credential;
   disabled: boolean;

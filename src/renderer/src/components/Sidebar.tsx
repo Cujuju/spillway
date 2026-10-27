@@ -1,4 +1,4 @@
-import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, Network, ScrollText, Settings as SettingsIcon, Users } from 'lucide-solid';
+import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { isMac } from '../lib/platform';
@@ -16,7 +16,6 @@ const NAV: { group: string; items: { id: Page; label: string; icon: () => JSX.El
     group: 'Monitor',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: () => <Gauge size={ICON_PX} /> },
-      { id: 'accounts', label: 'Accounts', icon: () => <Users size={ICON_PX} /> },
       { id: 'providers', label: 'Providers', icon: () => <Network size={ICON_PX} /> },
       { id: 'activity', label: 'Activity', icon: () => <ActivityIcon size={ICON_PX} /> },
     ],
@@ -71,7 +70,7 @@ export function Sidebar() {
                     <span class="spacer">{item.label}</span>
                   </Show>
                   {/* Collapsed, CSS pins the badge to the icon's corner. */}
-                  <Show when={item.id === 'accounts' && accountCount() > 0}>
+                  <Show when={item.id === 'providers' && accountCount() > 0}>
                     <span class="badge">{accountCount()}</span>
                   </Show>
                 </button>

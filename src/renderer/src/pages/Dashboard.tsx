@@ -127,7 +127,7 @@ export function Dashboard() {
           <div class="empty-state">
             <h3>No accounts yet</h3>
             <p>Sign in to a Claude, Codex or other subscription account and the proxy will rotate between them.</p>
-            <button class="btn primary" onClick={() => setPage('accounts')}>
+            <button class="btn primary" onClick={() => setPage('providers')}>
               <Plus size={ICON_PX} /> Add account
             </button>
           </div>

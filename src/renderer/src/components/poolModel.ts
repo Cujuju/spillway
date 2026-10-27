@@ -61,6 +61,8 @@ export interface PoolLine {
 export interface ProviderPool {
   id: string;
   count: () => number;
+  /** Every credential is an API key; keys report no limits, so the pool never has windows. */
+  keysOnly: () => boolean;
   /** Windows this provider has data for: account-wide by length, then scoped. */
   lines: () => PoolLine[];
 }
@@ -84,6 +86,6 @@ export function createProviderPools(ids: () => string[], credsOf: (id: string) =
       label: () => scoped().find((s) => s.value === key)?.label ?? key,
       model: createPoolModel(pool, () => key, strategy),
     }));
-    return { id, count: () => credsOf(id).length, lines: () => [...byLength(), ...byKey()].filter((l) => l.model.summary()) };
+    return { id, count: () => credsOf(id).length, keysOnly: () => credsOf(id).every((c) => c.apiKey), lines: () => [...byLength(), ...byKey()].filter((l) => l.model.summary()) };
   });
 }

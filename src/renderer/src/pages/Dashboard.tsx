@@ -146,7 +146,10 @@ export function Dashboard() {
           onSelect={setChosen}
           onLine={setChosenLine}
         />
-        <PoolPanel models={chartModels()} />
+        {/* API keys report no limits, so a keys-only view has nothing to chart. */}
+        <Show when={!providerCreds().every((c) => c.apiKey)}>
+          <PoolPanel models={chartModels()} />
+        </Show>
 
         <div class="toolbar">
           <label class="search">

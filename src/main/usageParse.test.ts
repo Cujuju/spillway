@@ -34,6 +34,7 @@ describe('windows and weight', () => {
   it('reads masked API-key identity and request counts without subscription limits', () => {
     const c = parseOne({ label: 'claude-apikey', api_key: { masked: 'sk-a…1234', success: 7, failed: 2 } });
     expect(c.apiKey).toEqual({ masked: 'sk-a…1234', success: 7, failed: 2 });
+    expect(c.label).toBe('sk-a…1234');
     expect(c.windows).toEqual([]);
     expect(c.plan).toBeNull();
     expect(parseOne({}).apiKey).toBeNull();

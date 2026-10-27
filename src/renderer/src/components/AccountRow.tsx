@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-solid';
+import { RefreshCw, Settings2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
@@ -36,9 +36,9 @@ export function AccountRow(props: { credential: Credential }) {
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>
-          <Show when={c().apiKey}><span class="badge">API key</span></Show>
-          <Show when={c().apiKey && state() === 'ready'}><span class="badge">Ready</span></Show>
-          <Show when={c().apiKey}><button class="btn ghost" onClick={() => setPage('providers')}>Manage key</button></Show>
+          <Show when={c().apiKey}>
+            <span class="badge">API key</span>
+          </Show>
           <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
@@ -47,13 +47,15 @@ export function AccountRow(props: { credential: Credential }) {
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
           </Show>
+          <Show when={c().apiKey}>
+            <button class="btn ghost icon-btn" onClick={() => setPage('providers')} title="Turn on or off in AI Providers" aria-label="Manage API key">
+              <Settings2 size={ICON_PX} />
+            </button>
+          </Show>
         </div>
         <div class="account-meta">
           <Show when={c().apiKey}>
-            {(key) => <>
-              <div>{key().masked}</div>
-              <div title="Requests since the proxy started">{key().success} succeeded · {key().failed} failed</div>
-            </>}
+            {(key) => <div title="Requests since the proxy started">{key().success} succeeded · {key().failed} failed</div>}
           </Show>
           <Show when={c().email && c().email !== c().label}>
             <div class="truncate">{c().email}</div>
@@ -73,7 +75,7 @@ export function AccountRow(props: { credential: Credential }) {
         </div>
       </div>
       <div class="limits">
-        <For each={c().windows} fallback={<span class="muted">{c().apiKey ? 'No quota reported for this API key.' : 'No limit data yet — refresh to look it up.'}</span>}>
+        <For each={c().windows} fallback={<span class="muted">{c().apiKey ? 'No quota reported' : 'No limit data yet — refresh to look it up.'}</span>}>
           {(w) => <LimitBar window={w} />}
         </For>
       </div>

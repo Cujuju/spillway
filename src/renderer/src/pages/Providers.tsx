@@ -104,22 +104,26 @@ export function Providers() {
               >
                 {(g) => (
                   <tr class="card-wash" classList={{ disabled: g.disabled }} style={{ '--card-wash-hue': providerVar(FAMILY_INFO[g.family].glyph) }}>
-                    <td>
+                    <td class="fill">
                       <div class="row">
                         <ProviderGlyph provider={FAMILY_INFO[g.family].glyph} />
-                        <span class="truncate">{g.name}</span>
+                        <span class="truncate" title={g.name}>{g.name}</span>
                         <Show when={g.disabled}><span class="badge">Off</span></Show>
                       </div>
                     </td>
-                    <td>{FAMILY_INFO[g.family].label}</td>
-                    <td class="truncate" title={g.baseUrl ?? undefined}>{g.baseUrl ?? <span class="muted">Default</span>}</td>
+                    <td class="nowrap">{FAMILY_INFO[g.family].label}</td>
+                    <td class="truncate fill" title={g.baseUrl ?? undefined}>{g.baseUrl ?? <span class="muted">Default</span>}</td>
                     <td>
-                      <For each={g.keys} fallback={<span class="muted">No key</span>}>
-                        {(k) => <div class="form-list-row">
-                          <span>{k.masked}</span>
-                          <Toggle value={!k.disabled} disabled={toggling() || !!fileError()} label={`Enable ${k.masked}`} onChange={(enabled) => void toggleKey(g, k.id, enabled)} />
-                        </div>}
-                      </For>
+                      <div class="key-list">
+                        <For each={g.keys} fallback={<span class="muted">No key</span>}>
+                          {(k) => (
+                            <div class="form-list-row">
+                              <span class="tabular nowrap spacer">{k.masked}</span>
+                              <Toggle value={!k.disabled} disabled={toggling() || !!fileError()} label={`Use key ${k.masked}`} onChange={(enabled) => void toggleKey(g, k.id, enabled)} />
+                            </div>
+                          )}
+                        </For>
+                      </div>
                     </td>
                     <td title={g.models.map((m) => (m.alias ? `${m.alias} → ${m.name}` : m.name)).join('\n') || undefined}>
                       {g.models.length || <span class="muted">All</span>}

@@ -74,7 +74,7 @@ export function ProviderCards(props: CardsProps) {
                   </button>
                 </Show>
               </div>
-              <For each={shown()} fallback={<span class="pool-card-empty muted">Not loaded yet</span>}>
+              <For each={shown()} fallback={<span class="pool-card-empty muted">{p.keysOnly() ? 'API keys report no quota' : 'Not loaded yet'}</span>}>
                 {(l) => <WindowLine line={l} chosen={l.id === props.chosenLine} onPick={() => props.onLine(l.id)} />}
               </For>
             </div>

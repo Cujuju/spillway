@@ -434,6 +434,11 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
+/* A provider's keys, one per line, each with its on/off toggle. */
+.key-list {
+  display: grid;
+  gap: var(--spacing-1_5);
+}
 /* One entry in an editable list: content, then its remove button. */
 .form-list-row {
   display: flex;

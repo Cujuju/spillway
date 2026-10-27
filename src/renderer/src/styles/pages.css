@@ -104,6 +104,23 @@
 .table:not(.dense) tbody tr:last-child td {
   padding-bottom: var(--table-edge);
 }
+/* Both tables end in fixed-width Enabled and actions columns, so their switches line up.
+   Logins rows have the most actions: four icon buttons. */
+.table:not(.dense) {
+  --row-actions-slots: 4;
+}
+.table:not(.dense) .col-enabled {
+  width: calc(var(--toggle-width) + 2 * var(--spacing-3_5));
+}
+.table:not(.dense) .row-actions {
+  width: calc(var(--row-actions-slots) * var(--icon-btn-size) + var(--spacing-3_5) + var(--table-edge));
+}
+/* Icon actions sit right, on one line. Percentage columns can squeeze a cell's width but not its content, so the bar holds the width. */
+.row-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  min-width: calc(var(--row-actions-slots) * var(--icon-btn-size));
+}
 .inline-edit {
   --inline-edit-inset: var(--spacing-1);
   background: transparent;
@@ -410,11 +427,6 @@
   padding: var(--spacing-6);
   text-align: center;
 }
-/* Table rows' icon actions sit right, on one line. */
-.table td.row-actions {
-  text-align: right;
-  white-space: nowrap;
-}
 
 /* Dialog forms: a label over its control, with optional help below. */
 .form {
@@ -434,9 +446,11 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
-/* A provider's keys, one per line, each with its on/off toggle. */
+/* A provider's keys, one per line. Rows are switch-high, so each key lines up with its switch in the Enabled column. */
 .key-list {
   display: grid;
+  grid-auto-rows: var(--control-height);
+  align-items: center;
   gap: var(--spacing-1_5);
 }
 /* One entry in an editable list: content, then its remove button. */

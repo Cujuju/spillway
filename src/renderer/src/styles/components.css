@@ -64,7 +64,6 @@
 
 /* ── On/Off toggle (StockApp OnOffToggle) and segmented control ── */
 .toggle {
-  --toggle-width: 44px;
   width: var(--toggle-width);
   height: var(--control-height);
   font-size: var(--text-xs);

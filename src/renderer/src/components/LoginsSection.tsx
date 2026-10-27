@@ -111,15 +111,15 @@ export function LoginsSection() {
               <th>Provider</th>
               <th>Status</th>
               <th title={PRIORITY_HELP}>Priority</th>
-              <th>Enabled</th>
-              <th />
+              <th class="col-enabled">Enabled</th>
+              <th class="row-actions" />
             </tr>
           </thead>
           <tbody>
             <For each={creds()} fallback={<tr><td colSpan={6} class="muted empty-row">No accounts yet. Use “Add account” to sign in.</td></tr>}>
               {(c) => (
                 <tr class="card-wash" classList={{ disabled: c.disabled }} style={{ '--card-wash-hue': providerVar(c.provider) }}>
-                  <td>
+                  <td class="fill">
                     <div class="row">
                       <ProviderGlyph provider={c.provider} />
                       <div class="shrink">
@@ -155,14 +155,16 @@ export function LoginsSection() {
                   <td>
                     <NumberField value={c.priority} narrow onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
                   </td>
-                  <td>
+                  <td class="col-enabled">
                     <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void act(() => window.api.setCredentialDisabled(c.id, !on))} />
                   </td>
                   <td class="row-actions">
-                    <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} />
-                    <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
-                      <Trash2 size={ICON_PX} />
-                    </button>
+                    <div class="row-actions-bar">
+                      <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} />
+                      <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
+                        <Trash2 size={ICON_PX} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}

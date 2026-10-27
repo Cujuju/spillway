@@ -88,7 +88,8 @@ export function Providers() {
                 <th>Endpoint</th>
                 <th>Keys</th>
                 <th>Models</th>
-                <th />
+                <th class="col-enabled">Enabled</th>
+                <th class="row-actions" />
               </tr>
             </thead>
             <tbody>
@@ -96,7 +97,7 @@ export function Providers() {
                 each={groups()}
                 fallback={
                   <tr>
-                    <td colSpan={6} class="muted empty-row">
+                    <td colSpan={7} class="muted empty-row">
                       {list.loading ? 'Loading…' : 'No API keys yet. Use “Add provider” to add one.'}
                     </td>
                   </tr>
@@ -116,25 +117,31 @@ export function Providers() {
                     <td>
                       <div class="key-list">
                         <For each={g.keys} fallback={<span class="muted">No key</span>}>
-                          {(k) => (
-                            <div class="form-list-row">
-                              <span class="tabular nowrap spacer">{k.masked}</span>
-                              <Toggle value={!k.disabled} disabled={toggling() || !!fileError()} label={`Use key ${k.masked}`} onChange={(enabled) => void toggleKey(g, k.id, enabled)} />
-                            </div>
-                          )}
+                          {(k) => <span class="tabular nowrap">{k.masked}</span>}
                         </For>
                       </div>
                     </td>
                     <td title={g.models.map((m) => (m.alias ? `${m.alias} → ${m.name}` : m.name)).join('\n') || undefined}>
                       {g.models.length || <span class="muted">All</span>}
                     </td>
+                    <td class="col-enabled">
+                      <div class="key-list">
+                        <For each={g.keys}>
+                          {(k) => (
+                            <Toggle value={!k.disabled} disabled={toggling() || !!fileError()} label={`Use key ${k.masked}`} onChange={(enabled) => void toggleKey(g, k.id, enabled)} />
+                          )}
+                        </For>
+                      </div>
+                    </td>
                     <td class="row-actions">
-                      <button class="btn ghost icon-btn" title="Edit" onClick={() => setEditing({ target: { family: g.family, name: g.name }, group: g })}>
-                        <Pencil size={ICON_PX} />
-                      </button>
-                      <button class="btn ghost icon-btn" title="Remove" onClick={() => setDeleting(g)}>
-                        <Trash2 size={ICON_PX} />
-                      </button>
+                      <div class="row-actions-bar">
+                        <button class="btn ghost icon-btn" title="Edit" onClick={() => setEditing({ target: { family: g.family, name: g.name }, group: g })}>
+                          <Pencil size={ICON_PX} />
+                        </button>
+                        <button class="btn ghost icon-btn" title="Remove" onClick={() => setDeleting(g)}>
+                          <Trash2 size={ICON_PX} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}

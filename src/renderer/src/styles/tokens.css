@@ -102,6 +102,8 @@
 
   /* One height for buttons, inputs, toggles and segments so settings rows line up. */
   --control-height: 28px;
+  /* On/Off switch width; also sizes the AI Providers tables' Enabled columns. */
+  --toggle-width: 44px;
   --setting-label-line-height: 18px;
 
   --titlebar-height: 36px;

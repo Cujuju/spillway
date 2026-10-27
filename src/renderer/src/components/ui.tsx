@@ -125,13 +125,16 @@ export function ProviderGlyph(props: { provider: string; size?: number }) {
   );
 }
 
-/** Reset countdown: icon, time left, local reset time. The icon scales with the surrounding text. */
+/** Reset countdown: icon, time left, local reset time. Wraps only between time left and reset time. */
 export function ResetTime(props: { at: string | number; now: number }) {
   const parts = () => resetParts(props.at, props.now);
   return (
     <span class="reset-time">
-      <RotateCcw size="1em" role="img" aria-label="Resets in" />
-      {parts().left} · {parts().clock}
+      <span>
+        <RotateCcw size="1em" role="img" aria-label="Resets in" />
+        {parts().left} ·
+      </span>{' '}
+      <span>{parts().clock}</span>
     </span>
   );
 }

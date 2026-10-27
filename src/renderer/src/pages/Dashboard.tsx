@@ -157,9 +157,11 @@ export function Dashboard() {
             <option value="name">Name</option>
           </select>
         </div>
-        <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
-          {(c) => <AccountRow credential={c} />}
-        </For>
+        <div class="account-list">
+          <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
+            {(c) => <AccountRow credential={c} />}
+          </For>
+        </div>
       </Show>
     </>
   );

@@ -24,7 +24,7 @@ export function LimitBar(props: { window: LimitWindow }) {
       <div class="limit-bar" classList={{ warn: level() === 'warn', critical: level() === 'critical' }}>
         <div style={{ width: `${fill()}%` }} />
       </div>
-      <div class="limit-foot truncate">
+      <div class="limit-foot">
         <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
       </div>
     </div>

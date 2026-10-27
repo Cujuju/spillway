@@ -36,13 +36,13 @@ export function AccountRow(props: { credential: Credential }) {
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
           <span class="truncate selectable" title={c().label}>{c().label}</span>
+          <Show when={state() === 'next-pick'}>
+            <span class="badge green" title="Picked for new conversations">Next pick</span>
+          </Show>
           <Show when={c().provider === LIVE_LOOKUP_PROVIDER && !c().disabled}>
             <button class="btn ghost icon-btn" disabled={busy()} onClick={refresh} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
-          </Show>
-          <Show when={state() === 'next-pick'}>
-            <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
         </div>
         <div class="account-meta">

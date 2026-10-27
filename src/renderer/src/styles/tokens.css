@@ -95,6 +95,8 @@
   --bar-height: 5px;
   --icon-btn-size: 32px;
   --scrollbar-size: 10px;
+  /* Sidebar nav buttons: row height, and the square width when collapsed. */
+  --nav-btn-size: 30px;
   /* Widest a page's content grows. */
   --page-max-width: 1180px;
 

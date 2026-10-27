@@ -193,8 +193,6 @@ a {
   margin-top: var(--spacing-1);
 }
 .nav-btn {
-  /* Row height everywhere (sidebar and settings nav); square width when the sidebar collapses. */
-  --nav-btn-size: 30px;
   display: flex;
   align-items: center;
   gap: var(--spacing-2);

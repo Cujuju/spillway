@@ -7,7 +7,7 @@ import { resolveTheme, themeTokens } from '@shared/themes';
 import { rangeDays } from './lib/activityStats';
 import { MAX_ACTIVITY_EVENTS, type ActivityBucket, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
 
-export type Page = 'dashboard' | 'accounts' | 'activity' | 'proxy' | 'logs' | 'settings';
+export type Page = 'dashboard' | 'accounts' | 'providers' | 'activity' | 'proxy' | 'logs' | 'settings';
 
 const api = window.api;
 

@@ -321,3 +321,28 @@
   text-align: right;
   white-space: nowrap;
 }
+
+/* Dialog forms: a label over its control, with optional help below. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-field > span:first-child {
+  font-weight: 600;
+}
+.form-help {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+/* One entry in an editable list: content, then its remove button. */
+.form-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

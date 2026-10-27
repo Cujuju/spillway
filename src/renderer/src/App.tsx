@@ -6,6 +6,7 @@ import { Accounts } from './pages/Accounts';
 import { Activity } from './pages/Activity';
 import { Dashboard } from './pages/Dashboard';
 import { Logs } from './pages/Logs';
+import { Providers } from './pages/Providers';
 import { Proxy } from './pages/Proxy';
 import { Settings } from './pages/Settings';
 import { applyTheme, page, settings } from './store';
@@ -23,6 +24,7 @@ export function App() {
             <Switch>
               <Match when={page() === 'dashboard'}><Dashboard /></Match>
               <Match when={page() === 'accounts'}><Accounts /></Match>
+              <Match when={page() === 'providers'}><Providers /></Match>
               <Match when={page() === 'activity'}><Activity /></Match>
               <Match when={page() === 'proxy'}><Proxy /></Match>
               <Match when={page() === 'logs'}><Logs /></Match>

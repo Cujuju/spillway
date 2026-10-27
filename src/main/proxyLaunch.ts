@@ -24,9 +24,14 @@ const USER_CONFIG_TEMPLATE = `# Custom proxy settings, merged into config.yaml (
 # first-byte timeout; values you set for those are replaced. Saving this file applies it live.
 `;
 
-function readUserConfig(): string {
+export function readUserConfig(): string {
   const file = appPaths.proxyUserConfigFile;
   return existsSync(file) ? readFileSync(file, 'utf8') : '';
+}
+
+/** Saves config.user.yaml. The caller applies it to a running proxy. */
+export function writeUserConfig(text: string): void {
+  writeFileAtomic(appPaths.proxyUserConfigFile, text);
 }
 
 /** Regenerates config.yaml from settings and config.user.yaml; returns the user file's error, if any. */

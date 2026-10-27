@@ -1,3 +1,4 @@
+import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget } from './apiProviders';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
@@ -69,6 +70,11 @@ export interface DesktopApi {
   /** Refreshes one account's login token, or every account's when omitted. */
   renewCredentials(credentialId?: string): Promise<CredentialRenewResult>;
   credentialModels(credentialId: string): Promise<CredentialModel[]>;
+  /** API-key upstreams from config.user.yaml's `api-keys` section; keys arrive masked. */
+  apiProviders(): Promise<ApiProviderList>;
+  /** Adds a group (target null) or updates one, then applies the config; returns the groups after. */
+  saveApiProvider(draft: ApiProviderDraft, target: ApiProviderTarget): Promise<ApiProviderGroup[]>;
+  deleteApiProvider(family: ApiKeyFamily, name: string): Promise<ApiProviderGroup[]>;
 
   setLimitTrays(images: { id: string; png1x: string; png2x: string; tooltip: string }[]): Promise<void>;
   setAppTooltip(text: string): Promise<void>;
@@ -140,6 +146,9 @@ export const INVOKE = {
   exportCredential: 'cred:export',
   renewCredentials: 'cred:renew',
   credentialModels: 'cred:models',
+  apiProviders: 'providers:list',
+  saveApiProvider: 'providers:save',
+  deleteApiProvider: 'providers:delete',
   setLimitTrays: 'tray:limits',
   setAppTooltip: 'tray:tooltip',
   taskbarDark: 'tray:taskbar-dark',

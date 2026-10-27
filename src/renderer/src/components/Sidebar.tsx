@@ -1,4 +1,4 @@
-import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, ScrollText, Settings as SettingsIcon, Users } from 'lucide-solid';
+import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, Network, ScrollText, Settings as SettingsIcon, Users } from 'lucide-solid';
 import { For, Show, type JSX } from 'solid-js';
 import { page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { BuildCard } from './BuildCard';
@@ -13,6 +13,7 @@ const NAV: { group: string; items: { id: Page; label: string; icon: () => JSX.El
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: () => <Gauge size={ICON_PX} /> },
       { id: 'accounts', label: 'Accounts', icon: () => <Users size={ICON_PX} /> },
+      { id: 'providers', label: 'Providers', icon: () => <Network size={ICON_PX} /> },
       { id: 'activity', label: 'Activity', icon: () => <ActivityIcon size={ICON_PX} /> },
     ],
   },

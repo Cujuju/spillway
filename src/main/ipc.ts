@@ -1,8 +1,11 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import type { Document } from 'yaml';
+import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
 import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
+import { applyDraft, parseForEdit, readGroups, removeGroup } from './apiProviders';
 import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
@@ -11,7 +14,7 @@ import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@share
 import { history } from './historyStore';
 import { management } from './managementClient';
 import { appPaths, PROXY_EXE_NAME } from './paths';
-import { ensureUserConfigFile } from './proxyLaunch';
+import { ensureUserConfigFile, readUserConfig, writeUserConfig } from './proxyLaunch';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
 import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
@@ -71,6 +74,25 @@ async function applySettings(next: AppSettings): Promise<AppSettings> {
   }
   if (prev.dashboard.refreshIntervalSeconds !== saved.dashboard.refreshIntervalSeconds) usage.start();
   return saved;
+}
+
+/** Edits config.user.yaml (kept comments and all), then applies it to a running proxy; returns the groups after. */
+function editUserConfig(fn: (doc: Document) => void): ApiProviderGroup[] {
+  // A new file starts from the template, so its explanatory header is kept.
+  ensureUserConfigFile();
+  const doc = parseForEdit(readUserConfig());
+  fn(doc);
+  writeUserConfig(doc.toString());
+  if (proxy.isRunning()) proxy.applyConfig();
+  return readGroups(doc);
+}
+
+function listApiProviders(): ApiProviderList {
+  try {
+    return { groups: readGroups(parseForEdit(readUserConfig())), error: null };
+  } catch (err) {
+    return { groups: [], error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 const OPEN_PATHS = {
@@ -181,6 +203,9 @@ const handlers: Handlers = {
     return result;
   },
   credentialModels: (id) => management.credentialModels(credentialName(id)),
+  apiProviders: () => listApiProviders(),
+  saveApiProvider: (draft, target) => editUserConfig((doc) => applyDraft(doc, draft, target)),
+  deleteApiProvider: (family, name) => editUserConfig((doc) => removeGroup(doc, family, name)),
   setLimitTrays: (images) => syncLimitTrays(images),
   setAppTooltip: (text) => setAppTrayTooltip(text),
   taskbarDark: () => taskbarDark(),

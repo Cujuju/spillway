@@ -4,6 +4,8 @@ import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } fr
 import { THEME_CHOICES } from './themes';
 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
+/** Whether API keys are routed to before or after subscription logins. */
+export type ApiKeyOrder = 'first' | 'last';
 export type TrayIconScope = 'active' | 'pool' | 'lowest' | 'account';
 export type TrayIconValue = 'remaining' | 'used';
 /** 'none' draws the digits alone. */
@@ -47,6 +49,7 @@ export interface AppSettings {
     port: number;
     allowLan: boolean;
     strategy: RoutingStrategy;
+    apiKeyOrder: ApiKeyOrder;
     sessionAffinity: boolean;
     sessionAffinityTtlMinutes: number;
     /** Empty = bundled binary. */
@@ -123,6 +126,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     port: DEFAULT_PROXY_PORT,
     allowLan: false,
     strategy: 'soonest-reset',
+    // Subscriptions are prepaid; API keys bill per request.
+    apiKeyOrder: 'last',
     sessionAffinity: true,
     // Upstream default session-affinity-ttl is 1h.
     sessionAffinityTtlMinutes: 60,
@@ -166,6 +171,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
+const API_KEY_ORDERS: readonly ApiKeyOrder[] = ['first', 'last'];
 const SCOPES: readonly TrayIconScope[] = ['active', 'pool', 'lowest', 'account'];
 const SORTS = ['reset', 'usage', 'name'] as const;
 const SHAPES: readonly TrayIconShape[] = ['square', 'rounded', 'circle', 'none'];
@@ -221,6 +227,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       port: int(p.port, d.proxy.port, MIN_USER_PORT, MAX_PORT),
       allowLan: bool(p.allowLan, d.proxy.allowLan),
       strategy: pick(p.strategy, STRATEGIES, d.proxy.strategy),
+      apiKeyOrder: pick(p.apiKeyOrder, API_KEY_ORDERS, d.proxy.apiKeyOrder),
       sessionAffinity: bool(p.sessionAffinity, d.proxy.sessionAffinity),
       sessionAffinityTtlMinutes: int(p.sessionAffinityTtlMinutes, d.proxy.sessionAffinityTtlMinutes, 1, MAX_AFFINITY_MINUTES),
       executablePath: str(p.executablePath, d.proxy.executablePath),
@@ -263,7 +270,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
 
 /** Settings written to config.yaml that a running proxy reloads live. */
 export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
-  return a.proxy.strategy !== b.proxy.strategy || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
+  return a.proxy.strategy !== b.proxy.strategy || a.proxy.apiKeyOrder !== b.proxy.apiKeyOrder || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
     a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds;
 }
 

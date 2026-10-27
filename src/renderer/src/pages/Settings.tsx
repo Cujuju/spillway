@@ -1,6 +1,6 @@
 import { FolderOpen } from 'lucide-solid';
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
-import type { AppSettings, RoutingStrategy } from '@shared/settings';
+import type { ApiKeyOrder, AppSettings, RoutingStrategy } from '@shared/settings';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
@@ -21,6 +21,11 @@ const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
   { value: 'fill-first', label: 'Fill first', help: 'Stay on one account until it is limited, then move to the next.' },
   { value: 'round-robin', label: 'Round robin', help: 'Rotate through accounts on each request.' },
   { value: 'weighted-round-robin', label: 'Weighted round robin', help: 'Rotate, favouring accounts by weight.' },
+];
+
+const API_KEY_ORDERS: readonly { value: ApiKeyOrder; label: string; help: string }[] = [
+  { value: 'last', label: 'Use last', help: 'Subscriptions first. API keys take over while every subscription is limited, until one recovers.' },
+  { value: 'first', label: 'Use first', help: 'API keys first. Subscriptions take over while every API key is limited or off, until one recovers.' },
 ];
 
 type Draft = AppSettings;
@@ -80,6 +85,9 @@ function ProxySection() {
           <select class="select" value={p().strategy} onChange={(e) => set((d) => void (d.proxy.strategy = e.currentTarget.value as RoutingStrategy))}>
             <For each={STRATEGIES}>{(s) => <option value={s.value}>{s.label}</option>}</For>
           </select>
+        </SettingRow>
+        <SettingRow label="API keys" help={API_KEY_ORDERS.find((o) => o.value === p().apiKeyOrder)?.help}>
+          <Seg value={p().apiKeyOrder} options={API_KEY_ORDERS} onChange={(v) => set((d) => void (d.proxy.apiKeyOrder = v))} />
         </SettingRow>
         <SettingRow label="Session affinity" help="Keep a conversation on the account it started on, so prompt caches stay warm. New conversations follow the strategy.">
           <Toggle value={p().sessionAffinity} onChange={(v) => set((d) => void (d.proxy.sessionAffinity = v))} />

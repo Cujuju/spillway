@@ -31,6 +31,12 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ general: { sidebarCollapsed: 'yes' } }).general.sidebarCollapsed).toBe(false);
   });
 
+  it('defaults API keys last and keeps only a valid stored order', () => {
+    expect(normalizeSettings({}).proxy.apiKeyOrder).toBe('last');
+    expect(normalizeSettings({ proxy: { apiKeyOrder: 'first' } }).proxy.apiKeyOrder).toBe('first');
+    expect(normalizeSettings({ proxy: { apiKeyOrder: 'middle' } }).proxy.apiKeyOrder).toBe('last');
+  });
+
   it('defaults update auto-check on and keeps a stored choice', () => {
     expect(normalizeSettings({}).updates.autoCheck).toBe(true);
     expect(normalizeSettings({ updates: { autoCheck: false } }).updates.autoCheck).toBe(false);
@@ -43,6 +49,7 @@ describe('proxyConfigChanged', () => {
   it('is true for settings written to config.yaml', () => {
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ strategy: 'round-robin' }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ firstByteTimeoutSeconds: 30 }))).toBe(true);
+    expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ apiKeyOrder: 'first' }))).toBe(true);
   });
 
   it('ignores the account override, which goes through the management API', () => {

@@ -1,6 +1,6 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import { APP_NAME } from '@shared/app';
-import type { AppSettings } from '@shared/settings';
+import type { ApiKeyOrder, AppSettings } from '@shared/settings';
 import { codexPoolToken } from './codexPoolAuth';
 
 export interface ProxyConfigInput {
@@ -26,6 +26,9 @@ const ALL_INTERFACES_HOST = '';
 const HEADER =
   ` Managed by ${APP_NAME}: regenerated from app settings and config.user.yaml.\n Edit config.user.yaml (v8 layout) for custom keys; the app-owned keys below always win.`;
 
+/** routing.prefer-auth-kind: the credential kind the proxy tries before falling back to the other. */
+const PREFERRED_AUTH_KIND: Record<ApiKeyOrder, 'api-key' | 'oauth'> = { first: 'api-key', last: 'oauth' };
+
 /** Go duration string the proxy expects for routing.session-affinity-ttl. */
 export const affinityTtl = (minutes: number) => `${minutes}m`;
 
@@ -41,7 +44,7 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['management', 'allow-remote'], false],
     [['management', 'disable-control-panel'], true],
     [['routing', 'strategy'], p.strategy],
-    [['routing', 'prefer-oauth'], true],
+    [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],

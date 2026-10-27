@@ -23,7 +23,7 @@ describe('buildProxyConfig', () => {
     const cfg = parsed();
     expect(cfg['config-version']).toBe(8);
     expect(cfg.server).toEqual({ host: '127.0.0.1', port: 8317 });
-    expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-oauth': true, 'session-affinity': true, 'session-affinity-ttl': '60m' });
+    expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-auth-kind': 'oauth', 'session-affinity': true, 'session-affinity-ttl': '60m' });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
     expect(cfg.access['api-keys']).toEqual(appKeys);
@@ -31,6 +31,10 @@ describe('buildProxyConfig', () => {
 
   it('writes the stable management key for outside tools; the app itself uses the supervisor password', () => {
     expect(parsed().management).toEqual({ 'secret-key': 'mk', 'allow-remote': false, 'disable-control-panel': true });
+  });
+
+  it('routes to API keys first only when the setting says so', () => {
+    expect(parsed({ settings: { ...DEFAULT_SETTINGS.proxy, apiKeyOrder: 'first' } }).routing['prefer-auth-kind']).toBe('api-key');
   });
 
   it('binds all interfaces only when LAN access is on', () => {

@@ -13,21 +13,6 @@ export function compactDuration(ms: number): string {
   return `${m}m`;
 }
 
-/** "in 2 days", "in 3 hours", "in 12 min" for reset captions. */
-export function relativeFuture(iso: string | null, now: number): string {
-  if (!iso) return 'No reset pending';
-  const ms = Date.parse(iso) - now;
-  if (ms <= MINUTE) return 'any moment';
-  if (ms >= 2 * DAY) return `in ${Math.round(ms / DAY)} days`;
-  if (ms >= 2 * HOUR) return `in ${Math.round(ms / HOUR)} hours`;
-  if (ms >= HOUR) return 'in 1 hour';
-  return `in ${Math.round(ms / MINUTE)} min`;
-}
-
-export function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
-}
-
 export function dayTime(t: number): string {
   return new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }

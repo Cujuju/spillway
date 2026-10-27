@@ -1,6 +1,6 @@
 import type { LimitWindow } from '@shared/types';
 import { trayLevel } from '@shared/trayValues';
-import { relativeFuture, shortDate } from '../lib/format';
+import { resetText } from '@shared/resetTime';
 import { now, settings } from '../store';
 
 /** One limit column: label, percent, bar, reset caption (Theo's per-account cells). */
@@ -19,7 +19,7 @@ export function LimitBar(props: { window: LimitWindow }) {
   const level = () => (props.window.status === 'rejected' ? 'critical' : trayLevel(used(), t().warnAtPercentUsed, t().criticalAtPercentUsed));
   const caption = () => {
     const r = props.window.resetsAt;
-    return r ? `${relativeFuture(r, now())} · ${shortDate(r)}` : 'No reset pending';
+    return r ? resetText(r, now()) : 'No reset pending';
   };
   return (
     <div class="limit" classList={{ empty: used() === null }} title={props.window.resetsAt ? new Date(props.window.resetsAt).toLocaleString() : undefined}>

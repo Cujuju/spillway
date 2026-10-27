@@ -1,9 +1,9 @@
 import { createEffect } from 'solid-js';
 import { APP_NAME } from '@shared/app';
+import { resetText } from '@shared/resetTime';
 import { providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
 import { poolSummary, poolWindowKey } from '../lib/forecast';
 import { poolShares } from '../lib/poolCapacity';
-import { relativeFuture } from '../lib/format';
 import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
 import { activityBuckets, history, now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
 
@@ -28,7 +28,7 @@ export function TrayIconSync() {
       const text = trayIconText(shown);
       const paint = paintFor(spec, darkTaskbar);
       const valueText = shown === null ? 'no data' : `${Math.round(shown)}% ${t.value}`;
-      const reset = reading.resetsAt ? ` · resets ${relativeFuture(reading.resetsAt, time)}` : '';
+      const reset = reading.resetsAt ? ` · resets ${resetText(reading.resetsAt, time)}` : '';
       return {
         id: spec.id,
         png1x: drawTrayIcon(TRAY_PX_1X, text, paint),

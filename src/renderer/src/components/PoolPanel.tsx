@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, mapArray, Show } from 'solid-js';
+import { resetText } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
 import { poolWindowKey } from '../lib/forecast';
 import { dayTime } from '../lib/format';
@@ -20,9 +21,9 @@ const POOL_FULL = 100;
 const days = () => settings().dashboard.forecastDays;
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const rateText = (m: PoolModel) => (m.rate() === null ? 'Collecting history for drain rate…' : `~${m.rate()!.toFixed(1)}%/hour`);
-const resetText = (m: PoolModel) => {
+const nextResetText = (m: PoolModel) => {
   const r = m.projection()?.nextReset;
-  return r ? `Next reset +${Math.round(r.restores)}% of pool · ${dayTime(r.at)}` : 'No reset in range';
+  return r ? `Next reset ${resetText(r.at, now())} · +${Math.round(r.restores)}% of pool` : 'No reset in range';
 };
 const paceText = (m: PoolModel) =>
   m.rate() === null ? '' : m.emptyAt() ? `Pool runs dry ~${dayTime(m.emptyAt()!)}` : `Lasts the next ${daysText(days())} at this pace`;
@@ -128,7 +129,7 @@ export function PoolPanel(props: { pools: PoolInput[]; strategy: string }) {
             {(m) => (
               <div class="chart-foot-row">
                 <Show when={!single()}><ProviderGlyph provider={m.provider()} size={12} /></Show>
-                <span>{resetText(m)}</span>
+                <span>{nextResetText(m)}</span>
                 <span class="spacer" />
                 <span>{paceText(m)}</span>
               </div>

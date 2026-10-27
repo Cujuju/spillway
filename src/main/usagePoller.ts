@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Notification } from 'electron';
 import { maskEmails } from '@shared/privacy';
+import { resetText } from '@shared/resetTime';
 import type { ResetCreditOutcome, UsageSnapshot } from '@shared/types';
 import { rollPastResets } from '@shared/usageWindows';
 import { history } from './historyStore';
@@ -20,7 +21,7 @@ function notify(event: UsageEvent): void {
   let body = '';
   if (event.kind === 'limitHit' && n.limitHit) {
     title = `${name(event.credential)}: ${event.windowLabel} limit reached`;
-    body = event.resetsAt ? `Resets ${new Date(event.resetsAt).toLocaleString()}` : 'Switching to the next account.';
+    body = event.resetsAt ? `Resets ${resetText(event.resetsAt, Date.now())}` : 'Switching to the next account.';
   } else if (event.kind === 'limitReset' && n.limitReset) {
     title = `${name(event.credential)}: ${event.windowLabel} limit reset`;
     body = 'The account is available again.';

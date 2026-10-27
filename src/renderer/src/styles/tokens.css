@@ -32,6 +32,10 @@
   /* Larger than the 24 px taskbar icon. scripts/make-icon.ps1 TITLEBAR_ICON_PX must match. */
   --titlebar-icon-size: 28px;
 
+  /* Card wash (StockApp's): hue share at a washed card's left edge, and the width fraction where it has faded out. */
+  --card-wash-pct: 0.08;
+  --card-wash-stop: 1;
+
   --shadow-floating: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
 
   /* Provider identity colours; Claude matches Theo's dashboard orange. */

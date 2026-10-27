@@ -79,28 +79,28 @@ function ModelsDialog(props: { credential: Credential; onClose: () => void }) {
                 {props.credential.label} · {count()} {count() === 1 ? 'model' : 'models'}
               </span>
             </div>
-            <ul class="model-families" style={{ '--family-color': providerVar(props.credential.provider) }}>
+            <ul class="model-families" style={{ '--card-wash-hue': providerVar(props.credential.provider) }}>
               <For each={families()}>
                 {(f) => (
-                  <li class="model-family">
-                    <span class="model-family-version">{f.latest.version.length ? f.latest.label : ''}</span>
-                    <div class="model-family-body">
-                      <div class="model-family-head">
-                        <span class="model-family-name">{familyName(f)}</span>
-                        <span class="model-family-id selectable">{f.latest.model.id}</span>
-                      </div>
-                      <Show when={f.older.length}>
-                        <div class="model-family-older">
-                          <For each={f.older}>
-                            {(v) => (
-                              <span class="badge selectable" title={v.model.id}>
-                                {v.label}
-                              </span>
-                            )}
-                          </For>
-                        </div>
+                  <li class="model-family card-wash">
+                    <div class="model-family-head">
+                      <span class="model-family-name">{familyName(f)}</span>
+                      <Show when={f.latest.version.length}>
+                        <span class="model-family-version">{f.latest.label}</span>
                       </Show>
+                      <span class="model-family-id selectable">{f.latest.model.id}</span>
                     </div>
+                    <Show when={f.older.length}>
+                      <div class="model-family-older">
+                        <For each={f.older}>
+                          {(v) => (
+                            <span class="badge selectable" title={v.model.id}>
+                              {v.label}
+                            </span>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </li>
                 )}
               </For>

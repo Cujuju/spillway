@@ -166,6 +166,14 @@
   border-radius: var(--radius-card);
   padding: 16px 20px;
 }
+/* Card wash: --card-wash-hue fades left to right over the card's fill. Set the fill as background-color; a `background` shorthand erases the wash. */
+.card-wash {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--card-wash-hue) calc(var(--card-wash-pct) * 100%), transparent),
+    transparent calc(var(--card-wash-stop) * 100%)
+  );
+}
 .card-title {
   font-size: var(--text-header);
   font-weight: 600;

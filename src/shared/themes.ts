@@ -105,7 +105,7 @@ export const THEMES: readonly Theme[] = [
       border: 'rgba(248, 248, 242, 0.1)', borderStrong: '#6272a4',
       text: '#f8f8f2', soft: '#e6e6e0', secondary: '#a9b1d6', muted: '#6272a4', disabled: '#4d5470',
       accent: '#bd93f9', accentLight: '#caa9fa', onAccent: '#191a21',
-      green: '#50fa7b', amber: '#ffb86c', red: '#ff5555', redLight: '#ff9580',
+      green: '#50fa7b', amber: '#ffb86c', red: '#ff5555', redLight: '#ff6e6e',
     },
   },
   {

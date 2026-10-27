@@ -28,7 +28,7 @@ export function TrayIconSync() {
       const text = trayIconText(shown);
       const paint = paintFor(spec, darkTaskbar);
       const valueText = shown === null ? 'no data' : `${Math.round(shown)}% ${t.value}`;
-      const reset = reading.resetsAt ? ` · resets ${resetText(reading.resetsAt, time)}` : '';
+      const reset = reading.resetsAt ? ` · ${resetText(reading.resetsAt, time)}` : '';
       return {
         id: spec.id,
         png1x: drawTrayIcon(TRAY_PX_1X, text, paint),

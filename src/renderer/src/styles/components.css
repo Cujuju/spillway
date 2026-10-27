@@ -266,7 +266,7 @@
   height: round(1cap, 1px);
   margin-bottom: var(--dialog-gap);
 }
-/* Line under a dialog title: an optional icon centred on the text's capitals. */
+/* Line under a dialog title: an optional icon centred on the text. */
 .dialog-sub {
   display: flex;
   align-items: center;
@@ -274,8 +274,9 @@
   margin: 0 0 var(--dialog-gap);
   color: var(--color-text-secondary);
 }
+/* Trimmed to the x-height: lowercase text reads centred there, so the icon centres on it, not on the capitals. */
 .dialog-sub-text {
-  text-box: trim-both cap alphabetic;
+  text-box: trim-both ex alphabetic;
 }
 .dialog-actions {
   display: flex;

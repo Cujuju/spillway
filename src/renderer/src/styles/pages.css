@@ -324,6 +324,8 @@
 
 /* Logins' Models dialog: one washed card per family. Name and newest version share a line; earlier versions sit below. */
 .model-families {
+  /* Between cards. */
+  --family-gap: 8px;
   /* Card inset on every side; the head line is trimmed to its caps, so this is the visible gap. */
   --family-pad: 14px;
   /* Name line to the version badges: tighter than the inset, so they read as one group. */
@@ -333,7 +335,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--dialog-gap);
+  gap: var(--family-gap);
 }
 .model-family {
   padding: var(--family-pad);

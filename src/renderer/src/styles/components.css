@@ -43,20 +43,17 @@
   color: var(--color-text);
   background: var(--color-surface-input);
 }
-/* Theo-style pills in the dashboard header. */
-.btn.pill {
-  height: var(--control-height);
-  padding: 0 12px;
+/* Page header actions: standard buttons, one text step larger. */
+.btn.page-action {
   font-size: var(--text-body);
-  border-radius: var(--radius-pill);
   background: transparent;
 }
-.btn.pill.solid {
+.btn.page-action.solid {
   background: var(--color-text);
   color: var(--color-background);
   border-color: var(--color-text);
 }
-.btn.pill.solid:hover:not(:disabled) {
+.btn.page-action.solid:hover:not(:disabled) {
   background: var(--color-text-soft);
 }
 .icon-btn {
@@ -190,12 +187,13 @@
 }
 
 .badge {
+  --badge-height: 20px;
   display: inline-flex;
   align-items: center;
-  height: 20px;
+  height: var(--badge-height);
   flex-shrink: 0;
   padding: 0 7px;
-  border-radius: var(--radius-badge);
+  border-radius: calc(var(--badge-height) * var(--chip-radius-ratio));
   font-size: var(--text-xxs);
   font-weight: 600;
   background: var(--color-surface-input);

@@ -94,8 +94,8 @@ export function Dashboard() {
           </div>
         </div>
         <div class="dash-actions">
-          <ShowEmailsButton class="btn pill" />
-          <button class="btn pill solid" disabled={refreshing() || proxyState() !== 'running'} onClick={refreshAll}>
+          <ShowEmailsButton class="btn page-action" />
+          <button class="btn page-action solid" disabled={refreshing() || proxyState() !== 'running'} onClick={refreshAll}>
             <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} /> Refresh all credentials
           </button>
         </div>

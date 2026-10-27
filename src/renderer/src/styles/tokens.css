@@ -19,9 +19,10 @@
 
   --radius-btn: 6px;
   --radius-card: 10px;
+  /* Round ends: bars, tracks and swatches only; chips, badges and buttons stay rounded rectangles. */
   --radius-pill: 999px;
-  /* Half a 20px-tall badge's pill radius. */
-  --radius-badge: 5px;
+  /* Chips and badges round a quarter of their height. */
+  --chip-radius-ratio: 0.25;
 
   /* One height for buttons, inputs, toggles and segments so settings rows line up. */
   --control-height: 28px;

@@ -252,15 +252,14 @@ a {
 }
 /* Inside the button's own box, so it never reaches the buttons above or below. */
 .sidebar.collapsed .nav-btn .badge {
-  --rail-badge-size: 12px;
+  --badge-height: 12px;
   position: absolute;
   top: 1px;
   right: 1px;
-  height: var(--rail-badge-size);
-  min-width: var(--rail-badge-size);
+  min-width: var(--badge-height);
   justify-content: center;
   padding: 0 3px;
-  line-height: var(--rail-badge-size);
+  line-height: var(--badge-height);
 }
 
 /* Sidebar footer: versions; a button that opens Updates. Same inset as the nav buttons, so the same radius. */

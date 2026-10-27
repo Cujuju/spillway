@@ -47,10 +47,11 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
   font-weight: 400;
+  --chip-height: 18px;
   min-width: 20px;
-  height: 18px;
+  height: var(--chip-height);
   padding: 0 6px;
-  border-radius: var(--radius-pill);
+  border-radius: calc(var(--chip-height) * var(--chip-radius-ratio));
   background: var(--color-surface-input);
   color: var(--color-text-secondary);
   display: grid;
@@ -98,7 +99,8 @@
   align-items: center;
   gap: 8px;
   margin: 0 calc(-1 * var(--pool-line-inset));
-  padding: 3px var(--pool-line-inset);
+  /* The text's line box already adds ~5px above the capitals; 1px brings the visible gap to the 6px side inset. */
+  padding: 1px var(--pool-line-inset);
   border: 0;
   border-radius: var(--radius-btn);
   background: none;

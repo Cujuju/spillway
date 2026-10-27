@@ -172,8 +172,6 @@ a {
 
 .sidebar {
   --sidebar-toggle-size: 20px;
-  /* Nav buttons: row height, and the square width when collapsed. */
-  --nav-btn-size: 30px;
   position: relative;
   background: var(--color-surface-sunken);
   border-right: var(--border-width) solid var(--color-border);
@@ -195,6 +193,8 @@ a {
   margin-top: var(--spacing-1);
 }
 .nav-btn {
+  /* Row height everywhere (sidebar and settings nav); square width when the sidebar collapses. */
+  --nav-btn-size: 30px;
   display: flex;
   align-items: center;
   gap: var(--spacing-2);

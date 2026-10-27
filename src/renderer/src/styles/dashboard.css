@@ -11,11 +11,13 @@
 .dash-header.title-row {
   align-items: flex-start;
 }
+/* Top trimmed to the capitals, so the page inset above the title is the visible gap, like the other sides. */
 .dash-title {
   font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0;
+  text-box: trim-start cap alphabetic;
 }
 .dash-sub {
   margin-top: 8px;

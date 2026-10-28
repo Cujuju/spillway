@@ -135,7 +135,6 @@ const handlers: Handlers = {
   installUpdate: async () => {
     // The installer replaces the bundled proxy binary, which a running proxy keeps locked.
     if (updates.status().state === 'ready') await proxy.stop();
-  activityDay: (day, failedOnly) => activityLog.day(day, failedOnly),
     await updates.install();
   },
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),
@@ -148,6 +147,7 @@ const handlers: Handlers = {
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
   activityPage: (query) => activityLog.page(query),
+  activityDay: (day, failedOnly) => activityLog.day(day, failedOnly),
   activityDaySummaries: () => activityLog.daySummaries(),
   activityTotals: () => activityLog.totalsList(),
   activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),

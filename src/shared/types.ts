@@ -36,6 +36,8 @@ export interface ResetCredits {
   /** Credits usable now, i.e. against a limit the account has reached. */
   applicable: number;
   checkedAt: string;
+  /** When held credits expire (ISO), soonest first. May be shorter than `available`: some credits never expire, or the list lookup failed. */
+  expiries: string[];
 }
 
 /** ChatGPT's answer to spending a reset credit: spent, nothing reached, none held, or a replayed request. */

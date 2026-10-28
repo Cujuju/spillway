@@ -61,7 +61,11 @@ function parseResetCredits(raw: unknown): ResetCredits | null {
   const available = n(r.available);
   const checkedAt = s(r.checked_at);
   if (available === null || available < 0 || !checkedAt) return null;
-  return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt };
+  const expiries = (Array.isArray(r.expiries) ? r.expiries : [])
+    .map(s)
+    .filter((t): t is string => t !== null && !Number.isNaN(Date.parse(t)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt, expiries };
 }
 
 /** The proxy keeps a provider's raw error body; show its message, e.g. `{"error":{"message":"…"}}` → "…". */

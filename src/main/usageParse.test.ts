@@ -77,9 +77,11 @@ describe('windows and weight', () => {
   });
   it('reads reset credits, capping usable ones at the held count', () => {
     expect(parseOne({ reset_credits: { available: 1, applicable: 0, checked_at: '2026-10-26T12:00:00Z' } }).resetCredits)
-      .toEqual({ available: 1, applicable: 0, checkedAt: '2026-10-26T12:00:00Z' });
+      .toEqual({ available: 1, applicable: 0, checkedAt: '2026-10-26T12:00:00Z', expiries: [] });
     expect(parseOne({ reset_credits: { available: 1, applicable: 3, checked_at: 'x' } }).resetCredits?.applicable).toBe(1);
     expect(parseOne({ reset_credits: null }).resetCredits).toBeNull();
+    expect(parseOne({ reset_credits: { available: 2, applicable: 0, checked_at: 'x', expiries: ['2026-12-01T08:30:00Z', 'soon', 3, '2026-11-06T23:38:22Z'] } }).resetCredits?.expiries)
+      .toEqual(['2026-11-06T23:38:22Z', '2026-12-01T08:30:00Z']);
     expect(parseOne({}).resetCredits).toBeNull();
   });
   it('drops an unknown cadence', () => {

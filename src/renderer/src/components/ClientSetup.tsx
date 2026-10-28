@@ -4,7 +4,7 @@ import { Notice } from './ui';
 
 const CLIENTS: { id: ClientId; label: string; help: string }[] = [
   { id: 'claude', label: 'Claude Code', help: 'Writes the endpoint and key into its settings.' },
-  { id: 'codex', label: 'Codex', help: 'Points its own OpenAI provider at the proxy and signs it in with the pool. The key is never written to its config.' },
+  { id: 'codex', label: 'Codex', help: 'Points its own OpenAI provider at the proxy. Sign Codex in with one of the proxy’s Codex accounts; the key is never written to its config.' },
 ];
 /** Shared by every config client: Apply backs up the file first. */
 const BACKUP_NOTE = 'Undo restores the backup.';

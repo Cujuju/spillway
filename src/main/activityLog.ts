@@ -136,10 +136,11 @@ class ActivityLog {
     return (this.db.prepare('SELECT DISTINCT day FROM requests ORDER BY day DESC').all() as { day: string }[]).map((r) => r.day);
   }
 
-  /** One day's requests, oldest first. */
-  day(day: string): StoredActivityEvent[] {
-    if (!DAY_KEY.test(day)) return [];
-    return (this.db.prepare('SELECT id, event FROM requests WHERE day = ? ORDER BY id').all(day) as RequestRow[]).map(toStored);
+  /** All of one day's requests, newest first. */
+  day(day: string, failedOnly = false): StoredActivityEvent[] {
+    if (typeof day !== 'string' || !DAY_KEY.test(day)) return [];
+    const sql = `SELECT id, event FROM requests WHERE day = ?${failedOnly === true ? ' AND failed = 1' : ''} ORDER BY id DESC`;
+    return (this.db.prepare(sql).all(day) as RequestRow[]).map(toStored);
   }
 
   totalsList(): ActivityDayTotal[] {

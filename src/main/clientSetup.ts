@@ -6,30 +6,10 @@ import type { ClientId, ClientSetupState, ClientSetupStatus } from '@shared/type
 import {
   applyClaude, applyCodex, claudeIsEmpty, claudeState, codexIsEmpty, codexState, undoClaude, undoCodex, type ClientTarget,
 } from './clientConfigText';
-import { CODEX_AUTH_FILE, codexPoolAuthJson, codexPoolAuthMatches, isCodexPoolAuth } from './codexPoolAuth';
+import { CODEX_AUTH_FILE, isCodexPoolAuth } from './codexPoolAuth';
 import { writeFileAtomic } from './settingsStore';
 
 export const BACKUP_SUFFIX = '.spillway-backup';
-
-/** A file beside the config file that apply replaces whole; undo restores the user's own copy. */
-interface Companion {
-  name: string;
-  content(target: ClientTarget): string;
-  /** True when the file holds what apply writes, for any key. */
-  isOurs(text: string): boolean;
-  /** True when the file is applied for this target; parts kept in step automatically (the account) don't count. */
-  matches(text: string, target: ClientTarget): boolean;
-}
-
-const COMPANIONS: Partial<Record<ClientId, Companion>> = {
-  // Codex's login: the pool login sends its account calls through the proxy as the routed account.
-  codex: {
-    name: CODEX_AUTH_FILE,
-    content: (t) => codexPoolAuthJson(t.key, t.codexAccountEmail),
-    isOurs: isCodexPoolAuth,
-    matches: (text, t) => codexPoolAuthMatches(text, t.key),
-  },
-};
 
 interface ClientEdit {
   apply(text: string | null, target: ClientTarget): string;
@@ -59,47 +39,19 @@ const read = (file: string): string | null => (existsSync(file) ? readFileSync(f
 /** Writes through a symlinked dotfile instead of replacing the link. */
 const resolved = (file: string) => (existsSync(file) ? realpathSync(file) : file);
 const display = (file: string, home: string) => (file.startsWith(home) ? `~${file.slice(home.length)}` : file);
-const companionPath = (file: string, companion: Companion) => path.join(path.dirname(file), companion.name);
 
-/** Out of date while the config file is applied but its companion holds something else. */
-function stateWithCompanion(client: ClientId, file: string, target: ClientTarget, state: ClientSetupState): ClientSetupState {
-  const companion = COMPANIONS[client];
-  if (!companion || state !== 'applied') return state;
-  const text = read(companionPath(file, companion));
-  return text !== null && companion.matches(text, target) ? state : 'out-of-date';
-}
-
-/** Rewrites an applied companion whose content went stale (the routed account changed). A file the user replaced is left alone. */
-export function syncCompanion(client: ClientId, file: string, target: ClientTarget): void {
-  const companion = COMPANIONS[client];
-  if (!companion) return;
-  const companionFile = companionPath(file, companion);
-  const text = read(companionFile);
-  if (text === null || !companion.matches(text, target)) return;
-  const content = companion.content(target);
-  if (text !== content) writeFileAtomic(resolved(companionFile), content);
-}
-
-/** Backs up the user's own file (a newer one, e.g. a fresh login, replaces an older backup), then replaces it. */
-function applyCompanion(companion: Companion, file: string, target: ClientTarget): void {
-  const companionFile = companionPath(file, companion);
-  const text = read(companionFile);
-  const content = companion.content(target);
-  if (text === content) return;
-  if (text === null) writeFileAtomic(`${companionFile}${BACKUP_SUFFIX}`, '');
-  else if (!companion.isOurs(text)) copyFileSync(resolved(companionFile), `${companionFile}${BACKUP_SUFFIX}`);
-  writeFileAtomic(resolved(companionFile), content);
-}
-
-/** Restores the backup only over the app's own content; a file the user replaced since is kept. */
-function undoCompanion(companion: Companion, file: string): void {
-  const companionFile = companionPath(file, companion);
-  const backupFile = `${companionFile}${BACKUP_SUFFIX}`;
-  const text = read(companionFile);
-  if (text !== null && companion.isOurs(text)) {
+/**
+ * Retires the pool login earlier versions wrote to auth.json: restores the user's backed-up login,
+ * or removes it so Codex asks to sign in. A newer login is kept.
+ */
+function retireCodexPoolLogin(configFile: string): void {
+  const authFile = path.join(path.dirname(configFile), CODEX_AUTH_FILE);
+  const backupFile = `${authFile}${BACKUP_SUFFIX}`;
+  const text = read(authFile);
+  if (text !== null && isCodexPoolAuth(text)) {
     const backup = read(backupFile);
-    if (backup) writeFileAtomic(resolved(companionFile), backup);
-    else rmSync(resolved(companionFile));
+    if (backup) writeFileAtomic(resolved(authFile), backup);
+    else rmSync(resolved(authFile));
   }
   rmSync(backupFile, { force: true });
 }
@@ -108,7 +60,7 @@ export function clientStatus(client: ClientId, file: string, target: ClientTarge
   const base = { client, path: display(file, home) };
   try {
     const state = EDITS[client].state(read(file), target, existsSync(`${file}${BACKUP_SUFFIX}`));
-    return { ...base, state: stateWithCompanion(client, file, target, state), error: null };
+    return { ...base, state, error: null };
   } catch (err) {
     return { ...base, state: 'not-applied', error: (err as Error).message };
   }
@@ -125,8 +77,7 @@ export function applyClient(client: ClientId, file: string, target: ClientTarget
     else copyFileSync(resolved(file), backup);
   }
   writeFileAtomic(resolved(file), next);
-  const companion = COMPANIONS[client];
-  if (companion) applyCompanion(companion, file, target);
+  if (client === 'codex') retireCodexPoolLogin(file);
 }
 
 /** Reverses the apply and removes the backup. A file the apply created is deleted when nothing else was added. */
@@ -141,6 +92,5 @@ export function undoClient(client: ClientId, file: string): void {
     else writeFileAtomic(resolved(file), next);
   }
   rmSync(backupFile, { force: true });
-  const companion = COMPANIONS[client];
-  if (companion) undoCompanion(companion, file);
+  if (client === 'codex') retireCodexPoolLogin(file);
 }

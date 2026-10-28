@@ -4,7 +4,7 @@ import { EVENTS } from '@shared/ipc';
 import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { history } from './historyStore';
-import { registerIpc, syncClientLogins } from './ipc';
+import { registerIpc } from './ipc';
 import { appIconPath } from './paths';
 import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
@@ -37,10 +37,7 @@ function launchedHidden(): boolean {
 }
 
 function wireEvents(): void {
-  usage.on('snapshot', (s) => {
-    send(EVENTS.onSnapshot, s);
-    syncClientLogins();
-  });
+  usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
   usage.on('error', (m) => send(EVENTS.onUsageError, m));
   proxy.on('status', (s) => {
     send(EVENTS.onProxyStatus, s);

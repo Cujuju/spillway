@@ -89,6 +89,8 @@ describe('activityLog', () => {
     expect(activityLog.page({ day: null, failedOnly: true, before: null }).events.map((e) => e.requestId)).toEqual(['new-failed', 'old-failed']);
     const yesterday = localDay(daysAgo(1).getTime());
     expect(activityLog.page({ day: yesterday, failedOnly: false, before: null }).events.map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
+    expect(activityLog.day(yesterday).map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
+    expect(activityLog.day(yesterday, true).map((e) => e.requestId)).toEqual(['old-failed']);
     expect(summary(yesterday)).toMatchObject({ requests: 2, failed: 1, newestId: expect.any(Number), unpricedRequests: 0 });
     expect(summary(yesterday)!.costUsd).toBeGreaterThan(0);
     expect(activityLog.daySummaries().map((d) => d.day)).toEqual([localDay(Date.now()), yesterday]);

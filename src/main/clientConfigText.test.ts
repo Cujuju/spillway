@@ -3,7 +3,7 @@ import {
   applyClaude, applyCodex, claudeState, codexState, DISABLED_PREFIX, undoClaude, undoCodex,
 } from './clientConfigText';
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', codexAccountEmail: null };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
 const moved = { ...target, endpoint: 'http://127.0.0.1:9000' };
 
 describe('Claude Code settings.json', () => {
@@ -83,9 +83,7 @@ describe('Claude Code settings.json', () => {
 
 describe('Codex config.toml', () => {
   const original = '# my config\nmodel = "gpt-5"\nmodel_provider = "openai"\n\n[model_providers.other]\nname = "x"\nmodel_provider = "kept"\n';
-  const rootBlock =
-    'openai_base_url = "http://127.0.0.1:8317/backend-api/codex"\n' +
-    'chatgpt_base_url = "http://127.0.0.1:8317/backend-api/"\ncli_auth_credentials_store = "file"\n';
+  const rootBlock = 'openai_base_url = "http://127.0.0.1:8317/backend-api/codex"\n';
 
   it('points the built-in OpenAI provider at the proxy, disabling a root model_provider', () => {
     const out = applyCodex(original, target);
@@ -95,7 +93,8 @@ describe('Codex config.toml', () => {
     expect(out).toContain(`${DISABLED_PREFIX}model_provider = "openai"`);
     // Inside a table it is a different key: untouched.
     expect(out).toContain('\nmodel_provider = "kept"\n');
-    // Codex authenticates with the pool login in auth.json; the key is never written here.
+    // Codex keeps its own login, which the proxy verifies; the key is never written here.
+    expect(out).not.toMatch(/chatgpt_base_url|cli_auth_credentials_store/);
     expect(out).not.toContain('k1');
     expect(out).not.toContain('[model_providers.spillway');
   });
@@ -104,11 +103,21 @@ describe('Codex config.toml', () => {
     expect(undoCodex(applyCodex(original, target))).toBe(original);
   });
 
-  it("turns off the user's own values for the keys it sets, and undo restores them", () => {
+  it("turns off the user's own values for the keys it sets, keeps the rest, and undo restores them", () => {
     const own = 'openai_base_url = "https://example.test/v1"\nchatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n';
     const out = applyCodex(own, target);
-    for (const line of own.trim().split('\n')) expect(out).toContain(`${DISABLED_PREFIX}${line}`);
+    expect(out).toContain(`${DISABLED_PREFIX}openai_base_url = "https://example.test/v1"`);
+    expect(out).toContain('\nchatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n');
     expect(undoCodex(out)).toBe(own);
+  });
+
+  it('an apply that also set the account URL and login store is out of date', () => {
+    const marker = '# >>> spillway: added by Spillway; remove it with Undo in the app\n';
+    const older =
+      `${marker}openai_base_url = "http://127.0.0.1:8317/backend-api/codex"\n` +
+      'chatgpt_base_url = "http://127.0.0.1:8317/backend-api/"\ncli_auth_credentials_store = "file"\n# <<< spillway\n';
+    expect(codexState(older, target)).toBe('out-of-date');
+    expect(applyCodex(older, target)).toBe(applyCodex('', target));
   });
 
   it('re-applies idempotently and updates values', () => {

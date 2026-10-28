@@ -35,6 +35,10 @@
   gap: var(--spacing-2_5);
   align-items: center;
 }
+/* Separate control groups (a filter beside the view tabs) sit a card gap apart. */
+.dash-actions.card-spaced {
+  gap: var(--card-gap);
+}
 
 .provider-glyph {
   width: var(--glyph-size);

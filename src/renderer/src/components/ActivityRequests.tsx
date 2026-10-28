@@ -1,22 +1,18 @@
-import { ChevronDown, ChevronRight } from 'lucide-solid';
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-solid';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { localDay } from '@shared/activityCounts';
-import { tokenCost } from '@shared/modelPrices';
-import { maskEmails } from '@shared/privacy';
-import type { ActivityDaySummary, ActivityEvent, StoredActivityEvent } from '@shared/types';
-import { dayLabel, usd } from '../lib/format';
+import { ACTIVITY_PAGE_SIZE, type StoredActivityEvent } from '@shared/types';
+import type { DaySummaries } from '../lib/daySummaries';
+import { dayLabel } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
-import { now, settings } from '../store';
+import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, sortRequests, type RequestSort } from '../lib/requestSort';
+import { now } from '../store';
 import { costText } from './activityFormat';
-import { TokenCell } from './TokenCell';
-import { ProviderGlyph, Seg } from './ui';
+import { REQUEST_COLUMN_COUNT, RequestRow } from './RequestRow';
 
-const MS_PER_SECOND = 1000;
-/** Below this, show milliseconds; above, seconds with one decimal. */
-const SHOW_SECONDS_FROM_MS = 1000;
-const COLUMN_COUNT = 10;
+export type RequestFilter = 'all' | 'failed';
 const CHEVRON_PX = 13;
-const FILTERS = [{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const;
+const SORT_ARROW_PX = 11;
 
 /** One day's rows loaded so far. */
 interface Section {
@@ -24,74 +20,22 @@ interface Section {
   more: boolean;
   loaded: boolean;
   loading: boolean;
+  /** Rows shown under an order sorted here; revealed a page at a time. */
+  shown: number;
 }
-const NEW_SECTION: Section = { rows: [], more: false, loaded: false, loading: false };
+const NEW_SECTION: Section = { rows: [], more: false, loaded: false, loading: false, shown: 0 };
 
 const isOpenMap = (v: unknown): v is Record<string, boolean> =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every((x) => typeof x === 'boolean');
 
-const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
-const requestCost = (e: ActivityEvent) => {
-  const cost = tokenCost(e.provider, e.model, e);
-  return cost ? usd(cost.usd) : '—';
-};
-const withRequest = (s: ActivityDaySummary, e: StoredActivityEvent): ActivityDaySummary => {
-  const cost = tokenCost(e.provider, e.model, e);
-  return {
-    ...s, requests: s.requests + 1, failed: s.failed + (e.failed ? 1 : 0), newestId: e.id,
-    costUsd: s.costUsd + (cost?.usd ?? 0), unpricedRequests: s.unpricedRequests + (cost ? 0 : 1),
-  };
-};
-
-function RequestRow(props: { e: StoredActivityEvent; account: (authIndex: string | null) => string }) {
-  const errorText = () => {
-    const text = props.e.error ?? '';
-    return settings().dashboard.showEmails ? text : maskEmails(text);
-  };
-  return (
-    <>
-      <tr classList={{ 'has-error': !!errorText() }}>
-        <td class="tabular">{new Date(props.e.at).toLocaleTimeString()}</td>
-        <td class="fill" title={`${props.account(props.e.authIndex)} · ${props.e.model || 'no model'}`}>
-          <div class="cell-name">
-            <ProviderGlyph provider={props.e.provider} size="sm" />
-            <span>{props.account(props.e.authIndex)} <span class="muted">· {props.e.model || '—'}</span></span>
-          </div>
-        </td>
-        <td>
-          <Show when={props.e.failed} fallback={<span class="badge green">OK</span>}>
-            <span class="badge red">{props.e.statusCode ?? 'Failed'}</span>
-          </Show>
-        </td>
-        <TokenCell v={props.e.inputTokens} />
-        <TokenCell v={props.e.outputTokens} />
-        <TokenCell v={props.e.cachedTokens} />
-        <TokenCell v={props.e.cacheWriteTokens} provider={props.e.provider} />
-        <td class="tabular num">{requestCost(props.e)}</td>
-        <td class="tabular num">{duration(props.e.ttftMs)}</td>
-        <td class="tabular num">{duration(props.e.latencyMs)}</td>
-      </tr>
-      {/* The error gets its own line so it never widens the columns. */}
-      <Show when={errorText()}>
-        <tr class="error-row">
-          <td colSpan={COLUMN_COUNT}><div class="truncate" title={errorText()}>{errorText()}</div></td>
-        </tr>
-      </Show>
-    </>
-  );
-}
-
-/** Stored requests, one collapsible section per day, newest first; open days load more as they scroll. */
-export function ActivityRequests(props: { account: (authIndex: string | null) => string }) {
-  const [filter, setFilter] = persistedSignal('activity.filter', 'all', FILTERS.map((f) => f.value));
+/** Stored requests, one collapsible section per day, newest day first; open days load more as they scroll. */
+export function ActivityRequests(props: { account: (authIndex: string | null) => string; filter: RequestFilter; days: DaySummaries }) {
   /** Days the user opened or closed; the rest follow the default, where only today is open. */
   const [toggled, setToggled] = persistedSignal<Record<string, boolean>>('activity.openDays', {}, isOpenMap);
-  const [summaries, setSummaries] = createSignal<ActivityDaySummary[]>([]);
+  const [sort, setSort] = persistedSignal<RequestSort>('activity.requestSort', DEFAULT_SORT, isRequestSort);
   const [sections, setSections] = createSignal<Record<string, Section>>({});
-  /** Bumped when the filter changes, so pages loaded under the old one are dropped. */
+  /** Bumped when the filter or order changes, so loads started under the old one are dropped. */
   let generation = 0;
-  /** Live requests that arrive while summaries load; applied after, when newer than the load counted. */
-  let liveDuringLoad: StoredActivityEvent[] | null = [];
 
   const today = () => localDay(now());
   const yesterday = () => {
@@ -101,145 +45,136 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   const dayName = (day: string) => (day === today() ? 'Today' : day === yesterday() ? 'Yesterday' : dayLabel(day));
   const isOpen = (day: string) => toggled()[day] ?? day === today();
   const toggle = (day: string) => setToggled((t) => ({ ...t, [day]: !isOpen(day) }));
+  const failedOnly = () => props.filter === 'failed';
   const section = (day: string) => sections()[day] ?? NEW_SECTION;
   const setSection = (day: string, next: (s: Section) => Section) => setSections((all) => ({ ...all, [day]: next(all[day] ?? NEW_SECTION) }));
-
-  const summaryByDay = createMemo(() => new Map(summaries().map((s) => [s.day, s])));
   // Day strings keep each section's rows mounted while its summary updates.
-  const shownDays = createMemo(() => summaries().filter((s) => filter() !== 'failed' || s.failed > 0).map((s) => s.day));
-  const stored = createMemo(() => summaries().reduce((t, s) => ({ requests: t.requests + s.requests, failed: t.failed + s.failed }), { requests: 0, failed: 0 }));
+  const shownDays = createMemo(() => props.days.list().filter((s) => !failedOnly() || s.failed > 0).map((s) => s.day));
 
-  const loadPage = (day: string) => {
-    const s = section(day);
-    if (s.loading || (s.loaded && !s.more)) return;
+  createEffect(on([() => props.filter, sort], () => {
+    generation += 1;
+    setSections({});
+  }, { defer: true }));
+  // Forget open/closed choices for days no longer stored.
+  createEffect(on(() => props.days.loaded(), (loaded) => {
+    if (!loaded) return;
+    const days = props.days.byDay();
+    setToggled((t) => Object.fromEntries(Object.entries(t).filter(([d]) => days.has(d))));
+  }));
+
+  const fetchInto = (day: string, load: () => Promise<{ events: StoredActivityEvent[]; more: boolean }>) => {
     const gen = generation;
     setSection(day, (cur) => ({ ...cur, loading: true }));
-    void window.api
-      .activityPage({ day, failedOnly: filter() === 'failed', before: s.rows.at(-1)?.id ?? null })
+    void load()
       .then((page) => {
         if (gen !== generation) return;
-        // Live requests that arrived during the load may be in the page too.
+        // Live requests that arrived during the load may be in it too.
         setSection(day, (cur) => {
           const shown = new Set(cur.rows.map((e) => e.id));
-          return { rows: [...cur.rows, ...page.events.filter((e) => !shown.has(e.id))], more: page.more, loaded: true, loading: false };
+          return { ...cur, rows: [...cur.rows, ...page.events.filter((e) => !shown.has(e.id))], more: page.more, loaded: true, loading: false, shown: ACTIVITY_PAGE_SIZE };
         });
       })
       .catch((err: unknown) => {
-        console.error('[activity] page failed:', err);
+        console.error('[activity] requests failed to load:', err);
         if (gen === generation) setSection(day, (cur) => ({ ...cur, loading: false }));
       });
   };
-  /** Loads a day's next page when the end of its rows scrolls into view. */
+  /** Newest first pages from the database; other orders load the whole day once, then reveal it a page at a time. */
+  const loadMore = (day: string) => {
+    const s = section(day);
+    if (s.loading) return;
+    // Read now, so the load matches the filter it started under.
+    const failed = failedOnly();
+    if (isRecordedOrder(sort())) {
+      const query = { day, failedOnly: failed, before: s.rows.at(-1)?.id ?? null };
+      if (!s.loaded || s.more) fetchInto(day, () => window.api.activityPage(query));
+    } else if (!s.loaded) {
+      fetchInto(day, () => window.api.activityDay(day, failed).then((events) => ({ events, more: false })));
+    } else if (s.shown < s.rows.length) {
+      setSection(day, (cur) => ({ ...cur, shown: cur.shown + ACTIVITY_PAGE_SIZE }));
+    }
+  };
+  /** Loads more of a day when the end of its rows scrolls into view. */
   const watchEnd = (el: HTMLElement, day: string) => {
-    const observer = new IntersectionObserver((entries) => entries.some((en) => en.isIntersecting) && loadPage(day));
+    const observer = new IntersectionObserver((entries) => entries.some((en) => en.isIntersecting) && loadMore(day));
     observer.observe(el);
     onCleanup(() => observer.disconnect());
-  };
-  const pickFilter = (f: (typeof FILTERS)[number]['value']) => {
-    setFilter(f);
-    generation += 1;
-    setSections({});
-  };
-
-  const countLive = (e: StoredActivityEvent) => {
-    const day = localDay(Date.parse(e.at));
-    const current = summaryByDay().get(day);
-    if (current && e.id <= current.newestId) return;
-    const next = withRequest(current ?? { day, requests: 0, failed: 0, costUsd: 0, unpricedRequests: 0, newestId: 0 }, e);
-    setSummaries((list) => (current ? list.map((s) => (s.day === day ? next : s)) : [next, ...list].sort((a, b) => b.day.localeCompare(a.day))));
-  };
-  const showLive = (e: StoredActivityEvent) => {
-    const day = localDay(Date.parse(e.at));
-    // A day that hasn't started loading picks the request up with its first page.
-    if (!sections()[day] || (filter() === 'failed' && !e.failed)) return;
-    setSection(day, (s) => (s.rows.some((r) => r.id === e.id) ? s : { ...s, rows: [e, ...s.rows] }));
   };
 
   onMount(() => {
     // An IPC event handler: it reads current state on each event, untracked by design.
     // oxlint-disable-next-line solid/reactivity
     onCleanup(window.api.onActivity((e) => {
-      if (liveDuringLoad) liveDuringLoad.push(e);
-      else countLive(e);
-      showLive(e);
+      const day = localDay(Date.parse(e.at));
+      // A day that hasn't started loading picks the request up with its first load.
+      if (!sections()[day] || (failedOnly() && !e.failed)) return;
+      setSection(day, (s) => (s.rows.some((r) => r.id === e.id) ? s : { ...s, rows: [e, ...s.rows] }));
     }));
-    void window.api
-      .activityDaySummaries()
-      .then((list) => {
-        setSummaries(list);
-        // Forget open/closed choices for days no longer stored.
-        const days = new Set(list.map((s) => s.day));
-        setToggled((t) => Object.fromEntries(Object.entries(t).filter(([d]) => days.has(d))));
-      })
-      .catch((err: unknown) => console.error('[activity] day summaries failed:', err))
-      .finally(() => {
-        for (const e of liveDuringLoad ?? []) countLive(e);
-        liveDuringLoad = null;
-      });
   });
 
   return (
-    <>
-      <div class="toolbar">
-        <Seg value={filter()} options={FILTERS} onChange={pickFilter} />
-        <span class="spacer" />
-        <span class="toolbar-note">{stored().requests.toLocaleString()} stored · {stored().failed.toLocaleString()} failed · newest first</span>
-      </div>
-      <div class="card table-card requests-card">
-        <table class="table dense">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Account · model</th>
-              <th>Result</th>
-              <th class="num">Input</th>
-              <th class="num">Output</th>
-              <th class="num">Cache read</th>
-              <th class="num">Cache write</th>
-              <th class="num" title="At API list prices">API cost</th>
-              <th class="num" title="Time to first token">First token</th>
-              <th class="num">Total time</th>
-            </tr>
-          </thead>
-          <For each={shownDays()} fallback={<tbody><tr><td colSpan={COLUMN_COUNT} class="muted">No requests.</td></tr></tbody>}>
-            {(day) => {
-              const summary = () => summaryByDay().get(day);
-              return (
-                <tbody>
-                  <tr class="group-row day-row">
-                    <td colSpan={COLUMN_COUNT}>
-                      <button class="day-toggle" aria-expanded={isOpen(day)} onClick={() => toggle(day)}>
-                        <Show when={isOpen(day)} fallback={<ChevronRight size={CHEVRON_PX} />}>
-                          <ChevronDown size={CHEVRON_PX} />
-                        </Show>
-                        <span>{dayName(day)}</span>
-                        <span class="muted">
-                          {(summary()?.requests ?? 0).toLocaleString()} requests · {(summary()?.failed ?? 0).toLocaleString()} failed · {summary() ? costText(summary()!) : '—'}
-                        </span>
-                      </button>
-                    </td>
-                  </tr>
-                  <Show when={isOpen(day)}>
-                    <For each={section(day).rows}>{(e) => <RequestRow e={e} account={props.account} />}</For>
-                    <Show when={!section(day).loaded || section(day).more}>
-                      <tr>
-                        <td class="more-cell" colSpan={COLUMN_COUNT} ref={(el) => watchEnd(el, day)}>
-                          <button class="btn ghost" disabled={section(day).loading} onClick={() => loadPage(day)}>
-                            {section(day).loading ? 'Loading…' : 'Show older'}
-                          </button>
-                        </td>
-                      </tr>
+    <div class="card table-card requests-card">
+      <table class="table dense">
+        <thead>
+          <tr>
+            <For each={REQUEST_COLUMNS}>
+              {(col) => (
+                <th class={col.num ? 'num' : undefined} title={col.title} aria-sort={sort().key === col.key ? (sort().desc ? 'descending' : 'ascending') : undefined}>
+                  <button type="button" class="sort-btn" onClick={() => setSort(nextSort(sort(), col.key))}>
+                    {col.label}
+                    <Show when={sort().key === col.key}>
+                      <Show when={sort().desc} fallback={<ArrowUp size={SORT_ARROW_PX} />}>
+                        <ArrowDown size={SORT_ARROW_PX} />
+                      </Show>
                     </Show>
-                    <Show when={section(day).loaded && section(day).rows.length === 0}>
-                      <tr><td colSpan={COLUMN_COUNT} class="muted">No requests.</td></tr>
-                    </Show>
+                  </button>
+                </th>
+              )}
+            </For>
+          </tr>
+        </thead>
+        <For each={shownDays()} fallback={<tbody><tr><td colSpan={REQUEST_COLUMN_COUNT} class="muted">No requests.</td></tr></tbody>}>
+          {(day) => {
+            const summary = () => props.days.byDay().get(day);
+            // Same object until this day's section changes, so other days' updates don't re-sort it.
+            const own = createMemo(() => section(day));
+            const rows = createMemo(() => (isRecordedOrder(sort()) ? own().rows : sortRequests(own().rows, sort(), props.account).slice(0, own().shown)));
+            const hasMore = () => !own().loaded || (isRecordedOrder(sort()) ? own().more : own().shown < own().rows.length);
+            return (
+              <tbody>
+                <tr class="group-row day-row">
+                  <td colSpan={REQUEST_COLUMN_COUNT}>
+                    <button type="button" class="day-toggle" aria-expanded={isOpen(day)} onClick={() => toggle(day)}>
+                      <Show when={isOpen(day)} fallback={<ChevronRight size={CHEVRON_PX} />}>
+                        <ChevronDown size={CHEVRON_PX} />
+                      </Show>
+                      <span>{dayName(day)}</span>
+                      <span class="muted">
+                        {(summary()?.requests ?? 0).toLocaleString()} requests · {(summary()?.failed ?? 0).toLocaleString()} failed · {summary() ? costText(summary()!) : '—'}
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+                <Show when={isOpen(day)}>
+                  <For each={rows()}>{(e) => <RequestRow e={e} account={props.account} />}</For>
+                  <Show when={hasMore()}>
+                    <tr>
+                      <td class="more-cell" colSpan={REQUEST_COLUMN_COUNT} ref={(el) => watchEnd(el, day)}>
+                        <button type="button" class="btn ghost" disabled={own().loading} onClick={() => loadMore(day)}>
+                          {own().loading ? 'Loading…' : 'Show more'}
+                        </button>
+                      </td>
+                    </tr>
                   </Show>
-                </tbody>
-              );
-            }}
-          </For>
-        </table>
-      </div>
-    </>
+                  <Show when={own().loaded && own().rows.length === 0}>
+                    <tr><td colSpan={REQUEST_COLUMN_COUNT} class="muted">No requests.</td></tr>
+                  </Show>
+                </Show>
+              </tbody>
+            );
+          }}
+        </For>
+      </table>
+    </div>
   );
 }

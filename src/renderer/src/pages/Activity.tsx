@@ -1,15 +1,24 @@
 import { createMemo, Show } from 'solid-js';
 import { ActivityOverview } from '../components/ActivityOverview';
-import { ActivityRequests } from '../components/ActivityRequests';
+import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
 import { ActivityTotals } from '../components/ActivityTotals';
 import { Notice, Seg } from '../components/ui';
+import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
 import { proxyStatus, snapshot } from '../store';
 
 const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const;
+const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 
 export function Activity() {
   const [view, setView] = persistedSignal('activity.view', 'overview', VIEWS.map((v) => v.value));
+  const [filter, setFilter] = persistedSignal<RequestFilter>('activity.filter', 'all', FILTERS);
+  const days = createDaySummaries();
+  // The stored and failed totals ride on the filter it switches between.
+  const filterOptions = createMemo(() => [
+    { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString()}` },
+    { value: 'failed' as const, label: `Failed ${days.stored().failed.toLocaleString()}` },
+  ]);
 
   // snapshot() is already masked when "Show emails" is off.
   const accountNames = createMemo(() => new Map((snapshot()?.credentials ?? []).map((c) => [c.authIndex, c.label])));
@@ -19,7 +28,12 @@ export function Activity() {
     <>
       <header class="dash-header title-row">
         <h1 class="dash-title">Activity</h1>
-        <Seg value={view()} options={VIEWS} onChange={setView} />
+        <div class="dash-actions card-spaced">
+          <Show when={view() === 'requests'}>
+            <Seg value={filter()} options={filterOptions()} onChange={setFilter} />
+          </Show>
+          <Seg value={view()} options={VIEWS} onChange={setView} />
+        </div>
       </header>
 
       <Show when={proxyStatus()?.state !== 'running'}>
@@ -33,7 +47,7 @@ export function Activity() {
         <ActivityTotals account={accountName} />
       </Show>
       <Show when={view() === 'requests'}>
-        <ActivityRequests account={accountName} />
+        <ActivityRequests account={accountName} filter={filter()} days={days} />
       </Show>
     </>
   );

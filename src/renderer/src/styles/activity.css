@@ -4,11 +4,6 @@
 .notice + .toolbar {
   margin-top: var(--page-gap);
 }
-.toolbar-note {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ── Stat strip: one card, cells split by 1px rules that survive wrapping ── */
 .stat-strip {
@@ -235,6 +230,25 @@
   display: block;
   height: 100%;
   background: var(--color-accent);
+}
+/* Sortable headers: the label is the button; an arrow marks the sorted column. */
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.sort-btn:hover,
+th[aria-sort] .sort-btn {
+  color: var(--color-text);
 }
 /* Requests: the card scrolls on its own, so each day's header stays pinned above its rows. */
 .requests-card {

@@ -1,7 +1,6 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import { APP_NAME } from '@shared/app';
 import type { ApiKeyOrder, AppSettings } from '@shared/settings';
-import { codexPoolToken } from './codexPoolAuth';
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
@@ -78,8 +77,7 @@ export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
   const { doc, error } = parseUserConfig(input.userConfig);
   if (doc.contents === null) doc.contents = doc.createNode({});
   for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
-  // Codex sends the pool token on its account calls (auth.json), the client key on model calls.
-  ensureClientKeys(doc, [input.clientApiKey, codexPoolToken(input.clientApiKey)]);
+  ensureClientKeys(doc, [input.clientApiKey]);
   doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
   return { yaml: doc.toString(), userConfigError: error };
 }

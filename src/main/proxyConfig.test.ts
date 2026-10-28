@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { DEFAULT_SETTINGS } from '@shared/settings';
-import { codexPoolToken } from './codexPoolAuth';
 import { buildProxyConfig } from './proxyConfig';
 
 const base = {
@@ -13,7 +12,7 @@ const base = {
 };
 
 /** Codex sends the pool token on account calls, so the proxy must accept it beside the client key. */
-const appKeys = ['client"key', codexPoolToken('client"key')];
+const appKeys = ['client"key'];
 
 const build = (over: Partial<typeof base> = {}) => buildProxyConfig({ ...base, ...over });
 const parsed = (over: Partial<typeof base> = {}) => parse(build(over).yaml);

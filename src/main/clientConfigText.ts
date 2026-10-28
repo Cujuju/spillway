@@ -12,8 +12,6 @@ export interface ClientTarget {
   /** e.g. http://127.0.0.1:8317 */
   endpoint: string;
   key: string;
-  /** The account Codex's account calls reach (`account_view`); its pool login names it. Null before the first usage poll. */
-  codexAccountEmail: string | null;
 }
 
 const CRLF = '\r\n';
@@ -118,14 +116,13 @@ export const DISABLED_PREFIX = '# spillway disabled: ';
  * Keeping that provider keeps features Codex gates on it, such as the image tool.
  */
 const CODEX_API_PATH = '/backend-api/codex';
-/** Codex sends ChatGPT account calls (usage, plan, plugins) under chatgpt_base_url; the proxy answers as the pool. */
-const BACKEND_PATH = '/backend-api/';
-/** Codex must read the pool login from auth.json, not a keyring login. */
-const AUTH_STORE = 'file';
 
 const TABLE_HEADER = /^\s*\[/;
-/** Root keys the apply sets, plus model_provider: any provider but the built-in one would bypass the proxy. */
-const ROOT_OWNED_KEY = /^\s*(model_provider|openai_base_url|chatgpt_base_url|cli_auth_credentials_store)\s*=/;
+/**
+ * Root keys the apply sets, plus model_provider: any other provider bypasses the proxy.
+ * Account calls (chatgpt_base_url) stay on chatgpt.com with Codex's own login.
+ */
+const ROOT_OWNED_KEY = /^\s*(model_provider|openai_base_url)\s*=/;
 
 /** TOML basic strings accept JSON's string escapes. */
 const tomlString = (s: string) => JSON.stringify(s);
@@ -165,8 +162,6 @@ const firstTable = (lines: string[]) => {
 /** The root block's lines, without its markers. */
 const codexRootBlock = (target: ClientTarget): string[] => [
   `openai_base_url = ${tomlString(`${target.endpoint}${CODEX_API_PATH}`)}`,
-  `chatgpt_base_url = ${tomlString(`${target.endpoint}${BACKEND_PATH}`)}`,
-  `cli_auth_credentials_store = ${tomlString(AUTH_STORE)}`,
 ];
 
 export function applyCodex(text: string | null, target: ClientTarget): string {

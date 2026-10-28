@@ -10,11 +10,12 @@ vi.mock('./settingsStore', () => ({
   },
 }));
 
-const { applyClient, BACKUP_SUFFIX, clientConfigFiles, clientStatus, syncCompanion, undoClient } = await import('./clientSetup');
-const { CODEX_AUTH_FILE, codexPoolAuthJson } = await import('./codexPoolAuth');
+const { applyClient, BACKUP_SUFFIX, clientConfigFiles, clientStatus, undoClient } = await import('./clientSetup');
+const { CODEX_AUTH_FILE } = await import('./codexPoolAuth');
 
-const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1', codexAccountEmail: 'a@example.com' };
+const target = { endpoint: 'http://127.0.0.1:8317', key: 'k1' };
 const userLogin = '{"auth_mode":"chatgpt","tokens":{"refresh_token":"rt_user"}}\n';
+const poolLogin = '{"auth_mode":"chatgpt","tokens":{"refresh_token":"spillway-pool"}}\n';
 const codexAuth = () => path.join(path.dirname(files.codex), CODEX_AUTH_FILE);
 let home: string;
 let files: ReturnType<typeof clientConfigFiles>;
@@ -64,51 +65,41 @@ describe('client setup files', () => {
     expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
   });
 
-  it('Codex: swaps in the pool login, keeps the user\'s, and undo puts it back', () => {
+  it("Codex: apply leaves the user's own login alone", () => {
     mkdirSync(path.dirname(codexAuth()), { recursive: true });
     writeFileSync(codexAuth(), userLogin);
     applyClient('codex', files.codex, target);
-    expect(readFileSync(codexAuth(), 'utf8')).toBe(codexPoolAuthJson(target.key, target.codexAccountEmail));
-    expect(readFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, 'utf8')).toBe(userLogin);
-
-    // A new key makes the login out of date; re-applying keeps the user's backup, not the old pool login.
-    expect(clientStatus('codex', files.codex, { ...target, key: 'k2' }, home).state).toBe('out-of-date');
-    applyClient('codex', files.codex, { ...target, key: 'k2' });
-    expect(readFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, 'utf8')).toBe(userLogin);
-
+    expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
+    expect(readFileSync(files.codex, 'utf8')).not.toMatch(/chatgpt_base_url|cli_auth_credentials_store/);
     undoClient('codex', files.codex);
+    expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
+  });
+
+  it("Codex: apply retires an earlier pool login and puts the user's login back", () => {
+    mkdirSync(path.dirname(codexAuth()), { recursive: true });
+    writeFileSync(codexAuth(), poolLogin);
+    writeFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, userLogin);
+    applyClient('codex', files.codex, target);
     expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
     expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
   });
 
-  it('Codex: follows the routed account without counting it as out of date', () => {
-    applyClient('codex', files.codex, target);
-    const switched = { ...target, codexAccountEmail: 'b@example.com' };
-    expect(clientStatus('codex', files.codex, switched, home).state).toBe('applied');
-    syncCompanion('codex', files.codex, switched);
-    expect(readFileSync(codexAuth(), 'utf8')).toBe(codexPoolAuthJson(target.key, 'b@example.com'));
-    // The user's backup is untouched by the sync.
-    expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(true);
-  });
-
-  it("Codex: sync leaves a user's own login and another key's pool login alone", () => {
-    applyClient('codex', files.codex, target);
-    writeFileSync(codexAuth(), userLogin);
-    syncCompanion('codex', files.codex, { ...target, codexAccountEmail: 'b@example.com' });
-    expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
-
-    const stale = codexPoolAuthJson('k0', 'a@example.com');
-    writeFileSync(codexAuth(), stale);
-    syncCompanion('codex', files.codex, { ...target, codexAccountEmail: 'b@example.com' });
-    expect(readFileSync(codexAuth(), 'utf8')).toBe(stale);
-  });
-
-  it('Codex: a login made after apply shows out of date, and undo leaves it in place', () => {
-    applyClient('codex', files.codex, target);
-    writeFileSync(codexAuth(), userLogin);
-    expect(clientStatus('codex', files.codex, target, home).state).toBe('out-of-date');
+  it('Codex: a pool login with no saved login is removed, so Codex asks to sign in', () => {
+    mkdirSync(path.dirname(codexAuth()), { recursive: true });
+    writeFileSync(codexAuth(), poolLogin);
+    writeFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, '');
     undoClient('codex', files.codex);
+    expect(existsSync(codexAuth())).toBe(false);
+    expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
+  });
+
+  it('Codex: a login made since the pool login is kept over the old backup', () => {
+    mkdirSync(path.dirname(codexAuth()), { recursive: true });
+    writeFileSync(codexAuth(), userLogin);
+    writeFileSync(`${codexAuth()}${BACKUP_SUFFIX}`, '{"old":true}\n');
+    applyClient('codex', files.codex, target);
     expect(readFileSync(codexAuth(), 'utf8')).toBe(userLogin);
+    expect(existsSync(`${codexAuth()}${BACKUP_SUFFIX}`)).toBe(false);
   });
 
   it('a rejected edit leaves the file and backup untouched', () => {

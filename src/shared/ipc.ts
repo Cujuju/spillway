@@ -46,6 +46,8 @@ export interface DesktopApi {
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
+  /** All of one day's attempts, newest first; for orders the database can't page. */
+  activityDay(day: string, failedOnly: boolean): Promise<StoredActivityEvent[]>;
   /** Each local day with stored requests, newest first. */
   activityDaySummaries(): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
@@ -131,6 +133,7 @@ export const INVOKE = {
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',
+  activityDay: 'activity:day',
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
   activityBuckets: 'activity:buckets',

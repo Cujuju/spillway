@@ -7,7 +7,7 @@ import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
-import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
+import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
 import { exportLoginFile, importLoginFiles } from './credentialFiles';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
@@ -37,24 +37,12 @@ function credentialName(id: string): string {
 
 const keys = () => ({ clientApiKey: getSecrets().clientApiKey, managementKey: getSecrets().managementKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
 
-const codexAccountEmail = () => usage.latest()?.credentials.find((c) => c.provider === 'codex' && c.accountView)?.email ?? null;
-const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey, codexAccountEmail: codexAccountEmail() });
-/** Keeps applied client logins naming the account the proxy routes to; called on every usage snapshot. */
-export function syncClientLogins(): void {
-  const files = clientConfigFiles();
-  for (const client of CLIENT_IDS) {
-    try {
-      syncCompanion(client, files[client], clientTarget());
-    } catch (err) {
-      console.error(`[client-setup] ${client} login sync failed:`, err instanceof Error ? err.message : err);
-    }
-  }
-}
+const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey });
 const clientStatuses = () => {
   const files = clientConfigFiles();
   return CLIENT_IDS.map((c) => clientStatus(c, files[c], clientTarget()));
 };
-/** A running Codex keeps its old URLs but reloads auth.json, then sends one side's login to the other. */
+/** A running Codex keeps its old URLs until restarted. */
 async function setupResult(client: ClientId) {
   return { statuses: clientStatuses(), restart: client === 'codex' ? await runningCodexApps() : [] };
 }
@@ -147,6 +135,7 @@ const handlers: Handlers = {
   installUpdate: async () => {
     // The installer replaces the bundled proxy binary, which a running proxy keeps locked.
     if (updates.status().state === 'ready') await proxy.stop();
+  activityDay: (day, failedOnly) => activityLog.day(day, failedOnly),
     await updates.install();
   },
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),

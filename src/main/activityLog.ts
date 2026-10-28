@@ -1,8 +1,9 @@
 import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
+import { inScope, normalizeScope, type AccountScope } from '@shared/activityScope';
 import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
-import { DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
+import { ACCOUNT_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 
@@ -55,7 +56,12 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
   const before = q?.before ?? null;
   if (day !== null && (typeof day !== 'string' || !DAY_KEY.test(day))) return null;
   if (before !== null && !Number.isSafeInteger(before)) return null;
-  return { day, failedOnly: q?.failedOnly === true, before };
+  return { day, failedOnly: q?.failedOnly === true, accounts: normalizeScope(q?.accounts), before };
+}
+
+/** SQL condition limiting requests to `scope`'s accounts; null when every account is in scope. */
+function scopeClause(scope: AccountScope): { sql: string; params: string[] } | null {
+  return scope === null ? null : { sql: `${ACCOUNT_KEY_SQL} IN (${scope.map(() => '?').join(', ')})`, params: scope };
 }
 
 /**
@@ -108,6 +114,11 @@ class ActivityLog {
       params.push(q.day);
     }
     if (q.failedOnly) where.push('failed = 1');
+    const accounts = scopeClause(q.accounts);
+    if (accounts) {
+      where.push(accounts.sql);
+      params.push(...accounts.params);
+    }
     if (q.before !== null) {
       where.push('id < ?');
       params.push(q.before);
@@ -118,11 +129,15 @@ class ActivityLog {
     return { events: rows.slice(0, ACTIVITY_PAGE_SIZE).map(toStored), more: rows.length > ACTIVITY_PAGE_SIZE };
   }
 
-  /** Each stored day, newest first; cost comes from the day's totals. */
-  daySummaries(): ActivityDaySummary[] {
-    const rows = this.db.prepare('SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests GROUP BY day ORDER BY day DESC').all() as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
+  /** Each day with stored requests from `accounts`, newest first; cost comes from the day's totals. */
+  daySummaries(accounts: AccountScope = null): ActivityDaySummary[] {
+    const scope = normalizeScope(accounts);
+    const clause = scopeClause(scope);
+    const sql = `SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests ${clause ? `WHERE ${clause.sql}` : ''} GROUP BY day ORDER BY day DESC`;
+    const rows = this.db.prepare(sql).all(...(clause?.params ?? [])) as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
     const cost = new Map<string, Pick<ActivityDaySummary, 'costUsd' | 'unpricedRequests'>>();
     for (const t of this.totalsList()) {
+      if (!inScope(scope, t.authIndex)) continue;
       const c = cost.get(t.day) ?? { costUsd: 0, unpricedRequests: 0 };
       c.costUsd += t.costUsd;
       c.unpricedRequests += t.unpricedRequests;
@@ -136,11 +151,12 @@ class ActivityLog {
     return (this.db.prepare('SELECT DISTINCT day FROM requests ORDER BY day DESC').all() as { day: string }[]).map((r) => r.day);
   }
 
-  /** All of one day's requests, newest first. */
-  day(day: string, failedOnly = false): StoredActivityEvent[] {
+  /** All of one day's requests from `accounts`, newest first. */
+  day(day: string, failedOnly = false, accounts: AccountScope = null): StoredActivityEvent[] {
     if (typeof day !== 'string' || !DAY_KEY.test(day)) return [];
-    const sql = `SELECT id, event FROM requests WHERE day = ?${failedOnly === true ? ' AND failed = 1' : ''} ORDER BY id DESC`;
-    return (this.db.prepare(sql).all(day) as RequestRow[]).map(toStored);
+    const clause = scopeClause(normalizeScope(accounts));
+    const sql = `SELECT id, event FROM requests WHERE day = ?${failedOnly === true ? ' AND failed = 1' : ''}${clause ? ` AND ${clause.sql}` : ''} ORDER BY id DESC`;
+    return (this.db.prepare(sql).all(day, ...(clause?.params ?? [])) as RequestRow[]).map(toStored);
   }
 
   totalsList(): ActivityDayTotal[] {

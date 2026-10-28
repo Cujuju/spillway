@@ -1,4 +1,5 @@
 /** IPC contract shared by main, preload and renderer. */
+import type { AccountScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 
 export type ProviderId = string;
@@ -189,6 +190,7 @@ export interface ActivityPageQuery {
   /** Local day, YYYY-MM-DD; null for every stored day. */
   day: string | null;
   failedOnly: boolean;
+  accounts: AccountScope;
   /** Return attempts older than this id; null for the newest. */
   before: number | null;
 }

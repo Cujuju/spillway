@@ -2,6 +2,7 @@ import Database from 'better-sqlite3-multiple-ciphers';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { withCountsFilled } from '@shared/activityCounts';
+import { NO_ACCOUNT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
 
 export type Db = Database.Database;
@@ -19,11 +20,15 @@ const LEGACY_DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
 const LEGACY_TOTALS_FILE = 'daily-totals.json';
 const LEGACY_IMPORTED = 'legacy-files-imported';
 
+/** A request's account key (accountKey in activityScope.ts); queries must use this exact text to use its index. */
+export const ACCOUNT_KEY_SQL = `coalesce(json_extract(event, '$.authIndex'), '${NO_ACCOUNT_KEY}')`;
+
 /** Rows are ordered by id, the order Spillway recorded them, which also pages the list. */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, failed INTEGER NOT NULL, event TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS requests_by_day ON requests (day, id);
 CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
+CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
 CREATE TABLE IF NOT EXISTS day_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;

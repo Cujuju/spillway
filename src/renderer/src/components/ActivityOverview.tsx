@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Show } from 'solid-js';
+import { inScope, type AccountScope } from '@shared/activityScope';
 import { bucketStarts, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
@@ -23,13 +24,14 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
   );
 }
 
-/** Range and totals stay on top; the charts below are tiles the user arranges. */
-export function ActivityOverview() {
+/** Range and totals for `accounts` stay on top; the charts below are tiles the user arranges. */
+export function ActivityOverview(props: { accounts: AccountScope }) {
   const [range, setRange] = persistedSignal<Range>('activity.range', '7d', RANGE_OPTIONS.map((o) => o.value));
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
 
   const starts = createMemo(() => bucketStarts(range(), now()));
-  const scoped = createMemo(() => inRange(activityBuckets(), starts()));
+  const rows = createMemo(() => activityBuckets().filter((r) => inScope(props.accounts, r.authIndex)));
+  const scoped = createMemo(() => inRange(rows(), starts()));
   const total = createMemo(() => summarize(scoped()));
   const points = createMemo(() => series(scoped(), starts(), now()));
   const models = createMemo(() => byModel(scoped()));
@@ -43,7 +45,7 @@ export function ActivityOverview() {
   };
   const data: ActivityData = {
     points,
-    rows: activityBuckets,
+    rows,
     now,
     models,
     total,

@@ -1,4 +1,5 @@
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
+import type { AccountScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
@@ -47,9 +48,9 @@ export interface DesktopApi {
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
   /** All of one day's attempts, newest first; for orders the database can't page. */
-  activityDay(day: string, failedOnly: boolean): Promise<StoredActivityEvent[]>;
-  /** Each local day with stored requests, newest first. */
-  activityDaySummaries(): Promise<ActivityDaySummary[]>;
+  activityDay(day: string, failedOnly: boolean, accounts: AccountScope): Promise<StoredActivityEvent[]>;
+  /** Each local day with stored requests from `accounts`, newest first. */
+  activityDaySummaries(accounts: AccountScope): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
   /** Hourly activity for the last `days` local days, today included; expired days as daily totals. */
   activityBuckets(days: number): Promise<ActivityBucket[]>;

@@ -287,3 +287,76 @@ th[aria-sort] .sort-btn {
   font-size: var(--text-xs);
   line-height: var(--leading-body);
 }
+
+/* ── Account filter: a header button and the popover list under it ── */
+.account-filter-btn {
+  /* Long account names truncate rather than push the view tabs off the row. */
+  --account-filter-max-width: 220px;
+  anchor-name: --account-filter;
+  max-width: var(--account-filter-max-width);
+  font-size: var(--text-body);
+}
+.account-menu {
+  /* Wide enough for an email; tall enough for about a dozen accounts before it scrolls. */
+  --account-menu-width: 280px;
+  --account-menu-max-height: 420px;
+  position-anchor: --account-filter;
+  position-area: bottom span-left;
+  position-try-fallbacks: flip-block;
+  inset: auto;
+  margin: var(--spacing-1) 0;
+  width: var(--account-menu-width);
+  max-height: min(var(--account-menu-max-height), calc(100vh - 2 * var(--page-pad)));
+  overflow-y: auto;
+  padding: var(--spacing-1);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--shadow-floating);
+  font-size: var(--text-body);
+}
+.account-menu input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+.account-menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.account-menu-row:hover {
+  background: var(--color-row-hover);
+}
+.account-menu-all,
+.account-menu-provider {
+  font-weight: 600;
+}
+.account-menu-group {
+  margin-top: var(--spacing-1);
+  padding-top: var(--spacing-1);
+  border-top: var(--border-width) solid var(--color-border);
+}
+.account-menu-account {
+  padding-left: var(--spacing-6);
+}
+.account-menu-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+/* "Only" shows on the hovered or focused row, so the list reads as names. */
+.account-menu-only {
+  visibility: hidden;
+}
+.account-menu-account:hover .account-menu-only,
+.account-menu-only:focus-visible {
+  visibility: visible;
+}

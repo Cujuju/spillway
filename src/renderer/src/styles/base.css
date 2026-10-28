@@ -52,6 +52,13 @@ a {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* Rounded scroll containers set --corner-radius; the track stops short of the curve so the thumb never clips into it. */
+::-webkit-scrollbar-track:vertical {
+  margin-block: var(--corner-radius, 0px);
+}
+::-webkit-scrollbar-track:horizontal {
+  margin-inline: var(--corner-radius, 0px);
+}
 
 .tabular {
   font-variant-numeric: tabular-nums;

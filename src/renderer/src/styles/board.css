@@ -53,6 +53,8 @@
   margin-left: 0;
 }
 .board-tile-body {
+  /* Square corners inside the tile's padding: no inherited scrollbar inset. */
+  --corner-radius: 0px;
   flex: 1;
   min-height: 0;
   overflow: auto;

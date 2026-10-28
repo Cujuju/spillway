@@ -175,7 +175,8 @@
   --card-pad: var(--spacing-4);
   background: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-card);
+  --corner-radius: var(--radius-card);
+  border-radius: var(--corner-radius);
   padding: var(--card-pad);
 }
 /* Its content (a table) sets its own inset. */
@@ -288,7 +289,8 @@
   overflow-y: auto;
   background: var(--color-surface-raised);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-card);
+  --corner-radius: var(--radius-card);
+  border-radius: var(--corner-radius);
   box-shadow: var(--shadow-floating);
   /* The page inset. The title is trimmed to its caps, so the top inset is the visible gap. */
   padding: var(--page-pad);

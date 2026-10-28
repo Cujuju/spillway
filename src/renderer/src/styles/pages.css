@@ -153,7 +153,8 @@
   word-break: break-all;
   background: var(--color-surface-sunken);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-btn);
+  --corner-radius: var(--radius-btn);
+  border-radius: var(--corner-radius);
   padding: var(--spacing-2) var(--spacing-2_5);
 }
 .log-err {

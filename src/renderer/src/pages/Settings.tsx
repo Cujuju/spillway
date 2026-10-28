@@ -1,6 +1,6 @@
 import { FolderOpen } from 'lucide-solid';
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
-import type { ApiKeyOrder, AppSettings, RoutingStrategy } from '@shared/settings';
+import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
@@ -27,6 +27,11 @@ const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
 const API_KEY_ORDERS: readonly { value: ApiKeyOrder; label: string; help: string }[] = [
   { value: 'last', label: 'Use last', help: 'Subscriptions first. API keys take over while every subscription is limited, until one recovers.' },
   { value: 'first', label: 'Use first', help: 'API keys first. Subscriptions take over while every API key is limited or off, until one recovers.' },
+];
+
+const SERVER_ERROR_ACTIONS: readonly { value: ServerErrorAction; label: string; help: string }[] = [
+  { value: 'stay', label: 'Stay', help: 'Overloads, 5xx errors and dropped connections go back to the client, which retries on the same account. The conversation keeps its prompt cache.' },
+  { value: 'switch', label: 'Switch account', help: 'Retry on another account. The conversation moves there and its prompt cache starts over; the failed account rests for a minute.' },
 ];
 
 type Draft = AppSettings;
@@ -98,7 +103,10 @@ function ProxySection() {
             <NumberField value={p().sessionAffinityTtlMinutes} unit="min" onCommit={(v) => set((d) => void (d.proxy.sessionAffinityTtlMinutes = v))} />
           </SettingRow>
         </Show>
-        <SettingRow label="First-byte timeout" help="A stream that sends nothing for this long is cancelled and retried on another account. 0 turns it off.">
+        <SettingRow label="On server errors" help={SERVER_ERROR_ACTIONS.find((o) => o.value === p().serverErrors)?.help}>
+          <Seg value={p().serverErrors} options={SERVER_ERROR_ACTIONS} onChange={(v) => set((d) => void (d.proxy.serverErrors = v))} />
+        </SettingRow>
+        <SettingRow label="First-byte timeout" help="A stream that sends nothing for this long is cancelled and handled as a server error. 0 turns it off.">
           <NumberField value={p().firstByteTimeoutSeconds} unit="s" onCommit={(v) => set((d) => void (d.proxy.firstByteTimeoutSeconds = v))} />
         </SettingRow>
       </SettingsGroup>

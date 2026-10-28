@@ -156,6 +156,7 @@ const handlers: Handlers = {
   activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),
   clearActivity: () => activityLog.clear(),
   conversationNames: (sessionIds) => conversationNames.names(sessionIds),
+  moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);
     await shell.openExternal(start.url);

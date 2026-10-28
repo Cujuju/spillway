@@ -7,6 +7,8 @@ import { DEFAULT_WINDOW_START, normalizeWindowStart, type WindowStartSettings } 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
 /** Whether API keys are routed to before or after subscription logins. */
 export type ApiKeyOrder = 'first' | 'last';
+/** What a provider server error (overload, 5xx, dropped connection) does: stay on the account or switch to another. */
+export type ServerErrorAction = 'stay' | 'switch';
 export type TrayIconScope = 'active' | 'pool' | 'lowest' | 'account';
 export type TrayIconValue = 'remaining' | 'used';
 /** 'none' draws the digits alone. */
@@ -56,7 +58,8 @@ export interface AppSettings {
     /** Empty = bundled binary. */
     executablePath: string;
     restartOnCrash: boolean;
-    /** Fail over when an upstream stream sends nothing for this long; 0 = never. */
+    serverErrors: ServerErrorAction;
+    /** Cancel an upstream stream that sends nothing for this long, then treat it as a server error; 0 = never. */
     firstByteTimeoutSeconds: number;
     /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
     preferredAccounts: Record<string, string>;
@@ -133,6 +136,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     sessionAffinity: true,
     // Upstream default session-affinity-ttl is 1h.
     sessionAffinityTtlMinutes: 60,
+    // Every account reaches the same provider servers, so switching on a server error only loses the prompt cache.
+    serverErrors: 'stay',
     executablePath: '',
     restartOnCrash: true,
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
@@ -175,6 +180,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const STRATEGIES: readonly RoutingStrategy[] = ['soonest-reset', 'fill-first', 'round-robin', 'weighted-round-robin'];
 const API_KEY_ORDERS: readonly ApiKeyOrder[] = ['first', 'last'];
+const SERVER_ERROR_ACTIONS: readonly ServerErrorAction[] = ['stay', 'switch'];
 const SCOPES: readonly TrayIconScope[] = ['active', 'pool', 'lowest', 'account'];
 const SORTS = ['reset', 'usage', 'name'] as const;
 const SHAPES: readonly TrayIconShape[] = ['square', 'rounded', 'circle', 'none'];
@@ -233,6 +239,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       apiKeyOrder: pick(p.apiKeyOrder, API_KEY_ORDERS, d.proxy.apiKeyOrder),
       sessionAffinity: bool(p.sessionAffinity, d.proxy.sessionAffinity),
       sessionAffinityTtlMinutes: int(p.sessionAffinityTtlMinutes, d.proxy.sessionAffinityTtlMinutes, 1, MAX_AFFINITY_MINUTES),
+      serverErrors: pick(p.serverErrors, SERVER_ERROR_ACTIONS, d.proxy.serverErrors),
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
@@ -275,7 +282,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
 /** Settings written to config.yaml that a running proxy reloads live. */
 export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
   return a.proxy.strategy !== b.proxy.strategy || a.proxy.apiKeyOrder !== b.proxy.apiKeyOrder || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
-    a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds;
+    a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds ||
+    a.proxy.serverErrors !== b.proxy.serverErrors;
 }
 
 /** Settings whose change requires the proxy to be restarted to take effect. */

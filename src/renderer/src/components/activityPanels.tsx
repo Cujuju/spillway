@@ -1,13 +1,14 @@
 import type { TileSize } from '@cujuju/solidjs-tiling-window-manager';
 import type { JSX } from 'solid-js';
 import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard';
+import { accountKey } from '@shared/activityScope';
 import type { ActivityBucket } from '@shared/types';
-import { metricValue, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
+import { metricValue, type AccountRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { axisMetric, countRows, formatMetric, metricLabel } from './activityFormat';
 import type { TipRow } from './ChartTip';
-import { ModelTable } from './ModelTable';
+import { BreakdownTable } from './BreakdownTable';
 import { TrendChart } from './TrendChart';
 
 /** The hit rate sits near 100% most of the time; 0/50/100% lines are enough. */
@@ -20,6 +21,9 @@ export interface ActivityData {
   rows: () => ActivityBucket[];
   now: () => number;
   models: () => ModelRow[];
+  accounts: () => AccountRow[];
+  /** Display name for an account, masked when "Show emails" is off. */
+  account: (authIndex: string | null) => string;
   total: () => Summary;
   /** "Hourly", "Daily" … for the range. */
   bucketNote: () => string;
@@ -72,7 +76,19 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'Models',
     hasMetric: true,
     minSize: { width: 420, height: 170 },
-    body: (spec, data) => <ModelTable models={data.models()} total={data.total()} metric={spec().metric} />,
+    body: (spec, data) => (
+      <BreakdownTable heading="Model" metric={spec().metric} total={data.total()}
+        rows={data.models().map((m) => ({ key: `${m.provider}|${m.model}`, provider: m.provider, name: m.model, summary: m.summary }))} />
+    ),
+  },
+  accounts: {
+    title: () => 'Accounts',
+    hasMetric: true,
+    minSize: { width: 420, height: 170 },
+    body: (spec, data) => (
+      <BreakdownTable heading="Account" metric={spec().metric} total={data.total()}
+        rows={data.accounts().map((a) => ({ key: accountKey(a.authIndex), provider: a.provider, name: data.account(a.authIndex), summary: a.summary }))} />
+    ),
   },
 };
 
@@ -84,4 +100,5 @@ export const ADD_CHOICES: { label: string; spec: ActivityPanelSpec }[] = [
   { label: 'Cache hit rate', spec: { kind: 'cache', metric: 'cost' } },
   { label: 'By hour', spec: { kind: 'heatmap', metric: 'cost' } },
   { label: 'Models', spec: { kind: 'models', metric: 'cost' } },
+  { label: 'Accounts', spec: { kind: 'accounts', metric: 'cost' } },
 ];

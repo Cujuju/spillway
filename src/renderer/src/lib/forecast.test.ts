@@ -21,7 +21,7 @@ const win = (
 });
 const account = (id: string, windows: LimitWindow[], patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
-  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, accountView: false, preferred: false,
+  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan: null, resetCredits: null, windows, ...patch,
 });
 /** Weekly account with an idle 5-hour window: `used` percent, resetting `resetIn` from NOW. */

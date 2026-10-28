@@ -107,7 +107,6 @@ function parseCredential(raw: unknown): Credential | null {
     observedAt: s(c.observed_at),
     lastUsedAt: s(c.last_used_at),
     nextPick: c.next_pick === true,
-    accountView: c.account_view === true,
     preferred: c.preferred === true,
     weight: n(c.weight) ?? DEFAULT_WEIGHT,
     plan: parsePlan(c.plan),

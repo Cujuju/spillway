@@ -4,7 +4,7 @@ import { percentText, readTray, shownPercent, thresholdInUnit, trayIconText, tra
 
 const cred = (id: string, used: number, patch: Partial<Credential> = {}): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
-  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, accountView: false, preferred: false, weight: 1, plan: null, resetCredits: null,
+  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null, resetCredits: null,
   windows: [{ key: 'five_hour', label: '5-hour', usedPercent: used, resetsAt: `2026-10-25T0${used % 9}:00:00Z`, status: 'allowed', durationMs: null, scoped: false, resetCadence: null }],
   ...patch,
 });

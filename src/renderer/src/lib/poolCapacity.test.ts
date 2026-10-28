@@ -9,7 +9,7 @@ const MAX_5X: CredentialPlan = { tier: 'default_claude_max_5x', label: 'Max 5x',
 const PRO: CredentialPlan = { tier: 'default_claude_ai', label: 'Pro', multiplier: 1 };
 const account = (id: string, plan: CredentialPlan | null): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
-  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, accountView: false, preferred: false,
+  status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan, resetCredits: null,
   windows: [
     { key: 'five_hour', label: '5-hour', usedPercent: 0, resetsAt: null, status: 'allowed', durationMs: 5 * H, scoped: false, resetCadence: 'on_use' },

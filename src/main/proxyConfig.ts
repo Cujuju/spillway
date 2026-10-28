@@ -46,6 +46,8 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
+    // Only quota and login failures move a conversation; a 5xx or timeout fails over for that request alone.
+    [['routing', 'session-affinity-rebind-on'], 'quota'],
     // A restart keeps conversations on their account (prompt cache) and limited accounts benched.
     [['routing', 'session-affinity-persist'], true],
     [['routing', 'cooldown', 'save-cooldown-status'], true],

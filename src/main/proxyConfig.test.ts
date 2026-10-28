@@ -23,7 +23,7 @@ describe('buildProxyConfig', () => {
     expect(cfg['config-version']).toBe(8);
     expect(cfg.server).toEqual({ host: '127.0.0.1', port: 8317 });
     expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-auth-kind': 'oauth', 'session-affinity': true, 'session-affinity-ttl': '60m',
-      'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
+      'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
     expect(cfg.access['api-keys']).toEqual(appKeys);

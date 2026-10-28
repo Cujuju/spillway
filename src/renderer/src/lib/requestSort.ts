@@ -11,7 +11,7 @@ type Account = (authIndex: string | null) => string;
 export interface RequestColumn {
   key: SortKey;
   label: string;
-  /** Numbers align right and sort largest first on the first click; text sorts A to Z. */
+  /** Numbers align right. */
   num: boolean;
   title?: string;
   /** Null (no price, no first token) sorts last in either direction. */
@@ -40,11 +40,10 @@ export const isRecordedOrder = (s: RequestSort) => s.key === DEFAULT_SORT.key &&
 export const isRequestSort = (v: unknown): v is RequestSort =>
   !!v && typeof v === 'object' && REQUEST_COLUMNS.some((c) => c.key === (v as RequestSort).key) && typeof (v as RequestSort).desc === 'boolean';
 
-/** Clicking the sorted column flips it; another column starts at its natural direction (time and numbers largest first). */
+/** Clicks on a column step through ascending, descending, then back to the default. Newest first is the default, so Time just flips. */
 export function nextSort(current: RequestSort, key: SortKey): RequestSort {
-  if (current.key === key) return { key, desc: !current.desc };
-  const col = REQUEST_COLUMNS.find((c) => c.key === key)!;
-  return { key, desc: col.num || key === 'time' };
+  if (current.key !== key || isRecordedOrder(current)) return { key, desc: false };
+  return current.desc ? DEFAULT_SORT : { key, desc: true };
 }
 
 /** Sorted copy; rows without a value go last, and ties keep newest first. */

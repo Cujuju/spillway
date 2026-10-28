@@ -27,10 +27,19 @@ describe('sortRequests', () => {
 });
 
 describe('nextSort', () => {
-  it('flips the sorted column and starts others at their natural direction', () => {
+  it('steps a column through ascending, descending, then the default', () => {
+    const up = nextSort(DEFAULT_SORT, 'cost');
+    expect(up).toEqual({ key: 'cost', desc: false });
+    const down = nextSort(up, 'cost');
+    expect(down).toEqual({ key: 'cost', desc: true });
+    expect(nextSort(down, 'cost')).toEqual(DEFAULT_SORT);
+  });
+  it('starts another column ascending', () => {
+    expect(nextSort({ key: 'cost', desc: true }, 'account')).toEqual({ key: 'account', desc: false });
+  });
+  it('flips Time between oldest first and the default', () => {
     expect(nextSort(DEFAULT_SORT, 'time')).toEqual({ key: 'time', desc: false });
-    expect(nextSort(DEFAULT_SORT, 'cost')).toEqual({ key: 'cost', desc: true });
-    expect(nextSort(DEFAULT_SORT, 'account')).toEqual({ key: 'account', desc: false });
+    expect(nextSort({ key: 'time', desc: false }, 'time')).toEqual(DEFAULT_SORT);
   });
   it('pages from the database only in recorded order', () => {
     expect(isRecordedOrder(DEFAULT_SORT)).toBe(true);

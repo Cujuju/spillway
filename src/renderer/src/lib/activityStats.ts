@@ -1,5 +1,6 @@
 import type { ActivityMetric } from '@shared/activityBoard';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
+import { accountKey } from '@shared/activityScope';
 import { promptTokens } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityCounts } from '@shared/types';
 
@@ -93,17 +94,33 @@ export interface ModelRow {
   summary: Summary;
 }
 
-/** Per provider and model, costliest first, then by tokens. */
-export function byModel(rows: ActivityBucket[]): ModelRow[] {
+export interface AccountRow {
+  provider: string;
+  authIndex: string | null;
+  summary: Summary;
+}
+
+/** Sums rows sharing a key, costliest first, then by tokens; `first` is any row of the group. */
+function groupSummaries(rows: ActivityBucket[], keyOf: (r: ActivityBucket) => string): { first: ActivityBucket; summary: Summary }[] {
   const groups = new Map<string, ActivityBucket[]>();
   for (const r of rows) {
-    const key = `${r.provider}|${r.model}`;
-    groups.set(key, [...(groups.get(key) ?? []), r]);
+    const key = keyOf(r);
+    const group = groups.get(key);
+    if (group) group.push(r);
+    else groups.set(key, [r]);
   }
   return [...groups.values()]
-    .map((g) => ({ provider: g[0]!.provider, model: g[0]!.model, summary: summarize(g) }))
+    .map((g) => ({ first: g[0]!, summary: summarize(g) }))
     .sort((a, b) => b.summary.costUsd - a.summary.costUsd || b.summary.totalTokens - a.summary.totalTokens);
 }
+
+/** Per provider and model, costliest first, then by tokens. */
+export const byModel = (rows: ActivityBucket[]): ModelRow[] =>
+  groupSummaries(rows, (r) => `${r.provider}|${r.model}`).map(({ first, summary }) => ({ provider: first.provider, model: first.model, summary }));
+
+/** Per account, costliest first, then by tokens. An authIndex belongs to one provider. */
+export const byAccount = (rows: ActivityBucket[]): AccountRow[] =>
+  groupSummaries(rows, (r) => accountKey(r.authIndex)).map(({ first, summary }) => ({ provider: first.provider, authIndex: first.authIndex, summary }));
 
 export type HeatMode = 'week' | 'rhythm';
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
-import { bucketStarts, byModel, heatGrid, series, summarize } from './activityStats';
+import { bucketStarts, byAccount, byModel, heatGrid, series, summarize } from './activityStats';
 
 // Local-clock times so bucket edges don't depend on the test machine's zone.
 const NOW = new Date(2026, 9, 26, 14, 30).getTime();
@@ -41,6 +41,16 @@ describe('byModel', () => {
   it('groups by provider and model, costliest first', () => {
     const models = byModel([row(NOW, { model: 'a', costUsd: 1 }), row(NOW, { model: 'b', costUsd: 3 }), row(NOW, { model: 'a', costUsd: 1 })]);
     expect(models.map((m) => [m.model, m.summary.requests])).toEqual([['b', 1], ['a', 2]]);
+  });
+});
+
+describe('byAccount', () => {
+  it('groups by account across models, costliest first, keeping requests without one', () => {
+    const accounts = byAccount([
+      row(NOW, { authIndex: 'a', model: 'x', costUsd: 1 }), row(NOW, { authIndex: 'b', costUsd: 5 }),
+      row(NOW, { authIndex: 'a', model: 'y', costUsd: 1 }), row(NOW, { authIndex: null, costUsd: 0.5 }),
+    ]);
+    expect(accounts.map((a) => [a.authIndex, a.summary.requests])).toEqual([['b', 1], ['a', 2], [null, 1]]);
   });
 });
 

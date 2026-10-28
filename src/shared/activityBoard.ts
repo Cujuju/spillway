@@ -1,6 +1,6 @@
 /** The Activity page's chart tiles: which charts exist and how they are tiled. */
 
-export const ACTIVITY_PANEL_KINDS = ['trend', 'cache', 'heatmap', 'models'] as const;
+export const ACTIVITY_PANEL_KINDS = ['trend', 'cache', 'heatmap', 'models', 'accounts'] as const;
 export type ActivityPanelKind = (typeof ACTIVITY_PANEL_KINDS)[number];
 export const ACTIVITY_METRICS = ['cost', 'tokens', 'requests'] as const;
 export type ActivityMetric = (typeof ACTIVITY_METRICS)[number];

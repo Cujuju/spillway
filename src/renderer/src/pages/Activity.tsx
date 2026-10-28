@@ -47,7 +47,7 @@ export function Activity() {
       </Show>
 
       <Show when={view() === 'overview'}>
-        <ActivityOverview accounts={accounts()} />
+        <ActivityOverview accounts={accounts()} account={accountName} />
       </Show>
       <Show when={view() === 'totals'}>
         <ActivityTotals account={accountName} accounts={accounts()} />

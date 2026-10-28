@@ -69,9 +69,6 @@ export function AccountRow(props: { credential: Credential }) {
           <Show when={limitedUnshown()}>
             <div class="back">Limited · <ResetTime at={c().cooldownUntil!} now={now()} /></div>
           </Show>
-          <Show when={c().statusMessage && !limitedUnshown()}>
-            <div class="truncate" title={c().statusMessage!}>{c().statusMessage}</div>
-          </Show>
           <Show when={lastUsed()}>
             <div>{lastUsed()}</div>
           </Show>

@@ -36,15 +36,16 @@ Spillway lets you use several of your own subscription accounts without signing 
 | Account logins (OAuth tokens) | `proxy/auths/*.json`, unencrypted | act as that account at the provider until the login is revoked |
 | Management key | `secrets.bin` (encrypted); the proxy keeps only a hash | read every account login (auth-file download, `api-call` with any account's token) and change the proxy's config, from this machine only |
 | Supervisor password | the proxy's environment, new each launch, never on disk | the same as the management key |
-| Client key | `secrets.bin`, and in plain text in `~/.claude/settings.json`, `~/.codex/auth.json` (the pool login) and anywhere you paste it | spend every pooled account's quota, and use the routed Codex account's Codex features: usage, plan, reset credits, cloud tasks, environments, plugins, file uploads |
+| Client key | `secrets.bin`, and in plain text in `~/.claude/settings.json` and anywhere you paste it | spend every pooled account's quota |
+| Codex's own ChatGPT login | `~/.codex/auth.json`, written by Codex | its usual ChatGPT access, and, while that account is in the pool, the client key's access too |
 
-The client key can't reach the rest of a ChatGPT account. The proxy forwards only the account calls Codex makes (listed in the fork's `docs/desktop-api.md`) and refuses conversations, memories, account settings and file downloads.
+The client key can't reach a ChatGPT account's data. Codex's account calls (usage, plan, plugins, cloud tasks) go to chatgpt.com with Codex's own login; the proxy serves only model, image and search calls, plus Codex's model list.
 
 ### Exposure
 
 - **Network.** The proxy listens on 127.0.0.1. **Allow LAN connections** makes it listen on every interface over plain HTTP: the client key crosses the network unencrypted, and anyone who has it can use the pool. Management stays local-only either way.
 - **This machine.** Any program running as you can read the account logins and the client key. Spillway doesn't defend against malware on your machine.
-- **Codex account calls.** They act as whichever Codex account routing picks, so cloud tasks and plugins can land on different accounts, and the client key reaches that account's Codex data. Pool only your own accounts.
+- **Codex accounts.** Codex's model calls run on whichever pooled account routing picks, not necessarily the one Codex is signed in to. Pool only your own accounts.
 - **Outside tools.** T3 Code's usage hub gets the management key, so it can read every account login.
 - **Logs.** Failed requests are logged with their full request body (prompts and code) in `proxy/auths/logs/`. The Activity page's history stores only metadata (account, model, status, tokens, timing).
 - **Custom proxy executable.** It runs with every account login. Point it only at a build you trust.
@@ -82,15 +83,13 @@ The Proxy page shows the endpoint and the client key. **Apply** writes them into
 | Client | File | Apply sets |
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_CUSTOM_HEADERS` (`X-Api-Key: <client key>`), and removes `env.ANTHROPIC_AUTH_TOKEN` |
-| Codex | `~/.codex/config.toml` (or `$CODEX_HOME`) | root `openai_base_url = "<endpoint>/backend-api/codex"`, `chatgpt_base_url = "<endpoint>/backend-api/"` and `cli_auth_credentials_store = "file"` at the top |
-| Codex login | `auth.json` beside `config.toml` | the pool login (see below) |
+| Codex | `~/.codex/config.toml` (or `$CODEX_HOME`) | root `openai_base_url = "<endpoint>/backend-api/codex"` at the top |
 
 - The first Apply copies the file to `<file>.spillway-backup` (an empty backup when the file did not exist). Undo removes the backup.
 - Claude Code: the key goes in a header so Claude Code keeps its subscription login (it must stay signed in; requests still use the proxy's accounts). In token mode it ignores usage-limit headers, so T3 Code can't snooze a thread until the reset. Apply keeps other `ANTHROPIC_CUSTOM_HEADERS` lines. Undo puts back only these variables' earlier values (or removes them); other edits made since stay.
-- Codex: the app's lines sit between `# >>> spillway` and `# <<< spillway` markers. Existing root `model_provider`, `openai_base_url`, `chatgpt_base_url` or `cli_auth_credentials_store` lines are commented out with `# spillway disabled: `; Undo removes the markers' blocks and restores those lines. Codex keeps its built-in OpenAI provider, pointed at the proxy: a custom provider loses the tools Codex offers only on that provider, such as image generation. A `model_provider` line would switch provider, so Apply turns it off. Apply replaces an older apply's `[model_providers.spillway]` block.
-- Codex login: Codex authenticates every proxy call with its `auth.json` token: model, image and search calls under `openai_base_url`, account calls (plan usage, rate-limit resets, plugins) under `chatgpt_base_url`. The proxy answers account calls as the pooled Codex account that requests route to, or the one that resets first when all are spent. Codex therefore needs no ChatGPT login of its own, and T3 Code's usage and snooze show the pool. Apply backs up your `auth.json` and writes a pool login whose token, derived from the client key, the proxy accepts. Undo restores your login unless you signed in again since. The pool login grants access to the proxy, like the client key.
-- Codex apps (ChatGPT connectors) don't work through the proxy: Codex sends its token to the apps server only on chatgpt.com, so the proxy answers those calls `401`. See [#24](https://github.com/Cujuju/spillway/issues/24).
-- A Codex process started before Apply or Undo keeps its old URLs but reloads `auth.json`, so it sends one side's login to the other and its calls fail. After either, the page names the apps running Codex (a dev Electron app by its project folder); restart them (in T3 Code, start a new Codex session).
+- Codex: the app's lines sit between `# >>> spillway` and `# <<< spillway` markers. Existing root `model_provider` or `openai_base_url` lines are commented out with `# spillway disabled: `; Undo removes the markers' blocks and restores those lines. Codex keeps its built-in OpenAI provider, pointed at the proxy: a custom provider loses the tools Codex offers only on that provider, such as image generation. A `model_provider` line would switch provider, so Apply turns it off. Apply replaces an older apply's `[model_providers.spillway]` block.
+- Codex login: Codex keeps its own ChatGPT login and sends it with every model call. The proxy accepts it when it is an unexpired auth.openai.com token for an account the proxy holds as a Codex credential, so Codex must be signed in to one of the pooled accounts. Account calls (usage, plan, plugins, apps) go to chatgpt.com directly. Apply and Undo remove the pool login earlier versions wrote to `auth.json`.
+- A Codex process started before Apply or Undo keeps its old URLs; the page names the apps running Codex (a dev Electron app by its project folder). Restart them (in T3 Code, start a new Codex session).
 - Changing the port or regenerating the key marks an applied client **Out of date**; Re-apply updates it. The app never rewrites these files on its own.
 - Codex edits are text-level, not parsed TOML: a multi-line string containing a line that starts with `[` or one of those root keys can be misread.
 

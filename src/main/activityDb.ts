@@ -20,6 +20,8 @@ const LEGACY_DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
 const LEGACY_TOTALS_FILE = 'daily-totals.json';
 const LEGACY_IMPORTED = 'legacy-files-imported';
 
+/** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
+export const CONVERSATION_KEY_SQL = `json_extract(event, '$.sessionId'), json_extract(event, '$.model')`;
 /** A request's account key (accountKey in activityScope.ts); queries must use this exact text to use its index. */
 export const ACCOUNT_KEY_SQL = `coalesce(json_extract(event, '$.authIndex'), '${NO_ACCOUNT_KEY}')`;
 
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS requests_by_day ON requests (day, id);
 CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
 CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
+CREATE INDEX IF NOT EXISTS requests_by_conversation ON requests (${CONVERSATION_KEY_SQL}, id);
 CREATE TABLE IF NOT EXISTS day_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;

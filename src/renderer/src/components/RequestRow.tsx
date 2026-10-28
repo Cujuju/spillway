@@ -2,6 +2,7 @@ import { Show } from 'solid-js';
 import { tokenCost } from '@shared/modelPrices';
 import { maskEmails } from '@shared/privacy';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
+import { conversationLabel, conversationName } from '../lib/conversationNames';
 import { usd } from '../lib/format';
 import { REQUEST_COLUMNS } from '../lib/requestSort';
 import { settings } from '../store';
@@ -25,6 +26,11 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
     const text = props.e.error ?? '';
     return settings().dashboard.showEmails ? text : maskEmails(text);
   };
+  /** The title (when known) and the full ID the proxy keys the conversation by. */
+  const conversationTitle = () => {
+    const id = props.e.sessionId;
+    return id ? [conversationName(id), id].filter(Boolean).join('\n') : undefined;
+  };
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>
@@ -34,6 +40,16 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
             <ProviderGlyph provider={props.e.provider} size="sm" />
             <span>{props.account(props.e.authIndex)} <span class="muted">· {props.e.model || '—'}</span></span>
           </div>
+        </td>
+        <td class="fill conversation-cell" title={conversationTitle()}>
+          <Show when={props.e.sessionId} fallback={<span class="muted">—</span>}>
+            <div class="cell-name">
+              <span>{conversationLabel(props.e.sessionId)}</span>
+              <Show when={props.e.movedFrom}>
+                {(from) => <span class="badge amber" title={`Moved from ${props.account(from())}; the prompt cache started over`}>moved</span>}
+              </Show>
+            </div>
+          </Show>
         </td>
         <td>
           <Show when={props.e.failed} fallback={<span class="badge green">OK</span>}>

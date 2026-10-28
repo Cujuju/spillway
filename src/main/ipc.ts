@@ -5,6 +5,7 @@ import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
+import { conversationNames } from './conversationNames';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
@@ -154,6 +155,7 @@ const handlers: Handlers = {
   activityTotals: () => activityLog.totalsList(),
   activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),
   clearActivity: () => activityLog.clear(),
+  conversationNames: (sessionIds) => conversationNames.names(sessionIds),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);
     await shell.openExternal(start.url);

@@ -4,6 +4,7 @@ import { localDay } from '@shared/activityCounts';
 import { inScope, type AccountScope } from '@shared/activityScope';
 import { ACTIVITY_PAGE_SIZE, type StoredActivityEvent } from '@shared/types';
 import type { DaySummaries } from '../lib/daySummaries';
+import { conversationLabel } from '../lib/conversationNames';
 import { dayLabel } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, sortRequests, type RequestSort } from '../lib/requestSort';
@@ -140,7 +141,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
             const summary = () => props.days.byDay().get(day);
             // Same object until this day's section changes, so other days' updates don't re-sort it.
             const own = createMemo(() => section(day));
-            const rows = createMemo(() => (isRecordedOrder(sort()) ? own().rows : sortRequests(own().rows, sort(), props.account).slice(0, own().shown)));
+            const rows = createMemo(() => (isRecordedOrder(sort()) ? own().rows : sortRequests(own().rows, sort(), { account: props.account, conversation: conversationLabel }).slice(0, own().shown)));
             const hasMore = () => !own().loaded || (isRecordedOrder(sort()) ? own().more : own().shown < own().rows.length);
             return (
               <tbody>

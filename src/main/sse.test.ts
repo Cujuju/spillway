@@ -20,7 +20,11 @@ describe('parseActivityEvent', () => {
       auth_index: 'a1', stream: true, failed: true, status_code: 529, error: 'overloaded', latency_ms: 50, input_tokens: 10,
       output_tokens: 0, cached_tokens: 0, cache_creation_tokens: 40,
     }));
-    expect(e).toMatchObject({ requestId: 'r1', cacheWriteTokens: 40, provider: 'claude', model: 'fable', failed: true, statusCode: 529, ttftMs: null });
+    expect(e).toMatchObject({ requestId: 'r1', cacheWriteTokens: 40, provider: 'claude', model: 'fable', failed: true, statusCode: 529, ttftMs: null, sessionId: null });
+  });
+
+  it('keeps the conversation the proxy keyed the request by', () => {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'r1', session_id: 'claude:abc' }))).toMatchObject({ sessionId: 'claude:abc', movedFrom: null });
   });
 
   it('rejects malformed events', () => {

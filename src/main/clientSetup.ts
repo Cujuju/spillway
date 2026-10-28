@@ -27,12 +27,15 @@ const EDITS: Record<ClientId, ClientEdit> = {
 
 export const CLIENT_IDS = Object.keys(EDITS) as ClientId[];
 
-/** Config file per client, honouring the overrides each client reads (CLAUDE_CONFIG_DIR, CODEX_HOME). */
+/** Home folder per client, honouring the overrides each client reads (CLAUDE_CONFIG_DIR, CODEX_HOME). */
+export function clientHomes(env: NodeJS.ProcessEnv = process.env, home = os.homedir()): Record<ClientId, string> {
+  return { claude: env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), codex: env.CODEX_HOME || path.join(home, '.codex') };
+}
+
+/** Config file per client. */
 export function clientConfigFiles(env: NodeJS.ProcessEnv = process.env, home = os.homedir()): Record<ClientId, string> {
-  return {
-    claude: path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'settings.json'),
-    codex: path.join(env.CODEX_HOME || path.join(home, '.codex'), 'config.toml'),
-  };
+  const homes = clientHomes(env, home);
+  return { claude: path.join(homes.claude, 'settings.json'), codex: path.join(homes.codex, 'config.toml') };
 }
 
 const read = (file: string): string | null => (existsSync(file) ? readFileSync(file, 'utf8') : null);

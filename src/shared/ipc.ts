@@ -2,7 +2,7 @@ import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList,
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityCount, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -46,10 +46,8 @@ export interface DesktopApi {
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
-  /** Stored attempts for one local day, or every day when null. */
-  activityCount(day: string | null): Promise<ActivityCount>;
-  /** Local days (YYYY-MM-DD) with stored requests, newest first. */
-  activityDays(): Promise<string[]>;
+  /** Each local day with stored requests, newest first. */
+  activityDaySummaries(): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
   /** Hourly activity for the last `days` local days, today included; expired days as daily totals. */
   activityBuckets(days: number): Promise<ActivityBucket[]>;
@@ -133,8 +131,7 @@ export const INVOKE = {
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',
-  activityCount: 'activity:count',
-  activityDays: 'activity:days',
+  activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
   activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',

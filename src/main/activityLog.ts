@@ -1,17 +1,10 @@
-import { addEvent, emptyCounts } from '@shared/activityCounts';
+import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
 import {
-  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityCount, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
+  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
 import { DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
-
-const pad = (n: number) => String(n).padStart(2, '0');
-/** Local calendar day, YYYY-MM-DD, so days match the user's clock. */
-export function localDay(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 /** Oldest local day inside the newest `retentionDays` days ending today. */
 export function oldestKeptDay(today: number, retentionDays: number): string {
@@ -125,10 +118,17 @@ class ActivityLog {
     return { events: rows.slice(0, ACTIVITY_PAGE_SIZE).map(toStored), more: rows.length > ACTIVITY_PAGE_SIZE };
   }
 
-  count(day: string | null): ActivityCount {
-    if (day !== null && (typeof day !== 'string' || !DAY_KEY.test(day))) return { requests: 0, failed: 0, newestId: 0 };
-    const sql = `SELECT count(*) AS requests, coalesce(sum(failed), 0) AS failed, coalesce(max(id), 0) AS newestId FROM requests${day === null ? '' : ' WHERE day = ?'}`;
-    return this.db.prepare(sql).get(...(day === null ? [] : [day])) as ActivityCount;
+  /** Each stored day, newest first; cost comes from the day's totals. */
+  daySummaries(): ActivityDaySummary[] {
+    const rows = this.db.prepare('SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests GROUP BY day ORDER BY day DESC').all() as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
+    const cost = new Map<string, Pick<ActivityDaySummary, 'costUsd' | 'unpricedRequests'>>();
+    for (const t of this.totalsList()) {
+      const c = cost.get(t.day) ?? { costUsd: 0, unpricedRequests: 0 };
+      c.costUsd += t.costUsd;
+      c.unpricedRequests += t.unpricedRequests;
+      cost.set(t.day, c);
+    }
+    return rows.map((r) => ({ ...r, ...(cost.get(r.day) ?? { costUsd: 0, unpricedRequests: 0 }) }));
   }
 
   /** Days with stored requests, newest first. */

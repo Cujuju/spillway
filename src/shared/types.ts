@@ -201,10 +201,11 @@ export interface ActivityPage {
   more: boolean;
 }
 
-export interface ActivityCount {
-  requests: number;
-  failed: number;
-  /** Newest attempt counted; 0 when none. Live attempts above it add to the count. */
+/** One stored day for the Requests list's section header. */
+export interface ActivityDaySummary extends Pick<ActivityCounts, 'requests' | 'failed' | 'costUsd' | 'unpricedRequests'> {
+  /** Local day, YYYY-MM-DD. */
+  day: string;
+  /** Newest attempt counted. Live attempts above it add to the summary. */
   newestId: number;
 }
 

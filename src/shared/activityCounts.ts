@@ -1,6 +1,13 @@
 import { tokenCost } from './modelPrices';
 import type { ActivityCounts, ActivityEvent } from './types';
 
+const pad = (n: number) => String(n).padStart(2, '0');
+/** Local calendar day, YYYY-MM-DD, so days match the user's clock. */
+export function localDay(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export const emptyCounts = (): ActivityCounts => ({
   requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
   costUsd: 0, uncachedCostUsd: 0, unpricedRequests: 0,

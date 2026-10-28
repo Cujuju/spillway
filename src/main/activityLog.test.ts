@@ -15,7 +15,8 @@ vi.mock('./settingsStore', () => ({
   getSecrets: () => secrets,
 }));
 
-const { activityLog, addToTotals, hourlyBuckets, lastDays, localDay, oldestKeptDay } = await import('./activityLog');
+const { localDay } = await import('@shared/activityCounts');
+const { activityLog, addToTotals, hourlyBuckets, lastDays, oldestKeptDay } = await import('./activityLog');
 afterAll(() => {
   activityLog.close();
   rmSync(dir, { recursive: true, force: true });
@@ -26,6 +27,8 @@ const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => (
   stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2,
   ...patch,
 });
+const storedCount = () => activityLog.daySummaries().reduce((n, d) => n + d.requests, 0);
+const summary = (day: string) => activityLog.daySummaries().find((d) => d.day === day);
 const daysAgo = (n: number, hour = 12) => {
   const t = new Date();
   return new Date(t.getFullYear(), t.getMonth(), t.getDate() - n, hour);
@@ -75,18 +78,20 @@ describe('activityLog', () => {
     expect(second.more).toBe(false);
     const ids = [...first.events, ...second.events].map((e) => e.requestId);
     expect(ids).toEqual(Array.from({ length: total }, (_, i) => `r${total - 1 - i}`));
-    expect(activityLog.count(null)).toMatchObject({ requests: total, failed: 0 });
+    expect(storedCount()).toBe(total);
   });
 
-  it('filters by day and failure in the query, and counts per day', () => {
-    activityLog.append(event(daysAgo(1), { requestId: 'old-ok' }));
-    activityLog.append(event(daysAgo(1), { requestId: 'old-failed', failed: true }));
+  it('filters by day and failure in the query, and summarizes each day', () => {
+    const priced = { model: 'claude-opus-5-5' };
+    activityLog.append(event(daysAgo(1), { requestId: 'old-ok', ...priced }));
+    activityLog.append(event(daysAgo(1), { requestId: 'old-failed', failed: true, ...priced }));
     activityLog.append(event(daysAgo(0), { requestId: 'new-failed', failed: true }));
     expect(activityLog.page({ day: null, failedOnly: true, before: null }).events.map((e) => e.requestId)).toEqual(['new-failed', 'old-failed']);
     const yesterday = localDay(daysAgo(1).getTime());
     expect(activityLog.page({ day: yesterday, failedOnly: false, before: null }).events.map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
-    expect(activityLog.count(yesterday)).toMatchObject({ requests: 2, failed: 1 });
-    expect(activityLog.days()).toEqual([localDay(Date.now()), yesterday]);
+    expect(summary(yesterday)).toMatchObject({ requests: 2, failed: 1, newestId: expect.any(Number), unpricedRequests: 0 });
+    expect(summary(yesterday)!.costUsd).toBeGreaterThan(0);
+    expect(activityLog.daySummaries().map((d) => d.day)).toEqual([localDay(Date.now()), yesterday]);
   });
 
   it('prunes past retention and keeps the totals', () => {
@@ -128,7 +133,7 @@ describe('activityLog', () => {
     activityLog.close();
     secrets.databaseKey = 'cd'.repeat(32);
     try {
-      expect(activityLog.count(null).requests).toBe(0);
+      expect(storedCount()).toBe(0);
       expect(readdirSync(dir).some((f) => f.startsWith('activity.db.unreadable-'))).toBe(true);
     } finally {
       activityLog.close();
@@ -151,7 +156,7 @@ describe('legacy file import', () => {
     const page = activityLog.page({ day: null, failedOnly: false, before: null });
     expect(page.events.map((e) => e.requestId)).toEqual(['c', 'b', 'a']);
     expect(page.events.at(-1)?.cacheWriteTokens).toBe(0);
-    expect(activityLog.count('2026-01-03')).toMatchObject({ requests: 1, failed: 1 });
+    expect(summary('2026-01-03')).toMatchObject({ requests: 1, failed: 1 });
     expect(activityLog.totalsList()).toEqual([expect.objectContaining({ day: '2026-01-02', requests: 2, costUsd: expect.any(Number) })]);
     expect(existsSync(legacyDir)).toBe(false);
 
@@ -159,7 +164,7 @@ describe('legacy file import', () => {
     activityLog.close();
     mkdirSync(legacyDir);
     writeFileSync(path.join(legacyDir, '2026-01-04.jsonl'), `${JSON.stringify(event(new Date(2026, 0, 4, 9)))}\n`);
-    expect(activityLog.count(null).requests).toBe(3);
+    expect(storedCount()).toBe(3);
     expect(existsSync(legacyDir)).toBe(false);
   });
 });

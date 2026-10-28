@@ -236,10 +236,37 @@
   height: 100%;
   background: var(--color-accent);
 }
-.more-row {
+/* Requests: the card scrolls on its own, so each day's header stays pinned above its rows. */
+.requests-card {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.table.dense tr.day-row td {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+}
+.day-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: var(--spacing-1_5) var(--spacing-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.day-toggle .muted {
+  font-weight: 400;
+}
+.table.dense td.more-cell {
   padding: var(--spacing-2_5);
   text-align: center;
-  border-top: var(--border-width) solid var(--color-border);
 }
 .chart-note {
   margin-top: var(--page-gap);

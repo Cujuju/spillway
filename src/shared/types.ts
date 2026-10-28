@@ -179,6 +179,10 @@ export interface ActivityEvent {
   cachedTokens: number;
   /** Tokens written to the prompt cache (Claude); 0 where the provider doesn't report them. */
   cacheWriteTokens: number;
+  /** The client conversation as the proxy keys it ("claude:<session uuid>"); null when the client sent none. */
+  sessionId: string | null;
+  /** Account of this conversation's previous attempt on the same model, when it was another one: the prompt cache started over. */
+  movedFrom: string | null;
 }
 
 /** An attempt as stored. `id` follows the order Spillway recorded attempts and pages the list. */

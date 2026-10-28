@@ -24,7 +24,7 @@ afterAll(() => {
 
 const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
   at: at.toISOString(), requestId: `r-${at.getTime()}`, selectionId: null, provider: 'claude', model: 'opus', authIndex: 'a1',
-  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2,
+  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2, sessionId: null, movedFrom: null,
   ...patch,
 });
 const storedCount = () => activityLog.daySummaries().reduce((n, d) => n + d.requests, 0);
@@ -146,6 +146,19 @@ describe('activityLog', () => {
     expect(readFileSync(dbFile).includes('persisted-secret-id')).toBe(false);
     expect(activityLog.page({ day: null, failedOnly: false, accounts: null, before: null }).events.map((e) => e.requestId)).toEqual(['persisted-secret-id']);
     expect(activityLog.totalsList()).toHaveLength(1);
+  });
+
+  it("marks a conversation's switch to another account, per model, across a reopen", () => {
+    const at = daysAgo(0);
+    const append = (authIndex: string, model = 'opus', sessionId: string | null = 'claude:s1') => activityLog.append(event(at, { authIndex, model, sessionId })).movedFrom;
+    expect(append('a1')).toBeNull();
+    expect(append('a1')).toBeNull();
+    expect(append('a2', 'haiku')).toBeNull();
+    expect(append('a2')).toBe('a1');
+    expect(append('a1', 'opus', null)).toBeNull();
+    activityLog.close();
+    expect(append('a1')).toBe('a2');
+    expect(activityLog.page({ day: null, failedOnly: false, accounts: null, before: null }).events[0]).toMatchObject({ sessionId: 'claude:s1', movedFrom: 'a2' });
   });
 
   it('sets aside a database the key cannot read and starts empty', () => {

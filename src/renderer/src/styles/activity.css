@@ -197,6 +197,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.cell-name > .badge {
+  flex-shrink: 0;
+}
+/* Shares the leftover width with the account column. */
+.table td.fill.conversation-cell {
+  --fill-col-share: 25%;
+}
 .table tr.group-row td {
   background: var(--color-surface-sunken);
   font-weight: 600;

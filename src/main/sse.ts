@@ -64,5 +64,8 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     outputTokens: n(r.output_tokens),
     cachedTokens: n(r.cached_tokens),
     cacheWriteTokens: n(r.cache_creation_tokens),
+    sessionId: s(r.session_id),
+    // Set when stored (activityLog.append), which knows the conversation's earlier requests.
+    movedFrom: null,
   };
 }

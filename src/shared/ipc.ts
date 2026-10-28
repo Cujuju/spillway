@@ -56,6 +56,8 @@ export interface DesktopApi {
   activityBuckets(days: number): Promise<ActivityBucket[]>;
   /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
+  /** Titles the clients gave these conversations (proxy session IDs); IDs without one are left out. */
+  conversationNames(sessionIds: string[]): Promise<Record<string, string>>;
 
   oauthStart(provider: string): Promise<OAuthStart>;
   oauthStatus(state: string): Promise<OAuthStatus>;
@@ -139,6 +141,7 @@ export const INVOKE = {
   activityTotals: 'activity:totals',
   activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',
+  conversationNames: 'activity:conversation-names',
   oauthStart: 'oauth:start',
   oauthStatus: 'oauth:status',
   oauthCancel: 'oauth:cancel',

@@ -3,7 +3,7 @@ import { inScope, normalizeScope, type AccountScope } from '@shared/activityScop
 import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
-import { ACCOUNT_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
+import { ACCOUNT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 
@@ -48,7 +48,12 @@ interface RequestRow {
   id: number;
   event: string;
 }
-const toStored = (r: RequestRow): StoredActivityEvent => ({ ...(JSON.parse(r.event) as ActivityEvent), id: r.id });
+function toStored(r: RequestRow): StoredActivityEvent {
+  // Requests stored before conversations were recorded have neither field.
+  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom'> & Partial<ActivityEvent>;
+  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, id: r.id };
+}
+const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 
 /** Renderer input arrives untyped over IPC. */
 function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPageQuery | null {
@@ -75,6 +80,8 @@ class ActivityLog {
   private prunedOn = '';
   /** Hourly sums of finished days; their rows no longer change. */
   private pastBuckets = new Map<string, ActivityBucket[]>();
+  /** Latest account per conversation and model (conversationKey), filled from the database on first sight. */
+  private conversationAccounts = new Map<string, string | null>();
 
   /** Opens on first use, after secrets load. */
   private get db(): Db {
@@ -85,7 +92,8 @@ class ActivityLog {
     return this.conn;
   }
 
-  append(e: ActivityEvent): StoredActivityEvent {
+  append(event: ActivityEvent): StoredActivityEvent {
+    const e = { ...event, movedFrom: this.movedFrom(event) };
     const day = localDay(Date.parse(e.at));
     const totals = this.loadTotals();
     let id: number;
@@ -101,7 +109,20 @@ class ActivityLog {
       throw err;
     }
     if (this.prunedOn !== localDay(Date.now())) this.prune();
+    if (e.sessionId) this.conversationAccounts.set(conversationKey(e), e.authIndex);
     return { ...e, id };
+  }
+
+  /** The conversation's previous account on this model, when this attempt went to another one. */
+  private movedFrom(e: ActivityEvent): string | null {
+    if (!e.sessionId || !e.authIndex) return null;
+    const key = conversationKey(e);
+    if (!this.conversationAccounts.has(key)) {
+      const row = this.db.prepare(`SELECT event FROM requests WHERE (${CONVERSATION_KEY_SQL}) = (?, ?) ORDER BY id DESC LIMIT 1`).get(e.sessionId, e.model) as RequestRow | undefined;
+      this.conversationAccounts.set(key, row ? toStored(row).authIndex : null);
+    }
+    const previous = this.conversationAccounts.get(key) ?? null;
+    return previous && previous !== e.authIndex ? previous : null;
   }
 
   page(query: ActivityPageQuery): ActivityPage {
@@ -195,6 +216,7 @@ class ActivityLog {
     })();
     this.totals = new Map();
     this.pastBuckets.clear();
+    this.conversationAccounts.clear();
   }
 
   /** Drops the caches too: the next open may find another file (set aside, or imported). */
@@ -203,6 +225,7 @@ class ActivityLog {
     this.conn = null;
     this.totals = null;
     this.pastBuckets.clear();
+    this.conversationAccounts.clear();
   }
 
   private loadTotals(): Map<string, ActivityDayTotal> {

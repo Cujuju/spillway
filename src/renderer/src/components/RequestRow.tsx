@@ -6,6 +6,7 @@ import { conversationLabel, conversationName } from '../lib/conversationNames';
 import { usd } from '../lib/format';
 import { REQUEST_COLUMNS } from '../lib/requestSort';
 import { settings } from '../store';
+import { MoveConversation } from './MoveConversation';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
 
@@ -48,6 +49,7 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
               <Show when={props.e.movedFrom}>
                 {(from) => <span class="badge amber" title={`Moved from ${props.account(from())}; the prompt cache started over`}>moved</span>}
               </Show>
+              <MoveConversation e={props.e} account={props.account} />
             </div>
           </Show>
         </td>

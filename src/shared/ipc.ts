@@ -60,6 +60,8 @@ export interface DesktopApi {
   clearActivity(): Promise<void>;
   /** Titles the clients gave these conversations (proxy session IDs); IDs without one are left out. */
   conversationNames(sessionIds: string[]): Promise<Record<string, string>>;
+  /** Moves a conversation, and its subagents, to another account of the same provider; its prompt cache starts over. */
+  moveConversation(sessionId: string, authIndex: string): Promise<void>;
 
   oauthStart(provider: string): Promise<OAuthStart>;
   oauthStatus(state: string): Promise<OAuthStatus>;
@@ -145,6 +147,7 @@ export const INVOKE = {
   activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',
   conversationNames: 'activity:conversation-names',
+  moveConversation: 'activity:move-conversation',
   oauthStart: 'oauth:start',
   oauthStatus: 'oauth:status',
   oauthCancel: 'oauth:cancel',

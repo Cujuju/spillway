@@ -204,6 +204,20 @@
 .table td.fill.conversation-cell {
   --fill-col-share: 25%;
 }
+/* Shown on the hovered or focused row only, so the table stays quiet. */
+.cell-name > .move-conversation {
+  flex-shrink: 0;
+  margin-left: auto;
+  height: auto;
+  visibility: hidden;
+}
+.table tr:hover .move-conversation,
+.move-conversation:focus {
+  visibility: visible;
+}
+.move-conversation-error {
+  color: var(--color-red);
+}
 .table tr.group-row td {
   background: var(--color-surface-sunken);
   font-weight: 600;

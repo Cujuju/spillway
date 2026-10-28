@@ -173,7 +173,23 @@ class ManagementClient {
   async setPreferredAccount(provider: string, authIndex: string): Promise<void> {
     await this.request('PUT', '/routing/preferred-auth', { provider, auth_index: authIndex });
   }
+
+  /** Rebinds a conversation (a request's session ID), and its subagents, to another account of the same provider. */
+  async moveConversation(sessionId: string, authIndex: string): Promise<void> {
+    try {
+      await this.request('POST', '/routing/move-session', { session_id: sessionId, auth_index: authIndex });
+    } catch (e) {
+      const text = e instanceof ManagementError ? MOVE_FAILURE_TEXT[e.status] : undefined;
+      throw text ? new ManagementError(text, (e as ManagementError).status) : e;
+    }
+  }
 }
+
+/** Move-session failures the user can act on, by HTTP status. */
+const MOVE_FAILURE_TEXT: Record<number, string> = {
+  404: 'The conversation is no longer bound to an account, or that account is gone. Its next request picks an account.',
+  409: 'Session affinity is off, so conversations are not bound to accounts.',
+};
 
 export const management = new ManagementClient();
 

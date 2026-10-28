@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { StoredActivityEvent } from '@shared/types';
-import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, sortRequests } from './requestSort';
+import { clientName, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, sortRequests } from './requestSort';
 
 const row = (id: number, patch: Partial<StoredActivityEvent> = {}): StoredActivityEvent => ({
   id, at: new Date(2026, 9, 27, 12, 0, id).toISOString(), requestId: `r${id}`, selectionId: null, provider: 'claude', model: 'claude-opus-5-5', authIndex: 'a1',
-  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 0, cacheWriteTokens: 0, sessionId: null, movedFrom: null,
+  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 0, cacheWriteTokens: 0, sessionId: null, movedFrom: null, userAgent: null,
   ...patch,
 });
 const labels = { account: (a: string | null) => a ?? '', conversation: (id: string | null) => id ?? '' };
@@ -56,5 +56,15 @@ describe('conversation column', () => {
     const rows = [row(1, { sessionId: 'claude:b' }), row(2, { sessionId: null }), row(3, { sessionId: 'claude:a' })];
     expect(ids(sortRequests(rows, { key: 'conversation', desc: false }, labels))).toEqual([3, 1, 2]);
     expect(ids(sortRequests(rows, { key: 'conversation', desc: true }, labels))).toEqual([1, 3, 2]);
+  });
+});
+
+describe('clientName', () => {
+  it("takes the User-Agent's first product name", () => {
+    expect(clientName('claude-cli/2.1.0 (external, sdk-ts)')).toBe('claude-cli');
+    expect(clientName('stockapp/0.1.0 (Windows 10.0.19045; x86_64)')).toBe('stockapp');
+    expect(clientName('curl')).toBe('curl');
+    expect(clientName('  ')).toBeNull();
+    expect(clientName(null)).toBeNull();
   });
 });

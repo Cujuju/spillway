@@ -1,7 +1,7 @@
 import { tokenCost } from '@shared/modelPrices';
 import type { StoredActivityEvent } from '@shared/types';
 
-export type SortKey = 'time' | 'account' | 'conversation' | 'result' | 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'cost' | 'firstToken' | 'totalTime';
+export type SortKey = 'time' | 'account' | 'conversation' | 'client' | 'result' | 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'cost' | 'firstToken' | 'totalTime';
 export interface RequestSort {
   key: SortKey;
   desc: boolean;
@@ -22,11 +22,17 @@ export interface RequestColumn {
   value: (e: StoredActivityEvent, labels: RowLabels) => number | string | null;
 }
 
+/** A User-Agent's first product name ("claude-cli/2.1 (…)" → "claude-cli"); null when the client sent none. */
+export function clientName(userAgent: string | null): string | null {
+  return userAgent?.trim().split(/[\s/]/, 1)[0] || null;
+}
+
 export const REQUEST_COLUMNS: readonly RequestColumn[] = [
   // Recorded order, the same order the database pages in.
   { key: 'time', label: 'Time', num: false, value: (e) => e.id },
   { key: 'account', label: 'Account · model', num: false, value: (e, l) => `${l.account(e.authIndex)} ${e.model}`.toLowerCase() },
   { key: 'conversation', label: 'Conversation', num: false, title: 'The client conversation; "moved" marks a switch to another account', value: (e, l) => l.conversation(e.sessionId).toLowerCase() || null },
+  { key: 'client', label: 'Client', num: false, title: 'The program that sent the request, from its User-Agent', value: (e) => clientName(e.userAgent)?.toLowerCase() ?? null },
   { key: 'result', label: 'Result', num: false, value: (e) => (e.failed ? (e.statusCode ?? null) : 0) },
   { key: 'input', label: 'Input', num: true, value: (e) => e.inputTokens },
   { key: 'output', label: 'Output', num: true, value: (e) => e.outputTokens },

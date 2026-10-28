@@ -5,7 +5,7 @@ import type { ActivityEvent } from './types';
 const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
   at: '2026-10-26T12:00:00Z', requestId: 'r', selectionId: null, provider: 'claude', model: 'claude-opus-5-5', authIndex: 'a',
   stream: true, failed: false, statusCode: null, error: null, latencyMs: 1, ttftMs: null,
-  inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, sessionId: null, movedFrom: null, ...patch,
+  inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, sessionId: null, movedFrom: null, userAgent: null, ...patch,
 });
 
 describe('activity counts', () => {

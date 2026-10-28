@@ -4,7 +4,7 @@ import { maskEmails } from '@shared/privacy';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
 import { conversationLabel, conversationName } from '../lib/conversationNames';
 import { usd } from '../lib/format';
-import { REQUEST_COLUMNS } from '../lib/requestSort';
+import { clientName, REQUEST_COLUMNS } from '../lib/requestSort';
 import { settings } from '../store';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
@@ -50,6 +50,9 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
               </Show>
             </div>
           </Show>
+        </td>
+        <td class="fill client-cell" title={props.e.userAgent ?? undefined}>
+          <Show when={clientName(props.e.userAgent)} fallback={<span class="muted">—</span>}>{(name) => name()}</Show>
         </td>
         <td>
           <Show when={props.e.failed} fallback={<span class="badge green">OK</span>}>

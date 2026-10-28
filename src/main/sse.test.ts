@@ -27,6 +27,11 @@ describe('parseActivityEvent', () => {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'r1', session_id: 'claude:abc' }))).toMatchObject({ sessionId: 'claude:abc', movedFrom: null });
   });
 
+  it('keeps the client that sent the request', () => {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'r1', user_agent: 'codex_cli_rs/0.164.0' }))?.userAgent).toBe('codex_cli_rs/0.164.0');
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'r1' }))?.userAgent).toBeNull();
+  });
+
   it('rejects malformed events', () => {
     expect(parseActivityEvent('not json')).toBeNull();
     expect(parseActivityEvent('{"provider":"claude"}')).toBeNull();

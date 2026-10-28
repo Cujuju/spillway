@@ -20,6 +20,12 @@ SELECT json_extract(p.payload_json, '$.nativeThreadRef.nativeId') AS native, t.t
 FROM orchestration_v2_projection_provider_threads p
 JOIN orchestration_v2_projection_threads t ON t.thread_id = p.thread_id
 WHERE native IS NOT NULL AND t.title IS NOT NULL AND t.title <> ''`;
+/** Codex's thread database (internal schema, read-only); its index file only lists renamed threads. */
+const CODEX_STATE_DB_NAME = 'state_5.sqlite';
+/** A thread's name the user set, else the title Codex gave it. */
+const CODEX_TITLES_SQL = `
+SELECT id AS native, coalesce(nullif(name, ''), title) AS title FROM threads
+WHERE coalesce(nullif(name, ''), title) <> ''`;
 
 /** The client's own conversation ID inside a proxy session ID; null for clients without names. */
 export function nativeConversationId(sessionId: string): { client: 'claude' | 'codex'; id: string } | null {
@@ -58,24 +64,25 @@ export function codexIndexTitles(text: string): Map<string, string> {
   return titles;
 }
 
-function readT3Titles(): Map<string, string> {
+/** Titles by client conversation ID from another app's database; `sql` selects `native` and `title`. */
+function readDbTitles(file: string, sql: string, client: string): Map<string, string> {
   const titles = new Map<string, string>();
-  if (!existsSync(T3_STATE_DB)) return titles;
+  if (!existsSync(file)) return titles;
   try {
-    const db = new Database(T3_STATE_DB, { readonly: true, fileMustExist: true });
+    const db = new Database(file, { readonly: true, fileMustExist: true });
     try {
-      for (const r of db.prepare(T3_TITLES_SQL).all() as { native: string; title: string }[]) titles.set(r.native, r.title);
+      for (const r of db.prepare(sql).all() as { native: string; title: string }[]) titles.set(r.native, r.title);
     } finally {
       db.close();
     }
   } catch (err) {
-    // T3 Code may change its schema; names are optional.
-    console.warn('[conversations] T3 Code titles unreadable:', err instanceof Error ? err.message : err);
+    // Clients may change their schema; names are optional.
+    console.warn(`[conversations] ${client} titles unreadable:`, err instanceof Error ? err.message : err);
   }
   return titles;
 }
 
-/** Names for proxy session IDs from the clients' own records: T3 Code thread titles, then Codex and Claude Code. */
+/** Names for proxy session IDs from the clients' own records: T3 Code thread titles, then Codex (index, then database) and Claude Code. */
 class ConversationNames {
   private titles = new Map<string, string>();
   private titlesReadAt = 0;
@@ -99,10 +106,12 @@ class ConversationNames {
   private async refreshTitles(): Promise<void> {
     if (Date.now() - this.titlesReadAt < TITLE_LIST_REFRESH_MS) return;
     this.titlesReadAt = Date.now();
-    const index = path.join(clientHomes().codex, 'session_index.jsonl');
-    const codex = existsSync(index) ? codexIndexTitles(await readFile(index, 'utf8').catch(() => '')) : new Map<string, string>();
-    // T3 Code titles are what the user sees, so they win.
-    this.titles = new Map([...codex, ...readT3Titles()]);
+    const codexHome = clientHomes().codex;
+    const index = path.join(codexHome, 'session_index.jsonl');
+    const renamed = existsSync(index) ? codexIndexTitles(await readFile(index, 'utf8').catch(() => '')) : new Map<string, string>();
+    const codex = readDbTitles(path.join(codexHome, CODEX_STATE_DB_NAME), CODEX_TITLES_SQL, 'Codex');
+    // Later sources win: renames over Codex's titles, and T3 Code titles, which the user sees, over both.
+    this.titles = new Map([...codex, ...renamed, ...readDbTitles(T3_STATE_DB, T3_TITLES_SQL, 'T3 Code')]);
   }
 
   private async claudeTitle(sessionUuid: string): Promise<string | null> {

@@ -191,6 +191,8 @@ export interface ActivityEvent {
   sessionId: string | null;
   /** Account of this conversation's previous attempt on the same model, when it was another one: the prompt cache started over. */
   movedFrom: string | null;
+  /** The client's User-Agent header, naming the program that sent the request; null when it sent none. */
+  userAgent: string | null;
 }
 
 /** An attempt as stored. `id` follows the order Spillway recorded attempts and pages the list. */

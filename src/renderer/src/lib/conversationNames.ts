@@ -1,7 +1,9 @@
 import { createSignal } from 'solid-js';
 
-/** Clients rename conversations after they start, so a looked-up ID is asked again after this long. */
+/** Clients rename conversations after they start, so a named ID is asked again after this long. */
 const NAME_REFRESH_MS = 5 * 60_000;
+/** Clients title a conversation seconds after its first request; matches the main process's TITLE_LIST_REFRESH_MS. Asks happen as rows render. */
+const UNNAMED_RETRY_MS = 30_000;
 /** Shown for an unnamed conversation: enough of its ID to tell conversations apart. */
 const SHORT_ID_CHARS = 8;
 const AGENT_MARK = ':agent:';
@@ -21,7 +23,8 @@ function flush(): void {
 /** The client's title for a proxy session ID, fetched in one batch per tick; null until known or when there is none. */
 export function conversationName(sessionId: string): string | null {
   const at = askedAt.get(sessionId);
-  if (at === undefined || Date.now() - at > NAME_REFRESH_MS) {
+  const refreshMs = names().has(sessionId) ? NAME_REFRESH_MS : UNNAMED_RETRY_MS;
+  if (at === undefined || Date.now() - at > refreshMs) {
     askedAt.set(sessionId, Date.now());
     if (queued.size === 0) queueMicrotask(flush);
     queued.add(sessionId);

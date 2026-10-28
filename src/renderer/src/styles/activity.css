@@ -204,6 +204,10 @@
 .table td.fill.conversation-cell {
   --fill-col-share: 25%;
 }
+/* Client names are one short word; the full User-Agent is in the tooltip. */
+.table td.fill.client-cell {
+  --fill-col-share: 10%;
+}
 .table tr.group-row td {
   background: var(--color-surface-sunken);
   font-weight: 600;

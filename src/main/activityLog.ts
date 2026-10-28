@@ -49,9 +49,9 @@ interface RequestRow {
   event: string;
 }
 function toStored(r: RequestRow): StoredActivityEvent {
-  // Requests stored before conversations were recorded have neither field.
-  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom'> & Partial<ActivityEvent>;
-  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, id: r.id };
+  // Requests stored before conversations or clients were recorded lack these fields.
+  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent'> & Partial<ActivityEvent>;
+  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, id: r.id };
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 

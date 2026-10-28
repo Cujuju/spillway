@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { DEFAULT_SETTINGS } from '@shared/settings';
-import { buildProxyConfig } from './proxyConfig';
+import { buildProxyConfig, TLS_HANDSHAKE_TIMEOUT_SECONDS } from './proxyConfig';
 
 const base = {
   clientApiKey: 'client"key',
@@ -25,12 +25,17 @@ describe('buildProxyConfig', () => {
     expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-auth-kind': 'oauth', 'session-affinity': true, 'session-affinity-ttl': '60m',
       'server-errors': 'return', 'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
+    expect(cfg.requests['tls-handshake-timeout-seconds']).toBe(TLS_HANDSHAKE_TIMEOUT_SECONDS);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
     expect(cfg.access['api-keys']).toEqual(appKeys);
   });
 
   it('writes the stable management key for outside tools; the app itself uses the supervisor password', () => {
     expect(parsed().management).toEqual({ 'secret-key': 'mk', 'allow-remote': false, 'disable-control-panel': true });
+  });
+
+  it('switches accounts on server errors only when the setting says so', () => {
+    expect(parsed({ settings: { ...DEFAULT_SETTINGS.proxy, serverErrors: 'switch' } }).routing['server-errors']).toBe('failover');
   });
 
   it('routes to API keys first only when the setting says so', () => {

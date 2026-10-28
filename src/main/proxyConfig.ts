@@ -1,6 +1,6 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import { APP_NAME } from '@shared/app';
-import type { ApiKeyOrder, AppSettings } from '@shared/settings';
+import type { ApiKeyOrder, AppSettings, ServerErrorAction } from '@shared/settings';
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
@@ -28,6 +28,12 @@ const HEADER =
 /** routing.prefer-auth-kind: the credential kind the proxy tries before falling back to the other. */
 const PREFERRED_AUTH_KIND: Record<ApiKeyOrder, 'api-key' | 'oauth'> = { first: 'api-key', last: 'oauth' };
 
+/** routing.server-errors: 'return' sends the error to the client on the same account; 'failover' tries the next one. */
+const PROXY_SERVER_ERRORS: Record<ServerErrorAction, 'return' | 'failover'> = { stay: 'return', switch: 'failover' };
+
+/** Handshakes take well under a second; a stalled one is cut off so the request fails instead of hanging (the first-byte timeout starts later). */
+export const TLS_HANDSHAKE_TIMEOUT_SECONDS = 20;
+
 /** Go duration string the proxy expects for routing.session-affinity-ttl. */
 export const affinityTtl = (minutes: number) => `${minutes}m`;
 
@@ -46,14 +52,14 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
-    // Server errors (overload, 5xx, dropped connections) go back to the client on the same account: every account hits the same servers.
-    [['routing', 'server-errors'], 'return'],
+    [['routing', 'server-errors'], PROXY_SERVER_ERRORS[p.serverErrors]],
     // Only quota and login failures move a conversation.
     [['routing', 'session-affinity-rebind-on'], 'quota'],
     // A restart keeps conversations on their account (prompt cache) and limited accounts benched.
     [['routing', 'session-affinity-persist'], true],
     [['routing', 'cooldown', 'save-cooldown-status'], true],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],
+    [['requests', 'tls-handshake-timeout-seconds'], TLS_HANDSHAKE_TIMEOUT_SECONDS],
     [['oauth', 'auth-dir'], input.authDir],
   ];
 }

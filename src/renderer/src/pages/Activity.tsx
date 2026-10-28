@@ -1,22 +1,23 @@
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { reportsCacheWrites, tokenCost } from '@shared/modelPrices';
 import { maskEmails } from '@shared/privacy';
-import { MAX_ACTIVITY_EVENTS, type ActivityEvent } from '@shared/types';
+import type { ActivityCount, ActivityEvent, StoredActivityEvent } from '@shared/types';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityTotals } from '../components/ActivityTotals';
 import { TokenCell } from '../components/TokenCell';
 import { Notice, ProviderGlyph, Seg } from '../components/ui';
 import { dayLabel, usd } from '../lib/format';
 import { isString, persistedSignal } from '../lib/persisted';
-import { activity, proxyStatus, settings, snapshot } from '../store';
+import { proxyStatus, settings, snapshot } from '../store';
 
 const MS_PER_SECOND = 1000;
 /** Below this, show milliseconds; above, seconds with one decimal. */
 const SHOW_SECONDS_FROM_MS = 1000;
-/** Rows added per "Show older" on a stored day; matches the recent list's length. */
-const PAGE_SIZE = MAX_ACTIVITY_EVENTS;
-/** Day picker value for the live recent list. */
+/** Day picker value for every stored day, newest first, with live requests on top. */
 const RECENT = '';
+const EMPTY_COUNT: ActivityCount = { requests: 0, failed: 0, newestId: 0 };
+const TIME: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
+const DATE_TIME: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', ...TIME };
 const REQUEST_COLUMN_COUNT = 10;
 const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const;
 const FILTERS = [{ value: 'all', label: 'All' }, { value: 'failed', label: 'Failed' }] as const;
@@ -26,30 +27,85 @@ const requestCost = (e: ActivityEvent) => {
   const cost = tokenCost(e.provider, e.model, e);
   return cost ? usd(cost.usd) : '—';
 };
+/** The date shows only on rows from before today. */
+const requestTime = (e: ActivityEvent) => {
+  const at = new Date(e.at);
+  return at.toLocaleString(undefined, at.toDateString() === new Date().toDateString() ? TIME : DATE_TIME);
+};
 
 export function Activity() {
   const [view, setView] = persistedSignal('activity.view', 'overview', VIEWS.map((v) => v.value));
   const [filter, setFilter] = persistedSignal('activity.filter', 'all', FILTERS.map((f) => f.value));
   const [day, setDay] = persistedSignal('activity.day', RECENT, isString);
   const [days, setDays] = createSignal<string[]>([]);
-  const [stored, setStored] = createSignal<ActivityEvent[]>([]);
-  const [limit, setLimit] = createSignal(PAGE_SIZE);
-  onMount(() =>
-    void window.api.activityDays().then((list) => {
-      setDays(list);
-      // Reload a restored day, or fall back to Recent if its file is gone.
-      const d = day();
-      if (d) pickDay(list.includes(d) ? d : RECENT);
-    }),
-  );
+  const [rows, setRows] = createSignal<StoredActivityEvent[]>([]);
+  const [more, setMore] = createSignal(false);
+  const [loading, setLoading] = createSignal(false);
+  const [count, setCount] = createSignal(EMPTY_COUNT);
+  /** Bumped on each reload, so a slow response for an earlier day or filter is dropped. */
+  let generation = 0;
 
+  const loadPage = (before: number | null) => {
+    const gen = generation;
+    setLoading(true);
+    void window.api
+      .activityPage({ day: day() || null, failedOnly: filter() === 'failed', before })
+      .then((page) => {
+        if (gen !== generation) return;
+        // Live requests that arrived during the load may be in the page too.
+        setRows((prev) => {
+          const shown = new Set(prev.map((e) => e.id));
+          return [...prev, ...page.events.filter((e) => !shown.has(e.id))];
+        });
+        setMore(page.more);
+      })
+      .catch((err: unknown) => console.error('[activity] page failed:', err))
+      .finally(() => gen === generation && setLoading(false));
+  };
+  const reload = () => {
+    generation += 1;
+    const gen = generation;
+    setRows([]);
+    setMore(false);
+    setCount(EMPTY_COUNT);
+    loadPage(null);
+    void window.api.activityCount(day() || null).then((c) => gen === generation && setCount(c));
+  };
+  const loadOlder = () => {
+    const oldest = rows().at(-1);
+    if (more() && !loading() && oldest) loadPage(oldest.id);
+  };
+  /** Loads the next page when the end of the list scrolls into view. */
+  const watchEnd = (el: HTMLElement) => {
+    const observer = new IntersectionObserver((entries) => entries.some((en) => en.isIntersecting) && loadOlder());
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+  };
   const pickDay = (d: string) => {
     setDay(d);
-    setLimit(PAGE_SIZE);
-    setStored([]);
-    // A slow load for an earlier pick must not replace the current day.
-    if (d) void window.api.activityDay(d).then((events) => day() === d && setStored(events));
+    reload();
   };
+  const pickFilter = (f: (typeof FILTERS)[number]['value']) => {
+    setFilter(f);
+    reload();
+  };
+
+  onMount(() => {
+    // An IPC event handler: it reads the current day and filter on each event, untracked by design.
+    // oxlint-disable-next-line solid/reactivity
+    const off = window.api.onActivity((e) => {
+      if (day() !== RECENT || e.id <= count().newestId) return;
+      setCount((c) => ({ requests: c.requests + 1, failed: c.failed + (e.failed ? 1 : 0), newestId: e.id }));
+      if (filter() !== 'failed' || e.failed) setRows((prev) => (prev.some((p) => p.id === e.id) ? prev : [e, ...prev]));
+    });
+    onCleanup(off);
+    void window.api.activityDays().then((list) => {
+      setDays(list);
+      // Fall back to Recent when a restored day has no stored requests left.
+      if (day() && !list.includes(day())) setDay(RECENT);
+      reload();
+    });
+  });
 
   // snapshot() is already masked when "Show emails" is off.
   const accountNames = createMemo(() => new Map((snapshot()?.credentials ?? []).map((c) => [c.authIndex, c.label])));
@@ -58,14 +114,7 @@ export function Activity() {
     const text = e.error ?? '';
     return settings().dashboard.showEmails ? text : maskEmails(text);
   };
-  const source = () => (day() ? stored() : activity());
-  const rows = createMemo(() => {
-    const all = source();
-    const shown = filter() === 'failed' ? all.filter((e) => e.failed) : all;
-    return [...shown].reverse();
-  });
-  const failedCount = () => source().filter((e) => e.failed).length;
-  const scope = () => (day() ? dayLabel(day()) : 'recent');
+  const scope = () => (day() ? dayLabel(day()) : 'stored');
 
   return (
     <>
@@ -90,9 +139,9 @@ export function Activity() {
             <option value={RECENT}>Recent</option>
             <For each={days()}>{(d) => <option value={d}>{dayLabel(d)}</option>}</For>
           </select>
-          <Seg value={filter()} options={FILTERS} onChange={setFilter} />
+          <Seg value={filter()} options={FILTERS} onChange={pickFilter} />
           <span class="spacer" />
-          <span class="toolbar-note">{source().length.toLocaleString()} {scope()} · {failedCount()} failed · newest first</span>
+          <span class="toolbar-note">{count().requests.toLocaleString()} {scope()} · {count().failed.toLocaleString()} failed · newest first</span>
         </div>
         <div class="card table-card">
           <table class="table dense">
@@ -111,11 +160,11 @@ export function Activity() {
               </tr>
             </thead>
             <tbody>
-              <For each={rows().slice(0, limit())} fallback={<tr><td colSpan={REQUEST_COLUMN_COUNT} class="muted">No requests.</td></tr>}>
+              <For each={rows()} fallback={<tr><td colSpan={REQUEST_COLUMN_COUNT} class="muted">{loading() ? 'Loading…' : 'No requests.'}</td></tr>}>
                 {(e) => (
                   <>
                     <tr classList={{ 'has-error': !!errorText(e) }}>
-                      <td class="tabular">{new Date(e.at).toLocaleTimeString()}</td>
+                      <td class="tabular">{requestTime(e)}</td>
                       <td class="fill" title={`${accountName(e.authIndex)} · ${e.model || 'no model'}`}>
                         <div class="cell-name">
                           <ProviderGlyph provider={e.provider} size="sm" />
@@ -146,9 +195,9 @@ export function Activity() {
               </For>
             </tbody>
           </table>
-          <Show when={rows().length > limit()}>
-            <div class="more-row">
-              <button class="btn ghost" onClick={() => setLimit((l) => l + PAGE_SIZE)}>Show older</button>
+          <Show when={more()}>
+            <div class="more-row" ref={watchEnd}>
+              <button class="btn ghost" disabled={loading()} onClick={loadOlder}>{loading() ? 'Loading…' : 'Show older'}</button>
             </div>
           </Show>
         </div>

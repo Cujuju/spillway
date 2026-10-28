@@ -24,10 +24,11 @@ describe('secrets', () => {
     expect(await loadSecrets()).toEqual(first);
   });
 
-  it('adds a management key to a file from before it existed, and keeps the client key', async () => {
+  it('adds management and database keys to a file from before they existed, and keeps the client key', async () => {
     writeFileSync(secretsFile, JSON.stringify({ clientApiKey: 'old-client' }));
     const loaded = await loadSecrets();
     expect(loaded.clientApiKey).toBe('old-client');
+    expect(loaded.databaseKey).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.parse(readFileSync(secretsFile, 'utf8'))).toEqual(loaded);
   });
 });

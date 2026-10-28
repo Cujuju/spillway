@@ -1,16 +1,10 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import path from 'node:path';
-import { addEvent, emptyCounts, withCountsFilled } from '@shared/activityCounts';
-import type { ActivityBucket, ActivityDayTotal, ActivityEvent } from '@shared/types';
+import { addEvent, emptyCounts } from '@shared/activityCounts';
+import {
+  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityCount, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
+} from '@shared/types';
+import { DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { appPaths } from './paths';
-import { getSettings, writeFileAtomic } from './settingsStore';
-
-/** Batches a burst of requests into one append. */
-const APPEND_DELAY_MS = 1_000;
-/** Totals change on every request; quit flushes the latest. */
-const TOTALS_SAVE_DELAY_MS = 30_000;
-const DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
-const TOTALS_FILE = 'daily-totals.json';
+import { getSecrets, getSettings } from './settingsStore';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** Local calendar day, YYYY-MM-DD, so days match the user's clock. */
@@ -19,11 +13,10 @@ export function localDay(t: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Days strictly older than the newest `retentionDays` days ending today. */
-export function expiredDays(days: string[], today: number, retentionDays: number): string[] {
+/** Oldest local day inside the newest `retentionDays` days ending today. */
+export function oldestKeptDay(today: number, retentionDays: number): string {
   const d = new Date(today);
-  const oldestKept = localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (retentionDays - 1)).getTime());
-  return days.filter((day) => day < oldestKept);
+  return localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (retentionDays - 1)).getTime());
 }
 
 /** Local days, YYYY-MM-DD, from `count - 1` days before `today` through today. */
@@ -32,18 +25,14 @@ export function lastDays(today: number, count: number): string[] {
   return Array.from({ length: count }, (_, i) => localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (count - 1 - i)).getTime()));
 }
 
-/** Requests saved before cache writes were recorded have none. */
-const withCacheWrites = <T extends { cacheWriteTokens?: number }>(r: T): T & { cacheWriteTokens: number } => ({ ...r, cacheWriteTokens: r.cacheWriteTokens ?? 0 });
-
-const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model'>) => `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}`;
-
-/** Adds one request to its day/account/model row. */
-export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): void {
+/** Adds one request to its day/account/model row and returns that row. */
+export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): ActivityDayTotal {
   const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model };
   const key = totalKey(base);
   const row = totals.get(key) ?? { ...base, ...emptyCounts() };
   addEvent(row, e);
   totals.set(key, row);
+  return row;
 }
 
 /** One day's requests summed per local hour, account and model. */
@@ -61,51 +50,96 @@ export function hourlyBuckets(events: ActivityEvent[]): ActivityBucket[] {
   return [...rows.values()];
 }
 
+interface RequestRow {
+  id: number;
+  event: string;
+}
+const toStored = (r: RequestRow): StoredActivityEvent => ({ ...(JSON.parse(r.event) as ActivityEvent), id: r.id });
+
+/** Renderer input arrives untyped over IPC. */
+function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPageQuery | null {
+  const day = q?.day ?? null;
+  const before = q?.before ?? null;
+  if (day !== null && (typeof day !== 'string' || !DAY_KEY.test(day))) return null;
+  if (before !== null && !Number.isSafeInteger(before)) return null;
+  return { day, failedOnly: q?.failedOnly === true, before };
+}
+
 /**
- * Every request on disk: one JSON line per request in a file per local day, kept for the
- * "Keep requests for" setting, plus per-day totals that are kept until cleared.
+ * Every request in the encrypted database (activityDb.ts), kept for the "Keep requests for" setting,
+ * plus per-day totals that are kept until cleared.
  */
 class ActivityLog {
-  private pending = new Map<string, string[]>();
-  private appendTimer: NodeJS.Timeout | null = null;
+  private conn: Db | null = null;
+  /** Mirror of `day_totals`; null until first read. */
   private totals: Map<string, ActivityDayTotal> | null = null;
-  private totalsTimer: NodeJS.Timeout | null = null;
   private prunedOn = '';
-  /** Hourly sums of finished days; their files no longer change. */
+  /** Hourly sums of finished days; their rows no longer change. */
   private pastBuckets = new Map<string, ActivityBucket[]>();
 
-  append(e: ActivityEvent): void {
+  /** Opens on first use, after secrets load. */
+  private get db(): Db {
+    if (!this.conn) {
+      this.conn = openActivityDb(appPaths.activityDb, getSecrets().databaseKey);
+      importLegacyFiles(this.conn, appPaths.legacyActivityDir);
+    }
+    return this.conn;
+  }
+
+  append(e: ActivityEvent): StoredActivityEvent {
     const day = localDay(Date.parse(e.at));
-    const lines = this.pending.get(day) ?? [];
-    lines.push(JSON.stringify(e));
-    this.pending.set(day, lines);
-    addToTotals(this.loadTotals(), e);
-    this.appendTimer ??= setTimeout(() => this.flushRequests(), APPEND_DELAY_MS);
-    this.totalsTimer ??= setTimeout(() => this.flushTotals(), TOTALS_SAVE_DELAY_MS);
+    const totals = this.loadTotals();
+    let id: number;
+    try {
+      id = this.db.transaction(() => {
+        const row = addToTotals(totals, e);
+        this.db.prepare('INSERT OR REPLACE INTO day_totals (key, total) VALUES (?, ?)').run(totalKey(row), JSON.stringify(row));
+        return Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
+      })();
+    } catch (err) {
+      // The mirror already counted it; reload from the rolled-back table.
+      this.totals = null;
+      throw err;
+    }
     if (this.prunedOn !== localDay(Date.now())) this.prune();
+    return { ...e, id };
+  }
+
+  page(query: ActivityPageQuery): ActivityPage {
+    const q = normalizeQuery(query);
+    if (!q) return { events: [], more: false };
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (q.day !== null) {
+      where.push('day = ?');
+      params.push(q.day);
+    }
+    if (q.failedOnly) where.push('failed = 1');
+    if (q.before !== null) {
+      where.push('id < ?');
+      params.push(q.before);
+    }
+    const filter = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    // One extra row says whether another page follows.
+    const rows = this.db.prepare(`SELECT id, event FROM requests ${filter} ORDER BY id DESC LIMIT ?`).all(...params, ACTIVITY_PAGE_SIZE + 1) as RequestRow[];
+    return { events: rows.slice(0, ACTIVITY_PAGE_SIZE).map(toStored), more: rows.length > ACTIVITY_PAGE_SIZE };
+  }
+
+  count(day: string | null): ActivityCount {
+    if (day !== null && (typeof day !== 'string' || !DAY_KEY.test(day))) return { requests: 0, failed: 0, newestId: 0 };
+    const sql = `SELECT count(*) AS requests, coalesce(sum(failed), 0) AS failed, coalesce(max(id), 0) AS newestId FROM requests${day === null ? '' : ' WHERE day = ?'}`;
+    return this.db.prepare(sql).get(...(day === null ? [] : [day])) as ActivityCount;
   }
 
   /** Days with stored requests, newest first. */
   days(): string[] {
-    this.flushRequests();
-    if (!existsSync(appPaths.activityDir)) return [];
-    return readdirSync(appPaths.activityDir).flatMap((f) => DAY_FILE.exec(f)?.[1] ?? []).sort().reverse();
+    return (this.db.prepare('SELECT DISTINCT day FROM requests ORDER BY day DESC').all() as { day: string }[]).map((r) => r.day);
   }
 
   /** One day's requests, oldest first. */
-  day(day: string): ActivityEvent[] {
-    this.flushRequests();
-    const file = path.join(appPaths.activityDir, `${day}.jsonl`);
-    if (!DAY_FILE.test(`${day}.jsonl`) || !existsSync(file)) return [];
-    return readFileSync(file, 'utf8').split('\n').flatMap((line) => {
-      if (!line) return [];
-      try {
-        const e = JSON.parse(line) as ActivityEvent;
-        return typeof e?.at === 'string' && typeof e.requestId === 'string' ? [withCacheWrites(e)] : [];
-      } catch {
-        return [];
-      }
-    });
+  day(day: string): StoredActivityEvent[] {
+    if (!DAY_KEY.test(day)) return [];
+    return (this.db.prepare('SELECT id, event FROM requests WHERE day = ? ORDER BY id').all(day) as RequestRow[]).map(toStored);
   }
 
   totalsList(): ActivityDayTotal[] {
@@ -130,55 +164,37 @@ class ActivityLog {
     });
   }
 
-  /** Deletes day files outside the retention setting. */
+  /** Deletes requests outside the retention setting; their totals stay. */
   prune(): void {
     this.prunedOn = localDay(Date.now());
-    for (const day of expiredDays(this.days(), Date.now(), getSettings().activity.retentionDays)) {
-      rmSync(path.join(appPaths.activityDir, `${day}.jsonl`), { force: true });
-    }
-  }
-
-  flush(): void {
-    this.flushRequests();
-    this.flushTotals();
+    const oldest = oldestKeptDay(Date.now(), getSettings().activity.retentionDays);
+    this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldest);
+    for (const day of this.pastBuckets.keys()) if (day < oldest) this.pastBuckets.delete(day);
   }
 
   clear(): void {
-    if (this.appendTimer) clearTimeout(this.appendTimer);
-    if (this.totalsTimer) clearTimeout(this.totalsTimer);
-    this.appendTimer = this.totalsTimer = null;
-    this.pending.clear();
+    this.db.transaction(() => {
+      this.db.exec('DELETE FROM requests; DELETE FROM day_totals;');
+    })();
     this.totals = new Map();
     this.pastBuckets.clear();
-    rmSync(appPaths.activityDir, { recursive: true, force: true });
   }
 
-  private flushRequests(): void {
-    if (this.appendTimer) clearTimeout(this.appendTimer);
-    this.appendTimer = null;
-    if (!this.pending.size) return;
-    mkdirSync(appPaths.activityDir, { recursive: true });
-    for (const [day, lines] of this.pending) appendFileSync(path.join(appPaths.activityDir, `${day}.jsonl`), `${lines.join('\n')}\n`);
-    this.pending.clear();
-  }
-
-  private flushTotals(): void {
-    if (this.totalsTimer) clearTimeout(this.totalsTimer);
-    this.totalsTimer = null;
-    if (this.totals) writeFileAtomic(path.join(appPaths.activityDir, TOTALS_FILE), JSON.stringify([...this.totals.values()]));
+  /** Drops the caches too: the next open may find another file (set aside, or imported). */
+  close(): void {
+    this.conn?.close();
+    this.conn = null;
+    this.totals = null;
+    this.pastBuckets.clear();
   }
 
   private loadTotals(): Map<string, ActivityDayTotal> {
     if (this.totals) return this.totals;
-    const file = path.join(appPaths.activityDir, TOTALS_FILE);
-    try {
-      const raw: unknown = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
-      const rows = Array.isArray(raw) ? raw.filter((r): r is ActivityDayTotal => typeof r?.day === 'string' && typeof r?.requests === 'number') : [];
-      this.totals = new Map(rows.map((r) => [totalKey(r), withCountsFilled(r)]));
-    } catch (err) {
-      console.error('[activity] totals unreadable, starting empty:', err);
-      this.totals = new Map();
-    }
+    const rows = this.db.prepare('SELECT total FROM day_totals').all() as { total: string }[];
+    this.totals = new Map(rows.map((r) => {
+      const t = JSON.parse(r.total) as ActivityDayTotal;
+      return [totalKey(t), t];
+    }));
     return this.totals;
   }
 }

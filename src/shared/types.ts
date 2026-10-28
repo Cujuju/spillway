@@ -154,8 +154,8 @@ export interface LogLine {
   text: string;
 }
 
-/** Recent attempts kept for the Activity page, in main and renderer alike; older ones scroll off. */
-export const MAX_ACTIVITY_EVENTS = 500;
+/** Requests per Activity page load; the list fetches the next page as it scrolls. */
+export const ACTIVITY_PAGE_SIZE = 500;
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent {
@@ -180,6 +180,32 @@ export interface ActivityEvent {
   cachedTokens: number;
   /** Tokens written to the prompt cache (Claude); 0 where the provider doesn't report them. */
   cacheWriteTokens: number;
+}
+
+/** An attempt as stored. `id` follows the order Spillway recorded attempts and pages the list. */
+export interface StoredActivityEvent extends ActivityEvent {
+  id: number;
+}
+
+export interface ActivityPageQuery {
+  /** Local day, YYYY-MM-DD; null for every stored day. */
+  day: string | null;
+  failedOnly: boolean;
+  /** Return attempts older than this id; null for the newest. */
+  before: number | null;
+}
+
+/** Newest first. */
+export interface ActivityPage {
+  events: StoredActivityEvent[];
+  more: boolean;
+}
+
+export interface ActivityCount {
+  requests: number;
+  failed: number;
+  /** Newest attempt counted; 0 when none. Live attempts above it add to the count. */
+  newestId: number;
 }
 
 /** Summed requests, tokens and list-price cost (src/shared/modelPrices.ts). */

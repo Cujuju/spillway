@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { MAX_ACTIVITY_EVENTS, type ActivityEvent } from '@shared/types';
-import { activityLog, localDay } from './activityLog';
+import type { StoredActivityEvent } from '@shared/types';
+import { activityLog } from './activityLog';
 import { management } from './managementClient';
 import { parseActivityEvent, SseParser } from './sse';
 import { usage } from './usagePoller';
@@ -12,23 +12,10 @@ const RECONNECT_MS = 2_000;
 /** Stream events that only mean "reload usage" (docs/desktop-api.md in the fork). */
 const USAGE_RELOAD_EVENTS = new Set(['ready', 'resync', 'usage']);
 
-/** Reads the proxy's live request stream: logs each attempt, keeps recent ones and refreshes usage when traffic changed it. */
+/** Reads the proxy's live request stream: stores each attempt and refreshes usage when traffic changed it. */
 class ActivityStream extends EventEmitter {
-  /** Null until first read, then seeded from today's log so the recent list survives a restart. */
-  private events: ActivityEvent[] | null = null;
   private abort: AbortController | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
-
-  all(): ActivityEvent[] {
-    this.events ??= activityLog.day(localDay(Date.now())).slice(-MAX_ACTIVITY_EVENTS);
-    return [...this.events];
-  }
-
-  /** Deletes the stored log and totals too. */
-  clear(): void {
-    this.events = [];
-    activityLog.clear();
-  }
 
   start(): void {
     this.stop();
@@ -79,10 +66,14 @@ class ActivityStream extends EventEmitter {
     if (event !== 'request') return;
     const e = parseActivityEvent(data);
     if (!e) return;
-    activityLog.append(e);
-    const events = this.all();
-    this.events = events.length >= MAX_ACTIVITY_EVENTS ? [...events.slice(1), e] : [...events, e];
-    this.emit('event', e);
+    let stored: StoredActivityEvent;
+    try {
+      stored = activityLog.append(e);
+    } catch (err) {
+      console.error('[activity] request not stored:', err);
+      return this.scheduleUsageRefresh();
+    }
+    this.emit('event', stored);
     this.scheduleUsageRefresh();
   }
 

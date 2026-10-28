@@ -20,8 +20,12 @@ export const appPaths = {
   get historyFile() {
     return path.join(this.root, 'usage-history.json');
   },
-  /** Per-day request logs and daily totals (activityLog.ts). */
-  get activityDir() {
+  /** Encrypted request log and daily totals (activityDb.ts). */
+  get activityDb() {
+    return path.join(this.root, 'activity.db');
+  },
+  /** Pre-database per-day request files; imported once, then deleted. */
+  get legacyActivityDir() {
     return path.join(this.root, 'activity');
   },
   get windowStateFile() {

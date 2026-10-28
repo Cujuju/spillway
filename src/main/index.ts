@@ -117,7 +117,7 @@ if (!app.requestSingleInstanceLock()) {
     usage.stop();
     activity.stop();
     history.flush();
-    activityLog.flush();
+    activityLog.close();
     void proxy.stop().finally(() => {
       destroyTrays();
       app.quit();

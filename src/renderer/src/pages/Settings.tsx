@@ -6,7 +6,7 @@ import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
-import { setActivity, setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
+import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
 
@@ -214,7 +214,7 @@ function Advanced() {
           actions={
             <>
               <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearActivity().then(() => { setActivity([]); setConfirming(null); })}>Clear</button>
+              <button class="btn danger" onClick={() => void window.api.clearActivity().then(() => setConfirming(null))}>Clear</button>
             </>
           }
         >

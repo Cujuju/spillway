@@ -3,3 +3,7 @@ allowBuilds:
   esbuild: true
   # Squirrel installer helper pulled in by electron-builder; this app ships NSIS only.
   electron-winstaller: false
+
+# Its "exports" hides index.d.ts from TypeScript; the patch adds a "types" condition.
+patchedDependencies:
+  better-sqlite3-multiple-ciphers: patches/better-sqlite3-multiple-ciphers.patch

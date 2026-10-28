@@ -7,7 +7,6 @@ import type { ClientId } from '@shared/types';
 import { activityLog } from './activityLog';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
-import { activity } from './activityStream';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, syncCompanion, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
 import { exportLoginFile, importLoginFiles } from './credentialFiles';
@@ -159,12 +158,12 @@ const handlers: Handlers = {
   },
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
-  activityList: () => activity.all(),
+  activityPage: (query) => activityLog.page(query),
+  activityCount: (day) => activityLog.count(day),
   activityDays: () => activityLog.days(),
-  activityDay: (day) => activityLog.day(day),
   activityTotals: () => activityLog.totalsList(),
   activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),
-  clearActivity: () => activity.clear(),
+  clearActivity: () => activityLog.clear(),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);
     await shell.openExternal(start.url);

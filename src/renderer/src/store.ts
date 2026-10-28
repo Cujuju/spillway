@@ -7,7 +7,7 @@ import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { rangeDays } from './lib/activityStats';
 import { persistedSignal } from './lib/persisted';
-import { MAX_ACTIVITY_EVENTS, type ActivityBucket, type ActivityEvent, type HistorySample, type LogLine, type ProxyStatus, type UsageSnapshot } from '@shared/types';
+import type { ActivityBucket, HistorySample, LogLine, ProxyStatus, UsageSnapshot } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
@@ -57,7 +57,6 @@ export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
-export const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
 export const [maximized, setMaximized] = createSignal(false);
@@ -93,8 +92,8 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
-  const [s, latest, status, hist, logLines, recent, dark] = await Promise.all([
-    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.activityList(), api.taskbarDark(),
+  const [s, latest, status, hist, logLines, dark] = await Promise.all([
+    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.taskbarDark(),
   ]);
   setTaskbarDark(dark);
   setSettingsSignal(s);
@@ -103,7 +102,6 @@ export async function initStore(): Promise<void> {
   setProxyStatus(status);
   setHistory(hist);
   setLogs(logLines);
-  setActivity(recent);
   void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets);
 
   api.onSnapshot((next) => {
@@ -118,8 +116,7 @@ export async function initStore(): Promise<void> {
   api.onNavigate((p) => setPage(p as Page));
   api.onSettings(setSettingsSignal);
   let bucketsReload: ReturnType<typeof setTimeout> | undefined;
-  api.onActivity((e) => {
-    setActivity((prev) => (prev.length >= MAX_ACTIVITY_EVENTS ? [...prev.slice(1), e] : [...prev, e]));
+  api.onActivity(() => {
     clearTimeout(bucketsReload);
     bucketsReload = setTimeout(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets), ACTIVITY_RELOAD_DEBOUNCE_MS);
   });

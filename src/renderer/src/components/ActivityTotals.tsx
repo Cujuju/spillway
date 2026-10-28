@@ -1,10 +1,9 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
 import type { ActivityCounts, ActivityDayTotal } from '@shared/types';
 import { dayLabel } from '../lib/format';
 import { costText } from './activityFormat';
 import { TokenCell } from './TokenCell';
-import { activity } from '../store';
 import { ProviderGlyph } from './ui';
 
 /** A burst of requests reloads the totals once, after it settles. */
@@ -41,10 +40,10 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
   const load = () => void window.api.activityTotals().then(setTotals);
   onMount(load);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(on(activity, () => {
+  onCleanup(window.api.onActivity(() => {
     clearTimeout(timer);
     timer = setTimeout(load, RELOAD_DEBOUNCE_MS);
-  }, { defer: true }));
+  }));
   onCleanup(() => clearTimeout(timer));
 
   const days = createMemo(() => {

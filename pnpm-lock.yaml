@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  better-sqlite3-multiple-ciphers: 9b443ccbaee7ac91affdcecc315f983ec083ff9f1582cb9b115aaf06e055c062
+
 importers:
 
   .:
@@ -181,6 +184,9 @@ importers:
       '@cujuju/solidjs-tiling-window-manager':
         specifier: link:../solidjs-toolkit/packages/tiling-window-manager
         version: link:../solidjs-toolkit/packages/tiling-window-manager
+      better-sqlite3-multiple-ciphers:
+        specifier: ^13.0.3
+        version: 13.0.3(patch_hash=9b443ccbaee7ac91affdcecc315f983ec083ff9f1582cb9b115aaf06e055c062)
       electron-updater:
         specifier: ^6.8.11
         version: 6.8.11(supports-color@7.2.0)
@@ -1187,6 +1193,10 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  better-sqlite3-multiple-ciphers@13.0.3:
+    resolution: {integrity: sha512-UYabM82r1J84TLWc/SszoHs6XopWpl/2HCg3Nui1JUaFXg/VLswzkPowYiRhK/4CftI8dgtikwyZQecMldrGxQ==}
+    engines: {node: '>=22'}
+
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
 
@@ -2024,6 +2034,10 @@ packages:
   node-abi@4.40.0:
     resolution: {integrity: sha512-GuvqvtrOk+AC27RidBxBsMzVNkwNl7PjHgc4NXbmdvSVLgIUjpaqcG1FjNRYnt2Yn9Ytq+Ln37XsBaglUcte/w==}
     engines: {node: '>=22.12.0'}
+
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
 
   node-api-version@0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
@@ -3447,6 +3461,10 @@ snapshots:
 
   baseline-browser-mapping@2.11.32: {}
 
+  better-sqlite3-multiple-ciphers@13.0.3(patch_hash=9b443ccbaee7ac91affdcecc315f983ec083ff9f1582cb9b115aaf06e055c062):
+    dependencies:
+      node-addon-api: 8.9.2
+
   bluebird@3.7.2: {}
 
   boolean@3.2.0:
@@ -4322,6 +4340,8 @@ snapshots:
   node-abi@4.40.0:
     dependencies:
       semver: 7.7.4
+
+  node-addon-api@8.9.2: {}
 
   node-api-version@0.2.1:
     dependencies:

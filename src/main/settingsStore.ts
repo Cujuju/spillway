@@ -11,6 +11,8 @@ interface Secrets {
   clientApiKey: string;
   /** Management key for outside tools (T3 Code's usage provider); the app itself uses the per-launch supervisor password. */
   managementKey: string;
+  /** Hex key of the encrypted activity database (activityDb.ts). Losing it sets that database aside. */
+  databaseKey: string;
 }
 
 const SECRET_BYTES = 32;
@@ -56,6 +58,8 @@ export function onSettingsChange(listener: (next: AppSettings, prev: AppSettings
 }
 
 const newSecret = () => randomBytes(SECRET_BYTES).toString('base64url');
+const newDatabaseKey = () => randomBytes(SECRET_BYTES).toString('hex');
+const present = (v: unknown): v is string => typeof v === 'string' && v !== '';
 
 async function encode(value: Secrets): Promise<Buffer> {
   const json = JSON.stringify(value);
@@ -74,11 +78,15 @@ async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean
     }
     const parsed = JSON.parse(json) as Partial<Secrets>;
     if (typeof parsed.clientApiKey !== 'string') return null;
-    // Files without a management key get one, so they are rewritten.
-    const hasManagementKey = typeof parsed.managementKey === 'string' && parsed.managementKey !== '';
+    // Files from older versions lack later keys; they get them and are rewritten.
+    const complete = present(parsed.managementKey) && present(parsed.databaseKey);
     return {
-      value: { clientApiKey: parsed.clientApiKey, managementKey: hasManagementKey ? parsed.managementKey! : newSecret() },
-      reEncrypt: reEncrypt || !hasManagementKey,
+      value: {
+        clientApiKey: parsed.clientApiKey,
+        managementKey: present(parsed.managementKey) ? parsed.managementKey : newSecret(),
+        databaseKey: present(parsed.databaseKey) ? parsed.databaseKey : newDatabaseKey(),
+      },
+      reEncrypt: reEncrypt || !complete,
     };
   } catch (err) {
     console.error('[settings] secrets unreadable:', err);
@@ -92,7 +100,7 @@ let secrets: Secrets | null = null;
 export async function loadSecrets(): Promise<Secrets> {
   const file = appPaths.secretsFile;
   const decoded = existsSync(file) ? await decode(readFileSync(file)) : null;
-  secrets = decoded?.value ?? { clientApiKey: newSecret(), managementKey: newSecret() };
+  secrets = decoded?.value ?? { clientApiKey: newSecret(), managementKey: newSecret(), databaseKey: newDatabaseKey() };
   // Rewrite when new, unreadable, or encrypted under a rotated key.
   if (!decoded || decoded.reEncrypt) writeFileAtomic(file, await encode(secrets));
   return secrets;

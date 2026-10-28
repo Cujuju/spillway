@@ -43,6 +43,7 @@
     "@cujuju/solidjs-hooks": "link:../solidjs-toolkit/packages/hooks",
     "@cujuju/solidjs-kv-tooltip": "link:../solidjs-toolkit/packages/kv-tooltip",
     "@cujuju/solidjs-tiling-window-manager": "link:../solidjs-toolkit/packages/tiling-window-manager",
+    "better-sqlite3-multiple-ciphers": "^13.0.3",
     "electron-updater": "^6.8.11",
     "yaml": "^2.9.1"
   }

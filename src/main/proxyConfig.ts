@@ -46,6 +46,9 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
+    // A restart keeps conversations on their account (prompt cache) and limited accounts benched.
+    [['routing', 'session-affinity-persist'], true],
+    [['routing', 'cooldown', 'save-cooldown-status'], true],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],
     [['oauth', 'auth-dir'], input.authDir],
   ];

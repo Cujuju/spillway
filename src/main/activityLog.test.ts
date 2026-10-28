@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTIVITY_PAGE_SIZE, type ActivityDayTotal, type ActivityEvent } from '@shared/types';
+import { EVERY_REQUEST } from '@shared/activityScope';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-activity-'));
 const dbFile = path.join(dir, 'activity.db');
@@ -17,6 +18,7 @@ vi.mock('./settingsStore', () => ({
 
 const { localDay } = await import('@shared/activityCounts');
 const { activityLog, addToTotals, hourlyBuckets, lastDays, oldestKeptDay } = await import('./activityLog');
+const { totalKey } = await import('./activityDb');
 afterAll(() => {
   activityLog.close();
   rmSync(dir, { recursive: true, force: true });
@@ -24,7 +26,7 @@ afterAll(() => {
 
 const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
   at: at.toISOString(), requestId: `r-${at.getTime()}`, selectionId: null, provider: 'claude', model: 'opus', authIndex: 'a1',
-  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2, sessionId: null, movedFrom: null, userAgent: null,
+  stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2, sessionId: null, movedFrom: null, userAgent: null, client: null,
   ...patch,
 });
 const storedCount = () => activityLog.daySummaries().reduce((n, d) => n + d.requests, 0);
@@ -71,10 +73,10 @@ describe('activityLog', () => {
   it('pages every stored day newest first, without gaps or repeats', () => {
     const total = ACTIVITY_PAGE_SIZE + 3;
     for (let i = 0; i < total; i++) activityLog.append(event(daysAgo(i % 3, 1 + (i % 20)), { requestId: `r${i}` }));
-    const first = activityLog.page({ day: null, failedOnly: false, accounts: null, before: null });
+    const first = activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: null });
     expect(first.events).toHaveLength(ACTIVITY_PAGE_SIZE);
     expect(first.more).toBe(true);
-    const second = activityLog.page({ day: null, failedOnly: false, accounts: null, before: first.events.at(-1)!.id });
+    const second = activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: first.events.at(-1)!.id });
     expect(second.more).toBe(false);
     const ids = [...first.events, ...second.events].map((e) => e.requestId);
     expect(ids).toEqual(Array.from({ length: total }, (_, i) => `r${total - 1 - i}`));
@@ -86,9 +88,9 @@ describe('activityLog', () => {
     activityLog.append(event(daysAgo(1), { requestId: 'old-ok', ...priced }));
     activityLog.append(event(daysAgo(1), { requestId: 'old-failed', failed: true, ...priced }));
     activityLog.append(event(daysAgo(0), { requestId: 'new-failed', failed: true }));
-    expect(activityLog.page({ day: null, failedOnly: true, accounts: null, before: null }).events.map((e) => e.requestId)).toEqual(['new-failed', 'old-failed']);
+    expect(activityLog.page({ day: null, failedOnly: true, scope: EVERY_REQUEST, before: null }).events.map((e) => e.requestId)).toEqual(['new-failed', 'old-failed']);
     const yesterday = localDay(daysAgo(1).getTime());
-    expect(activityLog.page({ day: yesterday, failedOnly: false, accounts: null, before: null }).events.map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
+    expect(activityLog.page({ day: yesterday, failedOnly: false, scope: EVERY_REQUEST, before: null }).events.map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
     expect(activityLog.day(yesterday).map((e) => e.requestId)).toEqual(['old-failed', 'old-ok']);
     expect(activityLog.day(yesterday, true).map((e) => e.requestId)).toEqual(['old-failed']);
     expect(summary(yesterday)).toMatchObject({ requests: 2, failed: 1, newestId: expect.any(Number), unpricedRequests: 0 });
@@ -102,16 +104,42 @@ describe('activityLog', () => {
     activityLog.append(event(daysAgo(0), { requestId: 'a2-new', authIndex: 'a2', failed: true, ...priced }));
     activityLog.append(event(daysAgo(0), { requestId: 'none-new', authIndex: null, ...priced }));
     const today = localDay(Date.now());
-    const ids = (accounts: string[] | null) => activityLog.page({ day: null, failedOnly: false, accounts, before: null }).events.map((e) => e.requestId);
+    const ids = (accounts: string[] | null) => activityLog.page({ day: null, failedOnly: false, scope: { accounts, clients: null }, before: null }).events.map((e) => e.requestId);
     expect(ids(['a2'])).toEqual(['a2-new']);
     expect(ids([''])).toEqual(['none-new']);
     expect(ids(['a1', ''])).toEqual(['none-new', 'a1-old']);
     expect(ids([])).toEqual([]);
-    expect(activityLog.day(today, false, ['a2']).map((e) => e.requestId)).toEqual(['a2-new']);
-    const scoped = activityLog.daySummaries(['a2']);
+    expect(activityLog.day(today, false, { accounts: ['a2'], clients: null }).map((e) => e.requestId)).toEqual(['a2-new']);
+    const scoped = activityLog.daySummaries({ accounts: ['a2'], clients: null });
     expect(scoped.map((d) => [d.day, d.requests, d.failed])).toEqual([[today, 1, 1]]);
     expect(scoped[0]!.costUsd).toBeCloseTo(activityLog.totalsList().find((t) => t.authIndex === 'a2')!.costUsd);
     expect(activityLog.daySummaries().reduce((n, d) => n + d.requests, 0)).toBe(3);
+  });
+
+  it('limits requests, day summaries, totals and buckets to the chosen clients', () => {
+    const priced = { model: 'claude-opus-5-5' };
+    activityLog.append(event(daysAgo(0, 1), { requestId: 'cc', client: 'claude-cli', ...priced }));
+    activityLog.append(event(daysAgo(0, 2), { requestId: 'sa', client: 'stockapp', failed: true, ...priced }));
+    activityLog.append(event(daysAgo(0, 3), { requestId: 'none', ...priced }));
+    const today = localDay(Date.now());
+    const only = (clients: string[]) => ({ accounts: null, clients });
+    const ids = (clients: string[]) => activityLog.page({ day: null, failedOnly: false, scope: only(clients), before: null }).events.map((e) => e.requestId);
+    expect(ids(['stockapp'])).toEqual(['sa']);
+    expect(ids([''])).toEqual(['none']);
+    expect(ids(['claude-cli', ''])).toEqual(['none', 'cc']);
+    expect(activityLog.page({ day: null, failedOnly: false, scope: { accounts: ['a2'], clients: ['stockapp'] }, before: null }).events).toEqual([]);
+    expect(activityLog.day(today, false, only(['stockapp'])).map((e) => e.requestId)).toEqual(['sa']);
+    expect(activityLog.daySummaries(only(['stockapp'])).map((d) => [d.day, d.requests, d.failed])).toEqual([[today, 1, 1]]);
+    // Same day, account and model: one totals row per client.
+    expect(activityLog.totalsList().map((t) => t.client).sort()).toEqual(['claude-cli', 'stockapp', null].sort());
+    expect(activityLog.buckets(1).filter((b) => b.client === 'stockapp')).toHaveLength(1);
+  });
+
+  it('reads totals stored before clients were recorded as having none, under their old key', () => {
+    activityLog.append(event(daysAgo(0), { requestId: 'before' }));
+    const [stored] = activityLog.totalsList();
+    expect(stored!.client).toBeNull();
+    expect(totalKey(stored!)).toBe(`${stored!.day}|claude|a1|opus`);
   });
 
   it('prunes past retention and keeps the totals', () => {
@@ -136,15 +164,15 @@ describe('activityLog', () => {
   it('rejects malformed queries from the renderer', () => {
     activityLog.append(event(daysAgo(0)));
     expect(activityLog.day('../settings')).toEqual([]);
-    expect(activityLog.page({ day: "x' OR 1=1", failedOnly: false, accounts: null, before: null }).events).toEqual([]);
-    expect(activityLog.page({ day: null, failedOnly: false, accounts: null, before: 1.5 }).events).toEqual([]);
+    expect(activityLog.page({ day: "x' OR 1=1", failedOnly: false, scope: EVERY_REQUEST, before: null }).events).toEqual([]);
+    expect(activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: 1.5 }).events).toEqual([]);
   });
 
   it('keeps totals and requests across a reopen, encrypted on disk', () => {
     activityLog.append(event(daysAgo(0), { requestId: 'persisted-secret-id' }));
     activityLog.close();
     expect(readFileSync(dbFile).includes('persisted-secret-id')).toBe(false);
-    expect(activityLog.page({ day: null, failedOnly: false, accounts: null, before: null }).events.map((e) => e.requestId)).toEqual(['persisted-secret-id']);
+    expect(activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: null }).events.map((e) => e.requestId)).toEqual(['persisted-secret-id']);
     expect(activityLog.totalsList()).toHaveLength(1);
   });
 
@@ -158,7 +186,7 @@ describe('activityLog', () => {
     expect(append('a1', 'opus', null)).toBeNull();
     activityLog.close();
     expect(append('a1')).toBe('a2');
-    expect(activityLog.page({ day: null, failedOnly: false, accounts: null, before: null }).events[0]).toMatchObject({ sessionId: 'claude:s1', movedFrom: 'a2' });
+    expect(activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: null }).events[0]).toMatchObject({ sessionId: 'claude:s1', movedFrom: 'a2' });
   });
 
   it('sets aside a database the key cannot read and starts empty', () => {
@@ -186,7 +214,7 @@ describe('legacy file import', () => {
     writeFileSync(path.join(legacyDir, '2026-01-03.jsonl'), `${JSON.stringify(event(new Date(2026, 0, 3, 9), { requestId: 'c', failed: true }))}\n`);
     writeFileSync(path.join(legacyDir, 'daily-totals.json'), JSON.stringify([{ day: '2026-01-02', provider: 'claude', authIndex: 'a1', model: 'opus', requests: 2 }]));
 
-    const page = activityLog.page({ day: null, failedOnly: false, accounts: null, before: null });
+    const page = activityLog.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: null });
     expect(page.events.map((e) => e.requestId)).toEqual(['c', 'b', 'a']);
     expect(page.events.at(-1)?.cacheWriteTokens).toBe(0);
     expect(summary('2026-01-03')).toMatchObject({ requests: 1, failed: 1 });

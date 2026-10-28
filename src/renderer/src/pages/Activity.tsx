@@ -1,11 +1,12 @@
 import { createMemo, Show } from 'solid-js';
-import { isAccountScope, type AccountScope } from '@shared/activityScope';
+import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
 import { ActivityTotals } from '../components/ActivityTotals';
+import { ClientFilter } from '../components/ClientFilter';
 import { Notice, Seg } from '../components/ui';
-import { accountGroups } from '../lib/accountScope';
+import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
@@ -16,8 +17,10 @@ const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 export function Activity() {
   const [view, setView] = persistedSignal('activity.view', 'overview', VIEWS.map((v) => v.value));
   const [filter, setFilter] = persistedSignal<RequestFilter>('activity.filter', 'all', FILTERS);
-  const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isAccountScope);
-  const days = createDaySummaries(accounts);
+  const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isKeyScope);
+  const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
+  const scope = createMemo<ActivityScope>(() => ({ accounts: accounts(), clients: clients() }));
+  const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
     { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString()}` },
@@ -28,6 +31,7 @@ export function Activity() {
   const accountNames = createMemo(() => new Map((snapshot()?.credentials ?? []).map((c) => [c.authIndex, c.label])));
   const accountName = (authIndex: string | null) => (authIndex ? (accountNames().get(authIndex) ?? authIndex) : '—');
   const groups = createMemo(() => accountGroups(snapshot()?.credentials ?? [], activityBuckets(), accounts()));
+  const clientChoices = createMemo(() => clientOptions(activityBuckets(), clients()));
 
   return (
     <>
@@ -35,6 +39,7 @@ export function Activity() {
         <h1 class="dash-title">Activity</h1>
         <div class="dash-actions card-spaced">
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
+          <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
           <Show when={view() === 'requests'}>
             <Seg value={filter()} options={filterOptions()} onChange={setFilter} />
           </Show>
@@ -47,13 +52,13 @@ export function Activity() {
       </Show>
 
       <Show when={view() === 'overview'}>
-        <ActivityOverview accounts={accounts()} account={accountName} />
+        <ActivityOverview scope={scope()} account={accountName} />
       </Show>
       <Show when={view() === 'totals'}>
-        <ActivityTotals account={accountName} accounts={accounts()} />
+        <ActivityTotals account={accountName} scope={scope()} />
       </Show>
       <Show when={view() === 'requests'}>
-        <ActivityRequests account={accountName} accounts={accounts()} filter={filter()} days={days} />
+        <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />
       </Show>
     </>
   );

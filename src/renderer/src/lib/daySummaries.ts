@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { localDay } from '@shared/activityCounts';
-import { inScope, type AccountScope } from '@shared/activityScope';
+import { inScope, type ActivityScope } from '@shared/activityScope';
 import { tokenCost } from '@shared/modelPrices';
 import type { ActivityDaySummary, StoredActivityEvent } from '@shared/types';
 
@@ -16,24 +16,24 @@ export interface DaySummaries {
   /** Newest day first. */
   list: () => ActivityDaySummary[];
   byDay: () => Map<string, ActivityDaySummary>;
-  /** Totals across every stored day, for the accounts shown. */
+  /** Totals across every stored day, for the requests shown. */
   stored: () => { requests: number; failed: number };
   loaded: () => boolean;
 }
 
-/** Per-day request counts for `accounts`, loaded when they change and kept current from the live stream. Call in a component. */
-export function createDaySummaries(accounts: () => AccountScope): DaySummaries {
+/** Per-day request counts for `scope`, loaded when it changes and kept current from the live stream. Call in a component. */
+export function createDaySummaries(scope: () => ActivityScope): DaySummaries {
   const [list, setList] = createSignal<ActivityDaySummary[]>([]);
   const [loaded, setLoaded] = createSignal(false);
   /** Live requests that arrive while a load runs; applied after, when newer than it counted. */
   let liveDuringLoad: StoredActivityEvent[] | null = [];
-  /** Bumped per load; only the newest load, for the current accounts, applies. */
+  /** Bumped per load; only the newest load, for the current scope, applies. */
   let generation = 0;
   const byDay = createMemo(() => new Map(list().map((s) => [s.day, s])));
   const stored = createMemo(() => list().reduce((t, s) => ({ requests: t.requests + s.requests, failed: t.failed + s.failed }), { requests: 0, failed: 0 }));
 
   const count = (e: StoredActivityEvent) => {
-    if (!inScope(accounts(), e.authIndex)) return;
+    if (!inScope(scope(), e)) return;
     const day = localDay(Date.parse(e.at));
     const current = byDay().get(day);
     if (current && e.id <= current.newestId) return;
@@ -46,18 +46,18 @@ export function createDaySummaries(accounts: () => AccountScope): DaySummaries {
     // oxlint-disable-next-line solid/reactivity
     onCleanup(window.api.onActivity((e) => (liveDuringLoad ? liveDuringLoad.push(e) : count(e))));
   });
-  createEffect(on(accounts, (scope) => {
+  createEffect(on(scope, (current) => {
     const gen = ++generation;
     liveDuringLoad ??= [];
     setLoaded(false);
     void window.api
-      .activityDaySummaries(scope)
+      .activityDaySummaries(current)
       .then((next) => {
         if (gen === generation) setList(next);
       })
       .catch((err: unknown) => {
         console.error('[activity] day summaries failed:', err);
-        // Never show another account choice's counts.
+        // Never show another filter's counts.
         if (gen === generation) setList([]);
       })
       .finally(() => {

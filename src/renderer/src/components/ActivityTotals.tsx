@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
-import { inScope, type AccountScope } from '@shared/activityScope';
+import { inScope, type ActivityScope } from '@shared/activityScope';
 import type { ActivityCounts, ActivityDayTotal } from '@shared/types';
 import { dayLabel } from '../lib/format';
 import { costText } from './activityFormat';
@@ -35,8 +35,20 @@ function CountCells(props: { c: ActivityCounts; provider?: string }) {
   );
 }
 
-/** Per-day totals for `accounts`, newest day first, broken down by account and model. */
-export function ActivityTotals(props: { account: (authIndex: string | null) => string; accounts: AccountScope }) {
+/** Sums rows of one account and model; totals are also kept per client, which this view doesn't split by. */
+function byAccountModel(rows: ActivityDayTotal[]): ActivityDayTotal[] {
+  const merged = new Map<string, ActivityDayTotal>();
+  for (const r of rows) {
+    const key = `${r.provider}|${r.authIndex ?? ''}|${r.model}`;
+    const row = merged.get(key) ?? { ...r, ...emptyCounts(), client: null };
+    addCounts(row, r);
+    merged.set(key, row);
+  }
+  return [...merged.values()];
+}
+
+/** Per-day totals for `scope`, newest day first, broken down by account and model. */
+export function ActivityTotals(props: { account: (authIndex: string | null) => string; scope: ActivityScope }) {
   const [totals, setTotals] = createSignal<ActivityDayTotal[]>([]);
   const load = () => void window.api.activityTotals().then(setTotals);
   onMount(load);
@@ -49,10 +61,10 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
 
   const days = createMemo(() => {
     const groups = new Map<string, ActivityDayTotal[]>();
-    for (const t of totals()) if (inScope(props.accounts, t.authIndex)) groups.set(t.day, [...(groups.get(t.day) ?? []), t]);
+    for (const t of totals()) if (inScope(props.scope, t)) groups.set(t.day, [...(groups.get(t.day) ?? []), t]);
     return [...groups]
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([day, rows]) => ({ day, total: sum(rows), rows: [...rows].sort((x, y) => y.requests - x.requests) }));
+      .map(([day, rows]) => ({ day, total: sum(rows), rows: byAccountModel(rows).sort((x, y) => y.requests - x.requests) }));
   });
 
   return (
@@ -72,7 +84,7 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
         </tr>
       </thead>
       <tbody>
-        <For each={days()} fallback={<tr><td colSpan={COLUMN_COUNT} class="muted">{props.accounts === null ? 'No requests recorded yet.' : 'No requests from these accounts.'}</td></tr>}>
+        <For each={days()} fallback={<tr><td colSpan={COLUMN_COUNT} class="muted">{props.scope.accounts === null && props.scope.clients === null ? 'No requests recorded yet.' : 'No requests match these filters.'}</td></tr>}>
           {(d) => (
             <>
               <tr class="group-row">

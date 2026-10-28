@@ -1,9 +1,9 @@
 import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
-import { inScope, normalizeScope, type AccountScope } from '@shared/activityScope';
+import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
-import { ACCOUNT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
+import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 
@@ -19,9 +19,9 @@ export function lastDays(today: number, count: number): string[] {
   return Array.from({ length: count }, (_, i) => localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (count - 1 - i)).getTime()));
 }
 
-/** Adds one request to its day/account/model row and returns that row. */
+/** Adds one request to its day/account/model/client row and returns that row. */
 export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): ActivityDayTotal {
-  const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model };
+  const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
   const key = totalKey(base);
   const row = totals.get(key) ?? { ...base, ...emptyCounts() };
   addEvent(row, e);
@@ -29,14 +29,14 @@ export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEv
   return row;
 }
 
-/** One day's requests summed per local hour, account and model. */
+/** One day's requests summed per local hour, account, model and client. */
 export function hourlyBuckets(events: ActivityEvent[]): ActivityBucket[] {
   const rows = new Map<string, ActivityBucket>();
   for (const e of events) {
     const at = new Date(Date.parse(e.at));
     at.setMinutes(0, 0, 0);
-    const base = { start: at.getTime(), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model };
-    const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}`;
+    const base = { start: at.getTime(), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
+    const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}|${base.client ?? ''}`;
     const row = rows.get(key) ?? { ...base, ...emptyCounts() };
     addEvent(row, e);
     rows.set(key, row);
@@ -50,8 +50,8 @@ interface RequestRow {
 }
 function toStored(r: RequestRow): StoredActivityEvent {
   // Requests stored before conversations or clients were recorded lack these fields.
-  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent'> & Partial<ActivityEvent>;
-  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, id: r.id };
+  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
+  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 
@@ -61,12 +61,19 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
   const before = q?.before ?? null;
   if (day !== null && (typeof day !== 'string' || !DAY_KEY.test(day))) return null;
   if (before !== null && !Number.isSafeInteger(before)) return null;
-  return { day, failedOnly: q?.failedOnly === true, accounts: normalizeScope(q?.accounts), before };
+  return { day, failedOnly: q?.failedOnly === true, scope: normalizeScope(q?.scope), before };
 }
 
-/** SQL condition limiting requests to `scope`'s accounts; null when every account is in scope. */
-function scopeClause(scope: AccountScope): { sql: string; params: string[] } | null {
-  return scope === null ? null : { sql: `${ACCOUNT_KEY_SQL} IN (${scope.map(() => '?').join(', ')})`, params: scope };
+/** SQL condition limiting requests to `scope`'s accounts and clients; null when every request is in scope. */
+function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
+  const parts: string[] = [];
+  const params: string[] = [];
+  for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients]] as const) {
+    if (keys === null) continue;
+    parts.push(`${keySql} IN (${keys.map(() => '?').join(', ')})`);
+    params.push(...keys);
+  }
+  return parts.length ? { sql: parts.join(' AND '), params } : null;
 }
 
 /**
@@ -135,10 +142,10 @@ class ActivityLog {
       params.push(q.day);
     }
     if (q.failedOnly) where.push('failed = 1');
-    const accounts = scopeClause(q.accounts);
-    if (accounts) {
-      where.push(accounts.sql);
-      params.push(...accounts.params);
+    const scope = scopeClause(q.scope);
+    if (scope) {
+      where.push(scope.sql);
+      params.push(...scope.params);
     }
     if (q.before !== null) {
       where.push('id < ?');
@@ -150,15 +157,15 @@ class ActivityLog {
     return { events: rows.slice(0, ACTIVITY_PAGE_SIZE).map(toStored), more: rows.length > ACTIVITY_PAGE_SIZE };
   }
 
-  /** Each day with stored requests from `accounts`, newest first; cost comes from the day's totals. */
-  daySummaries(accounts: AccountScope = null): ActivityDaySummary[] {
-    const scope = normalizeScope(accounts);
+  /** Each day with stored requests in `scope`, newest first; cost comes from the day's totals. */
+  daySummaries(rawScope: ActivityScope = EVERY_REQUEST): ActivityDaySummary[] {
+    const scope = normalizeScope(rawScope);
     const clause = scopeClause(scope);
     const sql = `SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests ${clause ? `WHERE ${clause.sql}` : ''} GROUP BY day ORDER BY day DESC`;
     const rows = this.db.prepare(sql).all(...(clause?.params ?? [])) as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
     const cost = new Map<string, Pick<ActivityDaySummary, 'costUsd' | 'unpricedRequests'>>();
     for (const t of this.totalsList()) {
-      if (!inScope(scope, t.authIndex)) continue;
+      if (!inScope(scope, t)) continue;
       const c = cost.get(t.day) ?? { costUsd: 0, unpricedRequests: 0 };
       c.costUsd += t.costUsd;
       c.unpricedRequests += t.unpricedRequests;
@@ -172,10 +179,10 @@ class ActivityLog {
     return (this.db.prepare('SELECT DISTINCT day FROM requests ORDER BY day DESC').all() as { day: string }[]).map((r) => r.day);
   }
 
-  /** All of one day's requests from `accounts`, newest first. */
-  day(day: string, failedOnly = false, accounts: AccountScope = null): StoredActivityEvent[] {
+  /** All of one day's requests in `scope`, newest first. */
+  day(day: string, failedOnly = false, scope: ActivityScope = EVERY_REQUEST): StoredActivityEvent[] {
     if (typeof day !== 'string' || !DAY_KEY.test(day)) return [];
-    const clause = scopeClause(normalizeScope(accounts));
+    const clause = scopeClause(normalizeScope(scope));
     const sql = `SELECT id, event FROM requests WHERE day = ?${failedOnly === true ? ' AND failed = 1' : ''}${clause ? ` AND ${clause.sql}` : ''} ORDER BY id DESC`;
     return (this.db.prepare(sql).all(day, ...(clause?.params ?? [])) as RequestRow[]).map(toStored);
   }
@@ -232,8 +239,10 @@ class ActivityLog {
     if (this.totals) return this.totals;
     const rows = this.db.prepare('SELECT total FROM day_totals').all() as { total: string }[];
     this.totals = new Map(rows.map((r) => {
-      const t = JSON.parse(r.total) as ActivityDayTotal;
-      return [totalKey(t), t];
+      // Totals stored before clients were recorded have none.
+      const t = JSON.parse(r.total) as Omit<ActivityDayTotal, 'client'> & Partial<ActivityDayTotal>;
+      const total = { ...t, client: t.client ?? null };
+      return [totalKey(total), total];
     }));
     return this.totals;
   }

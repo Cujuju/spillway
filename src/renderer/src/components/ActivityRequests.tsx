@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-solid';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { localDay } from '@shared/activityCounts';
-import { inScope, type AccountScope } from '@shared/activityScope';
+import { inScope, type ActivityScope } from '@shared/activityScope';
 import { ACTIVITY_PAGE_SIZE, type StoredActivityEvent } from '@shared/types';
 import type { DaySummaries } from '../lib/daySummaries';
 import { conversationLabel } from '../lib/conversationNames';
@@ -31,12 +31,12 @@ const isOpenMap = (v: unknown): v is Record<string, boolean> =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every((x) => typeof x === 'boolean');
 
 /** Stored requests, one collapsible section per day, newest day first; open days load more as they scroll. */
-export function ActivityRequests(props: { account: (authIndex: string | null) => string; accounts: AccountScope; filter: RequestFilter; days: DaySummaries }) {
+export function ActivityRequests(props: { account: (authIndex: string | null) => string; scope: ActivityScope; filter: RequestFilter; days: DaySummaries }) {
   /** Days the user opened or closed; the rest follow the default, where only today is open. */
   const [toggled, setToggled] = persistedSignal<Record<string, boolean>>('activity.openDays', {}, isOpenMap);
   const [sort, setSort] = persistedSignal<RequestSort>('activity.requestSort', DEFAULT_SORT, isRequestSort);
   const [sections, setSections] = createSignal<Record<string, Section>>({});
-  /** Bumped when the filter, accounts or order change, so loads started under the old ones are dropped. */
+  /** Bumped when the filters or order change, so loads started under the old ones are dropped. */
   let generation = 0;
 
   const today = () => localDay(now());
@@ -53,13 +53,13 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   // Day strings keep each section's rows mounted while its summary updates.
   const shownDays = createMemo(() => props.days.list().filter((s) => !failedOnly() || s.failed > 0).map((s) => s.day));
 
-  createEffect(on([() => props.filter, () => props.accounts, sort], () => {
+  createEffect(on([() => props.filter, () => props.scope, sort], () => {
     generation += 1;
     setSections({});
   }, { defer: true }));
-  // Forget open/closed choices for days no longer stored. Only the every-account list holds every stored day.
+  // Forget open/closed choices for days no longer stored. Only the unfiltered list holds every stored day.
   createEffect(on(() => props.days.loaded(), (loaded) => {
-    if (!loaded || props.accounts !== null) return;
+    if (!loaded || props.scope.accounts !== null || props.scope.clients !== null) return;
     const days = props.days.byDay();
     setToggled((t) => Object.fromEntries(Object.entries(t).filter(([d]) => days.has(d))));
   }));
@@ -85,14 +85,14 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   const loadMore = (day: string) => {
     const s = section(day);
     if (s.loading) return;
-    // Read now, so the load matches the filter and accounts it started under.
+    // Read now, so the load matches the filters it started under.
     const failed = failedOnly();
-    const accounts = props.accounts;
+    const scope = props.scope;
     if (isRecordedOrder(sort())) {
-      const query = { day, failedOnly: failed, accounts, before: s.rows.at(-1)?.id ?? null };
+      const query = { day, failedOnly: failed, scope, before: s.rows.at(-1)?.id ?? null };
       if (!s.loaded || s.more) fetchInto(day, () => window.api.activityPage(query));
     } else if (!s.loaded) {
-      fetchInto(day, () => window.api.activityDay(day, failed, accounts).then((events) => ({ events, more: false })));
+      fetchInto(day, () => window.api.activityDay(day, failed, scope).then((events) => ({ events, more: false })));
     } else if (s.shown < s.rows.length) {
       setSection(day, (cur) => ({ ...cur, shown: cur.shown + ACTIVITY_PAGE_SIZE }));
     }
@@ -110,7 +110,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
     onCleanup(window.api.onActivity((e) => {
       const day = localDay(Date.parse(e.at));
       // A day that hasn't started loading picks the request up with its first load.
-      if (!sections()[day] || (failedOnly() && !e.failed) || !inScope(props.accounts, e.authIndex)) return;
+      if (!sections()[day] || (failedOnly() && !e.failed) || !inScope(props.scope, e)) return;
       setSection(day, (s) => (s.rows.some((r) => r.id === e.id) ? s : { ...s, rows: [e, ...s.rows] }));
     }));
   });

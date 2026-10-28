@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { inScope, normalizeScope } from '@shared/activityScope';
-import { accountGroups, NO_ACCOUNT_LABEL, setAccounts } from './accountScope';
+import { clientName, inScope, normalizeScope } from '@shared/activityScope';
+import { accountGroups, clientOptions, NO_ACCOUNT_LABEL, NO_CLIENT_LABEL, setScopeKeys } from './accountScope';
 
 const credentials = [
   { authIndex: 'c2', provider: 'codex', label: 'zed@x' },
@@ -19,28 +19,51 @@ describe('accountGroups', () => {
   });
 });
 
-describe('setAccounts', () => {
+describe('setScopeKeys', () => {
   const all = ['a1', 'a2', 'c2'];
   it('unticking from every account keeps the rest', () => {
-    expect(setAccounts(null, ['a1'], false, all)).toEqual(['a2', 'c2']);
+    expect(setScopeKeys(null, ['a1'], false, all)).toEqual(['a2', 'c2']);
   });
   it('ticking the last missing account means every account again', () => {
-    expect(setAccounts(['a2', 'c2'], ['a1'], true, all)).toBeNull();
+    expect(setScopeKeys(['a2', 'c2'], ['a1'], true, all)).toBeNull();
   });
   it('unticks a whole provider', () => {
-    expect(setAccounts(null, ['a1', 'a2'], false, all)).toEqual(['c2']);
+    expect(setScopeKeys(null, ['a1', 'a2'], false, all)).toEqual(['c2']);
   });
 });
 
 describe('inScope / normalizeScope', () => {
-  it('matches requests without an account by the empty key', () => {
-    expect(inScope([''], null)).toBe(true);
-    expect(inScope(['a1'], null)).toBe(false);
-    expect(inScope(null, 'anything')).toBe(true);
+  const row = (authIndex: string | null, client: string | null) => ({ authIndex, client });
+  it('matches requests without an account or client by the empty key', () => {
+    expect(inScope({ accounts: [''], clients: null }, row(null, 'x'))).toBe(true);
+    expect(inScope({ accounts: ['a1'], clients: null }, row(null, 'x'))).toBe(false);
+    expect(inScope({ accounts: null, clients: [''] }, row('a1', null))).toBe(true);
+    expect(inScope({ accounts: null, clients: null }, row('anything', 'any'))).toBe(true);
   });
-  it('treats anything but a string list as every account', () => {
-    expect(normalizeScope(['a', 'a', 'b'])).toEqual(['a', 'b']);
-    expect(normalizeScope([1])).toBeNull();
-    expect(normalizeScope(undefined)).toBeNull();
+  it('needs both the account and the client in scope', () => {
+    expect(inScope({ accounts: ['a1'], clients: ['stockapp'] }, row('a1', 'stockapp'))).toBe(true);
+    expect(inScope({ accounts: ['a1'], clients: ['stockapp'] }, row('a1', 'claude-cli'))).toBe(false);
+  });
+  it('treats anything but a string list as every key', () => {
+    expect(normalizeScope({ accounts: ['a', 'a', 'b'], clients: [1] })).toEqual({ accounts: ['a', 'b'], clients: null });
+    expect(normalizeScope(undefined)).toEqual({ accounts: null, clients: null });
+  });
+});
+
+describe('clientName', () => {
+  it("takes the User-Agent's first product name", () => {
+    expect(clientName('claude-cli/2.1.0 (external, sdk-ts)')).toBe('claude-cli');
+    expect(clientName('stockapp/0.164.0 (Windows 10.0.19045; x86_64) xterm-256color (stockapp; 0.1.0)')).toBe('stockapp');
+    expect(clientName('curl')).toBe('curl');
+    expect(clientName('  ')).toBeNull();
+    expect(clientName(null)).toBeNull();
+  });
+});
+
+describe('clientOptions', () => {
+  it('lists seen and saved clients A-Z, unknown last', () => {
+    expect(clientOptions([{ client: 'stockapp' }, { client: null }, { client: 'claude-cli' }, { client: 'stockapp' }], ['gone'])).toEqual([
+      { key: 'claude-cli', label: 'claude-cli' }, { key: 'gone', label: 'gone' }, { key: 'stockapp', label: 'stockapp' }, { key: '', label: NO_CLIENT_LABEL },
+    ]);
   });
 });

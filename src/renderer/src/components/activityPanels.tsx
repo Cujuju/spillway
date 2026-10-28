@@ -1,9 +1,10 @@
 import type { TileSize } from '@cujuju/solidjs-tiling-window-manager';
 import type { JSX } from 'solid-js';
 import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard';
-import { accountKey } from '@shared/activityScope';
+import { accountKey, clientKey } from '@shared/activityScope';
+import { clientLabel } from '../lib/accountScope';
 import type { ActivityBucket } from '@shared/types';
-import { metricValue, type AccountRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
+import { metricValue, type AccountRow, type ClientRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { axisMetric, countRows, formatMetric, metricLabel } from './activityFormat';
@@ -22,6 +23,7 @@ export interface ActivityData {
   now: () => number;
   models: () => ModelRow[];
   accounts: () => AccountRow[];
+  clients: () => ClientRow[];
   /** Display name for an account, masked when "Show emails" is off. */
   account: (authIndex: string | null) => string;
   total: () => Summary;
@@ -90,6 +92,15 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
         rows={data.accounts().map((a) => ({ key: accountKey(a.authIndex), provider: a.provider, name: data.account(a.authIndex), summary: a.summary }))} />
     ),
   },
+  clients: {
+    title: () => 'Clients',
+    hasMetric: true,
+    minSize: { width: 420, height: 170 },
+    body: (spec, data) => (
+      <BreakdownTable heading="Client" metric={spec().metric} total={data.total()}
+        rows={data.clients().map((c) => ({ key: clientKey(c.client), name: clientLabel(c.client), summary: c.summary }))} />
+    ),
+  },
 };
 
 /** The "Add chart" menu: each over-time metric is its own choice. */
@@ -101,4 +112,5 @@ export const ADD_CHOICES: { label: string; spec: ActivityPanelSpec }[] = [
   { label: 'By hour', spec: { kind: 'heatmap', metric: 'cost' } },
   { label: 'Models', spec: { kind: 'models', metric: 'cost' } },
   { label: 'Accounts', spec: { kind: 'accounts', metric: 'cost' } },
+  { label: 'Clients', spec: { kind: 'clients', metric: 'cost' } },
 ];

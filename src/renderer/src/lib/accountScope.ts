@@ -1,4 +1,4 @@
-import { accountKey, NO_ACCOUNT_KEY, type AccountScope } from '@shared/activityScope';
+import { accountKey, clientKey, NO_ACCOUNT_KEY, NO_CLIENT_KEY, type AccountScope, type ClientScope, type KeyScope } from '@shared/activityScope';
 
 /** One account the Activity filter can pick. */
 export interface AccountOption {
@@ -41,12 +41,29 @@ export function accountGroups(
     .map(([provider, accounts]) => ({ provider, accounts: accounts.sort((x, y) => x.label.localeCompare(y.label)) }));
 }
 
-/** Ticks or unticks `keys`; ticking every listed account means "every account", so new ones show too. */
-export function setAccounts(scope: AccountScope, keys: readonly string[], on: boolean, all: readonly string[]): AccountScope {
+/** Ticks or unticks `keys`; ticking every listed key means "every key", so new accounts or clients show too. */
+export function setScopeKeys(scope: KeyScope, keys: readonly string[], on: boolean, all: readonly string[]): KeyScope {
   const next = new Set(scope ?? all);
   for (const k of keys) {
     if (on) next.add(k);
     else next.delete(k);
   }
   return all.every((k) => next.has(k)) ? null : [...next];
+}
+
+/** One client the Activity filter can pick. */
+export interface ClientOption {
+  key: string;
+  label: string;
+}
+
+export const NO_CLIENT_LABEL = 'Unknown client';
+export const clientLabel = (client: string | null) => client ?? NO_CLIENT_LABEL;
+
+/** Clients seen in activity, plus keys only the saved filter holds, so every selected client can be unticked. A-Z, unknown last. */
+export function clientOptions(seen: readonly { client: string | null }[], scope: ClientScope): ClientOption[] {
+  const keys = new Set([...seen.map((s) => clientKey(s.client)), ...(scope ?? [])]);
+  return [...keys]
+    .map((key) => ({ key, label: key === NO_CLIENT_KEY ? NO_CLIENT_LABEL : key }))
+    .sort((a, b) => (a.key === NO_CLIENT_KEY ? 1 : b.key === NO_CLIENT_KEY ? -1 : a.label.localeCompare(b.label)));
 }

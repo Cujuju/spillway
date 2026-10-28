@@ -61,7 +61,7 @@ describe('poolShares', () => {
 describe('measured session sizes', () => {
   const TEAM: CredentialPlan = { tier: 'claude_team', label: 'Team', multiplier: null };
   const bucket = (id: string, start: number, costUsd: number): ActivityBucket => ({
-    ...emptyCounts(), start, wholeDay: false, provider: 'claude', authIndex: id, model: 'm', requests: 1, costUsd,
+    ...emptyCounts(), start, wholeDay: false, provider: 'claude', authIndex: id, model: 'm', client: null, requests: 1, costUsd,
   });
   // Over one logged hour, each account's 5-hour window moves `moved` percent while it spends `usd`.
   const hour = (moves: Record<string, [moved: number, usd: number]>) => ({

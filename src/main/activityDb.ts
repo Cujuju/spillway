@@ -2,7 +2,7 @@ import Database from 'better-sqlite3-multiple-ciphers';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { withCountsFilled } from '@shared/activityCounts';
-import { NO_ACCOUNT_KEY } from '@shared/activityScope';
+import { NO_ACCOUNT_KEY, NO_CLIENT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
 
 export type Db = Database.Database;
@@ -24,6 +24,8 @@ const LEGACY_IMPORTED = 'legacy-files-imported';
 export const CONVERSATION_KEY_SQL = `json_extract(event, '$.sessionId'), json_extract(event, '$.model')`;
 /** A request's account key (accountKey in activityScope.ts); queries must use this exact text to use its index. */
 export const ACCOUNT_KEY_SQL = `coalesce(json_extract(event, '$.authIndex'), '${NO_ACCOUNT_KEY}')`;
+/** A request's client key (clientKey in activityScope.ts); queries must use this exact text to use its index. */
+export const CLIENT_KEY_SQL = `coalesce(json_extract(event, '$.client'), '${NO_CLIENT_KEY}')`;
 
 /** Rows are ordered by id, the order Spillway recorded them, which also pages the list. */
 const SCHEMA = `
@@ -31,12 +33,15 @@ CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS requests_by_day ON requests (day, id);
 CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
 CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
+CREATE INDEX IF NOT EXISTS requests_by_client ON requests (${CLIENT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_conversation ON requests (${CONVERSATION_KEY_SQL}, id);
 CREATE TABLE IF NOT EXISTS day_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
-export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model'>) => `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}`;
+/** Totals stored before clients were recorded have no client, and keep the key they were stored under. */
+export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model' | 'client'>) =>
+  `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}${t.client === null ? '' : `|${t.client}`}`;
 
 function openKeyed(file: string, hexKey: string): Db {
   const db = new Database(file);

@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Show } from 'solid-js';
-import { inScope, type AccountScope } from '@shared/activityScope';
-import { bucketStarts, byAccount, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
+import { inScope, type ActivityScope } from '@shared/activityScope';
+import { bucketStarts, byAccount, byClient, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, now } from '../store';
@@ -24,18 +24,19 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
   );
 }
 
-/** Range and totals for `accounts` stay on top; the charts below are tiles the user arranges. */
-export function ActivityOverview(props: { accounts: AccountScope; account: (authIndex: string | null) => string }) {
+/** Range and totals for `scope` stay on top; the charts below are tiles the user arranges. */
+export function ActivityOverview(props: { scope: ActivityScope; account: (authIndex: string | null) => string }) {
   const [range, setRange] = persistedSignal<Range>('activity.range', '7d', RANGE_OPTIONS.map((o) => o.value));
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
 
   const starts = createMemo(() => bucketStarts(range(), now()));
-  const rows = createMemo(() => activityBuckets().filter((r) => inScope(props.accounts, r.authIndex)));
+  const rows = createMemo(() => activityBuckets().filter((r) => inScope(props.scope, r)));
   const scoped = createMemo(() => inRange(rows(), starts()));
   const total = createMemo(() => summarize(scoped()));
   const points = createMemo(() => series(scoped(), starts(), now()));
   const models = createMemo(() => byModel(scoped()));
   const accountRows = createMemo(() => byAccount(scoped()));
+  const clientRows = createMemo(() => byClient(scoped()));
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
   const daily = () => RANGES[range()].hoursPerBucket >= 24;
   /** "Mon, Oct 26" for a day; "Mon 3 AM" for an hour; "Mon 3 AM – 6 AM" for a multi-hour bar. */
@@ -50,6 +51,7 @@ export function ActivityOverview(props: { accounts: AccountScope; account: (auth
     now,
     models,
     accounts: accountRows,
+    clients: clientRows,
     account: (authIndex) => props.account(authIndex),
     total,
     bucketNote: () => BUCKET_NOTE[range()],

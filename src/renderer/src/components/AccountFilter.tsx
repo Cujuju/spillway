@@ -2,14 +2,14 @@ import { ChevronDown, Users } from 'lucide-solid';
 import { createEffect, createMemo, createUniqueId, For } from 'solid-js';
 import type { AccountScope } from '@shared/activityScope';
 import { providerLabel } from '@shared/trayValues';
-import { setAccounts, type AccountGroup } from '../lib/accountScope';
+import { setScopeKeys, type AccountGroup } from '../lib/accountScope';
 import { ProviderGlyph } from './ui';
 
 const ICON_PX = 14;
 const OTHER_GROUP = 'Other accounts';
 
 /** A checkbox that can show "some ticked": `indeterminate` is a DOM property with no attribute. */
-function Check(props: { checked: boolean; mixed?: boolean; onChange: (on: boolean) => void }) {
+export function Check(props: { checked: boolean; mixed?: boolean; onChange: (on: boolean) => void }) {
   return (
     <input type="checkbox" checked={props.checked} ref={(el) => createEffect(() => { el.indeterminate = props.mixed === true; })}
       onChange={(e) => props.onChange(e.currentTarget.checked)} />
@@ -27,7 +27,7 @@ export function AccountFilter(props: { groups: AccountGroup[]; value: AccountSco
     if (v.length === 1) return props.groups.flatMap((g) => g.accounts).find((a) => a.key === v[0])?.label ?? '1 account';
     return v.length ? `${v.length} accounts` : 'No accounts';
   };
-  const set = (keys: string[], on: boolean) => props.onChange(setAccounts(props.value, keys, on, all()));
+  const set = (keys: string[], on: boolean) => props.onChange(setScopeKeys(props.value, keys, on, all()));
 
   return (
     <>

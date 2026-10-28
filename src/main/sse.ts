@@ -1,4 +1,5 @@
 import type { ActivityEvent } from '@shared/types';
+import { clientName } from '@shared/activityScope';
 
 export interface SseMessage {
   event: string;
@@ -51,6 +52,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   const requestId = s(r.request_id);
   // Window starts are the app's own requests; Activity records client traffic only.
   if (!requestId || r.purpose === WINDOW_START_PURPOSE) return null;
+  const userAgent = s(r.user_agent);
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,
@@ -69,7 +71,8 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     cachedTokens: n(r.cached_tokens),
     cacheWriteTokens: n(r.cache_creation_tokens),
     sessionId: s(r.session_id),
-    userAgent: s(r.user_agent),
+    userAgent,
+    client: clientName(userAgent),
     // Set when stored (activityLog.append), which knows the conversation's earlier requests.
     movedFrom: null,
   };

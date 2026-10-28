@@ -1,4 +1,4 @@
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
 import { costText, hitRate } from './activityFormat';
@@ -9,10 +9,11 @@ const NUMERIC_COLUMNS = ['Requests', 'Input', 'Output', 'Cache read', 'Cache wri
 /** Name, the numeric columns, and Share. */
 const COLUMN_COUNT = NUMERIC_COLUMNS.length + 2;
 
-/** One row of a breakdown: a model, an account… */
+/** One row of a breakdown: a model, an account, a client… */
 export interface BreakdownRow {
   key: string;
-  provider: string;
+  /** Unset for rows that span providers (clients); they show no glyph. */
+  provider?: string;
   name: string;
   summary: Summary;
 }
@@ -34,7 +35,7 @@ export function BreakdownTable(props: { heading: string; rows: BreakdownRow[]; t
         <For each={props.rows} fallback={<tr><td colSpan={COLUMN_COUNT} class="muted">No requests in this range.</td></tr>}>
           {(r) => (
             <tr>
-              <td class="fill" title={r.name}><div class="cell-name"><ProviderGlyph provider={r.provider} size="sm" /><span class="tabular">{r.name || '—'}</span></div></td>
+              <td class="fill" title={r.name}><div class="cell-name"><Show when={r.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show><span class="tabular">{r.name || '—'}</span></div></td>
               <td class="tabular num">{r.summary.requests.toLocaleString()}</td>
               <TokenCell v={r.summary.inputTokens} />
               <TokenCell v={r.summary.outputTokens} />

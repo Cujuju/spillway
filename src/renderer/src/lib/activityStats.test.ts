@@ -7,7 +7,7 @@ import { bucketStarts, byAccount, byModel, heatGrid, series, summarize } from '.
 const NOW = new Date(2026, 9, 26, 14, 30).getTime();
 const at = (daysAgo: number, hour: number) => new Date(2026, 9, 26 - daysAgo, hour).getTime();
 const row = (start: number, patch: Partial<ActivityBucket> = {}): ActivityBucket => ({
-  ...emptyCounts(), start, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'claude-opus-5-5', requests: 1, ...patch,
+  ...emptyCounts(), start, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'claude-opus-5-5', client: null, requests: 1, ...patch,
 });
 
 describe('bucketStarts', () => {

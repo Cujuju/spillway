@@ -1,6 +1,6 @@
 import type { ActivityMetric } from '@shared/activityBoard';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
-import { accountKey } from '@shared/activityScope';
+import { accountKey, clientKey } from '@shared/activityScope';
 import { promptTokens } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityCounts } from '@shared/types';
 
@@ -117,6 +117,16 @@ function groupSummaries(rows: ActivityBucket[], keyOf: (r: ActivityBucket) => st
 /** Per provider and model, costliest first, then by tokens. */
 export const byModel = (rows: ActivityBucket[]): ModelRow[] =>
   groupSummaries(rows, (r) => `${r.provider}|${r.model}`).map(({ first, summary }) => ({ provider: first.provider, model: first.model, summary }));
+
+/** One client's totals in the range. */
+export interface ClientRow {
+  client: string | null;
+  summary: Summary;
+}
+
+/** Per client, costliest first, then by tokens. */
+export const byClient = (rows: ActivityBucket[]): ClientRow[] =>
+  groupSummaries(rows, (r) => clientKey(r.client)).map(({ first, summary }) => ({ client: first.client, summary }));
 
 /** Per account, costliest first, then by tokens. An authIndex belongs to one provider. */
 export const byAccount = (rows: ActivityBucket[]): AccountRow[] =>

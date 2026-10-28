@@ -381,6 +381,16 @@ th[aria-sort] .sort-btn {
 .account-menu-only {
   visibility: hidden;
 }
+/* The client filter: its own anchor, and a flat list without provider indents. */
+.client-filter-btn {
+  anchor-name: --client-filter;
+}
+.account-menu.client-menu {
+  position-anchor: --client-filter;
+}
+.client-menu .account-menu-account {
+  padding-left: var(--spacing-2);
+}
 .account-menu-account:hover .account-menu-only,
 .account-menu-only:focus-visible {
   visibility: visible;

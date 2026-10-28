@@ -1,5 +1,5 @@
 /** IPC contract shared by main, preload and renderer. */
-import type { AccountScope } from './activityScope';
+import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 
 export type ProviderId = string;
@@ -193,6 +193,8 @@ export interface ActivityEvent {
   movedFrom: string | null;
   /** The client's User-Agent header, naming the program that sent the request; null when it sent none. */
   userAgent: string | null;
+  /** clientName(userAgent), set when received; null for requests recorded before clients were. */
+  client: string | null;
 }
 
 /** An attempt as stored. `id` follows the order Spillway recorded attempts and pages the list. */
@@ -204,7 +206,7 @@ export interface ActivityPageQuery {
   /** Local day, YYYY-MM-DD; null for every stored day. */
   day: string | null;
   failedOnly: boolean;
-  accounts: AccountScope;
+  scope: ActivityScope;
   /** Return attempts older than this id; null for the newest. */
   before: number | null;
 }
@@ -238,16 +240,18 @@ export interface ActivityCounts {
   unpricedRequests: number;
 }
 
-/** Requests and tokens for one local day, account and model; kept after that day's request log expires. */
+/** Requests and tokens for one local day, account, model and client; kept after that day's request log expires. */
 export interface ActivityDayTotal extends ActivityCounts {
   /** Local calendar day, YYYY-MM-DD. */
   day: string;
   provider: string;
   authIndex: string | null;
   model: string;
+  /** Null for requests without a client, including every request before clients were recorded. */
+  client: string | null;
 }
 
-/** Activity for one local hour, account and model. */
+/** Activity for one local hour, account, model and client. */
 export interface ActivityBucket extends ActivityCounts {
   /** Start of the local hour, epoch ms. With `wholeDay`, local midnight. */
   start: number;
@@ -256,6 +260,7 @@ export interface ActivityBucket extends ActivityCounts {
   provider: string;
   authIndex: string | null;
   model: string;
+  client: string | null;
 }
 
 /** Coding clients whose own config the Proxy page can point at the proxy. */

@@ -46,7 +46,9 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
-    // Only quota and login failures move a conversation; a 5xx or timeout fails over for that request alone.
+    // Server errors (overload, 5xx, dropped connections) go back to the client on the same account: every account hits the same servers.
+    [['routing', 'server-errors'], 'return'],
+    // Only quota and login failures move a conversation.
     [['routing', 'session-affinity-rebind-on'], 'quota'],
     // A restart keeps conversations on their account (prompt cache) and limited accounts benched.
     [['routing', 'session-affinity-persist'], true],
@@ -77,31 +79,12 @@ function ensureClientKeys(doc: Document, required: string[]): void {
   for (const key of required) if (!present.includes(key)) keys.add(key);
 }
 
-/** Anthropic's "overloaded" status: the model is busy for everyone, so another account would fare no better. */
-const OVERLOADED_STATUS = 529;
-/** Overload goes back to the client, which retries; the account stays unbenched and the conversation keeps its cache. */
-// The proxy skips rules without match text.
-export const OVERLOAD_RULE = { status: OVERLOADED_STATUS, match: ['overloaded_error'], action: 'stop' };
-const CLAUDE_OAUTH_ERROR_RULES = ['oauth', 'request-scoped-errors', 'claude'];
-
-function ensureOverloadRule(doc: Document): void {
-  const rules = doc.getIn(CLAUDE_OAUTH_ERROR_RULES);
-  if (!isSeq(rules)) {
-    doc.setIn(CLAUDE_OAUTH_ERROR_RULES, [OVERLOAD_RULE]);
-    return;
-  }
-  const present = rules.toJSON() as { status?: unknown }[];
-  // The proxy uses the first matching rule.
-  if (!present.some((r) => r?.status === OVERLOADED_STATUS)) rules.items.unshift(doc.createNode(OVERLOAD_RULE));
-}
-
 /** Builds config.yaml: config.user.yaml with the app-owned keys applied on top. Comments in the user file are kept. */
 export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
   const { doc, error } = parseUserConfig(input.userConfig);
   if (doc.contents === null) doc.contents = doc.createNode({});
   for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
   ensureClientKeys(doc, [input.clientApiKey]);
-  ensureOverloadRule(doc);
   doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
   return { yaml: doc.toString(), userConfigError: error };
 }

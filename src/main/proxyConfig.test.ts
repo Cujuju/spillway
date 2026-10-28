@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { DEFAULT_SETTINGS } from '@shared/settings';
-import { buildProxyConfig, OVERLOAD_RULE } from './proxyConfig';
+import { buildProxyConfig } from './proxyConfig';
 
 const base = {
   clientApiKey: 'client"key',
@@ -23,7 +23,7 @@ describe('buildProxyConfig', () => {
     expect(cfg['config-version']).toBe(8);
     expect(cfg.server).toEqual({ host: '127.0.0.1', port: 8317 });
     expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-auth-kind': 'oauth', 'session-affinity': true, 'session-affinity-ttl': '60m',
-      'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
+      'server-errors': 'return', 'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
     expect(cfg.access['api-keys']).toEqual(appKeys);
@@ -60,15 +60,6 @@ describe('buildProxyConfig', () => {
     expect(cfg.debug).toBe(true);
     expect(cfg.access['api-keys']).toEqual(['lan-key', ...appKeys]);
     expect(yaml).toContain('# my tweaks');
-  });
-
-  it("returns Claude overloads to the client instead of moving the conversation; a user's 529 rule wins", () => {
-    const rules = (userConfig: string) => parse(build({ userConfig }).yaml).oauth['request-scoped-errors'].claude;
-    expect(rules('')).toEqual([OVERLOAD_RULE]);
-    const tooLong = { status: 400, match: ['prompt is too long'], action: 'stop' };
-    const userRules = (...lines: string[]) => ['oauth:', '  request-scoped-errors:', '    claude:', ...lines].join('\n');
-    expect(rules(userRules('      - status: 400', '        match: ["prompt is too long"]', '        action: stop'))).toEqual([OVERLOAD_RULE, tooLong]);
-    expect(rules(userRules('      - status: 529', '        action: continue'))).toEqual([{ status: 529, action: 'continue' }]);
   });
 
   it('ignores an unusable user file and reports why', () => {

@@ -98,6 +98,20 @@ function priceOf(model: string): ModelPrice | null {
 }
 
 /**
+ * The model with the lowest input, then output, list price; null when none is priced. A near-empty
+ * request is mostly prompt, and subscription limits weigh models roughly by price.
+ */
+export function cheapestModel(ids: readonly string[]): string | null {
+  let best: { id: string; rates: Rates } | null = null;
+  for (const id of ids) {
+    const rates = priceOf(id)?.rates;
+    if (!rates) continue;
+    if (!best || rates.input < best.rates.input || (rates.input === best.rates.input && rates.output < best.rates.output)) best = { id, rates };
+  }
+  return best?.id ?? null;
+}
+
+/**
  * List-price cost of one request, or null for a model without a known price. A day's totals hide the
  * long-context step, so `long` rates are skipped.
  */

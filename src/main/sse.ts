@@ -31,6 +31,9 @@ export class SseParser {
   }
 }
 
+/** The proxy's mark on requests sent by POST /usage/start-window (docs/desktop-api.md in the fork). */
+const WINDOW_START_PURPOSE = 'window-start';
+
 const s = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null);
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const positive = (v: unknown) => (typeof v === 'number' && v > 0 ? v : null);
@@ -46,7 +49,8 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const requestId = s(r.request_id);
-  if (!requestId) return null;
+  // Window starts are the app's own requests; Activity records client traffic only.
+  if (!requestId || r.purpose === WINDOW_START_PURPOSE) return null;
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,

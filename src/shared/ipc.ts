@@ -3,7 +3,7 @@ import type { AccountScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot,
+  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -43,6 +43,8 @@ export interface DesktopApi {
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
   /** Spends one of a Codex account's rate-limit reset credits. */
   useResetCredit(credentialId: string): Promise<ResetCreditOutcome>;
+  /** The latest automatic 5-hour window start and failure. */
+  windowStartStatus(): Promise<WindowStartStatus>;
   usageHistory(): Promise<HistorySample[]>;
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
@@ -131,6 +133,7 @@ export const INVOKE = {
   usageLatest: 'usage:latest',
   usageRefresh: 'usage:refresh',
   useResetCredit: 'usage:use-reset-credit',
+  windowStartStatus: 'usage:window-start-status',
   usageHistory: 'usage:history',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',

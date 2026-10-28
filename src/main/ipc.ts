@@ -21,6 +21,7 @@ import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './
 import { setAppTrayTooltip, syncLimitTrays, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
+import { windowStarter } from './windowStarter';
 import { mainWindow } from './window';
 
 type Handlers = { [K in keyof typeof INVOKE]: (...args: Parameters<DesktopApi[K]>) => ReturnType<DesktopApi[K]> | Awaited<ReturnType<DesktopApi[K]>> };
@@ -144,6 +145,7 @@ const handlers: Handlers = {
     if (!authIndex) throw new Error('Account not found');
     return usage.useResetCredit(authIndex);
   },
+  windowStartStatus: () => windowStarter.status(),
   usageHistory: () => history.all(),
   clearHistory: () => history.clear(),
   activityPage: (query) => activityLog.page(query),

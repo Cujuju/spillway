@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { promptTokens, tokenCost } from './modelPrices';
+import { cheapestModel, promptTokens, tokenCost } from './modelPrices';
+
+describe('cheapestModel', () => {
+  it('picks the lowest input price and skips unpriced models', () => {
+    expect(cheapestModel(['claude-opus-5-5', 'claude-haiku-5-5', 'claude-unknown'])).toBe('claude-haiku-5-5');
+    expect(cheapestModel(['gpt-6-sol', 'gpt-6-luna-20260101'])).toBe('gpt-6-luna-20260101');
+    expect(cheapestModel(['made-up'])).toBeNull();
+  });
+});
 
 const t = (inputTokens: number, outputTokens: number, cachedTokens = 0, cacheWriteTokens = 0) => ({ inputTokens, outputTokens, cachedTokens, cacheWriteTokens });
 

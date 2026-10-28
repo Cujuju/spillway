@@ -7,6 +7,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /** Usage refresh calls Anthropic once per account, so it gets more room. */
 const REFRESH_TIMEOUT_MS = 60_000;
 const PING_TIMEOUT_MS = 1_500;
+/** The proxy bounds a window start at one minute (docs/desktop-api.md); this leaves room for its reply. */
+const WINDOW_START_TIMEOUT_MS = 70_000;
 
 export class ManagementError extends Error {
   constructor(message: string, readonly status: number) {
@@ -77,6 +79,12 @@ class ManagementClient {
     const outcome = RESET_CREDIT_OUTCOMES.find((o) => o === res.code);
     if (!outcome) throw new Error(`Unexpected reset outcome: ${String(res.code)}`);
     return { outcome, snapshot: parseUsageSnapshot(res.usage) };
+  }
+
+  /** Sends one minimal request through the account so its 5-hour window starts now; answers with fresh usage. */
+  async startWindow(authIndex: string, model: string): Promise<UsageSnapshot> {
+    const res = (await this.request('POST', '/usage/start-window', { auth_index: authIndex, model }, WINDOW_START_TIMEOUT_MS)) as { usage?: unknown };
+    return parseUsageSnapshot(res.usage);
   }
 
   async shutdown(): Promise<boolean> {

@@ -2,6 +2,7 @@
 
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { THEME_CHOICES } from './themes';
+import { DEFAULT_WINDOW_START, normalizeWindowStart, type WindowStartSettings } from './windowStartSettings';
 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
 /** Whether API keys are routed to before or after subscription logins. */
@@ -60,6 +61,7 @@ export interface AppSettings {
     /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
     preferredAccounts: Record<string, string>;
   };
+  windowStart: WindowStartSettings;
   dashboard: {
     refreshIntervalSeconds: number;
     showEmails: boolean;
@@ -136,6 +138,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
     preferredAccounts: {},
   },
+  windowStart: DEFAULT_WINDOW_START,
   dashboard: {
     refreshIntervalSeconds: 60,
     showEmails: false,
@@ -235,6 +238,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
       preferredAccounts: stringRecord(p.preferredAccounts),
     },
+    windowStart: normalizeWindowStart(r.windowStart),
     dashboard: {
       refreshIntervalSeconds: int(db.refreshIntervalSeconds, d.dashboard.refreshIntervalSeconds, MIN_REFRESH_SECONDS, MAX_REFRESH_SECONDS),
       showEmails: bool(db.showEmails, d.dashboard.showEmails),

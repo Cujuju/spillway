@@ -42,6 +42,12 @@ export interface ResetCredits {
 export const RESET_CREDIT_OUTCOMES = ['reset', 'nothing_to_reset', 'no_credit', 'already_redeemed'] as const;
 export type ResetCreditOutcome = (typeof RESET_CREDIT_OUTCOMES)[number];
 
+/** The latest automatic 5-hour window start and failure, for Settings. */
+export interface WindowStartStatus {
+  lastStart: { credentialId: string; model: string; at: string } | null;
+  lastError: { credentialId: string; message: string; at: string } | null;
+}
+
 export interface Credential {
   id: string;
   /** Auth file name; the management API addresses credentials by it. */

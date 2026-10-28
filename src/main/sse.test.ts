@@ -27,4 +27,8 @@ describe('parseActivityEvent', () => {
     expect(parseActivityEvent('not json')).toBeNull();
     expect(parseActivityEvent('{"provider":"claude"}')).toBeNull();
   });
+
+  it("drops the app's own window-start requests", () => {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'r2', provider: 'claude', purpose: 'window-start' }))).toBeNull();
+  });
 });

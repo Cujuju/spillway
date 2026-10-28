@@ -12,6 +12,7 @@ import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { destroyTrays, ensureAppTray, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
+import { windowStarter } from './windowStarter';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
 
 /** Windows: passed by the login item so a login launch can start hidden in the tray. */
@@ -39,6 +40,7 @@ function launchedHidden(): boolean {
 function wireEvents(): void {
   usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
   usage.on('error', (m) => send(EVENTS.onUsageError, m));
+  windowStarter.attach();
   proxy.on('status', (s) => {
     send(EVENTS.onProxyStatus, s);
     if (s.state !== 'running') activity.stop();

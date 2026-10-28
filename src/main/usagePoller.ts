@@ -80,6 +80,12 @@ class UsagePoller extends EventEmitter {
     return outcome;
   }
 
+  /** Starts an account's 5-hour window now, then publishes the usage that follows. */
+  async startWindow(authIndex: string, model: string): Promise<void> {
+    if (!proxy.isRunning()) throw new Error('Start the proxy first');
+    this.accept(await management.startWindow(authIndex, model));
+  }
+
   start(): void {
     this.stop();
     void this.poll();

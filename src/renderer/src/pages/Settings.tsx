@@ -4,6 +4,7 @@ import type { ApiKeyOrder, AppSettings, RoutingStrategy } from '@shared/settings
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
+import { WindowStartSettings } from '../components/WindowStartSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
 import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
@@ -12,7 +13,7 @@ const ICON_PX = 14;
 
 const NAV: { group: string; items: { id: SettingsSection; label: string }[] }[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
-  { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'dashboard', label: 'Dashboard' }] },
+  { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Window starts' }, { id: 'dashboard', label: 'Dashboard' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }] },
 ];
 
@@ -250,6 +251,7 @@ export function Settings() {
           <Match when={section() === 'appearance'}><Appearance /></Match>
           <Match when={section() === 'trayIcons'}><TrayIconSettings /></Match>
           <Match when={section() === 'proxy'}><ProxySection /></Match>
+          <Match when={section() === 'windowStart'}><WindowStartSettings /></Match>
           <Match when={section() === 'dashboard'}><DashboardSection /></Match>
           <Match when={section() === 'notifications'}><Notifications /></Match>
           <Match when={section() === 'updates'}><UpdateSettings /></Match>

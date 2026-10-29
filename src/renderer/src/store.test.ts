@@ -6,7 +6,7 @@ import type { Credential, UsageSnapshot } from '@shared/types';
 // IPC clones the request before main normalizes it.
 const api = { setSettings: async (s: AppSettings) => normalizeSettings(structuredClone(s)) };
 vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
-const { setSnapshot, settings, snapshot, updateSettings } = await import('./store');
+const { setSnapshot, settings, settingsError, snapshot, updateSettings } = await import('./store');
 
 const cred = (id: string, usedPercent: number): Credential => ({
   id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
@@ -28,6 +28,22 @@ describe('settings IPC serialization', () => {
     expect(settings().activity.board.tiles).toEqual(tiles);
     expect(settings().activity.board.panels).toEqual(panels);
     expect(settings().activity.board.panels[id]).toEqual(spec);
+    expect(settingsError()).toBeNull();
+  });
+});
+
+describe('failed settings saves', () => {
+  it('resolve, keep the saved settings, and report why until a save succeeds', async () => {
+    const before = settings().general.sidebarCollapsed;
+    vi.spyOn(api, 'setSettings').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(updateSettings((d) => { d.general.sidebarCollapsed = !before; })).resolves.toBeUndefined();
+    expect(settings().general.sidebarCollapsed).toBe(before);
+    expect(settingsError()).toBe('disk full');
+
+    await updateSettings((d) => { d.general.sidebarCollapsed = !before; });
+    expect(settings().general.sidebarCollapsed).toBe(!before);
+    expect(settingsError()).toBeNull();
   });
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', strategy: 'round-robin', credentials });

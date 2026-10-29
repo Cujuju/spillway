@@ -217,6 +217,10 @@
 .card + .card {
   margin-top: var(--card-gap);
 }
+/* The app shell's failed-save notice sits above the page's header. */
+.notice.save-error {
+  margin-bottom: var(--page-gap);
+}
 /* Text sets fractional heights. Page-level blocks round theirs up, so each block starts on a whole pixel, where borders and text don't drift apart. */
 .page-inner > *,
 .page-section > * {

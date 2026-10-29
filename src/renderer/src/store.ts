@@ -70,16 +70,24 @@ const ACTIVITY_DAYS = rangeDays('30d');
 /** A burst of requests reloads the hourly activity once, after it settles. */
 const ACTIVITY_RELOAD_DEBOUNCE_MS = 2_000;
 
-export async function saveSettings(next: AppSettings): Promise<void> {
+async function saveSettings(next: AppSettings): Promise<void> {
   // Edits can copy store-backed values into the draft; IPC cannot clone Solid proxies.
   setSettingsSignal(await api.setSettings(unwrap(next)));
 }
 
-/** Applies `fn` to a copy of the current settings and saves it. */
-export function updateSettings(fn: (draft: AppSettings) => void): Promise<void> {
-  const draft = structuredClone(unwrap(settings()));
-  fn(draft);
-  return saveSettings(draft);
+/** Why the last settings save failed; cleared by the next one that succeeds. The app shell shows it. */
+export const [settingsError, setSettingsError] = createSignal<string | null>(null);
+
+/** Applies `fn` to a copy of the current settings and saves it. Never rejects: a failure lands in `settingsError`. */
+export async function updateSettings(fn: (draft: AppSettings) => void): Promise<void> {
+  try {
+    const draft = structuredClone(unwrap(settings()));
+    fn(draft);
+    await saveSettings(draft);
+    setSettingsError(null);
+  } catch (e) {
+    setSettingsError(e instanceof Error ? e.message : String(e));
+  }
 }
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');

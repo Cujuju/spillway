@@ -1,15 +1,16 @@
-import { createComputed, createEffect, Match, on, onCleanup, Switch } from 'solid-js';
+import { createComputed, createEffect, Match, on, onCleanup, Show, Switch } from 'solid-js';
 import { persistedSignal } from './lib/persisted';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { TrayIconSync } from './components/TrayIconSync';
+import { Notice } from './components/ui';
 import { Activity } from './pages/Activity';
 import { Dashboard } from './pages/Dashboard';
 import { Logs } from './pages/Logs';
 import { Providers } from './pages/Providers';
 import { Proxy } from './pages/Proxy';
 import { Settings } from './pages/Settings';
-import { applyTheme, page, settings, type Page } from './store';
+import { applyTheme, page, setSettingsError, settings, settingsError, type Page } from './store';
 
 /** Scroll saves wait for the scrolling to settle, so a fling writes storage once. */
 const SCROLL_SAVE_DEBOUNCE_MS = 250;
@@ -60,6 +61,14 @@ export function App() {
         <main class="page" ref={main} onScroll={onScroll}>
           {/* These pages give their spare height to one child (log view, board, quota chart) instead of leaving it blank. */}
           <div class="page-inner" classList={{ fill: page() === 'logs' || page() === 'activity' || page() === 'dashboard' }}>
+            <Show when={settingsError()}>
+              {(message) => (
+                <Notice tone="error" class="save-error">
+                  <span class="spacer">Settings weren't saved: {message()}</span>
+                  <button type="button" class="btn" onClick={() => setSettingsError(null)}>Dismiss</button>
+                </Notice>
+              )}
+            </Show>
             <Switch>
               <Match when={page() === 'dashboard'}><Dashboard /></Match>
               <Match when={page() === 'providers'}><Providers /></Match>

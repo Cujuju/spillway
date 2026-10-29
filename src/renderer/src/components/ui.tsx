@@ -233,6 +233,6 @@ export function CopyButton(props: { value: string; what: string; label?: string;
   );
 }
 
-export function Notice(props: { tone?: 'warn' | 'error' | 'info'; children: JSX.Element }) {
-  return <div class="notice" classList={{ error: props.tone === 'error', info: props.tone === 'info' }}>{props.children}</div>;
+export function Notice(props: { tone?: 'warn' | 'error' | 'info'; class?: string; children: JSX.Element }) {
+  return <div class={props.class ? `notice ${props.class}` : 'notice'} classList={{ error: props.tone === 'error', info: props.tone === 'info' }}>{props.children}</div>;
 }

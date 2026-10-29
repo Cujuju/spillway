@@ -25,7 +25,7 @@ const tile = (id: string) => ({ kind: 'tile', id });
 
 const row = (sizes: number[], ...children: unknown[]) => ({ kind: 'split', dir: 'row', sizes, children });
 
-/** Two rows: cost over time beside cache hit rate, then by hour beside models. Shares favour the wider chart. */
+/** Two rows: API cost beside Cache hit, then Activity beside models. Shares favour the wider chart. */
 export const DEFAULT_ACTIVITY_BOARD: ActivityBoard = {
   tiles: {
     kind: 'split', dir: 'column', sizes: [1, 1.4],

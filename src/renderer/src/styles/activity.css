@@ -50,11 +50,6 @@
 .chart-head .section-label {
   margin: 0;
 }
-/* The mode toggle is taller than the label line. */
-.heat-head {
-  align-items: center;
-  margin-bottom: var(--spacing-2_5);
-}
 .chart-head-note {
   margin-left: auto;
   font-size: var(--text-xs);

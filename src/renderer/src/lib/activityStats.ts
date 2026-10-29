@@ -6,6 +6,7 @@ import type { ActivityBucket, ActivityCounts } from '@shared/types';
 
 const HOURS_PER_DAY = 24;
 const DAYS_PER_WEEK = 7;
+const HOUR_MS = 60 * 60 * 1000;
 
 export type Range = '24h' | '7d' | '30d';
 export type Metric = ActivityMetric;
@@ -132,11 +133,18 @@ export const byClient = (rows: ActivityBucket[]): ClientRow[] =>
 export const byAccount = (rows: ActivityBucket[]): AccountRow[] =>
   groupSummaries(rows, (r) => accountKey(r.authIndex)).map(({ first, summary }) => ({ provider: first.provider, authIndex: first.authIndex, summary }));
 
-export type HeatMode = 'week' | 'rhythm';
+export const HEAT_MODES = [
+  { value: 'hourly', label: 'Hourly' },
+  { value: 'week', label: '7 days' },
+  { value: 'lastWeek', label: 'Last week' },
+  { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over stored hourly activity' },
+] as const;
+export type HeatMode = (typeof HEAT_MODES)[number]['value'];
 
 export interface HeatRow {
   label: string;
-  /** One per local hour, 0-23. */
+  hours: number[];
+  /** Summaries in the same order as hours. */
   cells: Summary[];
 }
 
@@ -145,11 +153,18 @@ const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
 const weekday = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short' });
 
 /**
- * Day-by-hour grid. "week": last 7 local days, oldest first. "rhythm": every hour of `rows` summed
- * by weekday. Expired days' daily totals have no hour, so are left out.
+ * Local-hour grids exclude daily totals: their hour is unknown. Rhythm sums stored hours by weekday.
  */
 export function heatGrid(rows: ActivityBucket[], mode: HeatMode, now: number): HeatRow[] {
-  const hourly = rows.filter((r) => !r.wholeDay);
+  const hourly = rows.filter((r) => !r.wholeDay && r.start <= now);
+  const hours = Array.from({ length: HOURS_PER_DAY }, (_, h) => h);
+  if (mode === 'hourly') {
+    const currentHour = new Date(now);
+    currentHour.setMinutes(0, 0, 0);
+    const starts = hours.map((h) => currentHour.getTime() - (HOURS_PER_DAY - 1 - h) * HOUR_MS);
+    return [{ label: '24h', hours: starts.map((t) => new Date(t).getHours()),
+      cells: series(hourly, starts, now).map((p) => p.summary) }];
+  }
   const cellsOf = (match: (d: Date) => boolean) => {
     const byHour = Array.from({ length: HOURS_PER_DAY }, () => [] as ActivityBucket[]);
     for (const r of hourly) {
@@ -162,14 +177,17 @@ export function heatGrid(rows: ActivityBucket[], mode: HeatMode, now: number): H
     return WEEKDAYS.map((wd) => {
       const sample = new Date(now);
       sample.setDate(sample.getDate() - ((sample.getDay() - wd + DAYS_PER_WEEK) % DAYS_PER_WEEK));
-      return { label: weekday(sample), cells: cellsOf((d) => d.getDay() === wd) };
+      return { label: weekday(sample), hours, cells: cellsOf((d) => d.getDay() === wd) };
     });
   }
   return Array.from({ length: DAYS_PER_WEEK }, (_, i) => {
     const day = new Date(now);
     day.setHours(0, 0, 0, 0);
-    day.setDate(day.getDate() - (DAYS_PER_WEEK - 1 - i));
-    return { label: weekday(day), cells: cellsOf((d) => d.toDateString() === day.toDateString()) };
+    const daysBack = mode === 'lastWeek'
+      ? ((day.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK) + DAYS_PER_WEEK - i
+      : DAYS_PER_WEEK - 1 - i;
+    day.setDate(day.getDate() - daysBack);
+    return { label: weekday(day), hours, cells: cellsOf((d) => d.toDateString() === day.toDateString()) };
   });
 }
 

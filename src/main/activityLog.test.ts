@@ -70,6 +70,22 @@ describe('hourlyBuckets / lastDays', () => {
 describe('activityLog', () => {
   beforeEach(() => activityLog.clear());
 
+  it('returns every stored weekend hour to both heatmap views', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 9, 29, 14, 30).getTime());
+    try {
+      const { heatGrid } = await import('../renderer/src/lib/activityStats');
+      for (let day = 23; day <= 29; day++) activityLog.append(event(new Date(2026, 9, day, 12)));
+      const rows = activityLog.buckets(31);
+      expect(rows).toHaveLength(7);
+      expect(rows.every((r) => !r.wholeDay)).toBe(true);
+      for (const mode of ['week', 'rhythm'] as const) {
+        expect(heatGrid(rows, mode, Date.now()).map((r) => r.cells[12]!.requests)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+      }
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('pages every stored day newest first, without gaps or repeats', () => {
     const total = ACTIVITY_PAGE_SIZE + 3;
     for (let i = 0; i < total; i++) activityLog.append(event(daysAgo(i % 3, 1 + (i % 20)), { requestId: `r${i}` }));

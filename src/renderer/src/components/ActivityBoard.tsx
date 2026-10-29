@@ -1,6 +1,6 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
-import { createMemo, createSignal, For, Show, untrack } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, Show, untrack } from 'solid-js';
 import type { ActivityPanelSpec } from '@shared/activityBoard';
 import { settings, updateSettings } from '../store';
 import { METRIC_OPTIONS } from './activityFormat';
@@ -10,6 +10,8 @@ import { Seg } from './ui';
 /** CSS token for the gap between tiles (also the divider's grab area), shared with every other card gap. */
 const TILE_GAP_TOKEN = '--card-gap';
 const ICON_PX = 14;
+/** Room for title, both full switches, gaps and remove button. */
+const FULL_HEADER_CONTROLS_PX = 760;
 /** Select value meaning "nothing picked", so the menu reads as a button. */
 const NO_CHOICE = '';
 
@@ -87,21 +89,29 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
           const spec = () => specFor(tile.id)!;
           // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
           const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
+          const content = def.mount(spec, props.data, tile.id);
+          const [compact, setCompact] = createSignal(false);
+          const measureHeader = (header: HTMLElement) => {
+            const observer = new ResizeObserver(([entry]) => setCompact(entry!.contentRect.width < FULL_HEADER_CONTROLS_PX));
+            observer.observe(header);
+            onCleanup(() => observer.disconnect());
+          };
           return (
             <Show when={specFor(tile.id)}>
               <section class="card board-tile">
-                <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
+                <header ref={measureHeader} class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
                   <div class="section-label">{def.title(spec())}</div>
                   <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
                   <span class="spacer" />
+                  {content.headerControls?.(compact())}
                   <Show when={def.hasMetric}>
-                    <Seg value={spec().metric} options={METRIC_OPTIONS} onChange={(m) => void setMetric(tile.id, m)} />
+                    <Seg label="Chart metric" compact={compact()} value={spec().metric} options={METRIC_OPTIONS} onChange={(m) => void setMetric(tile.id, m)} />
                   </Show>
                   <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>
                     <X size={ICON_PX} />
                   </button>
                 </header>
-                <div class="board-tile-body">{def.body(spec, props.data, tile.id)}</div>
+                <div class="board-tile-body">{content.body}</div>
               </section>
             </Show>
           );

@@ -24,5 +24,5 @@ export const countRows = (s: Summary): TipRow[] => [
   { label: 'Output', value: compactNumber(s.outputTokens) },
   { label: 'Cache read', value: compactNumber(s.cachedTokens) },
   { label: 'Cache write', value: compactNumber(s.cacheWriteTokens) },
-  { label: 'Cache hit rate', value: hitRate(s) },
+  { label: 'Cache hit', value: hitRate(s) },
 ];

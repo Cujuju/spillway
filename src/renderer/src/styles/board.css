@@ -39,6 +39,7 @@
   text-overflow: ellipsis;
 }
 .board-tile-head > .seg,
+.board-tile-head > .seg-select,
 .board-tile-head > .icon-btn {
   flex-shrink: 0;
 }

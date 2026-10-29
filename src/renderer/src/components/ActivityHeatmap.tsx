@@ -2,8 +2,6 @@ import { createMemo, createSignal, For, Show } from 'solid-js';
 import { ChartTip, type TipRow } from './ChartTip';
 import { heatGrid, hourLabel, metricValue, type HeatMode, type Metric, type Summary } from '../lib/activityStats';
 import type { ActivityBucket } from '@shared/types';
-import { persistedSignal } from '../lib/persisted';
-import { Seg } from './ui';
 
 /** Shades above empty; matches `.heat-cell.l1`–`.l4` in activity.css. */
 const LEVELS = 4;
@@ -12,30 +10,21 @@ const HOUR_LABEL_STEP = 6;
 /** Empty plus each shade, for the legend. */
 const SHADES = Array.from({ length: LEVELS + 1 }, (_, l) => l);
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
-const HEAT_MODES = [{ value: 'week', label: 'Last 7 days' }, { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over the last 30 days' }] as const;
-const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-/** "America/Los_Angeles" → "Los Angeles". */
-const zoneLabel = zone.split('/').pop()!.replace(/_/g, ' ');
-
 /** Shade step for a value: 0 is empty; the rest split the range up to the busiest cell. */
 export function heatLevel(value: number, max: number): number {
   return value <= 0 || max <= 0 ? 0 : Math.max(1, Math.ceil((value / max) * LEVELS));
 }
 
 export function ActivityHeatmap(props: {
-  /** The board tile's id, so each heatmap tile keeps its own mode. */
-  tileId: string;
+  mode: HeatMode;
   rows: ActivityBucket[];
   now: number;
   metric: Metric;
   format: (s: Summary) => string;
   tooltip: (s: Summary) => TipRow[];
 }) {
-  // A tile's id is fixed for life (ActivityBoard).
-  // oxlint-disable-next-line solid/reactivity
-  const [mode, setMode] = persistedSignal<HeatMode>(`activity.heatMode.${props.tileId}`, 'week', HEAT_MODES.map((m) => m.value));
   const [tip, setTip] = createSignal<{ cell: HTMLElement; title: string; s: Summary } | null>(null);
-  const grid = createMemo(() => heatGrid(props.rows, mode(), props.now));
+  const grid = createMemo(() => heatGrid(props.rows, props.mode, props.now));
   const max = createMemo(() => Math.max(0, ...grid().flatMap((r) => r.cells.map((c) => metricValue(c, props.metric)))));
 
   const show = (e: Event, day: string, h: number, s: Summary) => {
@@ -44,13 +33,9 @@ export function ActivityHeatmap(props: {
 
   return (
     <div class="heat-card">
-      <div class="chart-head heat-head">
-        <span class="chart-head-note" title={zone}>{zoneLabel} time</span>
-        <Seg value={mode()} options={HEAT_MODES} onChange={setMode} />
-      </div>
-      <div class="heat" role="grid" aria-label="Activity by day and hour" onPointerLeave={() => setTip(null)}>
+      <div class="heat" role="grid" aria-label="Activity" onPointerLeave={() => setTip(null)}>
         <div />
-        <For each={HOURS}>{(h) => <div class="heat-hour">{h % HOUR_LABEL_STEP === 0 ? hourLabel(h) : ''}</div>}</For>
+        <For each={grid()[0]?.hours ?? HOURS}>{(h) => <div class="heat-hour">{h % HOUR_LABEL_STEP === 0 ? hourLabel(h) : ''}</div>}</For>
         <For each={grid()}>
           {(row) => (
             <>
@@ -61,9 +46,9 @@ export function ActivityHeatmap(props: {
                     class={`heat-cell l${heatLevel(metricValue(s, props.metric), max())}`}
                     role="gridcell"
                     tabindex="0"
-                    aria-label={`${row.label} ${hourLabel(h())}: ${props.format(s)}`}
-                    onPointerEnter={(e) => show(e, row.label, h(), s)}
-                    onFocus={(e) => show(e, row.label, h(), s)}
+                    aria-label={`${row.label} ${hourLabel(row.hours[h()]!)}: ${props.format(s)}`}
+                    onPointerEnter={(e) => show(e, row.label, row.hours[h()]!, s)}
+                    onFocus={(e) => show(e, row.label, row.hours[h()]!, s)}
                     onBlur={() => setTip(null)}
                   />
                 )}

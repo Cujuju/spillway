@@ -23,17 +23,26 @@ export function Toggle(props: { value: boolean; onChange: (v: boolean) => void; 
   );
 }
 
-export function Seg<T extends string | number>(props: { value: T; options: readonly { value: T; label: string; title?: string }[]; onChange: (v: T) => void }) {
+export function Seg<T extends string | number>(props: { label?: string; compact?: boolean; value: T; options: readonly { value: T; label: string; title?: string }[]; onChange: (v: T) => void }) {
   return (
-    <div class="seg" role="radiogroup">
-      <For each={props.options}>
-        {(o) => (
-          <button type="button" role="radio" aria-checked={props.value === o.value} title={o.title} classList={{ active: props.value === o.value }} onClick={() => props.onChange(o.value)}>
-            {o.label}
-          </button>
-        )}
-      </For>
-    </div>
+    <Show when={props.compact} fallback={
+      <div class="seg" role="radiogroup" aria-label={props.label}>
+        <For each={props.options}>
+          {(o) => (
+            <button type="button" role="radio" aria-checked={props.value === o.value} title={o.title} classList={{ active: props.value === o.value }} onClick={() => props.onChange(o.value)}>
+              {o.label}
+            </button>
+          )}
+        </For>
+      </div>
+    }>
+      <select class="select seg-select" aria-label={props.label} onChange={(e) => {
+        const option = props.options.find((o) => String(o.value) === e.currentTarget.value);
+        if (option) props.onChange(option.value);
+      }}>
+        <For each={props.options}>{(o) => <option value={o.value} selected={o.value === props.value}>{o.label}</option>}</For>
+      </select>
+    </Show>
   );
 }
 

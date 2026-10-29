@@ -46,6 +46,16 @@ describe('normalizeSettings', () => {
   });
 });
 
+describe('forecastHours', () => {
+  it('migrates the old whole-day setting to hours', () => {
+    expect(normalizeSettings({ dashboard: { forecastDays: 3 } }).dashboard.forecastHours).toBe(72);
+  });
+
+  it('keeps a stored hour length over the old day setting', () => {
+    expect(normalizeSettings({ dashboard: { forecastHours: 4, forecastDays: 3 } }).dashboard.forecastHours).toBe(4);
+  });
+});
+
 describe('proxyConfigChanged', () => {
   const withProxy = (p: Partial<typeof DEFAULT_SETTINGS.proxy>) => ({ ...DEFAULT_SETTINGS, proxy: { ...DEFAULT_SETTINGS.proxy, ...p } });
 

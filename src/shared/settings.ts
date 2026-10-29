@@ -68,7 +68,7 @@ export interface AppSettings {
   dashboard: {
     refreshIntervalSeconds: number;
     showEmails: boolean;
-    forecastDays: number;
+    forecastHours: number;
     drainLookbackHours: number;
     accountSort: 'reset' | 'usage' | 'name';
   };
@@ -106,7 +106,9 @@ const MAX_PORT = 65535;
 /** Faster polling than this only re-reads the same cached headers. */
 const MIN_REFRESH_SECONDS = 15;
 const MAX_REFRESH_SECONDS = 3600;
-const MAX_FORECAST_DAYS = 14;
+const HOURS_PER_DAY = 24;
+/** Two weeks: history keeps 14 days, so a longer forecast outruns its evidence. */
+const MAX_FORECAST_HOURS = 14 * HOURS_PER_DAY;
 const MAX_LOOKBACK_HOURS = 168;
 const MAX_AFFINITY_MINUTES = 24 * 60;
 /** Claude streams begin with message_start within seconds; 90 s also covers very long prompts. */
@@ -147,7 +149,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dashboard: {
     refreshIntervalSeconds: 60,
     showEmails: false,
-    forecastDays: 7,
+    forecastHours: 7 * HOURS_PER_DAY,
     drainLookbackHours: 24,
     accountSort: 'reset',
   },
@@ -249,7 +251,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     dashboard: {
       refreshIntervalSeconds: int(db.refreshIntervalSeconds, d.dashboard.refreshIntervalSeconds, MIN_REFRESH_SECONDS, MAX_REFRESH_SECONDS),
       showEmails: bool(db.showEmails, d.dashboard.showEmails),
-      forecastDays: int(db.forecastDays, d.dashboard.forecastDays, 1, MAX_FORECAST_DAYS),
+      // Older settings stored whole days as `forecastDays`.
+      forecastHours: int(db.forecastHours ?? (typeof db.forecastDays === 'number' ? db.forecastDays * HOURS_PER_DAY : undefined), d.dashboard.forecastHours, 1, MAX_FORECAST_HOURS),
       drainLookbackHours: int(db.drainLookbackHours, d.dashboard.drainLookbackHours, 1, MAX_LOOKBACK_HOURS),
       accountSort: pick(db.accountSort, SORTS, d.dashboard.accountSort),
     },

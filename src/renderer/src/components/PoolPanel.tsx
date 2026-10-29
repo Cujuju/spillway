@@ -6,7 +6,9 @@ import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
 
-const FORECAST_DAY_CHOICES = [1, 3, 7, 14] as const;
+const HOURS_PER_DAY = 24;
+/** Forecast lengths in hours: short ones for 5-hour windows, then days for weekly ones. */
+const FORECAST_HOUR_CHOICES = [4, 8, HOURS_PER_DAY, 3 * HOURS_PER_DAY, 7 * HOURS_PER_DAY, 14 * HOURS_PER_DAY];
 /** Headroom above the busiest drain sample so the line never touches the top edge. */
 const DRAIN_HEADROOM = 1.2;
 /** Smallest drain-rate axis, %/hour, so a quiet day still reads as a flat line. */
@@ -15,8 +17,9 @@ const MIN_DRAIN_AXIS = 5;
 const POOL_FULL = 100;
 
 const POOL_TABS = ['remaining', 'drain'] as const;
-const days = () => settings().dashboard.forecastDays;
-const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+const hours = () => settings().dashboard.forecastHours;
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+const lengthText = (h: number) => (h % HOURS_PER_DAY ? plural(h, 'hour') : plural(h / HOURS_PER_DAY, 'day'));
 
 /**
  * Remaining/drain chart and forecast, a line per pool (the provider cards pick pools and window).
@@ -54,8 +57,8 @@ export function PoolPanel(props: { models: PoolModel[] }) {
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
             </Show>
-            <select class="select" value={days()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastDays = Number(e.currentTarget.value); })}>
-              <For each={FORECAST_DAY_CHOICES}>{(n) => <option value={n}>Next {daysText(n)}</option>}</For>
+            <select class="select" value={hours()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastHours = Number(e.currentTarget.value); })}>
+              <For each={FORECAST_HOUR_CHOICES}>{(n) => <option value={n}>Next {lengthText(n)}</option>}</For>
             </select>
           </div>
         </div>

@@ -29,7 +29,7 @@ const weekly = (id: string, used: number, resetIn: number | null, patch: Partial
   account(id, [win('five_hour', 10, null, FIVE_H), win('seven_day', used, resetIn, WEEK)], patch);
 /** Projects with shares from plans alone (no history): same-plan accounts split the pool evenly. */
 const run = (creds: Credential[], key: string, perHour: number, strategy: string, days = 1) =>
-  project(creds, key, perHour, NOW, days, strategy, poolShares([], creds, key, []));
+  project(creds, key, perHour, NOW, days * 24, strategy, poolShares([], creds, key, []));
 const at = (p: { points: { t: number; remaining: number }[] }, t: number) => p.points.find((x) => x.t === t)!.remaining;
 
 describe('poolWindowKey', () => {
@@ -125,7 +125,7 @@ describe('project: coupled windows', () => {
     const spare = account('spare', [win('five_hour', 0, null, FIVE_H), win('seven_day', 0, 96 * H, WEEK)]);
     // 1% of the pool is 2% of an account's week and 10% of its session window.
     const shares = new Map([['capped', half({ seven_day: 2, five_hour: 10 })], ['spare', half({ seven_day: 2, five_hour: 10 })]]);
-    const p = project([capped, spare], 'seven_day', 2, NOW, 1, 'soonest-reset', shares);
+    const p = project([capped, spare], 'seven_day', 2, NOW, 24, 'soonest-reset', shares);
     // "capped" has room for one 0.5% step (5% of its session window).
     expect(p.nextReset).toEqual({ at: NOW + 2 * H, restores: 0.5 });
     expect(at(p, NOW + H)).toBeCloseTo(98);
@@ -134,7 +134,7 @@ describe('project: coupled windows', () => {
     const capped = account('capped', [win('five_hour', 0, null, FIVE_H), win('seven_day', 99, 96 * H, WEEK)]);
     const spare = account('spare', [win('five_hour', 0, null, FIVE_H), win('seven_day', 0, 120 * H, WEEK)]);
     const shares = new Map([['capped', half({ five_hour: 2, seven_day: 0.4 })], ['spare', half({ five_hour: 2, seven_day: 0.4 })]]);
-    const p = project([capped, spare], 'five_hour', 10, NOW, 1, 'soonest-reset', shares);
+    const p = project([capped, spare], 'five_hour', 10, NOW, 24, 'soonest-reset', shares);
     // "capped" takes one 2.5% step (1% of its week), starting its 5-hour window then.
     expect(p.nextReset).toEqual({ at: NOW + STEP + FIVE_H, restores: 2.5 });
   });

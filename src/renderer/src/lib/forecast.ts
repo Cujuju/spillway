@@ -6,7 +6,6 @@ import type { SeriesPoint } from './poolHistory';
 /** Pool forecast for one provider and one limit window, in percent of the whole pool (see poolCapacity). */
 
 const HOUR_MS = 60 * 60_000;
-const DAY_MS = 24 * HOUR_MS;
 const FULL = 100;
 /** 15-minute steps resolve a 5-hour window and keep a 14-day projection under 1.4k points. */
 const STEP_MS = 15 * 60_000;
@@ -197,10 +196,10 @@ export interface Projection {
 
 /** Projects the pool forward at a steady drain (pool %/hour), routed as the proxy would (`strategy`). */
 export function project(
-  credentials: Credential[], key: string, perHour: number, now: number, days: number, strategy: string, shares: Map<string, AccountShare>,
+  credentials: Credential[], key: string, perHour: number, now: number, hours: number, strategy: string, shares: Map<string, AccountShare>,
 ): Projection {
   const accounts = accountsFor(credentials, key, shares);
-  const end = now + days * DAY_MS;
+  const end = now + hours * HOUR_MS;
   const points: SeriesPoint[] = [{ t: now, remaining: remainingOf(accounts) }];
   let nextReset: Projection['nextReset'] = null;
   const drainPerStep = (perHour * STEP_MS) / HOUR_MS;

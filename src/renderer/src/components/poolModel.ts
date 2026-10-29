@@ -7,7 +7,6 @@ import { keyForDuration, lengthLineId, nextResetAt, poolSegments, scopedChoices,
 import { activityBuckets, history, now, settings } from '../store';
 
 const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 
 /** Chart lines carry every stored sample, so zooming out reaches past the lookback. */
 const WHOLE_HISTORY = Number.NEGATIVE_INFINITY;
@@ -19,7 +18,7 @@ export interface PoolInput {
 
 /** Default chart span shared by every pool on one panel: lookback behind now, forecast ahead. */
 export const chartFrom = () => now() - settings().dashboard.drainLookbackHours * HOUR_MS;
-export const chartTo = () => now() + settings().dashboard.forecastDays * DAY_MS;
+export const chartTo = () => now() + settings().dashboard.forecastHours * HOUR_MS;
 
 /** Percent of the pool left in `key` now, by the Dashboard's math; tray icons and the tray tooltip read it. */
 export const poolRemaining = (credentials: Credential[], key: string) =>
@@ -40,7 +39,7 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
     return [...pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), { t: now(), remaining: s.remaining }];
   });
   const projection = createMemo(() =>
-    key() ? project(pool().credentials, key()!, rate() ?? 0, now(), settings().dashboard.forecastDays, strategy(), shares()) : null,
+    key() ? project(pool().credentials, key()!, rate() ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares()) : null,
   );
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, WHOLE_HISTORY) : []));
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));

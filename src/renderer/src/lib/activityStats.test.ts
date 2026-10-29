@@ -86,7 +86,7 @@ describe('heatmap time frames', () => {
     expect(grid!.cells[0]!.requests).toBe(1);
     expect(grid!.cells[23]!.requests).toBe(1);
   });
-  it('selects the previous full Monday-Sunday week even on Monday or Sunday', () => {
+  it('selects the previous full Monday-Sunday week', () => {
     const rows = Array.from({ length: 16 }, (_, i) => row(hour(18 + i)));
     for (const today of [26, 29, 31]) {
       const grid = heatGrid(rows, 'lastWeek', hour(today));
@@ -95,6 +95,15 @@ describe('heatmap time frames', () => {
     }
     const grid = heatGrid([row(hour(18)), row(hour(19)), row(hour(25)), row(hour(26))], 'lastWeek', thursday);
     expect(grid.map((r) => r.cells[12]!.requests)).toEqual([1, 0, 0, 0, 0, 0, 1]);
+  });
+  it.each([
+    { weekday: 'Sunday', today: 32, first: 19 },
+    { weekday: 'Monday', today: 33, first: 26 },
+  ])('selects the correct previous week when now is $weekday', ({ today, first }) => {
+    const rows = Array.from({ length: 16 }, (_, i) => row(hour(18 + i), { requests: 18 + i }));
+    const grid = heatGrid(rows, 'lastWeek', hour(today));
+    expect(grid.map((r) => r.cells[12]!.requests)).toEqual(Array.from({ length: 7 }, (_, i) => first + i));
+    expect(grid.map((r) => r.label)).toEqual(Array.from({ length: 7 }, (_, i) => new Date(hour(first + i)).toLocaleDateString(undefined, { weekday: 'short' })));
   });
   it('never assigns retained daily totals to a made-up hour', () => {
     const rows = [row(hour(23), { wholeDay: true, requests: 100 }), row(hour(25, 22))];

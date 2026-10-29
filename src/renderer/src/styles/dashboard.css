@@ -215,10 +215,10 @@
 }
 /* The bars block is as wide as the fullest row and hugs the right edge; spare width springs open before it. */
 .limits {
-  justify-self: end;
-  width: min(100%, calc(var(--limit-slots, 1) * (var(--limit-min) + var(--limit-gap)) - var(--limit-gap)));
+  /* Fills the column: --limit-slots equal tracks when they fit at --limit-min, else they wrap. */
+  --limit-share: calc((100% - (var(--limit-slots, 1) - 1) * var(--limit-gap)) / var(--limit-slots, 1));
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--limit-min), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(max(var(--limit-min), var(--limit-share)), 1fr));
   gap: var(--limit-gap);
 }
 .limit-head {

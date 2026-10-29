@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
-import { percentText, providerLabel } from '@shared/trayValues';
-import { compactDuration } from '../lib/format';
+import { providerLabel } from '@shared/trayValues';
+import { compactDuration, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
 import { providerVar } from '../lib/providers';
@@ -113,7 +113,7 @@ function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void
           )}
         </For>
       </span>
-      <span class="pool-line-pct">{percentText(m().summary()?.remaining ?? 0)}%</span>
+      <span class="pool-line-pct">{quotaPercent(m().summary()?.remaining ?? 0)}</span>
       <span class="pool-line-reset">
         <Show when={m().resetAt()}>
           {(at) => (

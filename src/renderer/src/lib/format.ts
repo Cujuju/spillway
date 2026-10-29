@@ -31,6 +31,13 @@ export function pct(value: number, digits = 0): string {
   return `${value.toFixed(digits)}%`;
 }
 
+/** Dashboard quota figures: 3 significant digits, truncated so a sliver never reads 0 and a near-full window never reads 100. */
+const QUOTA_SIGNIFICANT_DIGITS = 3;
+const quotaFormat = new Intl.NumberFormat(undefined, { maximumSignificantDigits: QUOTA_SIGNIFICANT_DIGITS, roundingMode: 'trunc' });
+export function quotaPercent(value: number | null): string {
+  return value === null ? '—' : `${quotaFormat.format(value)}%`;
+}
+
 /** Below a cent, "<$0.01"; to the cent under $1,000; whole dollars above. */
 const WHOLE_DOLLARS_FROM = 1000;
 const CENT = 0.01;

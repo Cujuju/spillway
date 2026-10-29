@@ -5,8 +5,8 @@ import { management } from './managementClient';
 import { parseActivityEvent, SseParser } from './sse';
 import { usage } from './usagePoller';
 
-/** A burst of requests triggers one usage refresh, after it settles. */
-const USAGE_REFRESH_DEBOUNCE_MS = 2_000;
+/** Bound event-triggered staleness even while requests keep arriving. */
+const USAGE_REFRESH_DELAY_MS = 2_000;
 /** The stream drops when the proxy restarts or reloads; reconnect while it should be running. */
 const RECONNECT_MS = 2_000;
 /** Stream events that only mean "reload usage" (docs/desktop-api.md in the fork). */
@@ -61,7 +61,7 @@ class ActivityStream extends EventEmitter {
   }
 
   private onMessage(event: string, data: string): void {
-    // ready: lookups may have landed before the stream connected. usage: a lookup recorded new windows.
+    // ready: lookups may have landed before the stream connected. usage: the proxy recorded new quota windows.
     if (USAGE_RELOAD_EVENTS.has(event)) return this.scheduleUsageRefresh();
     if (event !== 'request') return;
     const e = parseActivityEvent(data);
@@ -78,11 +78,11 @@ class ActivityStream extends EventEmitter {
   }
 
   private scheduleUsageRefresh(): void {
-    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    if (this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
       void usage.poll();
-    }, USAGE_REFRESH_DEBOUNCE_MS);
+    }, USAGE_REFRESH_DELAY_MS);
   }
 }
 

@@ -36,6 +36,7 @@ class UsagePoller extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
   private last: UsageSnapshot | null = null;
   private inFlight = false;
+  private pollPending = false;
   lastError: string | null = null;
 
   latest(): UsageSnapshot | null {
@@ -53,7 +54,11 @@ class UsagePoller extends EventEmitter {
   }
 
   async poll(): Promise<UsageSnapshot | null> {
-    if (this.inFlight || !proxy.isRunning()) return this.last;
+    if (!proxy.isRunning()) return this.last;
+    if (this.inFlight) {
+      this.pollPending = true;
+      return this.last;
+    }
     this.inFlight = true;
     try {
       return this.accept(await management.usage());
@@ -63,6 +68,10 @@ class UsagePoller extends EventEmitter {
       return this.last;
     } finally {
       this.inFlight = false;
+      if (this.pollPending) {
+        this.pollPending = false;
+        void this.poll();
+      }
     }
   }
 

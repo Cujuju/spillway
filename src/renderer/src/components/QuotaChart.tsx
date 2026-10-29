@@ -1,16 +1,12 @@
-import { createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from 'solid-js';
+import { timeTicks, wheelFactor, zoomRange, type TimeRange } from '../lib/chartZoom';
 import type { SeriesPoint } from '../lib/poolHistory';
 import { valueAt } from '../lib/poolWindows';
 import { dayTime } from '../lib/format';
 import { ChartTip } from './ChartTip';
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 const PAD = { left: 48, right: 12, top: 12, bottom: 26 };
 const Y_TICKS = 4;
-/** Spans up to this many days get 6-hour ticks; longer spans tick daily. */
-const HOURLY_TICK_MAX_DAYS = 2;
-const HOURLY_TICK_STEP_MS = 6 * HOUR_MS;
 /** Arrow keys move the readout by this share of the span. */
 const KEY_STEPS = 96;
 const HOVER_DOT_RADIUS = 4;
@@ -25,16 +21,22 @@ export interface QuotaSeries {
 }
 
 export interface QuotaChartProps {
+  /** Lines may reach past `from`; the wheel widens the view as far back as they go. */
   series: QuotaSeries[];
+  /** Default view; `to` is also the furthest the view reaches ahead. */
   from: number;
   to: number;
   now: number;
-  yMax: number;
+  /** Y-axis top for the largest value in view. */
+  yMax: (peak: number) => number;
   yLabel: (v: number) => string;
   ariaLabel: string;
 }
 
-/** Lines over time: solid history, dashed projection, a "Now" marker, and a crosshair readout. Fills its host's height. */
+/**
+ * Lines over time: history, dashed projection, "Now" marker, crosshair readout. Fills its host's height.
+ * Wheel up widens the span around the pointer, wheel down narrows it; double-click resets.
+ */
 export function QuotaChart(props: QuotaChartProps) {
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
@@ -51,12 +53,33 @@ export function QuotaChart(props: QuotaChartProps) {
     onCleanup(() => ro.disconnect());
   });
 
+  // Zoom held as offsets from now, so a zoomed view follows the clock like the default one.
+  const [zoom, setZoom] = createSignal<{ back: number; ahead: number } | null>(null);
+  const defaultOffsets = createMemo(() => `${props.now - props.from}:${props.to - props.now}`);
+  // A new lookback or forecast length shows its whole default span.
+  createEffect(on(defaultOffsets, () => setZoom(null), { defer: true }));
+  const bounds = createMemo((): TimeRange => ({
+    from: Math.min(props.from, ...props.series.map((s) => s.past[0]?.t ?? props.from)),
+    to: props.to,
+  }));
+  const view = createMemo((): TimeRange => {
+    const z = zoom();
+    if (!z) return { from: props.from, to: props.to };
+    return { from: Math.max(bounds().from, props.now - z.back), to: Math.min(bounds().to, props.now + z.ahead) };
+  });
+
   const plotW = () => width() - PAD.left - PAD.right;
   const plotH = () => height() - PAD.top - PAD.bottom;
-  const span = () => Math.max(1, props.to - props.from);
-  const x = (t: number) => PAD.left + ((t - props.from) / span()) * plotW();
-  const tAt = (px: number) => props.from + ((px - PAD.left) / plotW()) * span();
-  const y = (v: number) => PAD.top + plotH() - (Math.min(props.yMax, Math.max(0, v)) / Math.max(1, props.yMax)) * plotH();
+  const span = () => Math.max(1, view().to - view().from);
+  const x = (t: number) => PAD.left + ((t - view().from) / span()) * plotW();
+  const tAt = (px: number) => view().from + ((px - PAD.left) / plotW()) * span();
+  const yMax = createMemo(() => {
+    const { from, to } = view();
+    let peak = 0;
+    for (const s of props.series) for (const p of [...s.past, ...(s.future ?? [])]) if (p.t >= from && p.t <= to) peak = Math.max(peak, p.remaining);
+    return Math.max(1, props.yMax(peak));
+  });
+  const y = (v: number) => PAD.top + plotH() - (Math.min(yMax(), Math.max(0, v)) / yMax()) * plotH();
   const path = (pts: SeriesPoint[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.remaining).toFixed(1)}`).join('');
   const area = (pts: SeriesPoint[]) =>
     pts.length ? `${path(pts)}L${x(pts.at(-1)!.t).toFixed(1)},${y(0)}L${x(pts[0]!.t).toFixed(1)},${y(0)}Z` : '';
@@ -64,23 +87,12 @@ export function QuotaChart(props: QuotaChartProps) {
   const single = () => props.series.length === 1;
 
   const yTicks = createMemo(() => {
-    const max = props.yMax;
+    const max = yMax();
     return Array.from({ length: Y_TICKS + 1 }, (_, i) => (max * i) / Y_TICKS);
   });
-  const xTicks = createMemo(() => {
-    const daily = span() > HOURLY_TICK_MAX_DAYS * DAY_MS;
-    const step = daily ? DAY_MS : HOURLY_TICK_STEP_MS;
-    const start = new Date(props.from);
-    if (daily) start.setHours(24, 0, 0, 0);
-    else start.setHours(Math.ceil(start.getHours() / 6) * 6, 0, 0, 0);
-    const out: { t: number; label: string }[] = [];
-    for (let t = start.getTime(); t <= props.to; t += step) {
-      const d = new Date(t);
-      out.push({ t, label: daily ? d.toLocaleDateString(undefined, { weekday: 'short' }) : d.toLocaleTimeString(undefined, { hour: 'numeric' }) });
-    }
-    return out;
-  });
+  const xTicks = createMemo(() => timeTicks(view()));
   const gradientId = `qc-${createUniqueId()}`;
+  const clipId = `qc-clip-${createUniqueId()}`;
 
   /** Each series' value at the hovered time: history up to now, projection after. */
   const readout = createMemo(() => {
@@ -93,10 +105,10 @@ export function QuotaChart(props: QuotaChartProps) {
   });
 
   const hoverAt = (t: number, clientX: number, clientY: number) => {
-    setHoverT(Math.min(props.to, Math.max(props.from, t)));
+    setHoverT(Math.min(view().to, Math.max(view().from, t)));
     setPointer({ x: clientX, y: clientY });
   };
-  const onMove = (e: PointerEvent) => {
+  const onMove = (e: MouseEvent) => {
     const rect = host.getBoundingClientRect();
     const px = e.clientX - rect.left;
     if (px < PAD.left || px > width() - PAD.right) return setHoverT(null);
@@ -110,15 +122,26 @@ export function QuotaChart(props: QuotaChartProps) {
     const rect = host.getBoundingClientRect();
     hoverAt(t, rect.left + x(t), rect.top + PAD.top);
   };
+  const onWheel = (e: WheelEvent) => {
+    if (!e.deltaY) return;
+    e.preventDefault();
+    const rect = host.getBoundingClientRect();
+    const next = zoomRange(view(), tAt(e.clientX - rect.left), wheelFactor(e.deltaY), bounds());
+    setZoom({ back: props.now - next.from, ahead: next.to - props.now });
+    onMove(e);
+  };
 
   return (
-    <div ref={host} class="quota-chart" onPointerMove={onMove} onPointerLeave={() => setHoverT(null)}>
+    <div ref={host} class="quota-chart" onPointerMove={onMove} onPointerLeave={() => setHoverT(null)} onWheel={onWheel} onDblClick={() => setZoom(null)}>
       <svg class="chart" width={width()} height={height()} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => setHoverT(null)}>
         <defs>
           <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stop-color={props.series[0]?.color} stop-opacity="0.28" />
             <stop offset="1" stop-color={props.series[0]?.color} stop-opacity="0" />
           </linearGradient>
+          <clipPath id={clipId}>
+            <rect x={PAD.left} y={0} width={Math.max(0, plotW())} height={height()} />
+          </clipPath>
         </defs>
         <For each={yTicks()}>
           {(v) => (
@@ -129,6 +152,7 @@ export function QuotaChart(props: QuotaChartProps) {
           )}
         </For>
         <For each={xTicks()}>{(tick) => <text x={x(tick.t)} y={height() - 6} text-anchor="middle">{tick.label}</text>}</For>
+        <g clip-path={`url(#${clipId})`}>
         <For each={props.series}>
           {(s) => (
             <>
@@ -140,7 +164,8 @@ export function QuotaChart(props: QuotaChartProps) {
             </>
           )}
         </For>
-        <Show when={props.now >= props.from && props.now <= props.to}>
+        </g>
+        <Show when={props.now >= view().from && props.now <= view().to}>
           <line x1={x(props.now)} x2={x(props.now)} y1={PAD.top} y2={y(0)} stroke="var(--color-text-muted)" stroke-dasharray="3 3" />
           <text x={x(props.now)} y={PAD.top + 10} text-anchor="middle" style={{ fill: 'var(--color-text-secondary)' }}>Now</text>
         </Show>

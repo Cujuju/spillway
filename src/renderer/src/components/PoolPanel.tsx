@@ -20,13 +20,13 @@ const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
 /**
  * Remaining/drain chart and forecast, a line per pool (the provider cards pick pools and window).
- * The chart takes the panel's spare height.
+ * The chart takes the panel's spare height; the wheel zooms its time span.
  */
 export function PoolPanel(props: { models: PoolModel[] }) {
   const [tab, setTab] = persistedSignal('dashboard.poolTab', 'remaining', POOL_TABS);
   const shown = createMemo(() => props.models.filter((m) => m.summary()));
   const single = () => shown().length === 1;
-  const drainMax = () => Math.max(MIN_DRAIN_AXIS, Math.ceil(Math.max(0, ...shown().flatMap((m) => m.drain().map((p) => p.remaining))) * DRAIN_HEADROOM));
+  const drainMax = (peak: number) => Math.max(MIN_DRAIN_AXIS, Math.ceil(peak * DRAIN_HEADROOM));
   const series = (kind: 'remaining' | 'drain') =>
     shown().map((m) => ({
       id: m.provider(),
@@ -62,10 +62,10 @@ export function PoolPanel(props: { models: PoolModel[] }) {
         <Show
           when={tab() === 'remaining'}
           fallback={
-            <QuotaChart series={series('drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax()} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel="Drain rate chart" />
+            <QuotaChart series={series('drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel="Drain rate chart" />
           }
         >
-          <QuotaChart series={series('remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Remaining quota chart" />
+          <QuotaChart series={series('remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Remaining quota chart" />
         </Show>
       </Show>
     </section>

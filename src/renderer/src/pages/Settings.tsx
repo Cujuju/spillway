@@ -142,7 +142,7 @@ function DashboardSection() {
       <SettingRow label="Forecast length">
         <NumberField value={db().forecastDays} unit="d" onCommit={(v) => set((d) => void (d.dashboard.forecastDays = v))} />
       </SettingRow>
-      <SettingRow label="Drain-rate lookback" help="Recent history used for the %/hour rate and the chart's past line.">
+      <SettingRow label="Drain-rate lookback" help="Recent history used for the %/hour rate and the chart's default past range.">
         <NumberField value={db().drainLookbackHours} unit="h" onCommit={(v) => set((d) => void (d.dashboard.drainLookbackHours = v))} />
       </SettingRow>
       <SettingRow label="Sort accounts by">

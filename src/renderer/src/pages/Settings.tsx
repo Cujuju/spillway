@@ -102,6 +102,9 @@ function ProxySection() {
           <SettingRow nested label="Affinity lifetime" help="An idle conversation is re-routed after this long.">
             <NumberField value={p().sessionAffinityTtlMinutes} unit="min" onCommit={(v) => set((d) => void (d.proxy.sessionAffinityTtlMinutes = v))} />
           </SettingRow>
+          <SettingRow nested label="Wait for a near reset" help="When a conversation's account runs out and resets within this long, the conversation waits for it (T3 Code snoozes) instead of moving, which would re-send its whole context. It only waits while the prompt cache would still be alive at the reset (1 hour for Claude Code). 0 turns it off.">
+            <NumberField value={p().sessionHoldMinutes} unit="min" onCommit={(v) => set((d) => void (d.proxy.sessionHoldMinutes = v))} />
+          </SettingRow>
         </Show>
         <SettingRow label="On server errors" help={SERVER_ERROR_ACTIONS.find((o) => o.value === p().serverErrors)?.help}>
           <Seg value={p().serverErrors} options={SERVER_ERROR_ACTIONS} onChange={(v) => set((d) => void (d.proxy.serverErrors = v))} />

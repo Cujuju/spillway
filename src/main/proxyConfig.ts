@@ -52,6 +52,7 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'prefer-auth-kind'], PREFERRED_AUTH_KIND[p.apiKeyOrder]],
     [['routing', 'session-affinity'], p.sessionAffinity],
     [['routing', 'session-affinity-ttl'], affinityTtl(p.sessionAffinityTtlMinutes)],
+    [['routing', 'session-affinity-hold'], affinityTtl(p.sessionHoldMinutes)],
     [['routing', 'server-errors'], PROXY_SERVER_ERRORS[p.serverErrors]],
     // Only quota and login failures move a conversation.
     [['routing', 'session-affinity-rebind-on'], 'quota'],

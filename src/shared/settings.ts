@@ -55,6 +55,8 @@ export interface AppSettings {
     apiKeyOrder: ApiKeyOrder;
     sessionAffinity: boolean;
     sessionAffinityTtlMinutes: number;
+    /** A conversation waits this long at most for its spent account's reset instead of moving; 0 = never. */
+    sessionHoldMinutes: number;
     /** Empty = bundled binary. */
     executablePath: string;
     restartOnCrash: boolean;
@@ -140,6 +142,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     sessionAffinity: true,
     // Upstream default session-affinity-ttl is 1h.
     sessionAffinityTtlMinutes: 60,
+    // Off keeps moving a limited conversation at once, as before the setting existed.
+    sessionHoldMinutes: 0,
     // Every account reaches the same provider servers, so switching on a server error only loses the prompt cache.
     serverErrors: 'stay',
     executablePath: '',
@@ -245,6 +249,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       apiKeyOrder: pick(p.apiKeyOrder, API_KEY_ORDERS, d.proxy.apiKeyOrder),
       sessionAffinity: bool(p.sessionAffinity, d.proxy.sessionAffinity),
       sessionAffinityTtlMinutes: int(p.sessionAffinityTtlMinutes, d.proxy.sessionAffinityTtlMinutes, 1, MAX_AFFINITY_MINUTES),
+      sessionHoldMinutes: int(p.sessionHoldMinutes, d.proxy.sessionHoldMinutes, 0, MAX_AFFINITY_MINUTES),
       serverErrors: pick(p.serverErrors, SERVER_ERROR_ACTIONS, d.proxy.serverErrors),
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
@@ -291,7 +296,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
 export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
   return a.proxy.strategy !== b.proxy.strategy || a.proxy.apiKeyOrder !== b.proxy.apiKeyOrder || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
     a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds ||
-    a.proxy.serverErrors !== b.proxy.serverErrors || a.proxy.requestLog !== b.proxy.requestLog;
+    a.proxy.serverErrors !== b.proxy.serverErrors || a.proxy.requestLog !== b.proxy.requestLog ||
+    a.proxy.sessionHoldMinutes !== b.proxy.sessionHoldMinutes;
 }
 
 /** Settings whose change requires the proxy to be restarted to take effect. */

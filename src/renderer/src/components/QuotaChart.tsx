@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from 'solid-js';
-import { timeTicks, wheelFactor, zoomRange, type TimeRange } from '../lib/chartZoom';
+import { panRange, timeTicks, wheelFactor, zoomRange, type TimeRange } from '../lib/chartZoom';
 import type { SeriesPoint } from '../lib/poolHistory';
 import { valueAt } from '../lib/poolWindows';
 import { dayTime } from '../lib/format';
@@ -35,7 +35,7 @@ export interface QuotaChartProps {
 
 /**
  * Lines over time: history, dashed projection, "Now" marker, crosshair readout. Fills its host's height.
- * Wheel up widens the span around the pointer, wheel down narrows it; double-click resets.
+ * Wheel zooms around the pointer (up widens); drag or Shift+wheel pans; double-click resets.
  */
 export function QuotaChart(props: QuotaChartProps) {
   let host!: HTMLDivElement;
@@ -108,7 +108,26 @@ export function QuotaChart(props: QuotaChartProps) {
     setHoverT(Math.min(view().to, Math.max(view().from, t)));
     setPointer({ x: clientX, y: clientY });
   };
+  const setView = (next: TimeRange) => setZoom({ back: props.now - next.from, ahead: next.to - props.now });
+  const msPerPx = () => span() / Math.max(1, plotW());
+  // Drag pans: the view at pointer-down plus the pointer's travel, so the grabbed time follows the pointer.
+  const [drag, setDrag] = createSignal<{ x: number; view: TimeRange } | null>(null);
+  const canPan = () => view().from > bounds().from || view().to < bounds().to;
+  const onDown = (e: PointerEvent) => {
+    if (e.button !== 0 || !canPan()) return;
+    host.setPointerCapture(e.pointerId);
+    setDrag({ x: e.clientX, view: view() });
+    setHoverT(null);
+  };
+  const onUp = (e: PointerEvent) => {
+    if (!drag()) return;
+    host.releasePointerCapture(e.pointerId);
+    setDrag(null);
+    onMove(e);
+  };
   const onMove = (e: MouseEvent) => {
+    const d = drag();
+    if (d) return setView(panRange(d.view, (d.x - e.clientX) * msPerPx(), bounds()));
     const rect = host.getBoundingClientRect();
     const px = e.clientX - rect.left;
     if (px < PAD.left || px > width() - PAD.right) return setHoverT(null);
@@ -122,17 +141,29 @@ export function QuotaChart(props: QuotaChartProps) {
     const rect = host.getBoundingClientRect();
     hoverAt(t, rect.left + x(t), rect.top + PAD.top);
   };
+  // Vertical wheel zooms; horizontal scroll (Shift+wheel, trackpad swipe) pans.
   const onWheel = (e: WheelEvent) => {
-    if (!e.deltaY) return;
+    if (!e.deltaY && !e.deltaX) return;
     e.preventDefault();
     const rect = host.getBoundingClientRect();
-    const next = zoomRange(view(), tAt(e.clientX - rect.left), wheelFactor(e.deltaY), bounds());
-    setZoom({ back: props.now - next.from, ahead: next.to - props.now });
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) setView(panRange(view(), e.deltaX * msPerPx(), bounds()));
+    else setView(zoomRange(view(), tAt(e.clientX - rect.left), wheelFactor(e.deltaY), bounds()));
     onMove(e);
   };
 
   return (
-    <div ref={host} class="quota-chart" onPointerMove={onMove} onPointerLeave={() => setHoverT(null)} onWheel={onWheel} onDblClick={() => setZoom(null)}>
+    <div
+      ref={host}
+      class="quota-chart"
+      classList={{ pannable: canPan(), panning: drag() !== null }}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onPointerLeave={() => setHoverT(null)}
+      onWheel={onWheel}
+      onDblClick={() => setZoom(null)}
+    >
       <svg class="chart" width={width()} height={height()} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => setHoverT(null)}>
         <defs>
           <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">

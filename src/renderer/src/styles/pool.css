@@ -217,6 +217,13 @@
   display: block;
   height: 100%;
 }
+.quota-chart.pannable {
+  cursor: grab;
+}
+.quota-chart.panning {
+  cursor: grabbing;
+  user-select: none;
+}
 .quota-chart svg:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-accent-border);
   outline-offset: var(--focus-ring-offset);

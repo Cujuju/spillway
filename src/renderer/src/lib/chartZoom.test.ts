@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_ZOOM_SPAN_MS, timeTicks, wheelFactor, zoomRange } from './chartZoom';
+import { MIN_ZOOM_SPAN_MS, panRange, timeTicks, wheelFactor, zoomRange } from './chartZoom';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -36,6 +36,18 @@ describe('zoomRange', () => {
   it('takes bounds narrower than the minimum span as the whole view', () => {
     const tight = { from: 0, to: MIN_ZOOM_SPAN_MS / 2 };
     expect(zoomRange(tight, 0, 0.5, tight)).toEqual(tight);
+  });
+});
+
+describe('panRange', () => {
+  it('moves the view by the shift, keeping its span', () => {
+    expect(panRange(view, -DAY, bounds)).toEqual({ from: 3 * DAY, to: 5 * DAY });
+    expect(panRange(view, DAY, bounds)).toEqual({ from: 5 * DAY, to: 7 * DAY });
+  });
+
+  it('stops at either edge of the bounds', () => {
+    expect(panRange(view, -100 * DAY, bounds)).toEqual({ from: 0, to: 2 * DAY });
+    expect(panRange(view, 100 * DAY, bounds)).toEqual({ from: 8 * DAY, to: 10 * DAY });
   });
 });
 

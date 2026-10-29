@@ -34,6 +34,13 @@ export function zoomRange(view: TimeRange, anchor: number, factor: number, bound
   return { from, to: from + span };
 }
 
+/** `view` moved later by `shift` ms (earlier if negative), stopping at the edges of `bounds`. */
+export function panRange(view: TimeRange, shift: number, bounds: TimeRange): TimeRange {
+  const span = view.to - view.from;
+  const from = clamp(view.from + shift, bounds.from, bounds.to - span);
+  return { from, to: from + span };
+}
+
 /** Tick spacings, finest first; a chart takes the finest that fits MAX_X_TICKS. */
 const TICK_STEPS_MS = [15 * MINUTE_MS, 30 * MINUTE_MS, HOUR_MS, 3 * HOUR_MS, 6 * HOUR_MS, DAY_MS, 2 * DAY_MS, 7 * DAY_MS];
 /** Most x labels a chart shows; short time labels stay apart at the narrowest window. */

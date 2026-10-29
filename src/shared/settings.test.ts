@@ -64,6 +64,7 @@ describe('proxyConfigChanged', () => {
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ firstByteTimeoutSeconds: 30 }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ apiKeyOrder: 'first' }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ serverErrors: 'switch' }))).toBe(true);
+    expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ requestLog: true }))).toBe(true);
   });
 
   it('ignores the account override, which goes through the management API', () => {

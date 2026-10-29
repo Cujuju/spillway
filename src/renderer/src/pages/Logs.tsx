@@ -1,6 +1,7 @@
 import { FolderOpen } from 'lucide-solid';
 import { createEffect, For, on } from 'solid-js';
-import { logs, setLogs } from '../store';
+import { Toggle } from '../components/ui';
+import { logs, setLogs, settings, updateSettings } from '../store';
 
 const ICON_PX = 14;
 /** Within this share of a screen from the bottom counts as following the tail. */
@@ -25,6 +26,14 @@ export function Logs() {
           <div class="dash-sub">Proxy output and supervisor events · {logs().length} lines</div>
         </div>
         <div class="dash-actions">
+          <span class="muted" title="Saves every request and response, prompts included, under the proxy folder's logs. Failed requests are saved either way. Files grow quickly; turn it off when done.">
+            Record all requests
+          </span>
+          <Toggle
+            label="Record all requests"
+            value={settings().proxy.requestLog}
+            onChange={(v) => void updateSettings((d) => void (d.proxy.requestLog = v))}
+          />
           <button class="btn ghost" onClick={() => void window.api.openPath('logs')}><FolderOpen size={ICON_PX} /> Open folder</button>
           <button class="btn ghost" onClick={() => void window.api.clearProxyLogs().then(() => setLogs([]))}>Clear</button>
         </div>

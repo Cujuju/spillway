@@ -60,6 +60,7 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'cooldown', 'save-cooldown-status'], true],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],
     [['requests', 'tls-handshake-timeout-seconds'], TLS_HANDSHAKE_TIMEOUT_SECONDS],
+    [['observability', 'logs', 'request-log'], p.requestLog],
     [['oauth', 'auth-dir'], input.authDir],
   ];
 }

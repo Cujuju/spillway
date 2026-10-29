@@ -61,6 +61,8 @@ export interface AppSettings {
     serverErrors: ServerErrorAction;
     /** Cancel an upstream stream that sends nothing for this long, then treat it as a server error; 0 = never. */
     firstByteTimeoutSeconds: number;
+    /** Proxy writes every request and response, prompts included, to its logs folder. */
+    requestLog: boolean;
     /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
     preferredAccounts: Record<string, string>;
   };
@@ -143,6 +145,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     executablePath: '',
     restartOnCrash: true,
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
+    // Off: full request logs hold prompts and grow quickly. Failed requests are logged regardless.
+    requestLog: false,
     preferredAccounts: {},
   },
   windowStart: DEFAULT_WINDOW_START,
@@ -245,6 +249,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
+      requestLog: bool(p.requestLog, d.proxy.requestLog),
       preferredAccounts: stringRecord(p.preferredAccounts),
     },
     windowStart: normalizeWindowStart(r.windowStart),
@@ -286,7 +291,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
 export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
   return a.proxy.strategy !== b.proxy.strategy || a.proxy.apiKeyOrder !== b.proxy.apiKeyOrder || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
     a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds ||
-    a.proxy.serverErrors !== b.proxy.serverErrors;
+    a.proxy.serverErrors !== b.proxy.serverErrors || a.proxy.requestLog !== b.proxy.requestLog;
 }
 
 /** Settings whose change requires the proxy to be restarted to take effect. */

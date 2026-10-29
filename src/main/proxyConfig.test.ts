@@ -26,6 +26,7 @@ describe('buildProxyConfig', () => {
       'server-errors': 'return', 'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
     expect(cfg.requests['tls-handshake-timeout-seconds']).toBe(TLS_HANDSHAKE_TIMEOUT_SECONDS);
+    expect(cfg.observability.logs['request-log']).toBe(false);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
     expect(cfg.access['api-keys']).toEqual(appKeys);
   });

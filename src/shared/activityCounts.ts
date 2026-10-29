@@ -1,6 +1,15 @@
 import { tokenCost } from './modelPrices';
 import type { ActivityCounts, ActivityEvent } from './types';
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** Floors the local hour using this instant's offset, preserving repeated DST hours. */
+export function localHourStart(t: number): number {
+  const offset = new Date(t).getTimezoneOffset() * MINUTE_MS;
+  return Math.floor((t - offset) / HOUR_MS) * HOUR_MS + offset;
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 /** Local calendar day, YYYY-MM-DD, so days match the user's clock. */
 export function localDay(t: number): string {

@@ -1,5 +1,5 @@
 import type { ActivityMetric } from '@shared/activityBoard';
-import { addCounts, emptyCounts } from '@shared/activityCounts';
+import { addCounts, emptyCounts, localHourStart } from '@shared/activityCounts';
 import { accountKey, clientKey } from '@shared/activityScope';
 import { promptTokens } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityCounts } from '@shared/types';
@@ -57,9 +57,13 @@ function floorToBucket(t: number, hoursPerBucket: number): number {
   return d.getTime();
 }
 
-/** Bucket starts for a range ending at `now`, oldest first; local-clock steps survive DST changes. */
+/** Oldest first; hourly ranges step in elapsed time, longer ranges follow local calendar boundaries. */
 export function bucketStarts(range: Range, now: number): number[] {
   const { buckets, hoursPerBucket } = RANGES[range];
+  if (hoursPerBucket === 1) {
+    const last = localHourStart(now);
+    return Array.from({ length: buckets }, (_, i) => last - (buckets - 1 - i) * HOUR_MS);
+  }
   const last = new Date(floorToBucket(now, hoursPerBucket));
   return Array.from({ length: buckets }, (_, i) => {
     const d = new Date(last);
@@ -159,9 +163,7 @@ export function heatGrid(rows: ActivityBucket[], mode: HeatMode, now: number): H
   const hourly = rows.filter((r) => !r.wholeDay && r.start <= now);
   const hours = Array.from({ length: HOURS_PER_DAY }, (_, h) => h);
   if (mode === 'hourly') {
-    const currentHour = new Date(now);
-    currentHour.setMinutes(0, 0, 0);
-    const starts = hours.map((h) => currentHour.getTime() - (HOURS_PER_DAY - 1 - h) * HOUR_MS);
+    const starts = bucketStarts('24h', now);
     return [{ label: '24h', hours: starts.map((t) => new Date(t).getHours()),
       cells: series(hourly, starts, now).map((p) => p.summary) }];
   }

@@ -62,6 +62,34 @@ describe('hourlyBuckets / lastDays', () => {
     const rows = hourlyBuckets([event(new Date(2026, 9, 25, 9, 5)), event(new Date(2026, 9, 25, 9, 55)), event(new Date(2026, 9, 25, 10, 1))]);
     expect(rows.map((r) => [new Date(r.start).getHours(), r.requests])).toEqual([[9, 2], [10, 1]]);
   });
+  it('keeps repeated DST hours separate from event aggregation through both hourly charts', async () => {
+    vi.stubEnv('TZ', 'America/Los_Angeles');
+    try {
+      const first = Date.parse('2026-11-01T01:00:00-07:00');
+      const second = Date.parse('2026-11-01T01:00:00-08:00');
+      const now = Date.parse('2026-11-01T01:30:00-08:00');
+      expect(new Date(first).getTimezoneOffset()).toBe(420);
+      expect(new Date(second).getTimezoneOffset()).toBe(480);
+      const rows = hourlyBuckets([
+        event(new Date('2026-11-01T01:15:00-07:00')),
+        event(new Date('2026-11-01T01:15:00-08:00')),
+        event(new Date('2026-11-01T01:25:00-08:00')),
+      ]);
+      expect(rows.map((r) => [r.start, r.requests])).toEqual([[first, 1], [second, 2]]);
+      const { bucketStarts, heatGrid, series } = await import('../renderer/src/lib/activityStats');
+      const [grid] = heatGrid(rows, 'hourly', now);
+      expect(grid!.hours.slice(-2)).toEqual([1, 1]);
+      expect(grid!.cells).toHaveLength(24);
+      expect(grid!.cells.map((c) => c.requests)).toEqual([...Array<number>(22).fill(0), 1, 2]);
+      const starts = bucketStarts('24h', now);
+      expect(starts.slice(-2)).toEqual([first, second]);
+      expect(series(rows, starts, now).map((p) => p.summary.requests)).toEqual(grid!.cells.map((c) => c.requests));
+      // Rhythm intentionally combines both occurrences of the local hour.
+      expect(heatGrid(rows, 'rhythm', now)[6]!.cells[1]!.requests).toBe(3);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it('lists days oldest first, ending today', () => {
     expect(lastDays(new Date(2026, 9, 1, 12).getTime(), 3)).toEqual(['2026-09-29', '2026-09-30', '2026-10-01']);
   });

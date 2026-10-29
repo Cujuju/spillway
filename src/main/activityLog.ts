@@ -1,4 +1,4 @@
-import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
+import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
@@ -33,9 +33,7 @@ export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEv
 export function hourlyBuckets(events: ActivityEvent[]): ActivityBucket[] {
   const rows = new Map<string, ActivityBucket>();
   for (const e of events) {
-    const at = new Date(Date.parse(e.at));
-    at.setMinutes(0, 0, 0);
-    const base = { start: at.getTime(), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
+    const base = { start: localHourStart(Date.parse(e.at)), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
     const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}|${base.client ?? ''}`;
     const row = rows.get(key) ?? { ...base, ...emptyCounts() };
     addEvent(row, e);

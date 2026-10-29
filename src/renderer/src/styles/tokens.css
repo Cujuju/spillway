@@ -97,8 +97,6 @@
   --scrollbar-size: 10px;
   /* Sidebar nav buttons: row height, and the square width when collapsed. */
   --nav-btn-size: 30px;
-  /* Widest a page's content grows. */
-  --page-max-width: 1180px;
 
   /* One height for buttons, inputs, toggles and segments so settings rows line up. */
   --control-height: 28px;

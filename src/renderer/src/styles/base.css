@@ -116,10 +116,6 @@ a {
   padding: var(--page-pad);
   min-width: 0;
 }
-.page-inner {
-  max-width: var(--page-max-width);
-  margin: 0 auto;
-}
 /* A page with one child that fills the remaining height; the rest keep their size, and the page scrolls past it. */
 .page-inner.fill {
   height: 100%;

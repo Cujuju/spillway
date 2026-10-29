@@ -71,7 +71,8 @@ const ACTIVITY_DAYS = rangeDays('30d');
 const ACTIVITY_RELOAD_DEBOUNCE_MS = 2_000;
 
 export async function saveSettings(next: AppSettings): Promise<void> {
-  setSettingsSignal(await api.setSettings(next));
+  // Edits can copy store-backed values into the draft; IPC cannot clone Solid proxies.
+  setSettingsSignal(await api.setSettings(unwrap(next)));
 }
 
 /** Applies `fn` to a copy of the current settings and saves it. */

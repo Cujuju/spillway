@@ -67,11 +67,10 @@ export function Dashboard() {
   const lengths = createMemo(() => durationChoices(providers().map((p) => credsOf(p.id))));
   const cards = createProviderPools(() => providers().map((p) => p.id), credsOf, lengths, () => snapshot()?.strategy ?? '');
   // Lines of the providers in view; the chart only picks among these, so it never charts an empty window.
-  const visibleLines = createMemo(() =>
-    cards()
-      .filter((c) => provider() === ALL || c.id === provider())
-      .flatMap((c) => c.lines().map((line) => ({ provider: c.id, line }))),
-  );
+  const visibleCards = () => cards().filter((c) => provider() === ALL || c.id === provider());
+  const visibleLines = createMemo(() => visibleCards().flatMap((c) => c.lines().map((line) => ({ provider: c.id, line }))));
+  // API-key-only providers never report limits, so the legend leaves them out.
+  const chartProviders = () => visibleCards().filter((c) => !c.keysOnly()).map((c) => c.id);
   const visibleLengths = () => lengths().filter((l) => visibleLines().some((v) => v.line.id === lengthLineId(l.value)));
   const lineId = () => {
     const c = chosenLine();
@@ -180,7 +179,7 @@ export function Dashboard() {
           when={focused()}
           fallback={
             <Show when={!providerCreds().every((c) => c.apiKey)}>
-              <PoolPanel models={chartModels()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
+              <PoolPanel models={chartModels()} providers={chartProviders()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
             </Show>
           }
         >

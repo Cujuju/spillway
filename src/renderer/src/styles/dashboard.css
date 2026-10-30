@@ -105,6 +105,15 @@
   display: inline-block;
   margin-right: var(--spacing-1_5);
 }
+/* A provider in view without the charted window: dimmed, hollow dot. */
+.legend .absent {
+  color: var(--color-text-disabled);
+  cursor: default;
+}
+.legend .absent .dot {
+  background: none;
+  box-shadow: inset 0 0 0 var(--border-width) currentColor;
+}
 /* Dashes drawn close together so they read as one dashed line. */
 .legend .dash {
   --legend-dash-tracking: -1px;

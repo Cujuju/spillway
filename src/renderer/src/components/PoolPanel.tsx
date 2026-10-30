@@ -33,7 +33,14 @@ export interface ChartWindow {
  * Remaining/drain chart and forecast, a line per pool. Cards pick pools; cards or picker pick the window.
  * The chart takes the panel's spare height; the wheel zooms its time span.
  */
-export function PoolPanel(props: { models: PoolModel[]; windows: ChartWindow[]; line: string | null; onLine: (id: string) => void }) {
+export function PoolPanel(props: {
+  models: PoolModel[];
+  /** Providers in view, legend order; those without the charted window show disabled. */
+  providers: string[];
+  windows: ChartWindow[];
+  line: string | null;
+  onLine: (id: string) => void;
+}) {
   const [tab, setTab] = persistedSignal('dashboard.poolTab', 'remaining', POOL_TABS);
   const shown = createMemo(() => props.models.filter((m) => m.summary()));
   const single = () => shown().length === 1;
@@ -47,6 +54,8 @@ export function PoolPanel(props: { models: PoolModel[]; windows: ChartWindow[]; 
       future: kind === 'remaining' ? m.projection()?.points : undefined,
     }));
   const color = () => (single() ? providerVar(shown()[0]!.provider()) : undefined);
+  const charts = (id: string) => shown().some((m) => m.provider() === id);
+  const windowLabel = () => props.windows.find((w) => w.value === props.line)?.label ?? 'this';
 
   return (
     <section class="summary" style={{ '--pool-color': color() }}>
@@ -56,12 +65,18 @@ export function PoolPanel(props: { models: PoolModel[]; windows: ChartWindow[]; 
           <button classList={{ active: tab() === 'drain' }} onClick={() => setTab('drain')}>Drain rate</button>
           <span class="spacer" />
           <div class="legend">
-            <Show when={!single()}>
-              <For each={shown()}>
-                {(m) => <span style={{ '--pool-color': providerVar(m.provider()) }}><span class="dot" />{providerLabel(m.provider())}</span>}
-              </For>
-            </Show>
-            <Show when={single()}><span><span class="dot" />Past</span></Show>
+            <For each={props.providers}>
+              {(id) => (
+                <span
+                  classList={{ absent: !charts(id) }}
+                  style={{ '--pool-color': providerVar(id) }}
+                  title={charts(id) ? undefined : `${providerLabel(id)} reports no ${windowLabel()} window`}
+                >
+                  <span class="dot" />
+                  {providerLabel(id)}
+                </span>
+              )}
+            </For>
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
             </Show>

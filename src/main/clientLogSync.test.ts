@@ -1,10 +1,15 @@
-import { mkdtemp, writeFile, appendFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rm, open, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { expect, it } from 'vitest';
-import { importClientFile, type ImportSink } from './clientLogSync';
+import { expect, it, vi } from 'vitest';
+import { importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
 import type { ActivityEvent } from '@shared/types';
-import { zstdCompressSync } from 'node:zlib';
+import { createZstdDecompress, zstdCompressSync } from 'node:zlib';
+import { parseClientLine } from './clientLogParser';
+
+vi.mock('node:fs/promises', { spy: true });
+vi.mock('node:zlib', { spy: true });
+vi.mock('./clientLogParser', { spy: true });
 
 it('resumes complete UTF-8 lines, checkpoints context, tolerates truncation and deletion', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-sync-'));
@@ -36,6 +41,97 @@ it('resumes complete UTF-8 lines, checkpoints context, tolerates truncation and 
     await rm(file);
     expect(await importClientFile(file, 'claude', sink)).toBe(false);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it.each([false, true])('does not open or decompress a completed unchanged file (archive: %s)', async (archive) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-unchanged-'));
+  const file = path.join(dir, archive ? 'log.jsonl.zst' : 'log.jsonl');
+  let state: string | undefined;
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
+  try {
+    await writeFile(file, archive ? zstdCompressSync('{}\n{') : '{}\n{');
+    await importClientFile(file, 'claude', sink);
+    vi.mocked(open).mockClear();
+    vi.mocked(parseClientLine).mockClear();
+    vi.mocked(createZstdDecompress).mockClear();
+    expect(await importClientFile(file, 'claude', sink)).toBe(false);
+    expect(open).not.toHaveBeenCalled();
+    expect(createZstdDecompress).not.toHaveBeenCalled();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it.each(['truncate', 'replace', 'backwards'])('restarts after %s even with a valid old anchor', async (mode) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-rotate-'));
+  const file = path.join(dir, 'log.jsonl');
+  let state: string | undefined;
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
+  try {
+    await writeFile(file, '{}\n{}\n');
+    await importClientFile(file, 'claude', sink);
+    if (mode === 'truncate') await writeFile(file, '{}\n');
+    else if (mode === 'replace') {
+      const cp = JSON.parse(state!); cp.birthtime -= 1; state = JSON.stringify(cp);
+    } else {
+      await appendFile(file, '{}\n');
+      const info = await stat(file);
+      await utimes(file, info.atime, new Date(info.mtimeMs - 10_000));
+    }
+    vi.mocked(open).mockClear();
+    const batch = vi.spyOn(sink, 'importBatch');
+    vi.mocked(parseClientLine).mockClear();
+    await importClientFile(file, 'claude', sink);
+    expect(open).toHaveBeenCalled();
+    expect(JSON.parse(batch.mock.calls[0]![1]).offset).toBe(mode === 'backwards' ? 9 : mode === 'truncate' ? 3 : 6);
+    expect(parseClientLine).toHaveBeenCalledTimes(mode === 'backwards' ? 3 : mode === 'truncate' ? 1 : 2);
+    // A restart parses every line, even when the old anchor is still present.
+    expect(JSON.parse(state!).complete).toBe(true);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it('defers appends made after stat to the next scan', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-append-'));
+  const file = path.join(dir, 'log.jsonl');
+  let state: string | undefined;
+  let appended = false;
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
+  try {
+    await writeFile(file, '{}\n');
+    const realStat = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    vi.mocked(stat).mockImplementationOnce(async (...args: Parameters<typeof stat>) => {
+      const info = await realStat.stat(...args);
+      await appendFile(file, '{}\n'); appended = true;
+      return info;
+    });
+    await importClientFile(file, 'claude', sink);
+    expect(appended).toBe(true);
+    expect(JSON.parse(state!).offset).toBe(3);
+    await importClientFile(file, 'claude', sink);
+    expect(JSON.parse(state!).offset).toBe(6);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it('polls without resets when unchanged or when accounting skips duplicate records', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-poll-'));
+  vi.stubEnv('CLAUDE_CONFIG_DIR', dir);
+  vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  const file = path.join(dir, 'projects', 'log.jsonl');
+  let state: string | undefined;
+  const changed = vi.fn();
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; return false; } };
+  const line = JSON.stringify({ type: 'assistant', timestamp: '2026-10-30', sessionId: 's', message: { id: 'm', model: 'claude-opus-5-5', usage: { input_tokens: 1 } } }) + '\n';
+  try {
+    await mkdir(path.dirname(file));
+    await writeFile(file, line);
+    for (let poll = 0; poll < 2; poll++) {
+      let done!: () => void;
+      const idle = new Promise<void>((resolve) => { done = resolve; });
+      const progress = vi.fn((p) => { if (p.state === 'idle') done(); });
+      const stop = startClientLogSync(sink, changed, progress);
+      await idle; await stop();
+      expect(progress.mock.calls.at(-1)?.[0]).toMatchObject({ state: 'idle', filesDone: 1, filesTotal: 1 });
+    }
+    expect(changed).not.toHaveBeenCalled();
+  } finally { vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
 });
 
 it.each([false, true])('resumes an interrupted scan of an unchanged file (archive: %s)', async (archived) => {

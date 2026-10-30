@@ -22,6 +22,16 @@ const sampleUsage = (patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
   userAgent: null, client: 'claude-cli', ...patch,
 });
 
+it('reports committed accounting changes but not duplicate replay or checkpoint-only writes', () => {
+  const e = sampleUsage({ source: 'client-log' });
+  expect(activityLog.importBatch('feedback', 'first', [e])).toBe(true);
+  expect(activityLog.importBatch('feedback', 'duplicate', [e])).toBe(false);
+  expect(activityLog.importBatch('feedback', 'complete', [])).toBe(false);
+  expect(activityLog.checkpoint('feedback')).toBe('complete');
+  activityLog.close();
+  expect(activityLog.checkpoint('feedback')).toBe('complete');
+});
+
 it('replaces preliminary Claude blocks with final usage across files, retention and restart', () => {
   const block = (output: number) => parseClientLine(JSON.stringify({ type: 'assistant', isSidechain: true,
     sessionId: 's', requestId: 'req', timestamp: at, message: { id: 'msg_stream', model: 'claude-opus-5-5',

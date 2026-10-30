@@ -64,6 +64,8 @@ export class ActivityLog {
   /** Mirror of `activity_totals`; null until first read. */
   private totals: Map<string, ActivityTotal> | null = null;
   private prunedOn = '';
+  /** This worker is the sole checkpoint writer; retain reads until the connection closes. */
+  private checkpoints = new Map<string, string | undefined>();
   /** Latest account per conversation and model (conversationKey), filled from the database on first sight. */
   private conversationAccounts = new Map<string, string | null>();
 
@@ -86,15 +88,23 @@ export class ActivityLog {
   }
 
   checkpoint(file: string): string | undefined {
-    return (this.db.prepare('SELECT state FROM client_log_checkpoints WHERE path = ?').get(file) as { state: string } | undefined)?.state;
+    if (!this.checkpoints.has(file)) this.checkpoints.set(file,
+      (this.db.prepare('SELECT state FROM client_log_checkpoints WHERE path = ?').get(file) as { state: string } | undefined)?.state);
+    return this.checkpoints.get(file);
   }
 
-  importBatch(file: string, state: string, events: ActivityEvent[]): void {
+  importBatch(file: string, state: string, events: ActivityEvent[]): boolean {
     try {
-      this.db.transaction(() => {
+      const changed = this.db.transaction(() => {
+        const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+        const before = events.length ? changes() : 0;
         for (const e of events) this.append(e);
+        const changed = events.length > 0 && changes() !== before;
         this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(file, state);
+        return changed;
       })();
+      this.checkpoints.set(file, state);
+      return changed;
     } catch (e) {
       this.totals = null;
       this.conversationAccounts.clear();
@@ -265,6 +275,7 @@ export class ActivityLog {
     this.conn = null;
     this.totals = null;
     this.conversationAccounts.clear();
+    this.checkpoints.clear();
   }
 
   private loadTotals(): Map<string, ActivityTotal> {

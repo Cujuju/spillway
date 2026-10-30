@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createZstdDecompress } from 'node:zlib';
-import { opendir, open, stat } from 'node:fs/promises';
+import { readdir, open, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
@@ -21,7 +21,8 @@ const CHECKPOINT_VERSION = 1;
 export interface Checkpoint { size: number; mtime: number; offset: number; context: LogContext; birthtime: number; anchor: string; complete?: boolean; version?: number }
 export interface ImportSink {
   checkpoint(file: string): string | undefined;
-  importBatch(file: string, state: string, events: ActivityEvent[]): void;
+  /** False means only the checkpoint changed; void preserves sinks without accounting feedback. */
+  importBatch(file: string, state: string, events: ActivityEvent[]): boolean | void;
 }
 export const clientLogRoots = () => [
   { provider: 'claude' as const, dir: path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'projects') },
@@ -31,8 +32,8 @@ const missing = (e: unknown) => ['ENOENT', 'ENOTDIR'].includes((e as NodeJS.Errn
 
 async function* files(dir: string): AsyncGenerator<string> {
   try {
-    const entries = await opendir(dir);
-    for await (const entry of entries) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) yield* files(file);
       else if (entry.isFile() && /\.jsonl(?:\.zst)?$/.test(entry.name)) yield file;
@@ -64,7 +65,7 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
     const archived = file.endsWith('.zst');
     let cp: Checkpoint | undefined = saved ? JSON.parse(saved) : undefined;
     if (cp?.version !== CHECKPOINT_VERSION) cp = undefined;
-    if (cp && (info.size < cp.size || info.birthtimeMs !== cp.birthtime || (info.mtimeMs !== cp.mtime && (archived || info.size === cp.size)))) cp = undefined;
+    if (cp && (info.size < cp.size || info.mtimeMs < cp.mtime || info.birthtimeMs !== cp.birthtime || (info.mtimeMs !== cp.mtime && (archived || info.size === cp.size)))) cp = undefined;
     if (cp?.complete && cp.size === info.size && cp.mtime === info.mtimeMs) return false;
     handle = await open(file, 'r');
     const anchorAt = async (offset: number): Promise<string> => {
@@ -110,8 +111,8 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
           pending = pending.subarray(end + 1);
           const state: Checkpoint = { version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context, birthtime: info.birthtimeMs, anchor: archived ? '' : await anchorAt(offset) };
           if (stopped()) break;
-          sink.importBatch(file, JSON.stringify(state), events);
-          changed ||= events.length > 0;
+          const committed = sink.importBatch(file, JSON.stringify(state), events);
+          changed = (events.length > 0 && committed !== false) || changed;
           await setImmediate();
           end = pending.lastIndexOf(10);
         }
@@ -134,31 +135,35 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     const state: import('@shared/ipc').ActivityImportState = { state: 'importing', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
     const pending: { file: string; provider: 'claude' | 'codex' }[] = [];
     let lastProgress = 0;
+    const reportProgress = () => {
+      if (Date.now() - lastProgress < IMPORT_PROGRESS_INTERVAL_MS) return;
+      progress({ ...state });
+      lastProgress = Date.now();
+    };
     const counted: ImportSink = {
       checkpoint: (file) => sink.checkpoint(file),
       importBatch: (file, checkpoint, events) => {
-        sink.importBatch(file, checkpoint, events);
+        const committed = sink.importBatch(file, checkpoint, events);
+        dirty = (events.length > 0 && committed !== false) || dirty;
         state.recordsImported += events.length;
-        if (Date.now() - lastProgress >= IMPORT_PROGRESS_INTERVAL_MS) {
-          progress({ ...state });
-          lastProgress = Date.now();
-        }
+        reportProgress();
+        return committed;
       },
     };
-    progress({ ...state });
+    reportProgress();
     try {
       for (const root of clientLogRoots()) for await (const file of files(root.dir)) {
         if (stopped) return;
         pending.push({ file, provider: root.provider });
       }
       state.filesTotal = pending.length;
-      progress({ ...state });
+      reportProgress();
       for (const { file, provider } of pending) {
         if (stopped) return;
         try { dirty = await importClientFile(file, provider, counted, () => stopped) || dirty; }
         catch (e) { state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
-        progress({ ...state });
+        reportProgress();
       }
       if (dirty && !stopped) changed();
     } catch (e) { state.error = `Local usage scan failed: ${String(e)}`; }

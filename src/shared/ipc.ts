@@ -54,8 +54,8 @@ export interface DesktopApi {
   /** Each local day with stored requests from `accounts`, newest first. */
   activityDaySummaries(scope: ActivityScope): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
-  /** Hourly activity for the last `days` local days, today included; expired days as daily totals. */
-  activityBuckets(days: number): Promise<ActivityBucket[]>;
+  /** Totals for the latest `days` local days; null returns all. */
+  activityBuckets(days: number | null): Promise<ActivityBucket[]>;
   /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
   /** Titles the clients gave these conversations (proxy session IDs); IDs without one are left out. */

@@ -5,7 +5,6 @@ import { maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
-import { rangeDays } from './lib/activityStats';
 import { persistedSignal } from './lib/persisted';
 import type { ActivityBucket, HistorySample, LogLine, ProxyStatus, UsageSnapshot } from '@shared/types';
 
@@ -65,8 +64,19 @@ export const [taskbarDark, setTaskbarDark] = createSignal(true);
 const MAX_LOG_LINES = 2000;
 /** History refetch after a snapshot is cheap (local file) and keeps the chart current. */
 const HISTORY_REFRESH_MS = 5 * 60_000;
-/** Covers the overview's 30-day range and the plan sizing's history. */
-const ACTIVITY_DAYS = rangeDays('30d');
+/** Plan sizing (poolCapacity) and the account lists read recent history; they have always had 31 local days. */
+const MIN_ACTIVITY_DAYS = 31;
+/** Local days of activity held; null holds all. The Activity page widens it to its time frame. */
+const [activityDays, setActivityDays] = createSignal<number | null>(MIN_ACTIVITY_DAYS);
+const loadActivity = () => void api.activityBuckets(activityDays()).then(setActivityBuckets);
+
+/** Holds at least `days` local days of activity (null: all), reloading when that widens or narrows. */
+export function holdActivityDays(days: number | null): void {
+  const next = days === null ? null : Math.max(MIN_ACTIVITY_DAYS, days);
+  if (next === activityDays()) return;
+  setActivityDays(next);
+  loadActivity();
+}
 /** A burst of requests reloads the hourly activity once, after it settles. */
 const ACTIVITY_RELOAD_DEBOUNCE_MS = 2_000;
 
@@ -111,8 +121,8 @@ export async function initStore(): Promise<void> {
   setProxyStatus(status);
   setHistory(hist);
   setLogs(logLines);
-  void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets);
-  api.onActivityReset(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets));
+  loadActivity();
+  api.onActivityReset(loadActivity);
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -128,7 +138,7 @@ export async function initStore(): Promise<void> {
   let bucketsReload: ReturnType<typeof setTimeout> | undefined;
   api.onActivity(() => {
     clearTimeout(bucketsReload);
-    bucketsReload = setTimeout(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets), ACTIVITY_RELOAD_DEBOUNCE_MS);
+    bucketsReload = setTimeout(loadActivity, ACTIVITY_RELOAD_DEBOUNCE_MS);
   });
 
   tickEachMinute();

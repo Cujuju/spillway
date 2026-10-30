@@ -1,4 +1,4 @@
-import type { HistorySample, LimitWindow, UsageSnapshot } from './types';
+import type { HistorySample, LimitWindow, UsageSnapshot, WindowSummary } from './types';
 
 /**
  * When a window next resets, once its reset at `resetAt` is past `now`. Fixed-cadence windows
@@ -37,10 +37,23 @@ export function rollPastResets(snapshot: UsageSnapshot, now: number): UsageSnaps
   return changed ? { ...snapshot, credentials } : snapshot;
 }
 
-/** True when the window's reset time recorded in `a` passed by the time of `b`. */
+/** One settled history point per 5 min is finer than any weekly-chart pixel and keeps 14 days near 4k points. */
+export const HISTORY_SAMPLE_SPACING_MS = 5 * 60_000;
+
+/** Readings of one reset differ by request latency (seconds; Codex up to 3 s seen). Any later window resets at least 5 hours on. */
+export const RESET_READING_TOLERANCE_MS = 60_000;
+
+/** True when two reset readings name the same window; the one contract for window identity. */
+export function sameReset(a: number, b: number): boolean {
+  return Math.abs(a - b) <= RESET_READING_TOLERANCE_MS;
+}
+
+/** True when `b` is in a later window than `a`: it reports a different reset, or none after `a`'s reset passed. */
 export function resetBetween(a: HistorySample, b: HistorySample, id: string, key: string): boolean {
   const resetAt = a.resets?.[id]?.[key];
-  return resetAt !== undefined && resetAt <= Date.parse(b.at);
+  if (resetAt === undefined) return false;
+  const nextResetAt = b.resets?.[id]?.[key];
+  return nextResetAt === undefined ? resetAt <= Date.parse(b.at) : !sameReset(resetAt, nextResetAt);
 }
 
 /** Percent of one window used between two samples, or null when either lacks it. After a reset, all of `b` is new use. */
@@ -51,3 +64,6 @@ export function consumedBetween(a: HistorySample, b: HistorySample, id: string, 
   // Without a recorded reset, a drop is a reset in old samples or a source correction, not use.
   return resetBetween(a, b, id, key) ? after : Math.max(0, after - before);
 }
+
+/** When a summarised window stops counting: its reset, or earlier when a new window replaced it. */
+export const windowEnd = (s: WindowSummary): number => s.endedAt ?? s.resetAt;

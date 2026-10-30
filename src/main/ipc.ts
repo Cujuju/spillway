@@ -27,7 +27,7 @@ import { mainWindow } from './window';
 
 type Handlers = { [K in keyof typeof INVOKE]: (...args: Parameters<DesktopApi[K]>) => ReturnType<DesktopApi[K]> | Awaited<ReturnType<DesktopApi[K]>> };
 
-/** Longest span the Activity overview asks for; bounds a renderer-supplied day count. */
+/** Longest preset (1 year); a longer renderer-supplied day count returns everything rather than building a huge day set. */
 const MAX_BUCKET_DAYS = 365;
 
 /** Credential actions arrive by id; the management API addresses them by file name. */
@@ -153,7 +153,10 @@ const handlers: Handlers = {
   activityDay: (day, failedOnly, scope) => activityLog.day(day, failedOnly, scope),
   activityDaySummaries: (scope) => activityLog.daySummaries(scope),
   activityTotals: () => activityLog.totalsList(),
-  activityBuckets: (days) => activityLog.buckets(Math.min(MAX_BUCKET_DAYS, Math.max(1, Math.floor(Number(days) || 1)))),
+  activityBuckets: (days) => {
+    const n = Math.max(1, Math.floor(Number(days) || 1));
+    return activityLog.buckets(days === null || n > MAX_BUCKET_DAYS ? null : n);
+  },
   clearActivity: () => activityLog.clear(),
   conversationNames: (sessionIds) => conversationNames.names(sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),

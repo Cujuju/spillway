@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ActivityRpc, ACTIVITY_RESTART_BACKOFF_MS, type RpcPort } from './activityRpc';
+import { ActivityRpc, ACTIVITY_QUEUE_CAP, ACTIVITY_RESTART_BACKOFF_MS, type RpcPort } from './activityRpc';
 import type { Request } from './activityProtocol';
 class Port extends EventEmitter implements RpcPort {
   sent: Request[] = [];
@@ -73,4 +73,39 @@ it('retains a failed proxy write for retry ahead of queries and shutdown', async
   expect(port.sent.at(-1)!.method).toBe('close');
   port.reply();
   await close;
+});
+
+it('bounds outages, drops the oldest append, and reports the cumulative loss', async () => {
+  const port = new Port();
+  const rpc = new ActivityRpc(() => port);
+  const failure = vi.fn();
+  rpc.on('failure', failure);
+  const writes = Array.from({ length: 4_002 }, (_, i) =>
+    rpc.call('append', { requestId: String(i) } as import('@shared/types').ActivityEvent).catch(() => null));
+  expect(rpc.droppedEvents).toBe(2);
+  expect(failure.mock.lastCall?.[0]).toContain('2');
+  expect(await writes[0]).toBeNull();
+  expect(ACTIVITY_QUEUE_CAP).toBe(4_000);
+  rpc.start();
+  expect(port.sent[0]).toMatchObject({ args: [{ requestId: '2' }] });
+  const progress = vi.fn();
+  rpc.on('progress', progress);
+  port.emit('message', { event: 'progress', value: { state: 'idle', error: null } });
+  expect(progress.mock.lastCall?.[0].error).toContain('2 unacknowledged events dropped');
+  rpc.cancel();
+  await Promise.all(writes);
+});
+
+it('does not move an overflowing backlog into a stalled worker port', async () => {
+  const port = new Port();
+  const rpc = new ActivityRpc(() => port);
+  rpc.start();
+  const writes = Array.from({ length: ACTIVITY_QUEUE_CAP + 3 }, (_, i) =>
+    rpc.call('append', { requestId: String(i) } as import('@shared/types').ActivityEvent).catch(() => null));
+  expect(port.sent).toHaveLength(1);
+  port.reply({ id: 1 });
+  expect(port.sent).toHaveLength(2);
+  expect(port.sent[1]).toMatchObject({ args: [{ requestId: '3' }] });
+  rpc.cancel();
+  await Promise.all(writes);
 });

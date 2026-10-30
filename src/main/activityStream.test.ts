@@ -35,3 +35,20 @@ it('still stops when the final stream read fails', async () => {
   stream.reading = Promise.reject(new Error('connection closed'));
   await expect(activity.stop(true)).resolves.toBeUndefined();
 });
+
+it('cancels a stalled reader when the quit budget expires', async () => {
+  const cancel = vi.fn();
+  const body = new ReadableStream<Uint8Array>({ cancel });
+  const abort = new AbortController();
+  const stream = activity as unknown as {
+    abort: AbortController; running: Promise<void>; reading: Promise<void>;
+    read(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void>;
+  };
+  stream.abort = abort;
+  stream.reading = stream.read(body, abort.signal);
+  stream.running = stream.reading;
+  const draining = activity.stop(true);
+  await activity.stop(false);
+  await draining;
+  expect(cancel).toHaveBeenCalledOnce();
+});

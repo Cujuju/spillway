@@ -6,6 +6,7 @@ import type { ActivityMethods, Request, WorkerConfig } from './activityProtocol'
 const port = parentPort!;
 const log = new ActivityLog(workerData as WorkerConfig);
 log.prune();
+port.postMessage({ event: 'reset' });
 const startSync = () => startClientLogSync(log, () => {
   log.prune();
   port.postMessage({ event: 'reset' });

@@ -3,6 +3,7 @@ import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { activityLog } from './activityService';
 import { activity } from './activityStream';
+import { drainActivity } from './activityShutdown';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
 import { appIconPath } from './paths';
@@ -118,7 +119,7 @@ if (!app.requestSingleInstanceLock()) {
     session.defaultSession.flushStorageData();
     usage.stop();
     history.flush();
-    void proxy.stop().catch(console.error).then(() => activity.stop(true)).then(() => activityLog.close()).finally(() => {
+    void drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog).catch(console.error).finally(() => {
       destroyTrays();
       app.quit();
     });

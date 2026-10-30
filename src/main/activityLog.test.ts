@@ -248,7 +248,7 @@ describe('activityLog', () => {
   it("marks a conversation's switch to another account, per model, across a reopen", () => {
     const at = daysAgo(0);
     let request = 0;
-    const append = (authIndex: string, model = 'opus', sessionId: string | null = 'claude:s1') => activityLog.append(event(at, { requestId: `switch-${request++}`, authIndex, model, sessionId })).movedFrom;
+    const append = (authIndex: string, model = 'opus', sessionId: string | null = 'claude:s1') => activityLog.append(event(at, { requestId: `switch-${request++}`, authIndex, model, sessionId }))!.movedFrom;
     expect(append('a1')).toBeNull();
     expect(append('a1')).toBeNull();
     expect(append('a2', 'haiku')).toBeNull();
@@ -349,8 +349,21 @@ it('returns the original account move when a committed proxy append is replayed 
   activityLog.append(event(at, { requestId: 'first-account', sessionId: 'claude:replay', authIndex: 'a1' }));
   const moved = event(at, { requestId: 'moved-account', sessionId: 'claude:replay', authIndex: 'a2' });
   const stored = activityLog.append(moved);
-  expect(stored.movedFrom).toBe('a1');
+  expect(stored?.movedFrom).toBe('a1');
   activityLog.close();
   expect(activityLog.append(moved)).toEqual(stored);
   expect(activityLog.daySummaries().reduce((n, row) => n + row.requests, 0)).toBe(2);
+});
+
+it('proxy replay after pruning and row-ID reuse returns no unrelated row', () => {
+  activityLog.clear();
+  const old = event(daysAgo(40), { requestId: 'old' });
+  activityLog.append(old);
+  activityLog.prune();
+  const fresh = activityLog.append(event(daysAgo(0), { requestId: 'new' }));
+  expect(fresh?.id).toBe(1);
+  const totals = activityLog.totalsList();
+  expect(activityLog.append(old)).toBeNull();
+  expect(activityLog.totalsList()).toEqual(totals);
+  expect(storedCount()).toBe(1);
 });

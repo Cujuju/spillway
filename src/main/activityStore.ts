@@ -103,11 +103,16 @@ export class ActivityLog {
     }
   }
 
-  append(event: ActivityEvent): StoredActivityEvent {
+  append(event: ActivityEvent): StoredActivityEvent | null {
     // A committed append can lose its reply in a worker crash; preserve its original movedFrom on replay.
     if (event.source !== 'client-log') {
       const existing = this.db.prepare('SELECT id, event FROM requests WHERE id = (SELECT row_id FROM usage_identities WHERE key = ?)').get(identityKey(event)) as RequestRow | undefined;
-      if (existing) return toStored(existing);
+      if (existing) {
+        const stored = toStored(existing);
+        if (stored.source === (event.source ?? 'proxy') && stored.requestId === event.requestId && stored.authIndex === event.authIndex && stored.at === event.at) return stored;
+      }
+      // Accounted events outlive their retained request rows; acknowledge without resurrecting details.
+      if (this.db.prepare('SELECT 1 FROM usage_identities WHERE key = ?').get(identityKey(event))) return null;
     }
     const e = { ...event, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const day = localDay(Date.parse(e.at));

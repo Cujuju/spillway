@@ -58,6 +58,8 @@ class ActivityStream extends EventEmitter {
     const parser = new SseParser();
     const decoder = new TextDecoder();
     const reader = body.getReader();
+    const cancel = () => { void reader.cancel().catch(() => undefined); };
+    signal.addEventListener('abort', cancel, { once: true });
     try {
       while (!signal.aborted) {
         const { done, value } = await reader.read();
@@ -65,6 +67,7 @@ class ActivityStream extends EventEmitter {
         for (const msg of parser.push(decoder.decode(value, { stream: true }))) this.onMessage(msg.event, msg.data);
       }
     } finally {
+      signal.removeEventListener('abort', cancel);
       reader.releaseLock();
     }
   }
@@ -76,7 +79,7 @@ class ActivityStream extends EventEmitter {
     const e = parseActivityEvent(data);
     if (!e) return;
     void activityLog.call('append', e).then((stored) => {
-      this.emit('event', stored);
+      if (stored) this.emit('event', stored);
       this.scheduleUsageRefresh();
     }).catch((err) => {
       console.error('[activity] request not stored:', err);

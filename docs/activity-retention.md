@@ -60,3 +60,38 @@ per year), with the same dimension lengths and page occupancy. Estimates cover
 hourly totals and their index, excluding requests, usage identities, checkpoints,
 WAL and legacy daily baselines. The sample includes the partial current day.
 Already-pruned history has no hour detail and cannot contribute to measurement.
+
+## Worker outages and quit
+
+Proxy events have no cursor/replay contract. The fork creates a fresh subscriber
+for each connection; its `resync` event reloads quota windows, not request history.
+Pausing consumption would eventually overflow the proxy's 256-event buffer.
+
+The RPC queue holds at most 4,000 pending calls (plus its final close command).
+Only one call is sent to the worker at a time. An evicted in-flight event retains
+one additional reference until its reply or worker termination.
+Assumption: 2,000 events/hour is a planning rate, not a measured ceiling; this
+covers two hours when only appends are queued. Other pending calls reduce that
+coverage. Overflow drops the oldest unacknowledged append and rejects its promise;
+the existing activity failure notice shows cumulative drops for this app session,
+including during later import progress. An in-flight dropped event may already
+have committed, so this count is a conservative loss count. Queries are rejected
+when the queue is full and no append can be evicted. No plaintext spill is written.
+
+Residual: overflow loses proxy details and totals for events not already committed.
+Client-log imports can recover matching client usage, but cannot reconstruct all
+proxy attempts. Before the worker change, a failed synchronous append was logged
+and discarded immediately; the stream continued without retry.
+
+One 25-second quit deadline covers proxy stop, stream draining, and queue close:
+10 seconds for the management request, eight for proxy exit, and seven for stream
+and SQLite flushing. At the deadline, retries stop, the reader is cancelled and
+the worker is terminated. The log records the number of unacknowledged appends
+still in memory; those not committed are lost. Crash/power loss can also lose the
+memory queue. No queue survives a restart.
+
+A proxy replay whose accounting identity survives retention but whose full
+request identity no longer matches a retained row returns null. It cannot restore
+pruned details, count usage twice, or return a row that reused the old numeric ID.
+Every successful worker initialization emits a reset, exposing checkpointed imports
+even when a previous scan committed and crashed before its final notification.

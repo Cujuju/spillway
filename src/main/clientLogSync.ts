@@ -12,7 +12,7 @@ import type { ActivityEvent } from '@shared/types';
 
 /** Batch streaming appends at the existing cadence. */
 export const CLIENT_LOG_POLL_MS = 30_000;
-/** Recover missed notifications within five minutes while amortising a full walk over ten polls. */
+/** Safety net for Node watchers; native macOS streams report when reconciliation is needed. */
 export const CLIENT_LOG_RECONCILE_MS = 5 * 60_000;
 /** Bound renderer progress traffic during large individual files. */
 const IMPORT_PROGRESS_INTERVAL_MS = 100;
@@ -191,7 +191,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     };
     reportProgress();
     try {
-      const full = reconcile || Date.now() - lastReconcile >= CLIENT_LOG_RECONCILE_MS;
+      const full = reconcile || (roots.some((root) => root.watcher.needsPeriodicReconcile) && Date.now() - lastReconcile >= CLIENT_LOG_RECONCILE_MS);
       reconcile = false;
       if (full) lastReconcile = Date.now();
       for (const root of roots) {
@@ -225,13 +225,13 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
         reportProgress();
       }
       if (dirty && !stopped) changed();
-    } catch (e) { lastReconcile = -Infinity; state.error = `Local usage scan failed: ${String(e)}`; }
+    } catch (e) { reconcile = true; state.error = `Local usage scan failed: ${String(e)}`; }
     finally {
       progress({ ...state, state: 'idle' });
       active = false;
-      if (!stopped) timer = setTimeout(() => { running = scan(); }, reconcile ? 0 : CLIENT_LOG_POLL_MS);
+      if (!stopped) timer = setTimeout(() => { running = scan(); }, reconcile && !state.error ? 0 : CLIENT_LOG_POLL_MS);
     }
   };
   running = scan();
-  return async () => { stopped = true; clearTimeout(timer); for (const root of roots) root.watcher.close(); await running; };
+  return async () => { stopped = true; clearTimeout(timer); await Promise.all(roots.map((root) => root.watcher.close())); await running; };
 }

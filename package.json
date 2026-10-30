@@ -46,5 +46,8 @@
     "better-sqlite3-multiple-ciphers": "^13.0.3",
     "electron-updater": "^6.8.11",
     "yaml": "^2.9.1"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.3"
   }
 }

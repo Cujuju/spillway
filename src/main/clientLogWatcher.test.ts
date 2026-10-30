@@ -6,12 +6,26 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, startClientLogSync, importClientFile } from './clientLogSync';
 import { ClientLogWatcher, CLIENT_LOG_WATCH_RETRY_MS } from './clientLogWatcher';
+import { loadNativeClientLogEvents, type NativeClientLogEvents } from './nativeClientLogWatcher';
 import { ActivityLog } from './activityStore';
 import { parseClientLine } from './clientLogParser';
 import type { ActivityImportState } from '@shared/ipc';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('node:fs/promises', { spy: true });
+vi.mock('./nativeClientLogWatcher', async (original) => ({
+  ...await original<typeof import('./nativeClientLogWatcher')>(), loadNativeClientLogEvents: vi.fn(() => null),
+}));
+const nativeHandles: { dir: string; emit: (file: string, flags: number) => void; stop: ReturnType<typeof vi.fn> }[] = [];
+const native: NativeClientLogEvents = {
+  constants: { MustScanSubDirs: 1, UserDropped: 2, KernelDropped: 4, EventIdsWrapped: 8, RootChanged: 32,
+    Mount: 64, Unmount: 128, ItemCreated: 256, ItemRemoved: 512, ItemRenamed: 2048, ItemIsDir: 131072 },
+  watch: (dir, emit) => {
+    const stop = vi.fn(async () => {});
+    nativeHandles.push({ dir, emit, stop });
+    return stop;
+  },
+};
 const handles: { dir: string; recursive: boolean; emit: (event: string, filename: string | null) => void; handle: EventEmitter & { close: ReturnType<typeof vi.fn> } }[] = [];
 let dir: string;
 let log: ActivityLog;
@@ -27,6 +41,8 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   vi.setSystemTime(new Date('2026-10-30T12:00:00Z'));
   handles.length = 0;
+  nativeHandles.length = 0;
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(null);
   changed.mockClear(); progress.mockClear();
   vi.mocked(watch).mockImplementation(((root: string, options: unknown, listener?: (event: string, filename: string | null) => void) => {
     if (!existsSync(root)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
@@ -49,7 +65,8 @@ const file = () => path.join(dir, 'projects', 'old', 'subagents', 'old.jsonl');
 async function start() { const done = waitIdle(); stop = startClientLogSync(log, changed, progress); await done; }
 async function poll() { const done = waitIdle(); await vi.advanceTimersByTimeAsync(CLIENT_LOG_POLL_MS); await done; }
 /** A poll that finds a directory schedules an immediate full walk. */
-async function pollAndWalk() { await poll(); const done = waitIdle(); await vi.advanceTimersByTimeAsync(0); await done; }
+async function pollAndWalk() { await poll(); const done = waitIdle(); await vi.advanceTimersByTimeAsync(1); await done; }
+function nativeRoot() { return nativeHandles[0]!; }
 function root() { return handles.findLast((h) => h.dir === path.join(dir, 'projects') && h.recursive)!; }
 
 it('imports old-file appends without walking and does no filesystem work on an idle poll', async () => {
@@ -234,7 +251,7 @@ it('requests only one immediate reconciliation across repeated failing watcher c
       await watcher.refresh();
     }
     expect(reconcile).toHaveBeenCalledTimes(1);
-  } finally { watcher.close(); }
+  } finally { await watcher.close(); }
 });
 
 it.each([['archive.jsonl', 'rename'], ['x.jsonl.zst', 'rename'], ['archive.jsonl', 'change']])('discovers a newly populated directory named %s from a %s event', async (name, event) => {
@@ -252,4 +269,86 @@ it('imports a newly created log file without a full walk', async () => {
   root().emit('rename', 'new.jsonl'); await poll();
   expect(readdir).not.toHaveBeenCalled();
   expect(log.totalsList()).toHaveLength(1);
+});
+
+it('uses native events for appends and stays idle beyond the old reconciliation interval', async () => {
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  await writeFile(file(), line('first')); await start();
+  vi.mocked(stat).mockClear(); vi.mocked(readdir).mockClear();
+  for (let n = 0; n < 2 * CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+  expect(readdir).not.toHaveBeenCalled(); expect(stat).not.toHaveBeenCalled();
+  await appendFile(file(), line('append'));
+  nativeRoot().emit(path.join(nativeRoot().dir, 'projects', 'old', 'subagents', 'old.jsonl'), 0);
+  await poll();
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+  expect(readdir).not.toHaveBeenCalled();
+  await stop!();
+  expect(nativeHandles.every((h) => h.stop.mock.calls.length === 1)).toBe(true);
+});
+
+it.each(['MustScanSubDirs', 'UserDropped', 'KernelDropped', 'EventIdsWrapped', 'RootChanged', 'Mount', 'Unmount'] as const)(
+  'recovers missed native events on %s, including flags outside the client subtree', async (flag) => {
+    vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+    await start(); await writeFile(file(), line('missed'));
+    const old = nativeRoot();
+    const done = waitIdle(); old.emit(old.dir, native.constants[flag]); await done;
+    expect(log.totalsList()).toHaveLength(1);
+    expect(old.stop).toHaveBeenCalledTimes(1);
+    vi.mocked(readdir).mockClear();
+    old.emit(old.dir, native.constants[flag]);
+    await poll(); expect(readdir).not.toHaveBeenCalled();
+  },
+);
+
+it('finds populated native directory moves without descendant notifications', async () => {
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  await start();
+  const nested = path.join(dir, 'projects', 'archive.jsonl', 'nested');
+  await mkdir(nested, { recursive: true }); await writeFile(path.join(nested, 'child.jsonl'), line('moved'));
+  nativeRoot().emit(path.join(nativeRoot().dir, 'projects', 'archive.jsonl'), native.constants.ItemIsDir | native.constants.ItemRenamed);
+  await pollAndWalk(); expect(log.totalsList()).toHaveLength(1);
+});
+
+it('ignores unrelated native paths and follows missing ancestors and root replacement', async () => {
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  await rm(path.join(dir, 'projects'), { recursive: true });
+  await start(); vi.mocked(readdir).mockClear();
+  nativeRoot().emit(path.join(nativeRoot().dir, 'unrelated.jsonl'), 0);
+  await poll(); expect(readdir).not.toHaveBeenCalled();
+  await mkdir(path.dirname(file()), { recursive: true }); await writeFile(file(), line('new-root'));
+  let done = waitIdle();
+  nativeRoot().emit(path.join(nativeRoot().dir, 'projects'), native.constants.ItemIsDir | native.constants.ItemCreated);
+  await done; expect(log.totalsList()).toHaveLength(1);
+  await rename(path.join(dir, 'projects'), path.join(dir, 'retired'));
+  await mkdir(path.dirname(file()), { recursive: true }); await writeFile(file(), line('replaced'));
+  const current = nativeHandles.findLast((h) => h.dir === nativeRoot().dir)!;
+  done = waitIdle(); current.emit(path.join(current.dir, 'projects'), native.constants.ItemIsDir | native.constants.ItemRenamed);
+  await done; expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+});
+
+it.each(['load', 'watch'])('polls when native %s fails, then retries and returns to event-only mode', async (failure) => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  if (failure === 'load') vi.mocked(loadNativeClientLogEvents).mockImplementation(() => { throw new Error('missing addon'); });
+  else vi.mocked(loadNativeClientLogEvents).mockReturnValue({ ...native, watch: () => { throw new Error('stream unavailable'); } });
+  await start(); await writeFile(file(), line('fallback')); await poll();
+  expect(log.totalsList()).toHaveLength(1);
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  for (let n = 0; n < CLIENT_LOG_WATCH_RETRY_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+  expect(nativeHandles).toHaveLength(2);
+  vi.mocked(readdir).mockClear();
+  for (let n = 0; n < 2 * CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+  expect(readdir).not.toHaveBeenCalled();
+});
+
+it('retries a failed native recovery scan without requiring another event or a periodic sweep', async () => {
+  vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  await start(); await writeFile(file(), line('missed'));
+  vi.mocked(readdir).mockRejectedValueOnce(new Error('temporarily unavailable'));
+  const done = waitIdle();
+  nativeRoot().emit(nativeRoot().dir, native.constants.UserDropped);
+  await done;
+  expect(progress.mock.calls.at(-1)?.[0].error).toContain('temporarily unavailable');
+  await poll();
+  expect(log.totalsList()).toHaveLength(1);
+  expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
 });

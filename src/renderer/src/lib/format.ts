@@ -34,8 +34,10 @@ export function pct(value: number, digits = 0): string {
 /** Dashboard quota figures: 3 significant digits, truncated so a sliver never reads 0 and a near-full window never reads 100. */
 const QUOTA_SIGNIFICANT_DIGITS = 3;
 const quotaFormat = new Intl.NumberFormat(undefined, { maximumSignificantDigits: QUOTA_SIGNIFICANT_DIGITS, roundingMode: 'trunc' });
+/** Doubles hold ~15.9 digits; arithmetic noise sits in the last few, so 12 drops it (56.99999999999999 → 57) before truncating. */
+const FLOAT_NOISE_FREE_DIGITS = 12;
 export function quotaPercent(value: number | null): string {
-  return value === null ? '—' : `${quotaFormat.format(value)}%`;
+  return value === null ? '—' : `${quotaFormat.format(Number(value.toPrecision(FLOAT_NOISE_FREE_DIGITS)))}%`;
 }
 
 /** Below a cent, "<$0.01"; to the cent under $1,000; whole dollars above. */

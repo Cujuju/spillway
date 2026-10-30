@@ -22,4 +22,9 @@ describe('quotaPercent', () => {
     expect(quotaPercent(0)).toBe('0%');
     expect(quotaPercent(null)).toBe('—');
   });
+  it('ignores float noise before truncating', () => {
+    expect(quotaPercent(56.99999999999999)).toBe('57%');
+    expect(quotaPercent(100 - 42.99999999999999)).toBe('57%');
+    expect(quotaPercent(7.000000000000001)).toBe('7%');
+  });
 });

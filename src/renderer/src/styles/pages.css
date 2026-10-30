@@ -183,6 +183,9 @@
   height: auto;
   padding-block: var(--spacing-1);
 }
+.sectioned-nav-gap {
+  height: var(--spacing-4);
+}
 .sectioned-body {
   min-width: 0;
 }

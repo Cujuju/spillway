@@ -17,7 +17,7 @@ const ICON_PX = 14;
 const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Window starts' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About' }] },
+  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About', gapBefore: true }] },
 ];
 
 const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [

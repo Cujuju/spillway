@@ -1,10 +1,12 @@
-import { For, type JSX } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 
 /** A nav entry. `title` heads the body when the short nav `label` is not enough. */
 export interface NavItem<T extends string> {
   id: T;
   label: string;
   title?: string;
+  /** Leaves a gap above the item, setting it apart from the rest of its group. */
+  gapBefore?: boolean;
 }
 
 export interface NavGroup<T extends string> {
@@ -23,7 +25,14 @@ export function SectionedPage<T extends string>(props: { nav: readonly NavGroup<
             <>
               <div class="sidebar-group">{g.group}</div>
               <For each={g.items}>
-                {(i) => <button class="nav-btn" classList={{ active: props.section === i.id }} onClick={() => props.onSelect(i.id)}>{i.label}</button>}
+                {(i) => (
+                  <>
+                    <Show when={i.gapBefore}>
+                      <div class="sectioned-nav-gap" />
+                    </Show>
+                    <button class="nav-btn" classList={{ active: props.section === i.id }} onClick={() => props.onSelect(i.id)}>{i.label}</button>
+                  </>
+                )}
               </For>
             </>
           )}

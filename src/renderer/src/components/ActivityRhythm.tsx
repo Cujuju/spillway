@@ -2,7 +2,7 @@ import { Sun } from 'lucide-solid';
 import { createMemo, createSignal, For, Show } from 'solid-js';
 import type { ActivityBucket } from '@shared/types';
 import { hourOfDay } from '../lib/activityHeat';
-import { spanDays, type Span } from '../lib/activityRange';
+import { calendarDays, spanDays, type Span } from '../lib/activityRange';
 import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { moonPath, moonPhase, phaseName, skyBody, sunArc, SUNRISE_HOUR, SUNSET_HOUR, TWILIGHT_HOURS } from '../lib/sky';
 import { ChartTip, type TipRow } from './ChartTip';
@@ -50,7 +50,7 @@ export function ActivityRhythm(props: {
   const clock = () => { const d = new Date(props.now); return d.getHours() + d.getMinutes() / MINUTES_PER_HOUR; };
   const body = createMemo(() => skyBody(clock()));
   const phase = createMemo(() => moonPhase(props.now));
-  const days = () => Math.max(1, Math.round(spanDays(props.span)));
+  const days = () => spanDays(props.span) <= 1 ? 1 : calendarDays(props.span);
   const [tip, setTip] = createSignal<{ cell: HTMLElement; hour: number } | null>(null);
   const show = (e: Event, hour: number) => setTip({ cell: e.currentTarget as HTMLElement, hour });
   const arc = sunArc(ARC_STEPS).map((p) => `${p.x},${skyY(p.height)}`).join(' ');

@@ -1,8 +1,19 @@
 /* ── Activity Overview: chart tiles in the toolkit's TilingWorkspace ── */
-.activity-board {
-  /* Fills the page below the stat strip; grows past it (page scrolls) when its tiles need the room. */
+/* Fills the page below the stat strip until the user sizes it; then it keeps that height and the page scrolls. */
+.board-area {
+  --board-grip-width: 40px;
+  --board-grip-height: 3px;
+  display: flex;
   flex: 1 0 0;
+  flex-direction: column;
+  min-height: 0;
   margin-top: var(--page-gap);
+}
+.board-area.sized { flex: none; }
+.board-area.sized > .activity-board { flex: none; }
+.activity-board {
+  /* Grows past its height (page scrolls) when its tiles' minimums need the room. */
+  flex: 1 0 0;
   --twm-accent: var(--color-accent);
   --twm-accent-soft: var(--color-accent-subtle);
   --twm-danger: var(--color-red);
@@ -79,3 +90,34 @@
   --share-col-share: 12%;
   width: var(--share-col-share);
 }
+
+/* Bottom edge: drag or arrow keys set the board's height. */
+.board-resize {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  height: var(--spacing-3);
+  cursor: ns-resize;
+}
+.board-resize::before {
+  content: '';
+  width: var(--board-grip-width);
+  height: var(--board-grip-height);
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+.board-resize:hover::before,
+.board-resize:focus-visible::before { background: var(--color-accent); }
+.board-resize:focus-visible { outline: none; }
+.board-place-below {
+  flex-shrink: 0;
+  margin-top: var(--card-gap);
+  padding: var(--spacing-3);
+  border: var(--border-width) dashed var(--color-accent-border);
+  border-radius: var(--radius-card);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.board-place-below:hover,
+.board-place-below:focus-visible { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }

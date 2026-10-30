@@ -1,7 +1,8 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, Show, untrack } from 'solid-js';
-import type { ActivityPanelSpec } from '@shared/activityBoard';
+import { BOARD_MAX_PX, BOARD_MIN_PX, type ActivityPanelSpec } from '@shared/activityBoard';
+import { appendRow } from '../lib/boardGrow';
 import { settings, updateSettings } from '../store';
 import { METRIC_OPTIONS } from './activityFormat';
 import { ADD_CHOICES, PANELS, type ActivityData } from './activityPanels';
@@ -12,6 +13,10 @@ const TILE_GAP_TOKEN = '--card-gap';
 const ICON_PX = 14;
 /** Room for title, note, the full metric switch, gaps and remove button. */
 const FULL_HEADER_CONTROLS_PX = 560;
+/** Height of a chart added below the board: a header plus a readable chart. */
+const NEW_ROW_PX = 320;
+/** Arrow keys on the resize handle move the board's bottom edge this far. */
+const RESIZE_KEY_STEP_PX = 40;
 /** Select value meaning "nothing picked", so the menu reads as a button. */
 const NO_CHOICE = '';
 
@@ -40,9 +45,16 @@ export function AddChartSelect(props: { onPick: (chart: PendingChart) => void })
 /** The Overview's charts as tiles: drag a header to move one, drag a gap to resize, place `placing` where clicked. */
 export function ActivityBoard(props: { data: ActivityData; placing: PendingChart | null; onPlacingEnd: () => void }) {
   // Shown from the moment of an edit until the saved settings come back, so a resize never snaps back.
-  const [pending, setPending] = createSignal<{ tiles: TileNode | undefined; panels: Record<string, ActivityPanelSpec> } | null>(null);
+  const [pending, setPending] = createSignal<{ tiles: TileNode | undefined; panels: Record<string, ActivityPanelSpec>; heightPx: number | null } | null>(null);
+  /** Height while the resize handle is dragged, before it is saved. */
+  const [dragPx, setDragPx] = createSignal<number | null>(null);
+  let area: HTMLDivElement | undefined;
   const board = () => settings().activity.board;
   const panels = () => pending()?.panels ?? board().panels;
+  const heightPx = () => dragPx() ?? (pending() ? pending()!.heightPx : board().heightPx);
+  const clampPx = (px: number) => Math.min(BOARD_MAX_PX, Math.max(BOARD_MIN_PX, Math.round(px)));
+  /** The board's current pixel height: saved, or measured while it fills the page. */
+  const currentPx = () => heightPx() ?? area?.firstElementChild?.getBoundingClientRect().height ?? BOARD_MIN_PX;
   const layout = createMemo(() => {
     const local = pending();
     return local ? local.tiles : normalize(board().tiles, new Set(Object.keys(board().panels)));
@@ -53,12 +65,43 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   if (!Number.isFinite(tileGapPx)) throw new Error(`${TILE_GAP_TOKEN} is not set in tokens.css`);
 
   /** Saves the tree and drops charts no longer in it, in one write. */
-  const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }) => {
+  const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }, height = heightPx()) => {
     const kept = new Set(tileIds(tiles));
     const next = Object.fromEntries(Object.entries(panels()).filter(([id]) => kept.has(id)));
     if (added) next[added.id] = added.spec;
-    setPending({ tiles, panels: next });
-    return updateSettings((d) => { d.activity.board = { tiles: tiles ?? null, panels: next }; }).finally(() => setPending(null));
+    // An emptied board goes back to filling the page.
+    const h = tiles ? height : null;
+    setPending({ tiles, panels: next, heightPx: h });
+    return updateSettings((d) => { d.activity.board = { tiles: tiles ?? null, panels: next, heightPx: h }; }).finally(() => setPending(null));
+  };
+  const placeBelow = () => {
+    const chart = props.placing;
+    if (!chart) return;
+    const boardPx = currentPx();
+    props.onPlacingEnd();
+    void save(appendRow(layout(), chart.id, boardPx, NEW_ROW_PX), { id: chart.id, spec: chart.spec }, clampPx(boardPx + NEW_ROW_PX + tileGapPx));
+  };
+  const startResize = (e: PointerEvent) => {
+    const handle = e.currentTarget as HTMLElement;
+    const startY = e.clientY;
+    // A one-time snapshot: the drag measures from where it began.
+    const initialPx = currentPx();
+    handle.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => setDragPx(clampPx(initialPx + m.clientY - startY));
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      const px = dragPx();
+      if (px !== null) void save(layout(), undefined, px).finally(() => setDragPx(null));
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end, { once: true });
+    handle.addEventListener('pointercancel', end, { once: true });
+  };
+  const resizeByKey = (e: KeyboardEvent) => {
+    const step = e.key === 'ArrowDown' ? RESIZE_KEY_STEP_PX : e.key === 'ArrowUp' ? -RESIZE_KEY_STEP_PX : 0;
+    if (!step) return;
+    e.preventDefault();
+    void save(layout(), undefined, clampPx(currentPx() + step));
   };
   const setMetric = (id: string, metric: ActivityPanelSpec['metric']) =>
     updateSettings((d) => {
@@ -67,8 +110,10 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     });
 
   return (
+    <div ref={area} class="board-area" classList={{ sized: heightPx() !== null }}>
       <TilingWorkspace
         class="activity-board"
+        style={heightPx() !== null ? { height: `${heightPx()}px` } : undefined}
         layout={layout()}
         onLayoutChange={(next) => void save(next)}
         gapPx={tileGapPx}
@@ -116,5 +161,13 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
           );
         }}
       </TilingWorkspace>
+      <Show when={props.placing && layout()}>
+        <button type="button" class="board-place-below" onClick={placeBelow}>Place below all charts</button>
+      </Show>
+      <Show when={layout()}>
+        <div class="board-resize" role="separator" aria-orientation="horizontal" aria-label="Resize chart area" tabindex="0"
+          title="Drag to resize the chart area" onPointerDown={startResize} onKeyDown={resizeByKey} />
+      </Show>
+    </div>
   );
 }

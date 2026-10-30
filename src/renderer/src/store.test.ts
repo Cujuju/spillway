@@ -23,7 +23,7 @@ describe('settings IPC serialization', () => {
     const tiles = { kind: 'split', dir: 'column', sizes: [1, 1], children: [structuredClone(unwrap(board.tiles)), { kind: 'tile', id }] };
     const panels = { ...board.panels, [id]: spec };
 
-    await updateSettings((draft) => { draft.activity.board = { tiles, panels }; });
+    await updateSettings((draft) => { draft.activity.board = { tiles, panels, heightPx: null }; });
 
     expect(settings().activity.board.tiles).toEqual(tiles);
     expect(settings().activity.board.panels).toEqual(panels);

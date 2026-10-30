@@ -6,7 +6,7 @@ import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
-import type { ActivityBucket, HistorySample, LogLine, ProxyStatus, UsageSnapshot } from '@shared/types';
+import type { ActivityBucket, HistorySample, LogLine, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
@@ -54,6 +54,7 @@ createRoot(() =>
 export const snapshot = shownSnapshot;
 export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
+export const [windowSummaries, setWindowSummaries] = createSignal<WindowSummary[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
@@ -111,8 +112,8 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
-  const [s, latest, status, hist, logLines, dark] = await Promise.all([
-    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.proxyLogs(), api.taskbarDark(),
+  const [s, latest, status, hist, summaries, logLines, dark] = await Promise.all([
+    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.proxyLogs(), api.taskbarDark(),
   ]);
   setTaskbarDark(dark);
   setSettingsSignal(s);
@@ -120,6 +121,7 @@ export async function initStore(): Promise<void> {
   setUsageError(latest.error);
   setProxyStatus(status);
   setHistory(hist);
+  setWindowSummaries(summaries);
   setLogs(logLines);
   loadActivity();
   api.onActivityReset(loadActivity);
@@ -142,7 +144,10 @@ export async function initStore(): Promise<void> {
   });
 
   tickEachMinute();
-  setInterval(() => void api.usageHistory().then(setHistory), HISTORY_REFRESH_MS);
+  setInterval(() => {
+    void api.usageHistory().then(setHistory);
+    void api.usageWindowSummaries().then(setWindowSummaries);
+  }, HISTORY_REFRESH_MS);
   prefersDark.addEventListener('change', () => applyTheme(settings().general.theme));
 }
 

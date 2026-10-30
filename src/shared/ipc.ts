@@ -3,7 +3,7 @@ import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus,
+  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
@@ -46,6 +46,7 @@ export interface DesktopApi {
   /** The latest automatic 5-hour window start and failure. */
   windowStartStatus(): Promise<WindowStartStatus>;
   usageHistory(): Promise<HistorySample[]>;
+  usageWindowSummaries(): Promise<WindowSummary[]>;
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
@@ -54,6 +55,8 @@ export interface DesktopApi {
   /** Each local day with stored requests from `accounts`, newest first. */
   activityDaySummaries(scope: ActivityScope): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
+  /** Share of local client usage that went through the proxy. */
+  activityCoverage(): Promise<ProxyCoverage>;
   /** Totals for the latest `days` local days; null returns all. */
   activityBuckets(days: number | null): Promise<ActivityBucket[]>;
   /** Deletes recent, stored and total activity. */
@@ -140,11 +143,13 @@ export const INVOKE = {
   useResetCredit: 'usage:use-reset-credit',
   windowStartStatus: 'usage:window-start-status',
   usageHistory: 'usage:history',
+  usageWindowSummaries: 'usage:window-summaries',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',
   activityDay: 'activity:day',
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
+  activityCoverage: 'activity:coverage',
   activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',
   conversationNames: 'activity:conversation-names',

@@ -180,10 +180,13 @@ it('adopts 100 unchanged legacy identities without opening files; rereads change
     for (const file of files) {
       await writeFile(file, '{}\n'); await importClientFile(file, 'claude', sink);
     }
-    for (const [key, state] of states) {
-      const cp = JSON.parse(state);
+    // Legacy checkpoints stored fs.Stats millisecond times from a non-bigint stat().
+    for (const [n, file] of files.entries()) {
+      const key = [...states.keys()][n]!;
+      const cp = JSON.parse(states.get(key)!);
+      const legacy = await stat(file);
       delete cp.version; delete cp.dev; delete cp.ino; delete cp.ctime;
-      states.set(key, JSON.stringify(cp));
+      states.set(key, JSON.stringify({ ...cp, mtime: legacy.mtimeMs, birthtime: legacy.birthtimeMs }));
     }
     vi.mocked(open).mockClear();
     for (const file of files) await importClientFile(file, 'claude', sink);
@@ -203,7 +206,7 @@ it.each(['zero', 'large'])('compares %s filesystem identities without false repl
   try {
     const file = path.join(dir, 'log.jsonl'); await writeFile(file, '{}\n');
     const raw = await stat(file, { bigint: true });
-    const info = { ...raw, isFile: () => true, dev: mode === 'zero' ? 0n : 1n, ino: mode === 'zero' ? 0n : 9007199254740992n };
+    const info = { ...raw, isFile: () => true, isDirectory: () => false, dev: mode === 'zero' ? 0n : 1n, ino: mode === 'zero' ? 0n : 9007199254740992n };
     vi.mocked(stat).mockResolvedValueOnce(info as never);
     await importClientFile(file, 'claude', sink);
     const cp = JSON.parse(state!);

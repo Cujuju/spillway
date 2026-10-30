@@ -38,9 +38,8 @@ export class ClientLogWatcher {
         this.add(watch(this.dir, { recursive: true }, (event, filename) => {
           if (filename === null || filename.toString() === path.basename(this.dir)) { this.reconcile(); return; }
           const file = path.resolve(this.dir, filename.toString());
-          // Any rename can introduce a populated directory, including one with a log extension.
-          if (event === 'rename') this.reconcile();
-          else if (isClientLogFile(file)) this.dirty(file);
+          // A rename may be a new file or a populated directory; the poll stats it to tell.
+          if (event === 'rename' || isClientLogFile(file)) this.dirty(file);
         }));
       } catch (e) {
         if (!['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code ?? '')) throw e;

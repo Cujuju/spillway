@@ -48,6 +48,8 @@ afterEach(async () => {
 const file = () => path.join(dir, 'projects', 'old', 'subagents', 'old.jsonl');
 async function start() { const done = waitIdle(); stop = startClientLogSync(log, changed, progress); await done; }
 async function poll() { const done = waitIdle(); await vi.advanceTimersByTimeAsync(CLIENT_LOG_POLL_MS); await done; }
+/** A poll that finds a directory schedules an immediate full walk. */
+async function pollAndWalk() { await poll(); const done = waitIdle(); await vi.advanceTimersByTimeAsync(0); await done; }
 function root() { return handles.findLast((h) => h.dir === path.join(dir, 'projects') && h.recursive)!; }
 
 it('imports old-file appends without walking and does no filesystem work on an idle poll', async () => {
@@ -184,7 +186,9 @@ it.each(['archive.jsonl', 'x.jsonl.zst', 'ordinary'])('discovers populated renam
   await mkdir(path.join(source, 'nested'), { recursive: true });
   await writeFile(path.join(source, 'nested', 'child.jsonl'), line('child'));
   await rename(source, path.join(dir, 'projects', name));
-  const done = waitIdle(); root().emit('rename', name); await done;
+  vi.mocked(readdir).mockClear();
+  root().emit('rename', name); await pollAndWalk();
+  expect(readdir).toHaveBeenCalled();
   expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
   const batch = vi.spyOn(log, 'importBatch');
   root().emit('change', name); await poll();
@@ -233,11 +237,19 @@ it('requests only one immediate reconciliation across repeated failing watcher c
   } finally { watcher.close(); }
 });
 
-it.each(['archive.jsonl', 'x.jsonl.zst'])('discovers a newly populated directory named %s without importing the directory', async (name) => {
+it.each([['archive.jsonl', 'rename'], ['x.jsonl.zst', 'rename'], ['archive.jsonl', 'change']])('discovers a newly populated directory named %s from a %s event', async (name, event) => {
   await start();
   const nested = path.join(dir, 'projects', name, 'nested');
   await mkdir(nested, { recursive: true }); await writeFile(path.join(nested, 'child.jsonl'), line('created'));
-  const done = waitIdle(); root().emit('rename', name); await done;
+  root().emit(event, name); await pollAndWalk();
   expect(log.totalsList()).toHaveLength(1);
   expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
+});
+
+it('imports a newly created log file without a full walk', async () => {
+  await start(); vi.mocked(readdir).mockClear();
+  await writeFile(path.join(dir, 'projects', 'new.jsonl'), line('fresh'));
+  root().emit('rename', 'new.jsonl'); await poll();
+  expect(readdir).not.toHaveBeenCalled();
+  expect(log.totalsList()).toHaveLength(1);
 });

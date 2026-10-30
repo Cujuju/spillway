@@ -33,6 +33,14 @@ export const clientLogRoots = () => [
   { provider: 'codex' as const, dir: path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'sessions') },
 ];
 const missing = (e: unknown) => ['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code ?? '');
+const NS_PER_SEC = 1_000_000_000n;
+const MS_PER_SEC = 1000;
+const NS_PER_MS = 1_000_000;
+/** Same arithmetic as fs.Stats `*Ms`, which legacy checkpoints stored; a plain ns/1e6 rounds differently. */
+const statMs = (ns: bigint) => Number(ns / NS_PER_SEC) * MS_PER_SEC + Number(ns % NS_PER_SEC) / NS_PER_MS;
+async function isDirectory(file: string): Promise<boolean> {
+  try { return (await stat(file)).isDirectory(); } catch (e) { if (missing(e)) return false; throw e; }
+}
 
 async function* files(dir: string): AsyncGenerator<string> {
   try {
@@ -61,13 +69,14 @@ async function* archiveChunks(file: string, offset: number): AsyncGenerator<Buff
 }
 
 /** Checkpoints only complete lines. Partial UTF-8 characters and partial JSON remain unread until the next scan. */
-export async function importClientFile(file: string, provider: 'claude' | 'codex', sink: ImportSink, stopped = () => false): Promise<boolean> {
+export async function importClientFile(file: string, provider: 'claude' | 'codex', sink: ImportSink, stopped = () => false): Promise<boolean | 'directory'> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     const raw = await stat(file, { bigint: true });
+    if (raw.isDirectory()) return 'directory';
     if (!raw.isFile()) return false;
     const key = clientLogKey(file);
-    const info = { size: Number(raw.size), mtimeMs: Number(raw.mtimeNs) / 1e6, birthtimeMs: Number(raw.birthtimeNs) / 1e6, ctimeMs: Number(raw.ctimeNs) / 1e6 };
+    const info = { size: Number(raw.size), mtimeMs: statMs(raw.mtimeNs), birthtimeMs: statMs(raw.birthtimeNs), ctimeMs: statMs(raw.ctimeNs) };
     const identity = { dev: raw.dev.toString(), ino: raw.ino.toString(), ctime: info.ctimeMs };
     const saved = sink.checkpoint(key);
     const archived = file.endsWith('.zst');
@@ -196,13 +205,21 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
             if (stopped) return;
             pending.push({ file, provider: root.provider });
           }
-        } else for (const file of dirtyFiles) pending.push({ file, provider: root.provider });
+        } else for (const file of dirtyFiles) {
+          if (isClientLogFile(file)) pending.push({ file, provider: root.provider });
+          // Renames can introduce populated directories; only a walk finds their children.
+          else if (await isDirectory(file)) reconcile = true;
+        }
       }
       state.filesTotal = pending.length;
       reportProgress();
       for (const { file, provider } of pending) {
         if (stopped) return;
-        try { dirty = await importClientFile(file, provider, counted, () => stopped) || dirty; }
+        try {
+          const result = await importClientFile(file, provider, counted, () => stopped);
+          if (result === 'directory') reconcile = true;
+          else dirty = result || dirty;
+        }
         catch (e) { roots.find((root) => root.provider === provider)!.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
         reportProgress();

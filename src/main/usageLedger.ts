@@ -1,3 +1,5 @@
+import { localDay, localHourStart } from '@shared/activityCounts';
+import { storedTotalKey } from './activityTotals';
 import type { ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { fallbackKey, sameUsage } from './usageMerge';
@@ -6,17 +8,17 @@ interface IdentityRow { key: string; event: string; row_id: number; matched: num
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
 
 /** Only accounting and match fields survive request retention; no error text, headers or timings. */
-export function rememberUsage(db: Db, e: ActivityEvent, id: number): void {
+export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at))): void {
   const { requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed } = e;
   db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source) VALUES (?, ?, ?, ?, ?, ?)').run(identityKey(e), JSON.stringify({
-    requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
+    totalStart, requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source);
 }
 
 /** Called inside the same transaction as totals, requests and checkpoints. */
-export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remove?: ActivityEvent; id?: number } {
+export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remove?: ActivityEvent; removeKey?: string; id?: number } {
   const existing = db.prepare('SELECT * FROM usage_identities WHERE key = ?').get(identityKey(e)) as IdentityRow | undefined;
   if (existing) {
     const old = JSON.parse(existing.event) as ActivityEvent;
@@ -25,7 +27,7 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
       db.prepare('DELETE FROM usage_identities WHERE key = ?').run(identityKey(e));
       db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?").run(existing.row_id, old.requestId);
       const updated = { ...e, upstreamId: e.upstreamId ?? old.upstreamId };
-      return { ...reconcileUsage(db, updated), remove: old };
+      return { ...reconcileUsage(db, updated), remove: old, removeKey: removalKey(existing.event) };
     }
     return { skip: true, id: existing.row_id };
   }
@@ -41,5 +43,11 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
   db.prepare('UPDATE usage_identities SET matched = 1 WHERE key = ?').run(identityKey(e));
   if (e.source === 'client-log') return { skip: true, id: match.row_id };
   db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?").run(match.row_id, (JSON.parse(match.event) as ActivityEvent).requestId);
-  return { skip: false, remove: JSON.parse(match.event) as ActivityEvent };
+  return { skip: false, remove: JSON.parse(match.event) as ActivityEvent, removeKey: removalKey(match.event) };
+}
+
+/** A legacy identity belongs to the daily baseline even if newer usage shares its hour. */
+function removalKey(json: string): string {
+  const e = JSON.parse(json) as ActivityEvent & { totalStart?: number | null };
+  return storedTotalKey({ ...e, day: localDay(Date.parse(e.at)), start: e.totalStart ?? undefined });
 }

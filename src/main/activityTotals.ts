@@ -1,0 +1,46 @@
+import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
+import type { ActivityBucket, ActivityDayTotal, ActivityEvent } from '@shared/types';
+import { totalKey, type Db } from './activityDb';
+
+/** Missing start identifies a legacy daily baseline, never an hourly row. */
+export type ActivityTotal = ActivityDayTotal & { start?: number };
+
+export function storedTotalKey(t: Pick<ActivityTotal, 'day' | 'start' | 'provider' | 'authIndex' | 'model' | 'client' | 'source'>): string {
+  return t.start === undefined ? totalKey(t) : JSON.stringify([t.start, t.provider, t.authIndex, t.model, t.client, t.source ?? 'proxy']);
+}
+
+export function addToTotals(totals: Map<string, ActivityTotal>, e: ActivityEvent): ActivityTotal {
+  const base = { day: localDay(Date.parse(e.at)), start: localHourStart(Date.parse(e.at)), provider: e.provider,
+    authIndex: e.authIndex, model: e.model, client: e.client, source: e.source };
+  const key = storedTotalKey(base);
+  const row = totals.get(key) ?? { ...base, ...emptyCounts() };
+  addEvent(row, e);
+  totals.set(key, row);
+  return row;
+}
+
+export function readTotals(db: Db): Map<string, ActivityTotal> {
+  const rows = db.prepare('SELECT total FROM activity_totals').all() as { total: string }[];
+  return new Map(rows.map((r) => {
+    const t = JSON.parse(r.total) as ActivityTotal;
+    const total = { ...t, client: t.client ?? null, source: t.source ?? 'proxy' as const };
+    return [storedTotalKey(total), total];
+  }));
+}
+
+/** Daily consumers sum disjoint legacy baselines and newly recorded hours. */
+export function dailyTotals(totals: Iterable<ActivityTotal>): ActivityDayTotal[] {
+  const days = new Map<string, ActivityDayTotal>();
+  for (const { start: _, ...t } of totals) {
+    const key = totalKey(t);
+    const row = days.get(key) ?? { ...t, ...emptyCounts() };
+    for (const k of Object.keys(emptyCounts()) as (keyof ReturnType<typeof emptyCounts>)[]) row[k] += t[k];
+    days.set(key, row);
+  }
+  return [...days.values()];
+}
+
+export function toBucket({ day, start, ...t }: ActivityTotal): ActivityBucket {
+  const [y, m, d] = day.split('-').map(Number);
+  return { ...t, start: start ?? new Date(y!, m! - 1, d!).getTime(), wholeDay: start === undefined };
+}

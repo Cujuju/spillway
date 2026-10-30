@@ -17,7 +17,13 @@ vi.mock('./settingsStore', () => ({
 }));
 
 const { localDay } = await import('@shared/activityCounts');
-const { activityLog, addToTotals, hourlyBuckets, lastDays, oldestKeptDay } = await import('./activityLog');
+const { activityLog, lastDays, oldestKeptDay } = await import('./activityLog');
+const { addToTotals, toBucket } = await import('./activityTotals');
+const hourlyBuckets = (events: ActivityEvent[]) => {
+  const totals = new Map<string, import('./activityTotals').ActivityTotal>();
+  for (const e of events) addToTotals(totals, e);
+  return [...totals.values()].map(toBucket);
+};
 const { totalKey } = await import('./activityDb');
 afterAll(() => {
   activityLog.close();
@@ -201,7 +207,7 @@ describe('activityLog', () => {
     activityLog.prune();
     retention.days = 30;
     const rows = activityLog.buckets(3);
-    expect(rows.find((r) => r.wholeDay)).toMatchObject({ requests: 1, start: daysAgo(2).setHours(0, 0, 0, 0) });
+    expect(rows.find((r) => r.start === daysAgo(2).getTime())).toMatchObject({ requests: 1, wholeDay: false });
     expect(rows.some((r) => !r.wholeDay)).toBe(true);
   });
 

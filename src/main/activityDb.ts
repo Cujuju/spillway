@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
 CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_client ON requests (${CLIENT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_conversation ON requests (${CONVERSATION_KEY_SQL}, id);
-CREATE TABLE IF NOT EXISTS day_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS activity_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS client_log_checkpoints (path TEXT PRIMARY KEY, state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS usage_identities (key TEXT PRIMARY KEY, event TEXT NOT NULL, row_id INTEGER NOT NULL, matched INTEGER NOT NULL DEFAULT 0, fallback_key TEXT, upstream_id TEXT, source TEXT);
 CREATE INDEX IF NOT EXISTS usage_identity_session ON usage_identities (fallback_key, source, matched);
@@ -76,6 +76,12 @@ export function openActivityDb(file: string, hexKey: string): Db {
   }
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  // Daily rows have no recoverable hour; preserve them alongside new hourly rows.
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
+    db.transaction(() => {
+      db.exec('INSERT OR IGNORE INTO activity_totals SELECT * FROM day_totals; DROP TABLE day_totals;');
+    })();
+  }
   db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
   return db;
 }
@@ -112,7 +118,7 @@ export function importLegacyFiles(db: Db, dir: string): void {
   if (!existsSync(dir)) return;
   if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(LEGACY_IMPORTED)) {
     const insertRequest = db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)');
-    const insertTotal = db.prepare('INSERT OR REPLACE INTO day_totals (key, total) VALUES (?, ?)');
+    const insertTotal = db.prepare('INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)');
     db.transaction(() => {
       const days = readdirSync(dir).flatMap((f) => LEGACY_DAY_FILE.exec(f)?.[1] ?? []).sort();
       for (const day of days) {

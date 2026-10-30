@@ -34,7 +34,7 @@ const config: Configuration = {
     icon: 'resources/icon.ico',
   },
   nsis: {
-    // No spaces: GitHub renames spaced uploads, and latest.yml's url must match the uploaded name.
+    // No spaces: GitHub renames spaced uploads, and the update manifest names the file as built.
     artifactName: '${productName}-Setup-${version}.${ext}',
     oneClick: false,
     perMachine: false,

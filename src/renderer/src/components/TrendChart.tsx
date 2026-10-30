@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show } from 'solid-js';
 import { ChartTip, type TipRow } from './ChartTip';
 
 /** Left pad fits a 5-character axis label ("$37.5", "100%"). */
@@ -44,6 +44,7 @@ function niceCeil(v: number): number {
 
 /** Bar or line over time with a per-bucket hover readout (pointer and arrow keys). */
 export function TrendChart(props: TrendChartProps) {
+  const descriptionId = createUniqueId();
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
   const [fillHeight, setFillHeight] = createSignal(MIN_FILL_HEIGHT_PX);
@@ -117,8 +118,11 @@ export function TrendChart(props: TrendChartProps) {
 
   return (
     <div ref={host} class="trend" classList={{ fill: props.height === undefined }} onPointerMove={pick} onPointerLeave={() => setHover(null)}>
-      <svg class="chart" style={{ height: `${height()}px` }} width={width()} height={height()} role="img" aria-label={props.ariaLabel}
+      <svg class="chart" style={{ height: `${height()}px` }} width={width()} height={height()} role="img" aria-label={props.ariaLabel} aria-describedby={descriptionId}
         tabindex="0" onKeyDown={onKey} onBlur={() => setHover(null)}>
+        <desc id={descriptionId}>
+          {props.points.map((p, i) => `${props.tooltip(i).title}: ${p.value === null ? 'No data' : props.yLabel(p.value)}`).join('; ')}
+        </desc>
         <For each={yTicks()}>
           {(v) => (
             <>

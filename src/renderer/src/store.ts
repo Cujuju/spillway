@@ -16,7 +16,7 @@ const api = window.api;
 
 export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
-const SETTINGS_SECTIONS = ['general', 'appearance', 'trayIcons', 'proxy', 'windowStart', 'dashboard', 'notifications', 'updates', 'advanced'] as const;
+const SETTINGS_SECTIONS = ['general', 'appearance', 'trayIcons', 'proxy', 'windowStart', 'dashboard', 'notifications', 'updates', 'advanced', 'about'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 /** Lives here, not in the Settings page, so other views can open a section directly. */
 export const [settingsSection, setSettingsSection] = persistedSignal<SettingsSection>('settingsSection', 'general', SETTINGS_SECTIONS);
@@ -115,6 +115,8 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
+  // Before any await: main sends this once the page loads, which can beat the startup reads below.
+  api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
   let receivedImportEvent = false;
   api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
   const initialImport = await api.activityImportState();
@@ -143,7 +145,6 @@ export async function initStore(): Promise<void> {
   api.onProxyLog((line) => setLogs((prev) => (prev.length >= MAX_LOG_LINES ? [...prev.slice(1), line] : [...prev, line])));
   api.onMaximized(setMaximized);
   api.onTaskbarDark(setTaskbarDark);
-  api.onNavigate((p) => setPage(p as Page));
   api.onSettings(setSettingsSignal);
   let bucketsReload: ReturnType<typeof setTimeout> | undefined;
   api.onActivity(() => {

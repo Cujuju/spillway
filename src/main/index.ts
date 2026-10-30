@@ -2,6 +2,7 @@ import { app, nativeTheme, Notification, session } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { activityLog } from './activityService';
+import { installAppMenu } from './appMenu';
 import { activity } from './activityStream';
 import { drainActivity } from './activityShutdown';
 import { history } from './historyStore';
@@ -24,6 +25,15 @@ const isMac = process.platform === 'darwin';
 if (!app.isPackaged) app.setVersion(__APP_VERSION__);
 
 const send = (channel: string, payload: unknown) => mainWindow()?.webContents.send(channel, payload);
+
+/** Shows the window on a Settings section. A window still loading gets it after load; sent earlier, the renderer misses it. */
+function openSettingsSection(section: string): void {
+  showMainWindow();
+  const contents = mainWindow()?.webContents;
+  if (!contents) return;
+  if (contents.isLoading()) contents.once('did-finish-load', () => send(EVENTS.onOpenSettings, section));
+  else send(EVENTS.onOpenSettings, section);
+}
 
 function applyLoginItem(): void {
   if (!app.isPackaged || app.commandLine.hasSwitch('user-data-dir')) return;
@@ -65,10 +75,7 @@ function wireEvents(): void {
   updates.on('found', (version) => {
     if (!Notification.isSupported()) return;
     const n = new Notification({ title: 'Update available', body: `${APP_NAME} ${version} is ready to download in Settings → Updates.`, icon: appIconPath() });
-    n.on('click', () => {
-      showMainWindow();
-      send(EVENTS.onNavigate, 'settings');
-    });
+    n.on('click', () => openSettingsSection('updates'));
     n.show();
   });
   onSettingsChange((next, prev) => {
@@ -99,6 +106,7 @@ if (!app.requestSingleInstanceLock()) {
     await loadSecrets();
     registerIpc();
     wireEvents();
+    installAppMenu(() => openSettingsSection('about'));
     activityLog.start();
     applyLoginItem();
     // The tray is always present: it hosts the limit icons and the hidden-start entry point.

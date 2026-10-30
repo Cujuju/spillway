@@ -1,6 +1,7 @@
 # Builds every app icon from resources/icon-source.png (square artwork, art to the edges, no corners):
 #   resources/icon.png (256), resources/icon-1024.png (macOS; electron-builder makes the .icns),
-#   resources/icon.ico and src/renderer/public/icon.png + icon@2x.png (title bar).
+#   resources/icon.ico, src/renderer/public/icon.png + icon@2x.png (title bar)
+#   and src/renderer/public/logo.png + logo@2x.png + logo@3x.png (Settings → About).
 # Every size is the artwork, resampled from the source.
 # Run: pwsh -File scripts/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
@@ -14,6 +15,10 @@ $MAC_ICON_PX = 1024
 $CORNER_RATIO = 0.22
 # Must match --titlebar-icon-size in src/renderer/src/styles/tokens.css.
 $TITLEBAR_ICON_PX = 28
+# Must match --about-logo-size in src/renderer/src/styles/tokens.css.
+$ABOUT_LOGO_PX = 128
+# Display scales the About logo stays sharp at: 100%, 200% (Retina) and 300% (high-DPI Windows).
+$ABOUT_LOGO_SCALES = 1, 2, 3
 
 function New-RoundedPath([int]$size) {
   $d = 2 * $size * $CORNER_RATIO
@@ -64,6 +69,10 @@ try {
   # Title bar artwork; @2x serves 200% scaling.
   [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon.png'), (Get-PngBytes (New-ArtBitmap $art $TITLEBAR_ICON_PX)))
   [IO.File]::WriteAllBytes((Join-Path $root 'src/renderer/public/icon@2x.png'), (Get-PngBytes (New-ArtBitmap $art (2 * $TITLEBAR_ICON_PX))))
+  foreach ($x in $ABOUT_LOGO_SCALES) {
+    $name = if ($x -eq 1) { 'logo.png' } else { "logo@${x}x.png" }
+    [IO.File]::WriteAllBytes((Join-Path $root "src/renderer/public/$name"), (Get-PngBytes (New-ArtBitmap $art ($x * $ABOUT_LOGO_PX))))
+  }
 } finally {
   $art.Dispose()
 }

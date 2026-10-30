@@ -1,6 +1,7 @@
 import { FolderOpen } from 'lucide-solid';
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
+import { AboutSection } from '../components/AboutSection';
 import { SectionedPage, type NavGroup } from '../components/SectionedPage';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
@@ -16,7 +17,7 @@ const ICON_PX = 14;
 const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Window starts' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }] },
+  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About' }] },
 ];
 
 const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
@@ -253,6 +254,7 @@ export function Settings() {
         <Match when={section() === 'notifications'}><Notifications /></Match>
         <Match when={section() === 'updates'}><UpdateSettings /></Match>
         <Match when={section() === 'advanced'}><Advanced /></Match>
+        <Match when={section() === 'about'}><AboutSection /></Match>
       </Switch>
     </SectionedPage>
   );

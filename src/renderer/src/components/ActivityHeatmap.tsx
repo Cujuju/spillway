@@ -16,7 +16,7 @@ export function heatLevel(value: number, max: number): number {
 }
 
 export function ActivityHeatmap(props: {
-  mode: HeatMode;
+  mode: Extract<HeatMode, 'week' | 'lastWeek'>;
   rows: ActivityBucket[];
   now: number;
   metric: Metric;

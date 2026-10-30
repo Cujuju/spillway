@@ -141,9 +141,34 @@ export const HEAT_MODES = [
   { value: 'hourly', label: 'Hourly' },
   { value: 'week', label: '7 days' },
   { value: 'lastWeek', label: 'Last week' },
-  { value: 'rhythm', label: 'Rhythm', title: 'Each weekday and hour, summed over stored hourly activity' },
+  { value: 'rhythm', label: 'Rhythm', title: 'Time of day, summed over stored hourly activity' },
 ] as const;
 export type HeatMode = (typeof HEAT_MODES)[number]['value'];
+
+export const DAY_BANDS = [
+  { name: 'Morning', icon: '☀️', startHour: 6, endHour: 12 },
+  { name: 'Afternoon', icon: '🌤️', startHour: 12, endHour: 18 },
+  { name: 'Evening', icon: '🌆', startHour: 18, endHour: HOURS_PER_DAY },
+  { name: 'Night', icon: '🌙', startHour: 0, endHour: 6 },
+] as const;
+
+/** All supplied hourly history, grouped by local clock; repeated DST hours both count. */
+export function rhythmStats(rows: ActivityBucket[], metric: Metric, now: number) {
+  const hourly = rows.filter((r) => !r.wholeDay && r.start <= now);
+  const bands = DAY_BANDS.map((band) => ({ ...band, summary: summarize(hourly.filter((r) => {
+    const hour = new Date(r.start).getHours();
+    return hour >= band.startHour && hour < band.endHour;
+  })) }));
+  const max = Math.max(0, ...bands.map((b) => metricValue(b.summary, metric)));
+  // Stable display order breaks ties; empty or unpriced-only metrics have no peak.
+  const peak = max > 0 ? bands.find((b) => metricValue(b.summary, metric) === max)! : null;
+  const first = hourly.reduce((earliest, r) => Math.min(earliest, r.start), now);
+  const dayNumber = (t: number) => {
+    const d = new Date(t);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / (HOUR_MS * HOURS_PER_DAY);
+  };
+  return { bands, peak, max, total: summarize(hourly), days: hourly.length ? dayNumber(now) - dayNumber(first) + 1 : 0 };
+}
 
 export interface HeatRow {
   label: string;

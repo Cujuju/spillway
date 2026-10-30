@@ -1,5 +1,5 @@
 import type { TileSize } from '@cujuju/solidjs-tiling-window-manager';
-import type { JSX } from 'solid-js';
+import { Match, Switch, type JSX } from 'solid-js';
 import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard';
 import { accountKey, clientKey } from '@shared/activityScope';
 import { clientLabel } from '../lib/accountScope';
@@ -7,6 +7,8 @@ import type { ActivityBucket } from '@shared/types';
 import { metricValue, type AccountRow, type ClientRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
 import { ActivityHeatmap } from './ActivityHeatmap';
+import { ActivityHourly } from './ActivityHourly';
+import { ActivityRhythm } from './ActivityRhythm';
 import { persistedSignal } from '../lib/persisted';
 import { HEAT_MODES, type HeatMode } from '../lib/activityStats';
 import { Seg } from './ui';
@@ -82,7 +84,13 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
       const [mode, setMode] = persistedSignal<HeatMode>(`activity.heatMode.${tileId}`, 'week', HEAT_MODES.map((m) => m.value));
       return {
         headerControls: (compact) => <Seg label="Activity time frame" compact={compact} value={mode()} options={HEAT_MODES} onChange={setMode} />,
-        body: <ActivityHeatmap mode={mode()} rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />,
+        body: <Switch>
+          <Match when={mode() === 'hourly'}><ActivityHourly rows={data.rows()} now={data.now()} metric={spec().metric} /></Match>
+          <Match when={mode() === 'rhythm'}><ActivityRhythm rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} /></Match>
+          <Match when={mode() === 'week' || mode() === 'lastWeek'}>
+            <ActivityHeatmap mode={mode() === 'lastWeek' ? 'lastWeek' : 'week'} rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
+          </Match>
+        </Switch>,
       };
     },
   },

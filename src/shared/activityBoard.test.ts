@@ -12,8 +12,12 @@ describe('normalizeActivityBoard', () => {
     expect(normalizeActivityBoard({ tiles: null, panels: {} })).toEqual({ tiles: null, panels: {}, heightPx: null });
   });
 
+  it('resets a stored height for an empty board', () => {
+    expect(normalizeActivityBoard({ tiles: null, panels: {}, heightPx: 900 }).heightPx).toBeNull();
+  });
+
   it('keeps a stored board height within bounds and drops a non-number', () => {
-    const board = (heightPx: unknown) => normalizeActivityBoard({ tiles: null, panels: {}, heightPx }).heightPx;
+    const board = (heightPx: unknown) => normalizeActivityBoard({ tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx }).heightPx;
     expect(board(812.4)).toBe(812);
     expect(board(10)).toBe(BOARD_MIN_PX);
     expect(board(1e9)).toBe(BOARD_MAX_PX);

@@ -58,6 +58,6 @@ export function normalizeActivityBoard(raw: unknown): ActivityBoard {
       ? [[id, { kind: v.kind, metric: oneOf(v.metric, ACTIVITY_METRICS) ? v.metric : 'cost' }]]
       : []));
   const h = raw.heightPx;
-  const heightPx = typeof h === 'number' && Number.isFinite(h) ? Math.min(BOARD_MAX_PX, Math.max(BOARD_MIN_PX, Math.round(h))) : null;
+  const heightPx = raw.tiles !== null && typeof h === 'number' && Number.isFinite(h) ? Math.min(BOARD_MAX_PX, Math.max(BOARD_MIN_PX, Math.round(h))) : null;
   return { tiles: raw.tiles, panels, heightPx };
 }

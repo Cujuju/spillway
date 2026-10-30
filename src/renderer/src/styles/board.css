@@ -98,6 +98,7 @@
   place-items: center;
   height: var(--spacing-3);
   cursor: ns-resize;
+  touch-action: none;
 }
 .board-resize::before {
   content: '';
@@ -108,7 +109,10 @@
 }
 .board-resize:hover::before,
 .board-resize:focus-visible::before { background: var(--color-accent); }
-.board-resize:focus-visible { outline: none; }
+.board-resize:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent-border);
+  outline-offset: var(--focus-ring-offset);
+}
 .board-place-below {
   flex-shrink: 0;
   margin-top: var(--card-gap);

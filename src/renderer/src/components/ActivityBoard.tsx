@@ -1,6 +1,6 @@
-import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
+import { minimumSize, normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
-import { createMemo, createSignal, For, onCleanup, Show, untrack } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { BOARD_MAX_PX, BOARD_MIN_PX, type ActivityPanelSpec } from '@shared/activityBoard';
 import { appendRow } from '../lib/boardGrow';
 import { settings, updateSettings } from '../store';
@@ -17,6 +17,8 @@ const FULL_HEADER_CONTROLS_PX = 560;
 const NEW_ROW_PX = 320;
 /** Arrow keys on the resize handle move the board's bottom edge this far. */
 const RESIZE_KEY_STEP_PX = 40;
+/** Persist arrow-key repeats once the burst settles. */
+const RESIZE_SAVE_DELAY_MS = 250;
 /** Select value meaning "nothing picked", so the menu reads as a button. */
 const NO_CHOICE = '';
 
@@ -52,9 +54,17 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   const board = () => settings().activity.board;
   const panels = () => pending()?.panels ?? board().panels;
   const heightPx = () => dragPx() ?? (pending() ? pending()!.heightPx : board().heightPx);
-  const clampPx = (px: number) => Math.min(BOARD_MAX_PX, Math.max(BOARD_MIN_PX, Math.round(px)));
   /** The board's current pixel height: saved, or measured while it fills the page. */
-  const currentPx = () => heightPx() ?? area?.firstElementChild?.getBoundingClientRect().height ?? BOARD_MIN_PX;
+  const [measuredPx, setMeasuredPx] = createSignal(BOARD_MIN_PX);
+  onMount(() => {
+    const workspace = area!.firstElementChild!;
+    const observer = new ResizeObserver(() => setMeasuredPx(workspace.getBoundingClientRect().height));
+    observer.observe(workspace);
+    onCleanup(() => observer.disconnect());
+  });
+  const currentPx = () => heightPx() === null
+    ? area?.firstElementChild?.getBoundingClientRect().height ?? measuredPx()
+    : Math.max(minimumPx(), heightPx()!);
   const layout = createMemo(() => {
     const local = pending();
     return local ? local.tiles : normalize(board().tiles, new Set(Object.keys(board().panels)));
@@ -63,6 +73,13 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   const minFor = (id: string) => PANELS[specFor(id)?.kind ?? 'trend'].minSize;
   const tileGapPx = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(TILE_GAP_TOKEN));
   if (!Number.isFinite(tileGapPx)) throw new Error(`${TILE_GAP_TOKEN} is not set in tokens.css`);
+  const geometryOptions = () => ({ gapPx: tileGapPx, minSizes: new Map(tileIds(layout()).map((id) => [id, minFor(id)])) });
+  const minimumPx = () => Math.max(BOARD_MIN_PX, layout() ? minimumSize(layout()!, geometryOptions()).height : 0);
+  const clampPx = (px: number) => Math.max(minimumPx(), Math.min(BOARD_MAX_PX, Math.round(px)));
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopDrag: (() => void) | undefined;
+  let saveRevision = 0;
+  let saveQueue = Promise.resolve();
 
   /** Saves the tree and drops charts no longer in it, in one write. */
   const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }, height = heightPx()) => {
@@ -71,38 +88,71 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     if (added) next[added.id] = added.spec;
     // An emptied board goes back to filling the page.
     const h = tiles ? height : null;
+    const revision = ++saveRevision;
     setPending({ tiles, panels: next, heightPx: h });
-    return updateSettings((d) => { d.activity.board = { tiles: tiles ?? null, panels: next, heightPx: h }; }).finally(() => setPending(null));
+    saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { tiles: tiles ?? null, panels: next, heightPx: h }; }));
+    return saveQueue.finally(() => { if (revision === saveRevision) setPending(null); });
   };
   const placeBelow = () => {
     const chart = props.placing;
     if (!chart) return;
+    flushResize();
     const boardPx = currentPx();
+    const addPx = Math.max(NEW_ROW_PX, PANELS[chart.spec.kind].minSize.height);
+    // The sanity cap must never make appending shrink existing tiles.
+    if (boardPx + addPx + tileGapPx > BOARD_MAX_PX) return;
     props.onPlacingEnd();
-    void save(appendRow(layout(), chart.id, boardPx, NEW_ROW_PX), { id: chart.id, spec: chart.spec }, clampPx(boardPx + NEW_ROW_PX + tileGapPx));
+    void save(appendRow(layout(), chart.id, { width: area!.clientWidth, height: boardPx }, addPx, geometryOptions()),
+      { id: chart.id, spec: chart.spec }, boardPx + addPx + tileGapPx);
+  };
+  const flushResize = () => {
+    clearTimeout(resizeTimer);
+    const px = dragPx();
+    if (px === null) return;
+    void save(layout(), undefined, px);
+    setDragPx(null);
   };
   const startResize = (e: PointerEvent) => {
+    if (!e.isPrimary || e.button !== 0) return;
+    stopDrag?.();
+    flushResize();
     const handle = e.currentTarget as HTMLElement;
     const startY = e.clientY;
     // A one-time snapshot: the drag measures from where it began.
     const initialPx = currentPx();
     handle.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => setDragPx(clampPx(initialPx + m.clientY - startY));
-    const end = () => {
-      handle.removeEventListener('pointermove', move);
-      const px = dragPx();
-      if (px !== null) void save(layout(), undefined, px).finally(() => setDragPx(null));
+    const move = (m: PointerEvent) => {
+      if (m.pointerId === e.pointerId) setDragPx(clampPx(initialPx + m.clientY - startY));
     };
+    const cleanup = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', cancel);
+      handle.removeEventListener('lostpointercapture', cancel);
+      stopDrag = undefined;
+      if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+    };
+    const cancel = () => { cleanup(); setDragPx(null); };
+    const end = (event: PointerEvent) => {
+      if (event.pointerId !== e.pointerId) return;
+      cleanup();
+      flushResize();
+    };
+    stopDrag = cancel;
     handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end, { once: true });
-    handle.addEventListener('pointercancel', end, { once: true });
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', cancel);
+    handle.addEventListener('lostpointercapture', cancel);
   };
   const resizeByKey = (e: KeyboardEvent) => {
     const step = e.key === 'ArrowDown' ? RESIZE_KEY_STEP_PX : e.key === 'ArrowUp' ? -RESIZE_KEY_STEP_PX : 0;
     if (!step) return;
     e.preventDefault();
-    void save(layout(), undefined, clampPx(currentPx() + step));
+    setDragPx(clampPx(currentPx() + step));
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(flushResize, RESIZE_SAVE_DELAY_MS);
   };
+  onCleanup(() => { stopDrag?.(); flushResize(); });
   const setMetric = (id: string, metric: ActivityPanelSpec['metric']) =>
     updateSettings((d) => {
       const panel = d.activity.board.panels[id];
@@ -113,7 +163,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     <div ref={area} class="board-area" classList={{ sized: heightPx() !== null }}>
       <TilingWorkspace
         class="activity-board"
-        style={heightPx() !== null ? { height: `${heightPx()}px` } : undefined}
+        style={heightPx() !== null ? { height: `${clampPx(heightPx()!)}px` } : undefined}
         layout={layout()}
         onLayoutChange={(next) => void save(next)}
         gapPx={tileGapPx}
@@ -162,11 +212,13 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
         }}
       </TilingWorkspace>
       <Show when={props.placing && layout()}>
-        <button type="button" class="board-place-below" onClick={placeBelow}>Place below all charts</button>
+        <button type="button" class="board-place-below" disabled={currentPx() + NEW_ROW_PX + tileGapPx > BOARD_MAX_PX} onClick={placeBelow}>Place below all charts</button>
       </Show>
       <Show when={layout()}>
         <div class="board-resize" role="separator" aria-orientation="horizontal" aria-label="Resize chart area" tabindex="0"
-          title="Drag to resize the chart area" onPointerDown={startResize} onKeyDown={resizeByKey} />
+          aria-valuemin={minimumPx()} aria-valuemax={Math.max(BOARD_MAX_PX, minimumPx())}
+          aria-valuenow={Math.round(heightPx() === null ? measuredPx() : currentPx())}
+          title="Drag to resize the chart area" onBlur={flushResize} onPointerDown={startResize} onKeyDown={resizeByKey} />
       </Show>
     </div>
   );

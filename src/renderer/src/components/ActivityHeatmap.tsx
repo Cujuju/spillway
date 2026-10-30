@@ -56,7 +56,7 @@ export function ActivityHeatmap(props: {
           <div class="heat" role="table" aria-label="Activity by day and hour (24-hour clock)">
             <div role="row" style={{ display: 'contents' }}>
               <div role="columnheader" />
-              <For each={hours()[0]?.hours ?? []}>{(h) => <div role="columnheader" class="heat-hour">{h % HOUR_LABEL_STEP === 0 ? String(h).padStart(2, '0') : ''}</div>}</For>
+              <For each={hours()[0]?.hours ?? []}>{(h) => <div role="columnheader" class="heat-hour"><span>{h % HOUR_LABEL_STEP === 0 ? String(h).padStart(2, '0') : ''}</span></div>}</For>
             </div>
             <For each={hours()}>{(row) => (
               <div role="row" style={{ display: 'contents' }}>

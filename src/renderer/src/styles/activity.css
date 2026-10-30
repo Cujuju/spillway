@@ -122,9 +122,14 @@
   color: var(--color-text-muted);
 }
 .heat-hour {
-  text-align: center;
+  position: relative;
+  min-height: 1lh;
   white-space: nowrap;
   line-height: var(--leading-loose);
+}
+.heat-hour > span {
+  position: absolute;
+  right: 0;
 }
 .heat-day {
   grid-column: 1;

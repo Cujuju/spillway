@@ -4,6 +4,7 @@ import path from 'node:path';
 import { withCountsFilled } from '@shared/activityCounts';
 import { NO_ACCOUNT_KEY, NO_CLIENT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
+import { rebuildRetainedTotals } from './activityMigration';
 
 export type Db = Database.Database;
 
@@ -19,6 +20,8 @@ export const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const LEGACY_DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
 const LEGACY_TOTALS_FILE = 'daily-totals.json';
 const LEGACY_IMPORTED = 'legacy-files-imported';
+/** Set once whole-day baselines with retained requests have become hourly totals. */
+const RETAINED_HOURS_REBUILT = 'retained-hours-rebuilt';
 
 /** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
 export const CONVERSATION_KEY_SQL = `json_extract(event, '$.sessionId'), json_extract(event, '$.model')`;
@@ -76,13 +79,16 @@ export function openActivityDb(file: string, hexKey: string): Db {
   }
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
-  // Daily rows have no recoverable hour; preserve them alongside new hourly rows.
-  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
-    db.transaction(() => {
+  db.transaction(() => {
+    db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
       db.exec('INSERT OR IGNORE INTO activity_totals SELECT * FROM day_totals; DROP TABLE day_totals;');
-    })();
-  }
-  db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
+    }
+    if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(RETAINED_HOURS_REBUILT)) {
+      rebuildRetainedTotals(db);
+      db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(RETAINED_HOURS_REBUILT, new Date().toISOString());
+    }
+  })();
   return db;
 }
 
@@ -125,6 +131,7 @@ export function importLegacyFiles(db: Db, dir: string): void {
         for (const e of readLegacyDay(path.join(dir, `${day}.jsonl`))) insertRequest.run(day, e.failed ? 1 : 0, JSON.stringify(e));
       }
       for (const t of readLegacyTotals(path.join(dir, LEGACY_TOTALS_FILE))) insertTotal.run(totalKey(t), JSON.stringify(t));
+      rebuildRetainedTotals(db);
       db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(LEGACY_IMPORTED, new Date().toISOString());
     })();
   }

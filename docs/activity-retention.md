@@ -7,23 +7,26 @@ request details, not totals, identities or checkpoints. Daily consumers aggregat
 hourly rows by local calendar day.
 
 On first open, `day_totals` is copied transactionally into `activity_totals` and
-dropped. Existing rows remain whole-day baselines. Only new activity contributes
-to hourly rows; baselines are never counted again from retained requests. Days
-with both kinds sum disjoint usage. Legacy rows do not gain hour detail,
-including when their requests still exist at upgrade time. Hourly charts omit
-baselines; daily trends and range totals include them. Clearing Activity removes
-both kinds.
+dropped. In the same transaction, once (meta `retained-hours-rebuilt`), each day
+whose stored requests account for every request in its totals is rebuilt as
+hourly rows: requests, failures, all token counts and unpriced requests must match
+exactly. Its recorded cost is kept by scaling the repriced hours, so price changes
+since then don't alter history. Usage identities move to their hour.
 
-New usage identities record their total's hour. Older identities belong to daily
-baselines, so later client-log reconciliation subtracts legacy usage even when
-new usage shares its hour and dimensions.
+Residual: days already pruned, or whose stored requests don't match (a time-zone
+change since recording), stay whole-day baselines. Hourly charts omit them; daily
+trends and range totals include them. Days with both kinds sum disjoint usage.
+Clearing Activity removes both kinds.
+
+Identities still pointing at a baseline (`totalStart` null) make client-log
+reconciliation subtract from that baseline, even when new usage shares its hour.
 
 ## Storage sample (2026-10-29)
 
 A disposable copy of the encrypted database and WAL passed `integrity_check`.
 The live database was never opened by the measurement. The database copy and
-temporary decryption key were deleted afterwards. Policy blocked deleting the
-temporary Electron profile; it contains copied Local State and Chromium caches.
+temporary decryption key were deleted afterwards. The temporary Electron
+profile was deleted afterwards too.
 
 - Sample: 154,739 retained requests, 30 active days (September 30–October 29).
 - Hourly dimension rows: 965; median/day 17, max/day 163, mean/day 32.17.

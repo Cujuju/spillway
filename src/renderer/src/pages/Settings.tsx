@@ -5,6 +5,7 @@ import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
 import { WindowStartSettings } from '../components/WindowStartSettings';
+import { RhythmZipSetting } from '../components/RhythmZipSetting';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
 import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setWindowSummaries, type SettingsSection } from '../store';
@@ -136,6 +137,7 @@ function DashboardSection() {
   const db = () => settings().dashboard;
   return (
     <SettingsGroup>
+      <RhythmZipSetting />
       <SettingRow label="Refresh interval" help="How often the app reads limits from the proxy. The proxy looks up live usage on its own schedule.">
         <NumberField value={db().refreshIntervalSeconds} unit="s" onCommit={(v) => set((d) => void (d.dashboard.refreshIntervalSeconds = v))} />
       </SettingRow>

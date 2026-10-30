@@ -1,6 +1,8 @@
-/** Fixed until real sunrise/sunset lands (issue #78). */
-export const SUNRISE_HOUR = 6;
-export const SUNSET_HOUR = 18;
+import { FALLBACK_SUN_TIMES, type SunTimes } from './solarTimes';
+
+/** Default clock hours when no location is configured. */
+export const SUNRISE_HOUR = FALLBACK_SUN_TIMES.sunrise;
+export const SUNSET_HOUR = FALLBACK_SUN_TIMES.sunset;
 /** Hours the sky takes to pass between night and day colours at each end of daylight. */
 export const TWILIGHT_HOURS = 1.5;
 const HOURS_PER_DAY = 24;
@@ -33,20 +35,23 @@ export function moonPath(phase: number, r: number): string {
   return `M 0 ${-r} A ${r} ${r} 0 0 ${limbSweep} 0 ${r} A ${rx} ${r} 0 0 ${terminatorSweep} 0 ${-r} Z`;
 }
 
-const DAYLIGHT = SUNSET_HOUR - SUNRISE_HOUR;
-const NIGHT = HOURS_PER_DAY - DAYLIGHT;
-
-/** Where the sun or moon sits for a fractional local hour: x as a share of the day, height 0–1 above the horizon. */
-export function skyBody(hour: number): { body: 'sun' | 'moon'; x: number; height: number } {
-  const day = hour >= SUNRISE_HOUR && hour < SUNSET_HOUR;
-  const t = day ? (hour - SUNRISE_HOUR) / DAYLIGHT : ((hour - SUNSET_HOUR + HOURS_PER_DAY) % HOURS_PER_DAY) / NIGHT;
+/** Where the sun or moon sits at a fractional local hour, with height above the horizon. */
+export function skyBody(hour: number, times: SunTimes = FALLBACK_SUN_TIMES): { body: 'sun' | 'moon'; x: number; height: number } {
+  const daylight = (times.sunset - times.sunrise + HOURS_PER_DAY) % HOURS_PER_DAY;
+  const allDay = times.sunset - times.sunrise === HOURS_PER_DAY;
+  const sinceRise = (hour - times.sunrise + HOURS_PER_DAY) % HOURS_PER_DAY;
+  const day = allDay || sinceRise < daylight;
+  const t = day ? sinceRise / (allDay ? HOURS_PER_DAY : daylight)
+    : ((hour - times.sunset + HOURS_PER_DAY) % HOURS_PER_DAY) / (HOURS_PER_DAY - daylight);
   return { body: day ? 'sun' : 'moon', x: hour / HOURS_PER_DAY, height: Math.sin(Math.PI * t) };
 }
 
-/** Points along the sun's arc, as x share of the day and height 0–1, for drawing. */
-export function sunArc(steps: number): { x: number; height: number }[] {
+/** Points along the sun's arc, as x share of the day and height above the horizon. */
+export function sunArc(steps: number, times: SunTimes = FALLBACK_SUN_TIMES): { x: number; height: number }[] {
+  if (times.sunrise === times.sunset) return [];
+  const daylight = (times.sunset - times.sunrise + HOURS_PER_DAY) % HOURS_PER_DAY || HOURS_PER_DAY;
   return Array.from({ length: steps + 1 }, (_, i) => {
     const t = i / steps;
-    return { x: (SUNRISE_HOUR + t * DAYLIGHT) / HOURS_PER_DAY, height: Math.sin(Math.PI * t) };
+    return { x: (times.sunrise + t * daylight) / HOURS_PER_DAY, height: Math.sin(Math.PI * t) };
   });
 }

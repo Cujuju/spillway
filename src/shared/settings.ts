@@ -98,6 +98,8 @@ export interface AppSettings {
   activity: {
     /** Days of per-request logs kept on disk; daily totals are kept until cleared. */
     retentionDays: number;
+    /** Optional Census ZCTA for Rhythm sunrise and sunset. */
+    zipCode: string;
     /** The Overview's chart tiles. */
     board: ActivityBoard;
   };
@@ -184,6 +186,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   activity: {
     retentionDays: DEFAULT_ACTIVITY_RETENTION_DAYS,
+    zipCode: '',
     board: DEFAULT_ACTIVITY_BOARD,
   },
 };
@@ -286,6 +289,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),
     },
     activity: {
+      zipCode: typeof a.zipCode === 'string' && /^\d{5}$/.test(a.zipCode.trim()) ? a.zipCode.trim() : '',
       retentionDays: int(a.retentionDays, d.activity.retentionDays, 1, MAX_ACTIVITY_RETENTION_DAYS),
       board: normalizeActivityBoard(a.board),
     },

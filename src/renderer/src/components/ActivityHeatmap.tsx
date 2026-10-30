@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, For, Match, Show, Switch } from 'solid-js';
 import type { ActivityBucket } from '@shared/types';
 import { calendarWeeks, heatShape, hourRows } from '../lib/activityHeat';
 import type { Span } from '../lib/activityRange';
@@ -30,6 +30,13 @@ export function ActivityHeatmap(props: {
   tooltip: (s: Summary) => TipRow[];
 }) {
   const [tip, setTip] = createSignal<{ cell: HTMLElement; title: string; s: Summary } | null>(null);
+  let scroller!: HTMLDivElement;
+  createEffect(() => {
+    // A new range opens at its newest column; resizing preserves the user's scroll position.
+    void props.span;
+    const frame = requestAnimationFrame(() => { scroller.scrollLeft = scroller.scrollWidth; });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   const shape = createMemo(() => heatShape(props.span));
   const hours = createMemo(() => (shape() === 'calendar' ? [] : hourRows(props.rows, props.span)));
   const weeks = createMemo(() => (shape() === 'calendar' ? calendarWeeks(props.rows, props.span) : []));
@@ -51,11 +58,12 @@ export function ActivityHeatmap(props: {
 
   return (
     <div class="heat-card" onPointerLeave={() => setTip(null)}>
+      <div class="heat-scroll" ref={scroller}>
       <Switch>
         <Match when={shape() !== 'calendar'}>
           <div class="heat" role="table" aria-label="Activity by day and hour (24-hour clock)">
             <div role="row" style={{ display: 'contents' }}>
-              <div role="columnheader" />
+              <div role="columnheader" class="heat-day" />
               <For each={hours()[0]?.hours ?? []}>{(h) => <div role="columnheader" class="heat-hour"><span>{h % HOUR_LABEL_STEP === 0 ? String(h).padStart(2, '0') : ''}</span></div>}</For>
             </div>
             <For each={hours()}>{(row) => (
@@ -83,6 +91,7 @@ export function ActivityHeatmap(props: {
           </div>
         </Match>
       </Switch>
+      </div>
       <div class="heat-legend">
         less <For each={SHADES}>{(l) => <span class={`heat-cell l${l}`} />}</For> more
       </div>

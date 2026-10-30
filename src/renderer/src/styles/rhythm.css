@@ -23,12 +23,15 @@
   min-height: 0;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg,
-    var(--sky-night) 0%, var(--sky-night) calc(var(--sunrise) - var(--twilight)),
+  background: repeating-linear-gradient(90deg,
+    var(--sky-night) calc(var(--sunrise) - var(--twilight)),
     var(--sky-glow) var(--sunrise), var(--sky-day) calc(var(--sunrise) + var(--twilight)),
     var(--sky-day) calc(var(--sunset) - var(--twilight)), var(--sky-glow) var(--sunset),
-    var(--sky-night) calc(var(--sunset) + var(--twilight)), var(--sky-night) 100%);
+    var(--sky-night) calc(var(--sunset) + var(--twilight)),
+    var(--sky-night) calc(var(--sunrise) - var(--twilight) + 100%));
 }
+.rhythm-sky.polar-day { background: var(--sky-day); }
+.rhythm-sky.polar-night { background: var(--sky-night); }
 .rhythm-star {
   position: absolute;
   width: var(--rhythm-star-px);

@@ -9,8 +9,8 @@ const config: Configuration = {
   directories: { output: 'dist', buildResources: 'resources' },
   files: ['out/**', 'package.json'],
   extraResources: [
-    // Proxy binary for the platform and arch being packaged, built by `pnpm proxy:build`.
-    // Folder names match scripts/build-proxy.mjs and src/main/paths.ts.
+    // Proxy binary for this platform and arch, built by `pnpm proxy:build`.
+    // Folders match scripts/build-proxy.mjs and src/main/paths.ts.
     // Only the binary: backup copies left beside it during proxy swaps must not ship.
     { from: 'resources/bin/${platform}-${arch}', to: 'bin', filter: ['cli-proxy-api', 'cli-proxy-api.exe'] },
     // Notification and macOS tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.

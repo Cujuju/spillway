@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, normalizeSettings, proxyConfigChanged } from './settings';
 
 describe('normalizeSettings', () => {
+  it('defaults and validates the optional Rhythm ZIP format', () => {
+    expect(normalizeSettings({}).activity.zipCode).toBe('');
+    expect(normalizeSettings({ activity: { zipCode: ' 00601 ' } }).activity.zipCode).toBe('00601');
+    for (const zipCode of [12345, '1234', '123456', 'abcde']) {
+      expect(normalizeSettings({ activity: { zipCode } }).activity.zipCode).toBe('');
+    }
+  });
+
   it('keeps only non-empty string account overrides', () => {
     const s = normalizeSettings({ proxy: { preferredAccounts: { claude: 'abc', codex: '', devin: 3 } } });
     expect(s.proxy.preferredAccounts).toEqual({ claude: 'abc' });

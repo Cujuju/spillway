@@ -5,6 +5,7 @@ import { accountKey, clientKey } from '@shared/activityScope';
 import { clientLabel } from '../lib/accountScope';
 import type { ActivityBucket } from '@shared/types';
 import { metricValue, type AccountRow, type ClientRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
+import { settings } from '../store';
 import { pct } from '../lib/format';
 import type { Span } from '../lib/activityRange';
 import { ActivityHeatmap } from './ActivityHeatmap';
@@ -73,7 +74,8 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   heatmap: {
     title: () => 'Heatmap',
     hasMetric: true,
-    minSize: { width: 380, height: 220 },
+    // 230px grid + 16px scrollbar + 26px legend + 60px header/padding; rounded up.
+    minSize: { width: 380, height: 340 },
     body: (spec, data) => (
       <ActivityHeatmap rows={data.rows()} span={data.span()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),
@@ -84,7 +86,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     hasMetric: true,
     minSize: { width: 380, height: 220 },
     body: (spec, data) => (
-      <ActivityRhythm rows={data.rows()} span={data.span()} now={data.now()} metric={spec().metric}
+      <ActivityRhythm zipCode={settings().activity.zipCode} rows={data.rows()} span={data.span()} now={data.now()} metric={spec().metric}
         format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),
   },

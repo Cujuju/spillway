@@ -57,6 +57,13 @@ for (const target of targets) {
   }
   mkdirSync(path.dirname(built), { recursive: true });
   mkdirSync(path.dirname(dest), { recursive: true });
+  // MIT requires the notice wherever the binary ships; electron-builder.ts packages it from here.
+  const license = path.join(src, 'LICENSE');
+  if (!existsSync(license)) {
+    fail(`CLIProxyAPI LICENSE not found at ${license}; the binary cannot ship without it.`, dest);
+    continue;
+  }
+  copyFileSync(license, path.join(path.dirname(dest), 'LICENSE'));
   // CGO off: a pure-Go binary cross-compiles from any host. Go ad-hoc signs darwin/arm64 output.
   const env = { ...process.env, GOOS: GOOS[platform], GOARCH: GOARCH[arch], CGO_ENABLED: '0' };
   try {

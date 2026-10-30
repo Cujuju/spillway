@@ -1,4 +1,6 @@
-import type { Configuration } from 'electron-builder';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { Arch, type Configuration } from 'electron-builder';
 import { appVersion } from './appVersion.ts';
 
 const config: Configuration = {
@@ -16,7 +18,16 @@ const config: Configuration = {
     // Notification and macOS tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.
     { from: 'resources/icon.png', to: 'icon.png' },
     { from: 'resources/icon.ico', to: 'icon.ico' },
+    // License notices for Spillway and the third-party work it ships. The proxy's comes from its fork (scripts/build-proxy.mjs).
+    { from: 'LICENSE', to: 'licenses/Spillway.txt' },
+    { from: 'resources/bin/${platform}-${arch}/LICENSE', to: 'licenses/CLIProxyAPI.txt' },
+    { from: 'src/renderer/src/assets/providers/LICENSE', to: 'licenses/LobeHub-Icons.txt' },
   ],
+  // electron-builder only warns on a missing extraResources source; the proxy must not ship without its notice.
+  beforePack: (context) => {
+    const license = path.join(import.meta.dirname, 'resources', 'bin', `${context.electronPlatformName}-${Arch[context.arch]}`, 'LICENSE');
+    if (!existsSync(license)) throw new Error(`${license} is missing. Run pnpm proxy:build for this target.`);
+  },
   // No publish feed: scripts/release.mts signs the update files and uploads them (src/shared/updateFeed.ts).
   win: {
     target: [{ target: 'nsis', arch: 'x64' }],

@@ -50,7 +50,7 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
   const rows = createMemo(() => activityBuckets().filter((r) => inScope(props.scope, r)));
   const scoped = createMemo(() => rows().filter((r) => r.start >= span().from && r.start <= span().to));
   const total = createMemo(() => summarize(scoped()));
-  const points = createMemo(() => series(scoped(), starts(), now()));
+  const points = createMemo(() => series(scoped(), starts(), span().to));
   const models = createMemo(() => byModel(scoped()));
   const accountRows = createMemo(() => byAccount(scoped()));
   const clientRows = createMemo(() => byClient(scoped()));

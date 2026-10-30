@@ -158,6 +158,7 @@ const handlers: Handlers = {
   windowStartStatus: () => windowStarter.status(),
   usageHistory: () => history.all(),
   usageWindowSummaries: () => history.summaries(),
+  usageObservedSpans: () => history.observed(),
   clearHistory: () => history.clear(),
   activityImportState: () => activityImportState(),
   activityPage: (query) => activityLog.call('page', query),

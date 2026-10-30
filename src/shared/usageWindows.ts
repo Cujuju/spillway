@@ -40,6 +40,12 @@ export function rollPastResets(snapshot: UsageSnapshot, now: number): UsageSnaps
 /** One settled history point per 5 min is finer than any weekly-chart pixel and keeps 14 days near 4k points. */
 export const HISTORY_SAMPLE_SPACING_MS = 5 * 60_000;
 
+/** A gap over two reading intervals (one failed lookup allowed) means the app missed time. */
+const MISSED_GAP_READINGS = 2;
+
+/** Longest gap between readings that still counts as watching. Stored readings are a sample spacing apart, so the wider interval holds for both. */
+export const missedReadingGapMs = (refreshMs: number): number => MISSED_GAP_READINGS * Math.max(refreshMs, HISTORY_SAMPLE_SPACING_MS);
+
 /** Readings of one reset differ by request latency (seconds; Codex up to 3 s seen). Any later window resets at least 5 hours on. */
 export const RESET_READING_TOLERANCE_MS = 60_000;
 

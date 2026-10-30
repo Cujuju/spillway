@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { HistorySample, UsageSnapshot, WindowSummary } from '@shared/types';
-import { HISTORY_SAMPLE_SPACING_MS, resetBetween } from '@shared/usageWindows';
+import type { HistorySample, ObservedSpan, UsageSnapshot, WindowSummary } from '@shared/types';
+import { HISTORY_SAMPLE_SPACING_MS, missedReadingGapMs, resetBetween } from '@shared/usageWindows';
 import { appPaths } from './paths';
-import { writeFileAtomic } from './settingsStore';
-import { foldSample, pruneSummaries } from './windowSummaries';
+import { getSettings, writeFileAtomic } from './settingsStore';
+import { foldObserved, foldSample, pruneObserved, pruneSummaries } from './windowSummaries';
+
+const MS_PER_SECOND = 1000;
 
 /** Longest forecast lookback plus the chart's past range. */
 const RETENTION_MS = 14 * 24 * 60 * 60_000;
@@ -51,10 +53,27 @@ export function appendSample(samples: HistorySample[], next: HistorySample, now 
 
 const isWindowSummary = (s: Partial<WindowSummary> | null): s is WindowSummary =>
   typeof s?.credentialId === 'string' && typeof s.key === 'string' && typeof s.resetAt === 'number' && typeof s.peak === 'number' && s.endedAt !== undefined;
+const isObservedSpan = (s: Partial<ObservedSpan> | null): s is ObservedSpan =>
+  typeof s?.credentialId === 'string' && typeof s.key === 'string' && typeof s.from === 'number' && typeof s.to === 'number';
+
+/** Reads a stored list; with no file yet, rebuilds it from the samples still held. */
+function loadList<T>(file: string, isItem: (x: Partial<T> | null) => x is T, rebuild: () => T[]): T[] {
+  try {
+    if (!existsSync(file)) return rebuild();
+    const raw = JSON.parse(readFileSync(file, 'utf8'));
+    return Array.isArray(raw) ? raw.filter(isItem) : [];
+  } catch (err) {
+    console.error(`[history] unreadable ${file}, starting empty:`, err);
+    return [];
+  }
+}
+
+const maxReadingGapMs = () => missedReadingGapMs(getSettings().dashboard.refreshIntervalSeconds * MS_PER_SECOND);
 
 class HistoryStore {
   private samples: HistorySample[] | null = null;
   private windowSummaries: WindowSummary[] | null = null;
+  private observedSpans: ObservedSpan[] | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
 
   all(): HistorySample[] {
@@ -70,19 +89,16 @@ class HistoryStore {
   }
 
   summaries(): WindowSummary[] {
-    if (this.windowSummaries) return this.windowSummaries;
-    try {
-      if (existsSync(appPaths.windowSummariesFile)) {
-        const raw = JSON.parse(readFileSync(appPaths.windowSummariesFile, 'utf8'));
-        this.windowSummaries = Array.isArray(raw) ? raw.filter(isWindowSummary) : [];
-      } else {
-        this.windowSummaries = this.all().reduce(foldSample, [] as WindowSummary[]);
-      }
-    } catch (err) {
-      console.error('[window-summaries] unreadable, starting empty:', err);
-      this.windowSummaries = [];
-    }
+    this.windowSummaries ??= loadList(appPaths.windowSummariesFile, isWindowSummary, () => this.all().reduce(foldSample, [] as WindowSummary[]));
     return this.windowSummaries;
+  }
+
+  observed(): ObservedSpan[] {
+    this.observedSpans ??= loadList(appPaths.observedSpansFile, isObservedSpan, () => {
+      const maxGapMs = maxReadingGapMs();
+      return this.all().reduce((spans: ObservedSpan[], s) => foldObserved(spans, s, maxGapMs), []);
+    });
+    return this.observedSpans;
   }
 
   add(snapshot: UsageSnapshot): void {
@@ -90,6 +106,7 @@ class HistoryStore {
     const next = toSample(snapshot);
     const now = Date.parse(snapshot.fetchedAt);
     this.windowSummaries = pruneSummaries(foldSample(this.summaries(), next), now);
+    this.observedSpans = pruneObserved(foldObserved(this.observed(), next, maxReadingGapMs()), now);
     this.samples = appendSample(before, next);
     this.scheduleSave();
   }
@@ -104,11 +121,13 @@ class HistoryStore {
     this.saveTimer = null;
     if (this.samples) writeFileAtomic(appPaths.historyFile, JSON.stringify(this.samples));
     if (this.windowSummaries) writeFileAtomic(appPaths.windowSummariesFile, JSON.stringify(this.windowSummaries));
+    if (this.observedSpans) writeFileAtomic(appPaths.observedSpansFile, JSON.stringify(this.observedSpans));
   }
 
   clear(): void {
     this.samples = [];
     this.windowSummaries = [];
+    this.observedSpans = [];
     this.flush();
   }
 }

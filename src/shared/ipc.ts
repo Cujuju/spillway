@@ -4,7 +4,7 @@ import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
+  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
 import type { ManagedPolicyStatus } from './types';
 
@@ -54,6 +54,8 @@ export interface DesktopApi {
   windowStartStatus(): Promise<WindowStartStatus>;
   usageHistory(): Promise<HistorySample[]>;
   usageWindowSummaries(): Promise<WindowSummary[]>;
+  /** When the app was reading each account's windows, so past gaps tell no use from no reading. */
+  usageObservedSpans(): Promise<ObservedSpan[]>;
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
@@ -156,6 +158,7 @@ export const INVOKE = {
   windowStartStatus: 'usage:window-start-status',
   usageHistory: 'usage:history',
   usageWindowSummaries: 'usage:window-summaries',
+  usageObservedSpans: 'usage:observed-spans',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',
   activityDay: 'activity:day',

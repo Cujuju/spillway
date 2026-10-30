@@ -85,3 +85,7 @@
 .past-window.exhausted .past-window-note {
   color: var(--color-red-light);
 }
+.past-window.idle .past-window-span,
+.past-window.idle .past-window-peak {
+  color: var(--color-text-muted);
+}

@@ -1,4 +1,4 @@
-import type { HistorySample, WindowSummary } from '@shared/types';
+import type { HistorySample, ObservedSpan, WindowSummary } from '@shared/types';
 import { sameReset, windowEnd } from '@shared/usageWindows';
 
 /** Keep one year of windows so past weeks survive raw-history trimming without unbounded storage. */
@@ -39,3 +39,20 @@ export function foldSample(summaries: WindowSummary[], sample: HistorySample): W
 export function pruneSummaries(summaries: WindowSummary[], now: number): WindowSummary[] {
   return summaries.filter((s) => s.resetAt >= now - SUMMARY_RETENTION_MS && (s.peak > 0 || windowEnd(s) > now));
 }
+
+/** Extends each read window's latest span, or opens one after a gap over `maxGapMs`. Unused windows leave no summary, so spans tell no use from no reading. */
+export function foldObserved(spans: ObservedSpan[], sample: HistorySample, maxGapMs: number): ObservedSpan[] {
+  const out = [...spans];
+  const at = Date.parse(sample.at);
+  for (const [credentialId, windows] of Object.entries(sample.used)) {
+    for (const key of Object.keys(windows)) {
+      const index = out.findLastIndex((s) => s.credentialId === credentialId && s.key === key);
+      const last = out[index];
+      if (last && at - last.to <= maxGapMs) out[index] = { ...last, to: Math.max(last.to, at) };
+      else out.push({ credentialId, key, from: at, to: at });
+    }
+  }
+  return out;
+}
+
+export const pruneObserved = (spans: ObservedSpan[], now: number): ObservedSpan[] => spans.filter((s) => s.to >= now - SUMMARY_RETENTION_MS);

@@ -1,15 +1,13 @@
-import { createMemo, For } from 'solid-js';
+import { createMemo, For, Match, Switch } from 'solid-js';
 import type { LimitWindow, WindowSummary } from '@shared/types';
-import { HISTORY_SAMPLE_SPACING_MS, windowEnd } from '@shared/usageWindows';
+import { missedReadingGapMs, windowEnd } from '@shared/usageWindows';
 import { compactDuration, dateTime, dayTime, quotaPercent } from '../lib/format';
-import { now, settings, windowSummaries } from '../store';
+import { pastTimeline, windowStart } from '../lib/pastTimeline';
+import { now, observedSpans, settings, windowSummaries } from '../store';
 
 const FULL = 100;
+const NO_USE = 0;
 const SECOND_MS = 1000;
-/** A gap over two reading intervals (one failed lookup allowed) means the app missed part of the window. */
-const MISSED_GAP_READINGS = 2;
-
-const windowStart = (s: WindowSummary, durationMs: number | null) => (durationMs ? s.resetAt - durationMs : s.firstSampleAt);
 
 function outcome(s: WindowSummary): string {
   if (s.exhaustedAt === null) return 'Never ran out';
@@ -17,36 +15,54 @@ function outcome(s: WindowSummary): string {
   return `Ran out ${dayTime(s.exhaustedAt)} · ${compactDuration(windowEnd(s) - s.exhaustedAt)} before ${ended}`;
 }
 
-/** Finished windows of one account and window, newest first: span, peak, and when it ran out. */
+/** Finished windows of one account and window, newest first, with the stretches between them that held none. */
 export function PastWindows(props: { credentialId: string; window: LimitWindow }) {
-  // The store also holds the window in progress; only windows past their end are finished.
-  const rows = createMemo(() =>
-    windowSummaries().filter((s) => s.credentialId === props.credentialId && s.key === props.window.key && windowEnd(s) <= now()).reverse(),
-  );
-  // Live readings come each refresh; ones backfilled from history are a sample spacing apart. The wider interval holds for both.
-  const readingInterval = () => Math.max(settings().dashboard.refreshIntervalSeconds * SECOND_MS, HISTORY_SAMPLE_SPACING_MS);
-  const missed = (gapMs: number) => gapMs > MISSED_GAP_READINGS * readingInterval();
+  const maxGapMs = () => missedReadingGapMs(settings().dashboard.refreshIntervalSeconds * SECOND_MS);
+  const missed = (gapMs: number) => gapMs > maxGapMs();
+  const mine = <T extends { credentialId: string; key: string }>(list: T[]) => list.filter((x) => x.credentialId === props.credentialId && x.key === props.window.key);
+  const entries = createMemo(() => pastTimeline(mine(windowSummaries()), mine(observedSpans()), props.window.durationMs, now(), maxGapMs()));
   /** Notes where the readings stop short of the window, so a partly unseen window never reads as complete. */
   const coverage = (s: WindowSummary) =>
     [
       missed(s.firstSampleAt - windowStart(s, props.window.durationMs)) ? `tracked from ${dateTime(s.firstSampleAt)}` : null,
       missed(windowEnd(s) - s.lastSampleAt) ? `last reading ${dateTime(s.lastSampleAt)}` : null,
     ].filter((n) => n !== null);
+  /** Use is known to be zero only where the app was reading. */
+  const idleNote = (from: number, to: number, trackedMs: number) => {
+    const untrackedMs = to - from - trackedMs;
+    if (!missed(untrackedMs)) return `No use for ${compactDuration(to - from)}`;
+    if (!missed(trackedMs)) return `Not tracked for ${compactDuration(to - from)}`;
+    return `No use in ${compactDuration(trackedMs)} tracked · ${compactDuration(untrackedMs)} not tracked`;
+  };
 
   return (
     <div class="past-windows">
-      <For each={rows()} fallback={<div class="muted past-windows-empty">No finished {props.window.label.toLowerCase()} windows yet. Each one appears here after its reset.</div>}>
-        {(s) => (
-          <div class="past-window" classList={{ exhausted: s.exhaustedAt !== null }}>
-            <span class="past-window-span">{dateTime(windowStart(s, props.window.durationMs))} – {dateTime(windowEnd(s))}</span>
-            <span class="past-window-bar">
-              <span class="fill" style={{ width: `${Math.min(FULL, s.peak)}%` }} />
-            </span>
-            <span class="past-window-peak" title="Most used in the window">{quotaPercent(s.peak)}</span>
-            <span class="past-window-note">
-              {[outcome(s), ...coverage(s)].join(' · ')}
-            </span>
-          </div>
+      <For each={entries()} fallback={<div class="muted past-windows-empty">No finished {props.window.label.toLowerCase()} windows yet. Each one appears here after its reset.</div>}>
+        {(e) => (
+          <Switch>
+            <Match when={e.kind === 'window' && e.summary}>
+              {(s) => (
+                <div class="past-window" classList={{ exhausted: s().exhaustedAt !== null }}>
+                  <span class="past-window-span">{dateTime(windowStart(s(), props.window.durationMs))} – {dateTime(windowEnd(s()))}</span>
+                  <span class="past-window-bar">
+                    <span class="fill" style={{ width: `${Math.min(FULL, s().peak)}%` }} />
+                  </span>
+                  <span class="past-window-peak" title="Most used in the window">{quotaPercent(s().peak)}</span>
+                  <span class="past-window-note">{[outcome(s()), ...coverage(s())].join(' · ')}</span>
+                </div>
+              )}
+            </Match>
+            <Match when={e.kind === 'idle' && e}>
+              {(gap) => (
+                <div class="past-window idle">
+                  <span class="past-window-span">{dateTime(gap().from)} – {dateTime(gap().to)}</span>
+                  <span class="past-window-bar" />
+                  <span class="past-window-peak" title="Most used in the stretch">{missed(gap().to - gap().from - gap().trackedMs) ? quotaPercent(null) : quotaPercent(NO_USE)}</span>
+                  <span class="past-window-note">{idleNote(gap().from, gap().to, gap().trackedMs)}</span>
+                </div>
+              )}
+            </Match>
+          </Switch>
         )}
       </For>
     </div>

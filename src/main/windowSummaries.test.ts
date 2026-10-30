@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { HistorySample, WindowSummary } from '@shared/types';
-import { foldSample, pruneSummaries } from './windowSummaries';
+import type { HistorySample, ObservedSpan, WindowSummary } from '@shared/types';
+import { foldObserved, foldSample, pruneObserved, pruneSummaries } from './windowSummaries';
 
 const HOUR = 3_600_000;
 const sample = (at: string, used: number, reset?: string | number): HistorySample => ({
@@ -77,5 +77,33 @@ describe('pruneSummaries', () => {
     const unused = { ...used, peak: 0 };
     expect(pruneSummaries([unused], used.resetAt + HOUR)).toEqual([]);
     expect(pruneSummaries([unused], used.resetAt - HOUR)).toEqual([unused]);
+  });
+});
+
+describe('foldObserved', () => {
+  const MAX_GAP = 10 * 60_000;
+  const observe = (points: HistorySample[]) => points.reduce((spans: ObservedSpan[], p) => foldObserved(spans, p, MAX_GAP), []);
+  const span = (from: string, to: string): ObservedSpan => ({ credentialId: 'a', key: 'seven_day', from: t(from), to: t(to) });
+
+  it('extends a span across readings within the gap, unused or not, with or without a reset', () => {
+    expect(observe([sample('2026-10-25T10:00:00Z', 0), sample('2026-10-25T10:10:00Z', 0, '2026-11-01T17:00:00Z'), sample('2026-10-25T10:15:00Z', 4)]))
+      .toEqual([span('2026-10-25T10:00:00Z', '2026-10-25T10:15:00Z')]);
+  });
+
+  it('opens a new span after a missed stretch', () => {
+    expect(observe([sample('2026-10-25T10:00:00Z', 0), sample('2026-10-25T10:10:01Z', 0)]))
+      .toEqual([span('2026-10-25T10:00:00Z', '2026-10-25T10:00:00Z'), span('2026-10-25T10:10:01Z', '2026-10-25T10:10:01Z')]);
+  });
+
+  it('keeps separate spans per key, and only for windows in the reading', () => {
+    const both: HistorySample = { at: '2026-10-25T10:00:00Z', used: { a: { seven_day: 0, five_hour: 0 } } };
+    const weeklyOnly: HistorySample = { at: '2026-10-25T10:05:00Z', used: { a: { seven_day: 0 } } };
+    expect(observe([both, weeklyOnly])).toEqual([span('2026-10-25T10:00:00Z', '2026-10-25T10:05:00Z'), { ...span('2026-10-25T10:00:00Z', '2026-10-25T10:00:00Z'), key: 'five_hour' }]);
+  });
+
+  it('drops spans that ended over a year ago', () => {
+    const old = span('2026-10-25T10:00:00Z', '2026-10-25T11:00:00Z');
+    expect(pruneObserved([old], old.to + 365 * 24 * HOUR)).toEqual([old]);
+    expect(pruneObserved([old], old.to + 365 * 24 * HOUR + 1)).toEqual([]);
   });
 });

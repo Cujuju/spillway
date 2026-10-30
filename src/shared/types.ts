@@ -113,6 +113,14 @@ export interface HistorySample {
   resets?: Record<string, Record<string, number>>;
 }
 
+/** A stretch in which the app read one account's window with no missed reading (epoch ms). */
+export interface ObservedSpan {
+  credentialId: string;
+  key: string;
+  from: number;
+  to: number;
+}
+
 /** One limit window of one account (current or finished), folded from readings as they arrive (src/main/windowSummaries.ts). */
 export interface WindowSummary {
   credentialId: string;

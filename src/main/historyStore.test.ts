@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UsageSnapshot } from '@shared/types';
 
-vi.mock('./paths', () => ({ appPaths: { historyFile: 'unused', windowSummariesFile: 'unused-summaries' } }));
-vi.mock('./settingsStore', () => ({ writeFileAtomic: () => undefined }));
+vi.mock('./paths', () => ({ appPaths: { historyFile: 'unused', windowSummariesFile: 'unused-summaries', observedSpansFile: 'unused-spans' } }));
+/** A 60 s refresh; stored samples are 5 min apart, so readings within 10 min count as watching. */
+vi.mock('./settingsStore', () => ({ writeFileAtomic: () => undefined, getSettings: () => ({ dashboard: { refreshIntervalSeconds: 60 } }) }));
 
 const { appendSample, history } = await import('./historyStore');
 
@@ -34,6 +35,11 @@ describe('history.add', () => {
         [Date.parse('2026-11-01T17:00:00Z'), 2, null],
       ]);
       expect(history.all().map((s) => s.at)).toEqual(['2026-10-25T17:00:00Z', '2026-10-25T17:05:00Z']);
+      // The poll without usage read nothing, so the time away stays unobserved.
+      expect(history.observed().map((s) => [s.from, s.to])).toEqual([
+        [Date.parse('2026-10-01T16:55:00Z'), Date.parse('2026-10-01T16:55:00Z')],
+        [Date.parse('2026-10-25T17:05:00Z'), Date.parse('2026-10-25T17:05:00Z')],
+      ]);
     } finally {
       history.clear();
     }
@@ -51,6 +57,8 @@ describe('history.summaries', () => {
         [Date.parse('2026-10-25T17:00:00Z'), 60],
         [Date.parse('2026-11-01T17:00:00Z'), 3],
       ]);
+      // Stored samples 15 min apart are over the 10 min gap: two spans.
+      expect(fresh.observed().map((s) => s.from)).toEqual([Date.parse('2026-10-25T16:50:00Z'), Date.parse('2026-10-25T17:05:00Z')]);
     } finally {
       vi.doUnmock('node:fs');
     }

@@ -7,7 +7,7 @@ import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
-import type { ActivityBucket, HistorySample, LogLine, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
+import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
@@ -56,6 +56,7 @@ export const snapshot = shownSnapshot;
 export const [usageError, setUsageError] = createSignal<string | null>(null);
 export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [windowSummaries, setWindowSummaries] = createSignal<WindowSummary[]>([]);
+export const [observedSpans, setObservedSpans] = createSignal<ObservedSpan[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
@@ -118,8 +119,8 @@ export async function initStore(): Promise<void> {
   api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
   const initialImport = await api.activityImportState();
   if (!receivedImportEvent) setActivityImport(initialImport);
-  const [s, latest, status, hist, summaries, logLines, dark] = await Promise.all([
-    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.proxyLogs(), api.taskbarDark(),
+  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
+    api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.usageObservedSpans(), api.proxyLogs(), api.taskbarDark(),
   ]);
   setTaskbarDark(dark);
   setSettingsSignal(s);
@@ -128,6 +129,7 @@ export async function initStore(): Promise<void> {
   setProxyStatus(status);
   setHistory(hist);
   setWindowSummaries(summaries);
+  setObservedSpans(spans);
   setLogs(logLines);
   loadActivity();
   api.onActivityReset(loadActivity);
@@ -153,6 +155,7 @@ export async function initStore(): Promise<void> {
   setInterval(() => {
     void api.usageHistory().then(setHistory);
     void api.usageWindowSummaries().then(setWindowSummaries);
+    void api.usageObservedSpans().then(setObservedSpans);
   }, HISTORY_REFRESH_MS);
   prefersDark.addEventListener('change', () => applyTheme(settings().general.theme));
 }

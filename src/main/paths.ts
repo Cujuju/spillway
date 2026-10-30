@@ -26,6 +26,9 @@ export const appPaths = {
   get windowSummariesFile() {
     return path.join(this.root, 'window-summaries.json');
   },
+  get observedSpansFile() {
+    return path.join(this.root, 'observed-spans.json');
+  },
   /** Encrypted request log and daily totals (activityDb.ts). */
   get activityDb() {
     return path.join(this.root, 'activity.db');

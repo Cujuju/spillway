@@ -8,7 +8,7 @@ import { WindowStartSettings } from '../components/WindowStartSettings';
 import { RhythmZipSetting } from '../components/RhythmZipSetting';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
-import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setWindowSummaries, type SettingsSection } from '../store';
+import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setObservedSpans, setWindowSummaries, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
 
@@ -214,7 +214,7 @@ function Advanced() {
           actions={
             <>
               <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setWindowSummaries([]); setConfirming(null); })}>Clear</button>
+              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setWindowSummaries([]); setObservedSpans([]); setConfirming(null); })}>Clear</button>
             </>
           }
         >

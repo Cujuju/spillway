@@ -41,3 +41,10 @@ describe('parseActivityEvent', () => {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'r2', provider: 'claude', purpose: 'window-start' }))).toBeNull();
   });
 });
+
+
+it('preserves the upstream response ID and tags live events as proxy usage', () => {
+  expect(parseActivityEvent(JSON.stringify({ request_id: 'proxy_request', upstream_id: 'msg_response' })))
+    .toMatchObject({ upstreamId: 'msg_response', source: 'proxy' });
+  expect(parseActivityEvent(JSON.stringify({ request_id: 'older_proxy' }))?.upstreamId).toBeNull();
+});

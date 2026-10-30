@@ -108,6 +108,7 @@ export interface DesktopApi {
   onMaximized(cb: (maximized: boolean) => void): () => void;
   onNavigate(cb: (page: string) => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
+  onActivityReset(cb: () => void): () => void;
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
   onTaskbarDark(cb: (dark: boolean) => void): () => void;
@@ -190,6 +191,7 @@ export const EVENTS = {
   onNavigate: 'app:navigate',
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
+  onActivityReset: 'activity:reset',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

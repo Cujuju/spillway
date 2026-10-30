@@ -14,7 +14,7 @@ export interface AccountGroup {
   accounts: AccountOption[];
 }
 
-export const NO_ACCOUNT_LABEL = 'No account';
+export const NO_ACCOUNT_LABEL = 'Unknown account';
 
 /**
  * Current accounts, then accounts seen only in activity (since removed), then keys only the saved

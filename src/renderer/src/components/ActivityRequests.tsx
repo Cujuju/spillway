@@ -59,7 +59,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   }, { defer: true }));
   // Forget open/closed choices for days no longer stored. Only the unfiltered list holds every stored day.
   createEffect(on(() => props.days.loaded(), (loaded) => {
-    if (!loaded || props.scope.accounts !== null || props.scope.clients !== null) return;
+    if (!loaded || props.scope.accounts !== null || props.scope.clients !== null || props.scope.source === 'proxy') return;
     const days = props.days.byDay();
     setToggled((t) => Object.fromEntries(Object.entries(t).filter(([d]) => days.has(d))));
   }));

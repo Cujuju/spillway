@@ -56,6 +56,8 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,
+    upstreamId: s(r.upstream_id),
+    source: 'proxy',
     selectionId: s(r.selection_id),
     provider: (s(r.provider) ?? 'unknown').toLowerCase(),
     model: s(r.alias) ?? s(r.model) ?? '',

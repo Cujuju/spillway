@@ -52,6 +52,7 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
   const [totals, setTotals] = createSignal<ActivityDayTotal[]>([]);
   const load = () => void window.api.activityTotals().then(setTotals);
   onMount(load);
+  onCleanup(window.api.onActivityReset(load));
   let timer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(window.api.onActivity(() => {
     clearTimeout(timer);

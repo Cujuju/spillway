@@ -9,6 +9,7 @@ export type ClientScope = KeyScope;
 
 /** A request shows when both its account and its client are in scope. */
 export interface ActivityScope {
+  source?: 'proxy' | 'all';
   accounts: AccountScope;
   clients: ClientScope;
 }
@@ -29,8 +30,8 @@ export function clientName(userAgent: string | null): string | null {
 
 const inKeys = (keys: KeyScope, key: string) => keys === null || keys.includes(key);
 
-export const inScope = (scope: ActivityScope, row: { authIndex: string | null; client: string | null }): boolean =>
-  inKeys(scope.accounts, accountKey(row.authIndex)) && inKeys(scope.clients, clientKey(row.client));
+export const inScope = (scope: ActivityScope, row: { authIndex: string | null; client: string | null; source?: string }): boolean =>
+  (scope.source !== 'proxy' || (row.source ?? 'proxy') === 'proxy') && inKeys(scope.accounts, accountKey(row.authIndex)) && inKeys(scope.clients, clientKey(row.client));
 
 export const isKeyScope = (v: unknown): v is KeyScope => v === null || (Array.isArray(v) && v.every((k) => typeof k === 'string'));
 
@@ -39,5 +40,5 @@ const normalizeKeys = (raw: unknown): KeyScope => (Array.isArray(raw) && raw.eve
 
 export function normalizeScope(raw: unknown): ActivityScope {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof ActivityScope, unknown>>;
-  return { accounts: normalizeKeys(r.accounts), clients: normalizeKeys(r.clients) };
+  return { accounts: normalizeKeys(r.accounts), clients: normalizeKeys(r.clients), ...(r.source === 'proxy' ? { source: 'proxy' as const } : {}) };
 }

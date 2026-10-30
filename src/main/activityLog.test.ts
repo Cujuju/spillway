@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 const event = (at: Date, patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
-  at: at.toISOString(), requestId: `r-${at.getTime()}`, selectionId: null, provider: 'claude', model: 'opus', authIndex: 'a1',
+  at: at.toISOString(), requestId: `r-${at.getTime()}`, selectionId: null, upstreamId: null, source: 'proxy', provider: 'claude', model: 'opus', authIndex: 'a1',
   stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 1, cacheWriteTokens: 2, sessionId: null, movedFrom: null, userAgent: null, client: null,
   ...patch,
 });
@@ -222,7 +222,8 @@ describe('activityLog', () => {
 
   it("marks a conversation's switch to another account, per model, across a reopen", () => {
     const at = daysAgo(0);
-    const append = (authIndex: string, model = 'opus', sessionId: string | null = 'claude:s1') => activityLog.append(event(at, { authIndex, model, sessionId })).movedFrom;
+    let request = 0;
+    const append = (authIndex: string, model = 'opus', sessionId: string | null = 'claude:s1') => activityLog.append(event(at, { requestId: `switch-${request++}`, authIndex, model, sessionId })).movedFrom;
     expect(append('a1')).toBeNull();
     expect(append('a1')).toBeNull();
     expect(append('a2', 'haiku')).toBeNull();
@@ -272,4 +273,47 @@ describe('legacy file import', () => {
     expect(storedCount()).toBe(3);
     expect(existsSync(legacyDir)).toBe(false);
   });
+});
+
+
+describe('client-log accounting', () => {
+  beforeEach(() => activityLog.clear());
+  it('reconciles either arrival order, including after retention and restart', () => {
+    const at = daysAgo(40);
+    const imported = event(at, { requestId: 'local', source: 'client-log', upstreamId: 'msg_merge', authIndex: null, sessionId: 'claude:s' });
+    const proxy = event(at, { requestId: 'proxy', upstreamId: 'msg_merge', sessionId: 'claude:s' });
+    activityLog.append(imported);
+    activityLog.prune();
+    activityLog.close();
+    activityLog.append(proxy);
+    activityLog.append(imported);
+    expect(activityLog.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
+    expect(activityLog.totalsList().find((t) => t.source !== 'client-log')?.requests).toBe(1);
+    activityLog.clear();
+    activityLog.append(proxy);
+    activityLog.append(imported);
+    expect(activityLog.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
+  });
+  it('filters requests, summaries, buckets and totals by source consistently', () => {
+    activityLog.append(event(daysAgo(0), { requestId: 'proxy' }));
+    activityLog.append(event(daysAgo(0), { requestId: 'direct', source: 'client-log', authIndex: null }));
+    const scope = { accounts: null, clients: null, source: 'proxy' as const };
+    expect(activityLog.daySummaries(scope)[0]?.requests).toBe(1);
+    expect(activityLog.day(localDay(Date.now()), false, scope)).toHaveLength(1);
+    expect(activityLog.page({ day: null, before: null, failedOnly: false, scope }).events).toHaveLength(1);
+    expect(activityLog.buckets(1).filter((b) => b.source === 'proxy')[0]?.requests).toBe(1);
+    expect(activityLog.totalsList().filter((b) => b.source === 'client-log')[0]?.requests).toBe(1);
+  });
+});
+
+
+it('does not delete a newer request when SQLite reuses a pruned imported row id', () => {
+  activityLog.clear();
+  const old = event(daysAgo(40), { requestId: 'local-reused', source: 'client-log', upstreamId: 'msg_reused', authIndex: null });
+  activityLog.append(old);
+  activityLog.prune();
+  activityLog.append(event(daysAgo(0), { requestId: 'new-proxy' }));
+  activityLog.append(event(daysAgo(40), { requestId: 'old-proxy', upstreamId: 'msg_reused' }));
+  expect(activityLog.day(localDay(Date.now())).map((e) => e.requestId)).toContain('new-proxy');
+  expect(activityLog.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
 });

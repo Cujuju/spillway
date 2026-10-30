@@ -36,12 +36,16 @@ CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, 
 CREATE INDEX IF NOT EXISTS requests_by_client ON requests (${CLIENT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_conversation ON requests (${CONVERSATION_KEY_SQL}, id);
 CREATE TABLE IF NOT EXISTS day_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS client_log_checkpoints (path TEXT PRIMARY KEY, state TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS usage_identities (key TEXT PRIMARY KEY, event TEXT NOT NULL, row_id INTEGER NOT NULL, matched INTEGER NOT NULL DEFAULT 0, fallback_key TEXT, upstream_id TEXT, source TEXT);
+CREATE INDEX IF NOT EXISTS usage_identity_session ON usage_identities (fallback_key, source, matched);
+CREATE INDEX IF NOT EXISTS usage_identity_upstream ON usage_identities (upstream_id, source, matched);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 /** Totals stored before clients were recorded have no client, and keep the key they were stored under. */
-export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model' | 'client'>) =>
-  `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}${t.client === null ? '' : `|${t.client}`}`;
+export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model' | 'client' | 'source'>) =>
+  `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}${t.client === null ? '' : `|${t.client}`}${t.source === 'client-log' ? '|client-log' : ''}`;
 
 function openKeyed(file: string, hexKey: string): Db {
   const db = new Database(file);
@@ -72,6 +76,7 @@ export function openActivityDb(file: string, hexKey: string): Db {
   }
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
   return db;
 }
 

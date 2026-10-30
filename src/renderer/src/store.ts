@@ -112,6 +112,7 @@ export async function initStore(): Promise<void> {
   setHistory(hist);
   setLogs(logLines);
   void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets);
+  api.onActivityReset(() => void api.activityBuckets(ACTIVITY_DAYS).then(setActivityBuckets));
 
   api.onSnapshot((next) => {
     setSnapshot(next);

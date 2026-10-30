@@ -4,6 +4,7 @@ import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
+import { identityKey, reconcileUsage, rememberUsage } from './usageLedger';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 
@@ -21,7 +22,7 @@ export function lastDays(today: number, count: number): string[] {
 
 /** Adds one request to its day/account/model/client row and returns that row. */
 export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEvent): ActivityDayTotal {
-  const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
+  const base = { day: localDay(Date.parse(e.at)), provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client, source: e.source };
   const key = totalKey(base);
   const row = totals.get(key) ?? { ...base, ...emptyCounts() };
   addEvent(row, e);
@@ -33,8 +34,8 @@ export function addToTotals(totals: Map<string, ActivityDayTotal>, e: ActivityEv
 export function hourlyBuckets(events: ActivityEvent[]): ActivityBucket[] {
   const rows = new Map<string, ActivityBucket>();
   for (const e of events) {
-    const base = { start: localHourStart(Date.parse(e.at)), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client };
-    const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}|${base.client ?? ''}`;
+    const base = { start: localHourStart(Date.parse(e.at)), wholeDay: false, provider: e.provider, authIndex: e.authIndex, model: e.model, client: e.client, source: e.source };
+    const key = `${base.start}|${base.provider}|${base.authIndex ?? ''}|${base.model}|${base.client ?? ''}|${base.source}`;
     const row = rows.get(key) ?? { ...base, ...emptyCounts() };
     addEvent(row, e);
     rows.set(key, row);
@@ -49,7 +50,7 @@ interface RequestRow {
 function toStored(r: RequestRow): StoredActivityEvent {
   // Requests stored before conversations or clients were recorded lack these fields.
   const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
-  return { ...e, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
+  return { ...e, source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 
@@ -64,7 +65,7 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
 
 /** SQL condition limiting requests to `scope`'s accounts and clients; null when every request is in scope. */
 function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
-  const parts: string[] = [];
+  const parts: string[] = scope.source === 'proxy' ? ["coalesce(json_extract(event, '$.source'), 'proxy') = 'proxy'"] : [];
   const params: string[] = [];
   for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients]] as const) {
     if (keys === null) continue;
@@ -79,6 +80,7 @@ function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | 
  * plus per-day totals that are kept until cleared.
  */
 class ActivityLog {
+  revision = 0;
   private conn: Db | null = null;
   /** Mirror of `day_totals`; null until first read. */
   private totals: Map<string, ActivityDayTotal> | null = null;
@@ -93,20 +95,65 @@ class ActivityLog {
     if (!this.conn) {
       this.conn = openActivityDb(appPaths.activityDb, getSecrets().databaseKey);
       importLegacyFiles(this.conn, appPaths.legacyActivityDir);
+      if (!this.conn.prepare("SELECT 1 FROM meta WHERE key = 'usage-ledger-seeded'").get()) {
+        this.conn.transaction(() => {
+          for (const r of this.conn!.prepare('SELECT id, event FROM requests').all() as RequestRow[]) {
+            const e = toStored(r);
+            rememberUsage(this.conn!, e, r.id);
+          }
+          this.conn!.prepare("INSERT INTO meta VALUES ('usage-ledger-seeded', '1')").run();
+        })();
+      }
     }
     return this.conn;
   }
 
+  checkpoint(file: string): string | undefined {
+    return (this.db.prepare('SELECT state FROM client_log_checkpoints WHERE path = ?').get(file) as { state: string } | undefined)?.state;
+  }
+
+  importBatch(file: string, state: string, events: ActivityEvent[]): void {
+    try {
+      this.db.transaction(() => {
+        for (const e of events) this.append(e);
+        this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(file, state);
+      })();
+    } catch (e) {
+      this.totals = null;
+      this.pastBuckets.clear();
+      throw e;
+    }
+  }
+
   append(event: ActivityEvent): StoredActivityEvent {
-    const e = { ...event, movedFrom: this.movedFrom(event) };
+    const e = { ...event, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const day = localDay(Date.parse(e.at));
     const totals = this.loadTotals();
     let id: number;
     try {
       id = this.db.transaction(() => {
+        const merge = reconcileUsage(this.db, e);
+        if (merge.skip) return merge.id ?? 0;
+        if (merge.remove) {
+          this.revision += 1;
+          this.pastBuckets.delete(localDay(Date.parse(merge.remove.at)));
+          const old = merge.remove;
+          const key = totalKey({ day: localDay(Date.parse(old.at)), ...old });
+          const total = totals.get(key);
+          if (total) {
+            const counts = emptyCounts();
+            addEvent(counts, old);
+            for (const k of Object.keys(counts) as (keyof typeof counts)[]) total[k] -= counts[k];
+            this.db.prepare('INSERT OR REPLACE INTO day_totals VALUES (?, ?)').run(key, JSON.stringify(total));
+          }
+        }
+        this.pastBuckets.delete(day);
         const row = addToTotals(totals, e);
         this.db.prepare('INSERT OR REPLACE INTO day_totals (key, total) VALUES (?, ?)').run(totalKey(row), JSON.stringify(row));
-        return Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
+        const id = Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
+        rememberUsage(this.db, e, id);
+        this.db.prepare('UPDATE usage_identities SET row_id = ? WHERE key = ?').run(id, identityKey(e));
+        return id;
       })();
     } catch (err) {
       // The mirror already counted it; reload from the rolled-back table.
@@ -217,7 +264,7 @@ class ActivityLog {
 
   clear(): void {
     this.db.transaction(() => {
-      this.db.exec('DELETE FROM requests; DELETE FROM day_totals;');
+      this.db.exec('DELETE FROM requests; DELETE FROM day_totals; DELETE FROM usage_identities;');
     })();
     this.totals = new Map();
     this.pastBuckets.clear();

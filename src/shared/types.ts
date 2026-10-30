@@ -168,6 +168,8 @@ export const ACTIVITY_PAGE_SIZE = 500;
 export interface ActivityEvent {
   at: string;
   requestId: string;
+  upstreamId: string | null;
+  source: 'proxy' | 'client-log';
   /** Attempts of one credential selection share it. */
   selectionId: string | null;
   provider: string;
@@ -242,6 +244,7 @@ export interface ActivityCounts {
 
 /** Requests and tokens for one local day, account, model and client; kept after that day's request log expires. */
 export interface ActivityDayTotal extends ActivityCounts {
+  source?: ActivityEvent['source'];
   /** Local calendar day, YYYY-MM-DD. */
   day: string;
   provider: string;
@@ -253,6 +256,7 @@ export interface ActivityDayTotal extends ActivityCounts {
 
 /** Activity for one local hour, account, model and client. */
 export interface ActivityBucket extends ActivityCounts {
+  source?: ActivityEvent['source'];
   /** Start of the local hour, epoch ms. With `wholeDay`, local midnight. */
   start: number;
   /** The day's request log has expired, so only its daily total remains. */

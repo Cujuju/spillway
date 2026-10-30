@@ -3,7 +3,7 @@ import type { StoredActivityEvent } from '@shared/types';
 import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, sortRequests } from './requestSort';
 
 const row = (id: number, patch: Partial<StoredActivityEvent> = {}): StoredActivityEvent => ({
-  id, at: new Date(2026, 9, 27, 12, 0, id).toISOString(), requestId: `r${id}`, selectionId: null, provider: 'claude', model: 'claude-opus-5-5', authIndex: 'a1',
+  id, at: new Date(2026, 9, 27, 12, 0, id).toISOString(), requestId: `r${id}`, selectionId: null, upstreamId: null, source: 'proxy', provider: 'claude', model: 'claude-opus-5-5', authIndex: 'a1',
   stream: true, failed: false, statusCode: null, error: null, latencyMs: 100, ttftMs: 10, inputTokens: 10, outputTokens: 5, cachedTokens: 0, cacheWriteTokens: 0, sessionId: null, movedFrom: null, userAgent: null, client: null,
   ...patch,
 });

@@ -1,4 +1,4 @@
-import { createMemo, Show } from 'solid-js';
+import { createSignal, onCleanup, createMemo, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
 import { ActivityOverview } from '../components/ActivityOverview';
@@ -19,7 +19,10 @@ export function Activity() {
   const [filter, setFilter] = persistedSignal<RequestFilter>('activity.filter', 'all', FILTERS);
   const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isKeyScope);
   const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
-  const scope = createMemo<ActivityScope>(() => ({ accounts: accounts(), clients: clients() }));
+  const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
+  const [revision, setRevision] = createSignal(0);
+  onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
+  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source() }));
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
@@ -29,7 +32,7 @@ export function Activity() {
 
   // snapshot() is already masked when "Show emails" is off.
   const accountNames = createMemo(() => new Map((snapshot()?.credentials ?? []).map((c) => [c.authIndex, c.label])));
-  const accountName = (authIndex: string | null) => (authIndex ? (accountNames().get(authIndex) ?? authIndex) : '—');
+  const accountName = (authIndex: string | null) => (authIndex ? (accountNames().get(authIndex) ?? authIndex) : 'Unknown account');
   const groups = createMemo(() => accountGroups(snapshot()?.credentials ?? [], activityBuckets(), accounts()));
   const clientChoices = createMemo(() => clientOptions(activityBuckets(), clients()));
 
@@ -38,6 +41,7 @@ export function Activity() {
       <header class="dash-header title-row">
         <h1 class="dash-title">Activity</h1>
         <div class="dash-actions card-spaced">
+          <Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
           <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
           <Show when={view() === 'requests'}>
@@ -48,7 +52,7 @@ export function Activity() {
       </header>
 
       <Show when={proxyStatus()?.state !== 'running'}>
-        <Notice>New activity appears while the proxy is running.</Notice>
+        <Notice>Proxy activity appears while the proxy is running. Local usage syncs automatically.</Notice>
       </Show>
 
       <Show when={view() === 'overview'}>

@@ -68,7 +68,9 @@ class ActivityStream extends EventEmitter {
     if (!e) return;
     let stored: StoredActivityEvent;
     try {
+      const revision = activityLog.revision;
       stored = activityLog.append(e);
+      if (revision !== activityLog.revision) this.emit('reset');
     } catch (err) {
       console.error('[activity] request not stored:', err);
       return this.scheduleUsageRefresh();

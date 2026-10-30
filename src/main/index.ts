@@ -1,6 +1,7 @@
 import { app, nativeTheme, Notification, session } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
+import { startClientLogSync } from './clientLogSync';
 import { activityLog } from './activityLog';
 import { activity } from './activityStream';
 import { history } from './historyStore';
@@ -15,6 +16,7 @@ import { usage } from './usagePoller';
 import { windowStarter } from './windowStarter';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
 
+let stopClientLogs: (() => void) | undefined;
 /** Windows: passed by the login item so a login launch can start hidden in the tray. */
 const HIDDEN_ARG = '--hidden';
 const isMac = process.platform === 'darwin';
@@ -45,6 +47,7 @@ function wireEvents(): void {
     send(EVENTS.onProxyStatus, s);
     if (s.state !== 'running') activity.stop();
   });
+  activity.on('reset', () => send(EVENTS.onActivityReset, undefined));
   activity.on('event', (e) => send(EVENTS.onActivity, e));
   proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
   proxy.on('ready', () => {
@@ -96,6 +99,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc();
     wireEvents();
     activityLog.prune();
+    stopClientLogs = startClientLogSync(activityLog, () => { activityLog.prune(); send(EVENTS.onActivityReset, undefined); });
     applyLoginItem();
     // The tray is always present: it hosts the limit icons and the hidden-start entry point.
     ensureAppTray();
@@ -116,6 +120,7 @@ if (!app.requestSingleInstanceLock()) {
     usage.stop();
     activity.stop();
     history.flush();
+    stopClientLogs?.();
     activityLog.close();
     void proxy.stop().finally(() => {
       destroyTrays();

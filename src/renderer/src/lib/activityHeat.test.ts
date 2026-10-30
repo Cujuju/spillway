@@ -19,6 +19,10 @@ describe('heatmap', () => {
     expect(heatShape(span('24h'))).toBe('hours');
     expect(heatShape(span('7d'))).toBe('days');
     expect(heatShape(span('90d'))).toBe('calendar');
+    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-28', to: '2026-10-29' }, null))).toBe('days');
+    expect(heatShape(rangeSpan('all', NOW, { from: '', to: '' }, null))).toBe('hours');
+    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-16', to: '2026-10-29' }, null))).toBe('days');
+    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-15', to: '2026-10-29' }, null))).toBe('calendar');
   });
 
   it('shows the last 24 hours as one row ending at the current hour', () => {

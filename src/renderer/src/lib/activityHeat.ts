@@ -1,9 +1,10 @@
 import type { ActivityBucket } from '@shared/types';
-import { bucketStarts, bucketUnit, floorTo, type Span } from './activityRange';
+import { bucketStarts, calendarDays, floorTo, spanDays, type Span } from './activityRange';
 import { metricValue, series, summarize, type Metric, type Summary } from './activityStats';
 
 const HOURS_PER_DAY = 24;
 const DAYS_PER_WEEK = 7;
+const MAX_HOURLY_GRID_DAYS = 14;
 const HOURS = Array.from({ length: HOURS_PER_DAY }, (_, h) => h);
 
 const inSpan = (r: ActivityBucket, s: Span) => r.start >= s.from && r.start <= s.to;
@@ -20,8 +21,8 @@ export interface HourRow {
 /** A 24-hour span is one row of its hours; up to two weeks, one row per local day. Longer spans use the calendar. */
 export type HeatShape = 'hours' | 'days' | 'calendar';
 export function heatShape(s: Span): HeatShape {
-  const unit = bucketUnit(s);
-  return unit === 'hour' ? 'hours' : unit === '3h' ? 'days' : 'calendar';
+  if (spanDays(s) <= 1) return 'hours';
+  return calendarDays(s) <= MAX_HOURLY_GRID_DAYS ? 'days' : 'calendar';
 }
 
 export function hourRows(rows: ActivityBucket[], s: Span): HourRow[] {
@@ -30,10 +31,14 @@ export function hourRows(rows: ActivityBucket[], s: Span): HourRow[] {
     const points = series(kept, bucketStarts(s, 'hour'), s.to);
     return [{ label: '', hours: points.map((p) => new Date(p.start).getHours()), cells: points.map((p) => p.summary) }];
   }
+  const byDay = new Map<number, ActivityBucket[][]>();
+  for (const r of kept) {
+    const day = floorTo(r.start, 'day');
+    if (!byDay.has(day)) byDay.set(day, HOURS.map(() => []));
+    byDay.get(day)![new Date(r.start).getHours()]!.push(r);
+  }
   return bucketStarts(s, 'day').map((day) => {
-    const date = new Date(day).toDateString();
-    const byHour = HOURS.map(() => [] as ActivityBucket[]);
-    for (const r of kept) if (new Date(r.start).toDateString() === date) byHour[new Date(r.start).getHours()]!.push(r);
+    const byHour = byDay.get(day) ?? HOURS.map(() => []);
     return { label: new Date(day).toLocaleDateString(undefined, { weekday: 'short' }), hours: HOURS, cells: byHour.map(summarize) };
   });
 }
@@ -68,7 +73,9 @@ export function calendarWeeks(rows: ActivityBucket[], s: Span): CalendarWeek[] {
 /** Each local clock hour summed over the span; repeated DST hours both count. */
 export function hourOfDay(rows: ActivityBucket[], s: Span, metric: Metric) {
   const kept = hourly(rows, s);
-  const hours = HOURS.map((h) => summarize(kept.filter((r) => new Date(r.start).getHours() === h)));
+  const byHour = HOURS.map(() => [] as ActivityBucket[]);
+  for (const r of kept) byHour[new Date(r.start).getHours()]!.push(r);
+  const hours = byHour.map(summarize);
   const max = Math.max(0, ...hours.map((c) => metricValue(c, metric)));
   // Earliest hour wins a tie; an empty or unpriced-only metric has no peak.
   const peak = max > 0 ? hours.findIndex((c) => metricValue(c, metric) === max) : null;

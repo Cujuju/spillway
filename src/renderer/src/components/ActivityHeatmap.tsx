@@ -38,7 +38,7 @@ export function ActivityHeatmap(props: {
     : hours().flatMap((r) => r.cells.map((c) => metricValue(c, props.metric))))));
   const level = (s: Summary) => heatLevel(metricValue(s, props.metric), max());
   const cellProps = (title: string, s: Summary) => ({
-    role: 'gridcell' as const, tabindex: '0', 'aria-label': `${title}: ${props.format(s)}`,
+    role: 'cell' as const, tabindex: '0', 'aria-label': `${title}: ${props.format(s)}`,
     onPointerEnter: (e: Event) => setTip({ cell: e.currentTarget as HTMLElement, title, s }),
     onFocus: (e: Event) => setTip({ cell: e.currentTarget as HTMLElement, title, s }),
     onBlur: () => setTip(null),
@@ -53,30 +53,32 @@ export function ActivityHeatmap(props: {
     <div class="heat-card" onPointerLeave={() => setTip(null)}>
       <Switch>
         <Match when={shape() !== 'calendar'}>
-          <div class="heat" role="grid" aria-label="Activity by day and hour">
-            <div />
-            <For each={hours()[0]?.hours ?? []}>{(h) => <div class="heat-hour">{h % HOUR_LABEL_STEP === 0 ? hourLabel(h) : ''}</div>}</For>
+          <div class="heat" role="table" aria-label="Activity by day and hour (24-hour clock)">
+            <div role="row" style={{ display: 'contents' }}>
+              <div role="columnheader" />
+              <For each={hours()[0]?.hours ?? []}>{(h) => <div role="columnheader" class="heat-hour">{h % HOUR_LABEL_STEP === 0 ? String(h).padStart(2, '0') : ''}</div>}</For>
+            </div>
             <For each={hours()}>{(row) => (
-              <>
-                <div class="heat-day">{row.label}</div>
+              <div role="row" style={{ display: 'contents' }}>
+                <div class="heat-day" role="rowheader">{row.label}</div>
                 <For each={row.cells}>{(s, i) => (
                   <div class={`heat-cell l${level(s)}`} {...cellProps(`${row.label} ${hourLabel(row.hours[i()]!)}`.trim(), s)} />
                 )}</For>
-              </>
+              </div>
             )}</For>
           </div>
         </Match>
         <Match when={shape() === 'calendar'}>
-          <div class="heat-calendar" role="grid" aria-label="Activity by day" style={{ '--heat-weeks': String(weeks().length) }}>
+          <div class="heat-calendar" role="table" aria-label="Activity by day" style={{ '--heat-weeks': String(weeks().length) }}>
             <For each={WEEKDAY_NAMES}>{(name, d) => (
-              <>
-                <div class="heat-day" style={{ 'grid-row': d() + 1 }}>{LABELLED_WEEKDAYS.has(d()) ? name : ''}</div>
+              <div role="row" style={{ display: 'contents' }}>
+                <div class="heat-day" role="rowheader" aria-label={name} style={{ 'grid-row': d() + 1 }}>{LABELLED_WEEKDAYS.has(d()) ? name : ''}</div>
                 <For each={weeks()}>{(week, w) => (
-                  <Show when={week.days[d()]} fallback={<div class="heat-blank" style={{ 'grid-row': d() + 1, 'grid-column': w() + 2 }} />}>
+                  <Show when={week.days[d()]} fallback={<div role="cell" class="heat-blank" style={{ 'grid-row': d() + 1, 'grid-column': w() + 2 }} />}>
                     {(s) => <div class={`heat-cell l${level(s())}`} style={{ 'grid-row': d() + 1, 'grid-column': w() + 2 }} {...cellProps(dayTitle(week.start, d()), s())} />}
                   </Show>
                 )}</For>
-              </>
+              </div>
             )}</For>
           </div>
         </Match>

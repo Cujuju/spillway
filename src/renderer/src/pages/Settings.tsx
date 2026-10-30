@@ -1,6 +1,7 @@
 import { FolderOpen } from 'lucide-solid';
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
+import { SectionedPage, type NavGroup } from '../components/SectionedPage';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
 import { UpdateSettings } from '../components/UpdateSettings';
@@ -12,7 +13,7 @@ import { setHistory, setSettingsSection as setSection, settings, settingsSection
 
 const ICON_PX = 14;
 
-const NAV: { group: string; items: { id: SettingsSection; label: string }[] }[] = [
+const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Window starts' }, { id: 'dashboard', label: 'Dashboard' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }] },
@@ -240,37 +241,19 @@ function Advanced() {
 }
 
 export function Settings() {
-  const title = () => NAV.flatMap((g) => g.items).find((i) => i.id === section())?.label ?? '';
   return (
-    <div class="settings">
-      <nav class="settings-nav">
-        <For each={NAV}>
-          {(g) => (
-            <>
-              <div class="sidebar-group">{g.group}</div>
-              <For each={g.items}>
-                {(i) => <button class="nav-btn" classList={{ active: section() === i.id }} onClick={() => setSection(i.id)}>{i.label}</button>}
-              </For>
-            </>
-          )}
-        </For>
-      </nav>
-      <section class="settings-body">
-        <header class="dash-header">
-          <h1 class="dash-title">{title()}</h1>
-        </header>
-        <Switch>
-          <Match when={section() === 'general'}><General /></Match>
-          <Match when={section() === 'appearance'}><Appearance /></Match>
-          <Match when={section() === 'trayIcons'}><TrayIconSettings /></Match>
-          <Match when={section() === 'proxy'}><ProxySection /></Match>
-          <Match when={section() === 'windowStart'}><WindowStartSettings /></Match>
-          <Match when={section() === 'dashboard'}><DashboardSection /></Match>
-          <Match when={section() === 'notifications'}><Notifications /></Match>
-          <Match when={section() === 'updates'}><UpdateSettings /></Match>
-          <Match when={section() === 'advanced'}><Advanced /></Match>
-        </Switch>
-      </section>
-    </div>
+    <SectionedPage nav={NAV} section={section()} onSelect={setSection}>
+      <Switch>
+        <Match when={section() === 'general'}><General /></Match>
+        <Match when={section() === 'appearance'}><Appearance /></Match>
+        <Match when={section() === 'trayIcons'}><TrayIconSettings /></Match>
+        <Match when={section() === 'proxy'}><ProxySection /></Match>
+        <Match when={section() === 'windowStart'}><WindowStartSettings /></Match>
+        <Match when={section() === 'dashboard'}><DashboardSection /></Match>
+        <Match when={section() === 'notifications'}><Notifications /></Match>
+        <Match when={section() === 'updates'}><UpdateSettings /></Match>
+        <Match when={section() === 'advanced'}><Advanced /></Match>
+      </Switch>
+    </SectionedPage>
   );
 }

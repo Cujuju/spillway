@@ -1,7 +1,12 @@
 import { For, Show } from 'solid-js';
+import { SectionedPage, type NavGroup } from '../components/SectionedPage';
+import { persistedSignal } from '../lib/persisted';
 import { TRAY_NAME } from '../lib/platform';
 
 interface Topic {
+  id: string;
+  /** Short name in the section list. */
+  label: string;
   title: string;
   /** The situation the topic answers. */
   when: string;
@@ -11,8 +16,10 @@ interface Topic {
 }
 
 /** Operational how-tos. Routing claims follow the proxy fork's selector (docs/desktop-api.md there). */
-const TOPICS: Topic[] = [
+const ROUTING: [Topic, ...Topic[]] = [
   {
+    id: 'new-conversations',
+    label: 'New conversations',
     title: 'Send new conversations to another account',
     when: 'Spend an account, for example before its 5-hour window resets, without moving conversations already running.',
     steps: [
@@ -27,6 +34,8 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: 'all-traffic',
+    label: 'All traffic',
     title: 'Send everything to one account',
     when: 'Route all of a provider’s traffic to one account, including conversations already running.',
     steps: [
@@ -41,6 +50,8 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: 'one-conversation',
+    label: 'One conversation',
     title: 'Move one conversation',
     when: 'Move a single conversation to another account of the same provider.',
     steps: ['Activity → Requests: on any request from the conversation, choose Move… and pick the account.'],
@@ -50,12 +61,19 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: 'stop-account',
+    label: 'Stop an account',
     title: 'Stop using an account',
     when: 'Take an account out of rotation without removing its login.',
     steps: ['Providers → Logins: turn off Enabled for the account.'],
     notes: ['Conversations on it move to another account at their next request, and their prompt cache starts over.'],
   },
+];
+
+const PROXY: Topic[] = [
   {
+    id: 'unlock-tool',
+    label: 'Unlock a tool',
     title: 'Unlock an outside tool',
     when: 'A tool such as T3 Code’s usage hub can no longer reach the proxy’s management API.',
     steps: ['Proxy → Management lockouts: Reset.'],
@@ -66,30 +84,31 @@ const TOPICS: Topic[] = [
   },
 ];
 
+const GROUPS = [
+  { group: 'Routing', topics: ROUTING },
+  { group: 'Proxy', topics: PROXY },
+];
+const TOPICS = GROUPS.flatMap((g) => g.topics);
+const FIRST_TOPIC = ROUTING[0];
+const NAV: NavGroup<string>[] = GROUPS.map((g) => ({ group: g.group, items: g.topics }));
+
+const [topicId, setTopicId] = persistedSignal('helpTopic', FIRST_TOPIC.id, TOPICS.map((t) => t.id));
+
 export function Help() {
+  const topic = () => TOPICS.find((t) => t.id === topicId()) ?? FIRST_TOPIC;
   return (
-    <>
-      <header class="dash-header">
-        <div>
-          <h1 class="dash-title">Help</h1>
-        </div>
-      </header>
-      <For each={TOPICS}>
-        {(t) => (
-          <section class="card help-topic">
-            <h2 class="card-title">{t.title}</h2>
-            <p class="help-when">{t.when}</p>
-            <ol class="help-steps">
-              <For each={t.steps}>{(s) => <li>{s}</li>}</For>
-            </ol>
-            <Show when={t.notes.length}>
-              <ul class="help-notes">
-                <For each={t.notes}>{(n) => <li>{n}</li>}</For>
-              </ul>
-            </Show>
-          </section>
-        )}
-      </For>
-    </>
+    <SectionedPage nav={NAV} section={topic().id} onSelect={setTopicId}>
+      <section class="card help-topic">
+        <p class="help-when">{topic().when}</p>
+        <ol class="help-steps">
+          <For each={topic().steps}>{(s) => <li>{s}</li>}</For>
+        </ol>
+        <Show when={topic().notes.length}>
+          <ul class="help-notes">
+            <For each={topic().notes}>{(n) => <li>{n}</li>}</For>
+          </ul>
+        </Show>
+      </section>
+    </SectionedPage>
   );
 }

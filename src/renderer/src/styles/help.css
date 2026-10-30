@@ -1,6 +1,6 @@
-/* Help page: one card per topic, the situation, numbered steps, then notes. */
+/* Help topic card: the situation, numbered steps, then notes. */
 .help-when {
-  margin: var(--spacing-3) 0 0;
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
 }

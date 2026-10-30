@@ -72,6 +72,24 @@ it('keeps both fall-back hours distinct after pruning', () => {
   } finally { vi.unstubAllEnvs(); }
 });
 
+it('keeps the entire fall-back cutoff day through repeated pruning', () => {
+  vi.stubEnv('TZ', 'America/Los_Angeles');
+  try {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-01T23:59:59-08:00'));
+    const times = ['2026-11-01T00:00:00-07:00', '2026-11-01T01:15:00-07:00',
+      '2026-11-01T01:15:00-08:00', '2026-11-01T23:59:00-08:00'];
+    activityLog.append(event('2026-10-31T23:59:59-07:00'));
+    for (const at of times) activityLog.append(event(at));
+    activityLog.prune();
+    expect(activityLog.days()).toEqual(['2026-11-01']);
+    expect(activityLog.day('2026-11-01').map((e) => e.at).sort()).toEqual([...times].sort());
+    const totals = activityLog.totalsList();
+    activityLog.prune();
+    expect(activityLog.totalsList()).toEqual(totals);
+    expect(activityLog.day('2026-11-01')).toHaveLength(times.length);
+  } finally { vi.unstubAllEnvs(); }
+});
+
 it('migrates daily baselines once and reconciles against the correct baseline on mixed days', () => {
   const old = event('2026-11-01T10:05:00Z', { source: 'client-log', upstreamId: 'old', authIndex: null });
   const total = { ...emptyCounts(), day: localDay(Date.parse(old.at)), provider: old.provider, authIndex: old.authIndex,

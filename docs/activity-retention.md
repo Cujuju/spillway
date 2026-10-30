@@ -24,6 +24,13 @@ change since recording), stay whole-day baselines. Hourly charts omit them; dail
 trends and range totals include them. Days with both kinds sum disjoint usage.
 Clearing Activity removes both kinds.
 
+The retention cutoff is a local calendar date, and pruning deletes only rows
+with `day < oldestKeptDay`. Every row filed on the cutoff day survives, including
+both repeated hours on a fall-back day; pruning cannot split that day. A later
+client-log import can repopulate an older, pruned day only partially, so the
+migration proves completeness by comparing all usage counts and dimensions,
+rather than treating the earliest surviving request date as proof.
+
 Rebuilt requests receive explicit hourly ownership. Ledger seeding leaves other
 requests attached to baselines, even if a matching hourly row exists.
 

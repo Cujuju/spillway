@@ -6,7 +6,7 @@ import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activit
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import { importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { rebuildRetainedTotals } from './activityMigration';
-import { readTotals, storedTotalKey, type ActivityTotal } from './activityTotals';
+import { dailyTotals, readTotals, storedTotalKey, type ActivityTotal } from './activityTotals';
 import { reconcileUsage, rememberUsage } from './usageLedger';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-migration-'));
@@ -103,11 +103,12 @@ it('keeps both fall-back hours distinct', () => {
   vi.stubEnv('TZ', 'America/Los_Angeles');
   const events = [event('2026-11-01T01:15:00-07:00'), event('2026-11-01T01:15:00-08:00')];
   events.forEach(store);
-  baseline(events);
+  const old = baseline(events);
   rebuildRetainedTotals(db);
   expect(rows().map((t) => [t.start, t.requests])).toEqual([
     [Date.parse('2026-11-01T01:00:00-07:00'), 1], [Date.parse('2026-11-01T01:00:00-08:00'), 1],
   ]);
+  expect(dailyTotals(rows())).toEqual([old]);
 });
 
 it('rejects a day with misplaced requests even when the remaining requests match', () => {

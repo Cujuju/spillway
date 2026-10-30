@@ -108,7 +108,7 @@
   /* Larger than the 24 px taskbar icon. scripts/make-icon.ps1 TITLEBAR_ICON_PX must match. */
   --titlebar-icon-size: 28px;
   /* Settings → About logo. scripts/make-icon.ps1 ABOUT_LOGO_PX must match. */
-  --about-logo-size: 128px;
+  --about-logo-size: 96px;
   /* Windows caption buttons are 46px wide; macOS needs 80px clear for the traffic lights (main/window.ts). */
   --titlebar-btn-width: 46px;
   --titlebar-traffic-lights: 80px;

@@ -16,7 +16,7 @@ $CORNER_RATIO = 0.22
 # Must match --titlebar-icon-size in src/renderer/src/styles/tokens.css.
 $TITLEBAR_ICON_PX = 28
 # Must match --about-logo-size in src/renderer/src/styles/tokens.css.
-$ABOUT_LOGO_PX = 128
+$ABOUT_LOGO_PX = 96
 # Display scales the About logo stays sharp at: 100%, 200% (Retina) and 300% (high-DPI Windows).
 $ABOUT_LOGO_SCALES = 1, 2, 3
 

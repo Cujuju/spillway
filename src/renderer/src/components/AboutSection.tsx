@@ -1,4 +1,4 @@
-import { ExternalLink, Heart } from 'lucide-solid';
+import { ExternalLink } from 'lucide-solid';
 import { createResource, For, Show } from 'solid-js';
 import { APP_NAME, REPO_URL } from '@shared/app';
 import { ACKNOWLEDGEMENTS, CONTRIBUTORS, type Credit } from '../lib/credits';
@@ -9,9 +9,9 @@ const ICON_PX = 14;
 /** `https://github.com/a/b` → `github.com/a/b`: the link's visible text. */
 const shortUrl = (url: string): string => url.replace(/^https?:\/\//, '');
 
-function LinkButton(props: { url: string }) {
+function LinkButton(props: { url: string; class?: string }) {
   return (
-    <button type="button" class="btn ghost" title={props.url} onClick={() => void window.api.openExternal(props.url)}>
+    <button type="button" class={`btn ghost ${props.class ?? ''}`} title={props.url} onClick={() => void window.api.openExternal(props.url)}>
       <ExternalLink size={ICON_PX} /> {shortUrl(props.url)}
     </button>
   );
@@ -26,7 +26,7 @@ function CreditGroup(props: { title: string; credits: readonly Credit[] }) {
             <Show when={c.sponsorUrl}>
               {(url) => (
                 <button type="button" class="btn" title={url()} onClick={() => void window.api.openExternal(url())}>
-                  <Heart size={ICON_PX} /> Sponsor
+                  <span aria-hidden="true">❤️</span> Sponsor
                 </button>
               )}
             </Show>
@@ -38,6 +38,9 @@ function CreditGroup(props: { title: string; credits: readonly Credit[] }) {
   );
 }
 
+/** Spillway's license (LICENSE at the repo root). */
+const LICENSE_NAME = 'MIT License';
+
 /** Settings → About: logo, name, version, repository and credits. */
 export function AboutSection() {
   const [build] = createResource(() => window.api.appBuild());
@@ -45,12 +48,15 @@ export function AboutSection() {
     <>
       <section class="card about-hero">
         <img class="about-logo" src="./logo.png" srcset="./logo.png 1x, ./logo@2x.png 2x, ./logo@3x.png 3x" alt={`${APP_NAME} logo`} />
-        <div class="about-name">{APP_NAME}</div>
-        <div class="about-version">
-          Version {build()?.version ?? '—'}
-          <Show when={build()?.build}>{(b) => <> · build {b()}</>}</Show>
+        <div class="about-text">
+          <div class="about-name">{APP_NAME}</div>
+          <div class="about-version">
+            Version {build()?.version ?? '—'}
+            <Show when={build()?.build}>{(b) => <> · build {b()}</>}</Show>
+            {` · ${LICENSE_NAME}`}
+          </div>
+          <LinkButton url={REPO_URL} class="about-repo" />
         </div>
-        <LinkButton url={REPO_URL} />
       </section>
       <CreditGroup title="Contributors" credits={CONTRIBUTORS} />
       <CreditGroup title="Built on" credits={ACKNOWLEDGEMENTS} />

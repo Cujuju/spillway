@@ -1,6 +1,10 @@
 import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
 import type { ActivityBucket, ActivityDayTotal, ActivityEvent } from '@shared/types';
-import { totalKey, type Db } from './activityDb';
+import type { Db } from './activityDb';
+
+/** Legacy keys omit the client segment when no client was recorded. */
+export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model' | 'client' | 'source'>) =>
+  `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}${t.client == null ? '' : `|${t.client}`}${t.source === 'client-log' ? '|client-log' : ''}`;
 
 /** Missing start identifies a legacy daily baseline, never an hourly row. */
 export type ActivityTotal = ActivityDayTotal & { start?: number };
@@ -11,7 +15,7 @@ export function storedTotalKey(t: Pick<ActivityTotal, 'day' | 'start' | 'provide
 
 export function addToTotals(totals: Map<string, ActivityTotal>, e: ActivityEvent): ActivityTotal {
   const base = { day: localDay(Date.parse(e.at)), start: localHourStart(Date.parse(e.at)), provider: e.provider,
-    authIndex: e.authIndex, model: e.model, client: e.client, source: e.source };
+    authIndex: e.authIndex, model: e.model, client: e.client ?? null, source: e.source ?? 'proxy' };
   const key = storedTotalKey(base);
   const row = totals.get(key) ?? { ...base, ...emptyCounts() };
   addEvent(row, e);

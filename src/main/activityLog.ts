@@ -5,7 +5,6 @@ import {
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
-import { retainedTotalStart } from './activityMigration';
 import { identityKey, reconcileUsage, rememberUsage } from './usageLedger';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
@@ -76,7 +75,7 @@ class ActivityLog {
         this.conn.transaction(() => {
           for (const r of this.conn!.prepare('SELECT id, event FROM requests').all() as RequestRow[]) {
             const e = toStored(r);
-            rememberUsage(this.conn!, e, r.id, retainedTotalStart(this.conn!, e));
+            rememberUsage(this.conn!, e, r.id, null);
           }
           this.conn!.prepare("INSERT INTO meta VALUES ('usage-ledger-seeded', '1')").run();
         })();

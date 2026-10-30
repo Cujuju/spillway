@@ -5,6 +5,8 @@ import { withCountsFilled } from '@shared/activityCounts';
 import { NO_ACCOUNT_KEY, NO_CLIENT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
 import { rebuildRetainedTotals } from './activityMigration';
+import { totalKey } from './activityTotals';
+export { totalKey } from './activityTotals';
 
 export type Db = Database.Database;
 
@@ -46,10 +48,6 @@ CREATE INDEX IF NOT EXISTS usage_identity_upstream ON usage_identities (upstream
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
-/** Totals stored before clients were recorded have no client, and keep the key they were stored under. */
-export const totalKey = (t: Pick<ActivityDayTotal, 'day' | 'provider' | 'authIndex' | 'model' | 'client' | 'source'>) =>
-  `${t.day}|${t.provider}|${t.authIndex ?? ''}|${t.model}${t.client === null ? '' : `|${t.client}`}${t.source === 'client-log' ? '|client-log' : ''}`;
-
 function openKeyed(file: string, hexKey: string): Db {
   const db = new Database(file);
   try {
@@ -77,18 +75,23 @@ export function openActivityDb(file: string, hexKey: string): Db {
     for (const suffix of COMPANION_SUFFIXES) if (existsSync(file + suffix)) renameSync(file + suffix, aside + suffix);
     db = openKeyed(file, hexKey);
   }
-  db.pragma('journal_mode = WAL');
-  db.exec(SCHEMA);
-  db.transaction(() => {
-    db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
-    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
-      db.exec('INSERT OR IGNORE INTO activity_totals SELECT * FROM day_totals; DROP TABLE day_totals;');
-    }
-    if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(RETAINED_HOURS_REBUILT)) {
-      rebuildRetainedTotals(db);
-      db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(RETAINED_HOURS_REBUILT, new Date().toISOString());
-    }
-  })();
+  try {
+    db.pragma('journal_mode = WAL');
+    db.transaction(() => {
+      db.exec(SCHEMA);
+      db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
+        db.exec('INSERT OR IGNORE INTO activity_totals SELECT * FROM day_totals; DROP TABLE day_totals;');
+      }
+      if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(RETAINED_HOURS_REBUILT)) {
+        rebuildRetainedTotals(db);
+        db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(RETAINED_HOURS_REBUILT, new Date().toISOString());
+      }
+    })();
+  } catch (err) {
+    db.close();
+    throw err;
+  }
   return db;
 }
 
@@ -98,7 +101,7 @@ function readLegacyDay(file: string): ActivityEvent[] {
     try {
       const e = JSON.parse(line) as ActivityEvent;
       // Requests saved before cache writes were recorded have none.
-      return typeof e?.at === 'string' && typeof e.requestId === 'string' ? [{ ...e, cacheWriteTokens: e.cacheWriteTokens ?? 0 }] : [];
+      return typeof e?.at === 'string' && typeof e.requestId === 'string' ? [{ ...e, client: e.client ?? null, source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0 }] : [];
     } catch {
       return [];
     }

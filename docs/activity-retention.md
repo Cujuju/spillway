@@ -11,12 +11,18 @@ dropped. In the same transaction, once (meta `retained-hours-rebuilt`), each day
 whose stored requests account for every request in its totals is rebuilt as
 hourly rows: requests, failures, all token counts and unpriced requests must match
 exactly. Its recorded cost is kept by scaling the repriced hours, so price changes
-since then don't alter history. Usage identities move to their hour.
+since then don't alter history. Usage identities move to their hour, including identities not yet seeded.
+A misplaced request rejects the entire filed day. Legacy imports normalize missing
+client/source fields before generating keys. The rebuild scans requests once in
+day order and parses only candidate days.
 
 Residual: days already pruned, or whose stored requests don't match (a time-zone
 change since recording), stay whole-day baselines. Hourly charts omit them; daily
 trends and range totals include them. Days with both kinds sum disjoint usage.
 Clearing Activity removes both kinds.
+
+Rebuilt requests receive explicit hourly ownership. Ledger seeding leaves other
+requests attached to baselines, even if a matching hourly row exists.
 
 Identities still pointing at a baseline (`totalStart` null) make client-log
 reconciliation subtract from that baseline, even when new usage shares its hour.

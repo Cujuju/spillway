@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
-import { openActivityDb, totalKey, type Db } from './activityDb';
+import { importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { rebuildRetainedTotals } from './activityMigration';
 import { readTotals, storedTotalKey, type ActivityTotal } from './activityTotals';
 import { rememberUsage } from './usageLedger';
@@ -108,4 +108,54 @@ it('keeps both fall-back hours distinct', () => {
   expect(rows().map((t) => [t.start, t.requests])).toEqual([
     [Date.parse('2026-11-01T01:00:00-07:00'), 1], [Date.parse('2026-11-01T01:00:00-08:00'), 1],
   ]);
+});
+
+it('rejects a day with misplaced requests even when the remaining requests match', () => {
+  const kept = event('2026-10-20T12:00:00Z');
+  const misplaced = event('2026-10-21T12:00:00Z');
+  store(kept);
+  store(misplaced);
+  const old = baseline([kept]);
+  db.prepare('UPDATE requests SET day = ?').run(old.day);
+  rebuildRetainedTotals(db);
+  expect(rows()).toEqual([old]);
+  const identities = db.prepare('SELECT event FROM usage_identities').all() as { event: string }[];
+  expect(identities.every((r) => JSON.parse(r.event).totalStart === null)).toBe(true);
+});
+
+it('normalizes legacy files before rebuilding keys and seeding identities', () => {
+  const e = event('2026-10-20T12:00:00Z');
+  const total = baseline([e]);
+  db.exec('DELETE FROM activity_totals');
+  const legacy = path.join(dir, `legacy-${sequence++}`);
+  mkdirSync(legacy);
+  const { client: _client, source: _source, ...oldEvent } = e;
+  const { client: _totalClient, source: _totalSource, ...oldTotal } = total;
+  writeFileSync(path.join(legacy, `${total.day}.jsonl`), JSON.stringify(oldEvent));
+  writeFileSync(path.join(legacy, 'daily-totals.json'), JSON.stringify([oldTotal]));
+  importLegacyFiles(db, legacy);
+  expect(rows()).toEqual([expect.objectContaining({ start: localHourStart(Date.parse(e.at)), client: null, source: 'proxy', requests: 1 })]);
+  const identity = db.prepare('SELECT event FROM usage_identities').get() as { event: string };
+  expect(JSON.parse(identity.event).totalStart).toBe(localHourStart(Date.parse(e.at)));
+});
+
+it('rolls back an open migration and its marker on failure', () => {
+  const e = event('2026-10-20T12:00:00Z');
+  store(e);
+  const old = baseline([e]);
+  db.prepare("DELETE FROM meta WHERE key = 'retained-hours-rebuilt'").run();
+  db.exec("CREATE TRIGGER reject_hours BEFORE INSERT ON activity_totals BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END");
+  const file = db.name;
+  db.close();
+  expect(() => openActivityDb(file, key)).toThrow('injected migration failure');
+  // Open without migration to inspect the failed transaction.
+  db = new (db.constructor as new (file: string) => Db)(file);
+  db.pragma("cipher='chacha20'");
+  db.pragma(`hexkey='${key}'`);
+  expect(rows()).toEqual([old]);
+  expect(db.prepare("SELECT 1 FROM meta WHERE key = 'retained-hours-rebuilt'").get()).toBeUndefined();
+  db.exec('DROP TRIGGER reject_hours');
+  db.close();
+  db = openActivityDb(file, key);
+  expect(rows().every((t) => t.start !== undefined)).toBe(true);
 });

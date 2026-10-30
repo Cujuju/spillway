@@ -6,6 +6,7 @@ import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope } from '@shared/activityScope';
 import type { ActivityEvent } from '@shared/types';
 import { openActivityDb, totalKey } from './activityDb';
+import { addToTotals, storedTotalKey } from './activityTotals';
 import { rememberUsage } from './usageLedger';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-hourly-'));
@@ -95,4 +96,25 @@ it('migrates daily baselines once and reconciles against the correct baseline on
   expect(rows.reduce((n,r) => n+r.requests, 0)).toBe(2);
   activityLog.prune();
   expect(activityLog.totalsList().reduce((n,r) => n+r.requests, 0)).toBe(2);
+});
+
+it('seeds an unreconstructed request into its baseline even when its hour exists', () => {
+  const old = event('2026-11-01T10:05:00Z', { source: 'client-log', upstreamId: 'baseline-seed', authIndex: null });
+  activityLog.close();
+  const db = openActivityDb(file, key);
+  db.exec("DELETE FROM meta WHERE key = 'usage-ledger-seeded'");
+  const total = { ...emptyCounts(), day: localDay(Date.parse(old.at)), provider: old.provider, authIndex: old.authIndex,
+    model: old.model, client: old.client, source: old.source };
+  addEvent(total, old);
+  addEvent(total, old); // One request was already pruned, so the day cannot be rebuilt.
+  db.prepare('INSERT INTO activity_totals VALUES (?, ?)').run(totalKey(total), JSON.stringify(total));
+  const hours = new Map();
+  const hour = addToTotals(hours, old);
+  db.prepare('INSERT INTO activity_totals VALUES (?, ?)').run(storedTotalKey(hour), JSON.stringify(hour));
+  db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, 0, ?)').run(total.day, JSON.stringify(old));
+  db.close();
+  activityLog.append(event(old.at, { upstreamId: old.upstreamId }));
+  const rows = activityLog.buckets(10);
+  expect(rows.find((r) => r.wholeDay)?.requests).toBe(1);
+  expect(rows.find((r) => !r.wholeDay && r.source === 'client-log')?.requests).toBe(1);
 });

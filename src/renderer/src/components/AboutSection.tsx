@@ -53,9 +53,9 @@ export function AboutSection() {
           <div class="about-version">
             Version {build()?.version ?? '—'}
             <Show when={build()?.build}>{(b) => <> · build {b()}</>}</Show>
-            {` · ${LICENSE_NAME}`}
           </div>
           <LinkButton url={REPO_URL} class="about-repo" />
+          <div class="about-license">{LICENSE_NAME}</div>
         </div>
       </section>
       <CreditGroup title="Contributors" credits={CONTRIBUTORS} />

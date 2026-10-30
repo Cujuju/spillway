@@ -24,6 +24,11 @@
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
 }
+/* Same size and colour as the repository link above it. */
+.about-license {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
 /* Pulls the ghost button's padding back so its icon lines up with the text above. */
 .about-repo {
   margin-left: calc(-1 * var(--spacing-3));

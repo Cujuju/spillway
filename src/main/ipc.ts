@@ -10,6 +10,7 @@ import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKey
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
+import { applyManagedPolicy, managedPolicyStatus, undoManagedPolicy } from './managedPolicy';
 import { exportLoginFile, importLoginFiles } from './credentialFiles';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
@@ -130,6 +131,15 @@ const handlers: Handlers = {
   undoClientSetup: (client) => {
     undoClient(client, clientFile(client));
     return setupResult(client);
+  },
+  managedPolicyStatus: () => managedPolicyStatus(clientTarget()),
+  applyManagedPolicy: async () => {
+    await applyManagedPolicy(clientTarget());
+    return managedPolicyStatus(clientTarget());
+  },
+  undoManagedPolicy: async () => {
+    await undoManagedPolicy();
+    return managedPolicyStatus(clientTarget());
   },
   updateStatus: () => updates.status(),
   checkForUpdates: () => updates.check(),

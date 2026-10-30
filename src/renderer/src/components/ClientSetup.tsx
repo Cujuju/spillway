@@ -13,7 +13,7 @@ const RESTART_UNKNOWN = 'Restart any app running Codex (in T3 Code, start a new 
 const restartNote = (apps: ClientProcess[]) =>
   `Restart ${apps.map((a) => a.app).join(', ')} (in T3 Code, start a new Codex session): ${apps.length === 1 ? 'it runs' : 'they run'} Codex with its old settings, and its calls fail until then.`;
 
-const STATE: Record<ClientSetupState, { label: string; tone: string; title: string }> = {
+export const SETUP_STATE: Record<ClientSetupState, { label: string; tone: string; title: string }> = {
   'not-applied': { label: 'Not applied', tone: '', title: 'This client does not use the proxy through its config file.' },
   applied: { label: 'Applied', tone: 'green', title: 'The config file points at this proxy and gets the current key.' },
   'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port or key changed since it was applied. Re-apply to update it.' },
@@ -52,7 +52,7 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
       <For each={CLIENTS}>
         {(c) => {
           const s = () => status()?.find((x) => x.client === c.id);
-          const state = () => STATE[s()?.state ?? 'not-applied'];
+          const state = () => SETUP_STATE[s()?.state ?? 'not-applied'];
           return (
             <div class="list-row">
               <div class="list-row-text">

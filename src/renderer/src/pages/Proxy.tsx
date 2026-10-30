@@ -1,6 +1,7 @@
 import { Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from 'lucide-solid';
 import { createResource, createSignal, Show } from 'solid-js';
 import { ClientSetup } from '../components/ClientSetup';
+import { ManagedPolicySetup } from '../components/ManagedPolicySetup';
 import { ManagementLockouts } from '../components/ManagementLockouts';
 import { ShellEnvSetup } from '../components/ShellEnvSetup';
 import { T3CodeSetup } from '../components/T3CodeSetup';
@@ -96,6 +97,7 @@ export function Proxy() {
           </span>
         </div>
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
+        <ManagedPolicySetup endpoint={endpoint()} clientKey={key()} />
         <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} managementKey={managementKey()} maskedManagementKey={maskOf(managementKey())} />
         <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
         <ManagementLockouts />

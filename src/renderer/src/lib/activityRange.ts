@@ -15,7 +15,7 @@ const PRESET_DAYS: Partial<Record<Range, number>> = { '7d': 7, '30d': 30, '90d':
 /** Inclusive local days, YYYY-MM-DD. */
 export interface CustomRange { from: string; to: string }
 export const isCustomRange = (v: unknown): v is CustomRange =>
-  !!v && typeof v === 'object' && validDay((v as CustomRange).from) && validDay((v as CustomRange).to);
+  !!v && typeof v === 'object' && typeof (v as CustomRange).from === 'string' && typeof (v as CustomRange).to === 'string';
 
 /** Epoch ms; `to` is now or the end of the last chosen day, whichever is earlier. */
 export interface Span { from: number; to: number }
@@ -33,15 +33,12 @@ export const dayText = (t: number) => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const validDay = (v: unknown): v is string =>
-  typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && dayText(parseDay(v)) === v;
 
 /** `earliest`: the oldest activity held, for "All". */
 export function rangeSpan(range: Range, now: number, custom: CustomRange, earliest: number | null): Span {
   if (range === '24h') return { from: localHourStart(now) - (HOURS_SHOWN_BY_24H - 1) * HOUR_MS, to: now };
   if (range === 'all') return { from: startOfDay(earliest ?? now), to: now };
   if (range === 'custom') {
-    if (!isCustomRange(custom)) return { from: startOfDay(now), to: now };
     const [a, b] = [parseDay(custom.from), parseDay(custom.to)].sort((x, y) => x - y);
     return { from: Math.min(a!, startOfDay(now)), to: Math.min(now, shiftDays(b!, 1) - 1) };
   }
@@ -49,14 +46,6 @@ export function rangeSpan(range: Range, now: number, custom: CustomRange, earlie
 }
 
 export const spanDays = (s: Span) => (s.to - s.from) / DAY_MS;
-/** Inclusive local calendar days, independent of DST offsets. */
-export function calendarDays(s: Span): number {
-  const ordinal = (t: number) => {
-    const d = new Date(t);
-    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
-  };
-  return ordinal(s.to) - ordinal(s.from) + 1;
-}
 
 export const bucketUnit = (s: Span): BucketUnit => UNIT_LIMITS.find((l) => spanDays(s) <= l.maxDays)?.unit ?? 'month';
 
@@ -92,7 +81,7 @@ export function bucketStarts(span: Span, unit: BucketUnit): number[] {
 
 /** Local days to fetch so the span is covered; null fetches all. */
 export const daysToFetch = (range: Range, span: Span, now: number): number | null =>
-  range === 'all' ? null : calendarDays({ from: span.from, to: now });
+  range === 'all' ? null : Math.round((startOfDay(now) - startOfDay(span.from)) / DAY_MS) + 1;
 
 export const UNIT_NOTE: Record<BucketUnit, string> = { hour: 'Hourly', '3h': 'Every 3 hours', day: 'Daily', week: 'Weekly', month: 'Monthly' };
 

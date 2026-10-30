@@ -296,6 +296,15 @@ export type ClientId = 'claude' | 'codex';
 /** out-of-date: applied, but the endpoint or key has changed since (port change, regenerated key). */
 export type ClientSetupState = 'not-applied' | 'applied' | 'out-of-date';
 
+/** Claude Code's machine-wide managed policy, which apps that skip user settings still read. */
+export interface ManagedPolicyStatus {
+  state: ClientSetupState;
+  /** The policy file Spillway owns. */
+  path: string;
+  /** Why the file could not be read; null when it could. */
+  error: string | null;
+}
+
 export interface ClientSetupStatus {
   client: ClientId;
   state: ClientSetupState;

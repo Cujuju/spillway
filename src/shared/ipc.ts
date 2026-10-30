@@ -5,6 +5,7 @@ import type { AppSettings } from './settings';
 import type {
   ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
+import type { ManagedPolicyStatus } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
@@ -28,6 +29,11 @@ export interface DesktopApi {
   clientSetupStatus(): Promise<ClientSetupStatus[]>;
   applyClientSetup(client: ClientId): Promise<ClientSetupResult>;
   undoClientSetup(client: ClientId): Promise<ClientSetupResult>;
+  /** Claude Code's machine-wide managed policy; null on platforms without one. */
+  managedPolicyStatus(): Promise<ManagedPolicyStatus | null>;
+  /** Writes or removes the policy after an administrator prompt; returns the status after. */
+  applyManagedPolicy(): Promise<ManagedPolicyStatus | null>;
+  undoManagedPolicy(): Promise<ManagedPolicyStatus | null>;
   /** Outside tools locked out of the management API by wrong keys. */
   managementLockouts(): Promise<ManagementLockout[]>;
   /** Lifts every lockout; returns the list after. */
@@ -134,6 +140,9 @@ export const INVOKE = {
   clientSetupStatus: 'clients:status',
   applyClientSetup: 'clients:apply',
   undoClientSetup: 'clients:undo',
+  managedPolicyStatus: 'clients:managed-policy-status',
+  applyManagedPolicy: 'clients:managed-policy-apply',
+  undoManagedPolicy: 'clients:managed-policy-undo',
   updateStatus: 'update:status',
   checkForUpdates: 'update:check',
   downloadUpdate: 'update:download',

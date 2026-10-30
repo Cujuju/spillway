@@ -13,6 +13,12 @@ describe('time-of-day rhythm', () => {
   it('assigns the 0/6/12/18 boundaries and their preceding hours exactly once', () => {
     const result = rhythmStats([0, 5, 6, 11, 12, 17, 18, 23].map((h) => row(h, { requests: h + 1 })), 'requests', NOW);
     expect(result.bands.map((b) => b.summary.requests)).toEqual([19, 31, 43, 7]);
+    expect(result.bands.map(({ summary: _summary, ...band }) => band)).toEqual([
+      { name: 'Morning', startHour: 6, endHour: 12 },
+      { name: 'Afternoon', startHour: 12, endHour: 18 },
+      { name: 'Evening', startHour: 18, endHour: 24 },
+      { name: 'Night', startHour: 0, endHour: 6 },
+    ]);
     expect(result.total.requests).toBe(100);
     expect(result.peak?.name).toBe('Evening');
   });

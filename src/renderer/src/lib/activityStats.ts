@@ -145,11 +145,11 @@ export const HEAT_MODES = [
 ] as const;
 export type HeatMode = (typeof HEAT_MODES)[number]['value'];
 
-export const DAY_BANDS = [
-  { name: 'Morning', icon: '☀️', startHour: 6, endHour: 12 },
-  { name: 'Afternoon', icon: '🌤️', startHour: 12, endHour: 18 },
-  { name: 'Evening', icon: '🌆', startHour: 18, endHour: HOURS_PER_DAY },
-  { name: 'Night', icon: '🌙', startHour: 0, endHour: 6 },
+const DAY_BANDS = [
+  { name: 'Morning', startHour: 6, endHour: 12 },
+  { name: 'Afternoon', startHour: 12, endHour: 18 },
+  { name: 'Evening', startHour: 18, endHour: HOURS_PER_DAY },
+  { name: 'Night', startHour: 0, endHour: 6 },
 ] as const;
 
 /** All supplied hourly history, grouped by local clock; repeated DST hours both count. */

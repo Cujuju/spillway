@@ -154,7 +154,6 @@ const handlers: Handlers = {
   activityDay: (day, failedOnly, scope) => activityLog.day(day, failedOnly, scope),
   activityDaySummaries: (scope) => activityLog.daySummaries(scope),
   activityTotals: () => activityLog.totalsList(),
-  activityCoverage: () => activityLog.coverage(),
   activityBuckets: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.buckets(days === null || n > MAX_BUCKET_DAYS ? null : n);

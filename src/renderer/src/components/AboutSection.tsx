@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-solid';
+import { ExternalLink, Heart } from 'lucide-solid';
 import { createResource, For, Show } from 'solid-js';
 import { APP_NAME, REPO_URL } from '@shared/app';
 import { ACKNOWLEDGEMENTS, CONTRIBUTORS, type Credit } from '../lib/credits';
@@ -23,6 +23,13 @@ function CreditGroup(props: { title: string; credits: readonly Credit[] }) {
       <For each={props.credits}>
         {(c) => (
           <SettingRow label={c.name} help={c.role}>
+            <Show when={c.sponsorUrl}>
+              {(url) => (
+                <button type="button" class="btn" title={url()} onClick={() => void window.api.openExternal(url())}>
+                  <Heart size={ICON_PX} /> Sponsor
+                </button>
+              )}
+            </Show>
             <LinkButton url={c.url} />
           </SettingRow>
         )}

@@ -39,7 +39,8 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
   const [custom, setCustom] = persistedSignal<CustomRange>('activity.customRange',
     { from: dayText(Date.now() - (DEFAULT_CUSTOM_DAYS - 1) * DAY_MS), to: dayText(Date.now()) }, isCustomRange);
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
-  const [compact, setCompact] = createSignal(false);
+  const [toolbarWidth, setToolbarWidth] = createSignal(0);
+  const compact = () => toolbarWidth() < (range() === 'custom' ? FULL_TOOLBAR_CUSTOM_PX : FULL_TOOLBAR_PX);
 
   const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
   const span = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
@@ -56,7 +57,7 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
   const measureToolbar = (el: HTMLElement) => {
     const observer = new ResizeObserver(([entry]) =>
-      setCompact(entry!.contentRect.width < (range() === 'custom' ? FULL_TOOLBAR_CUSTOM_PX : FULL_TOOLBAR_PX)));
+      setToolbarWidth(entry!.contentRect.width));
     observer.observe(el);
     onCleanup(() => observer.disconnect());
   };

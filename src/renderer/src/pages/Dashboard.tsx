@@ -2,7 +2,6 @@ import { Plus, RefreshCw, Search } from 'lucide-solid';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
-import { AccountPanel } from '../components/AccountPanel';
 import { AccountRow } from '../components/AccountRow';
 import { PoolPanel } from '../components/PoolPanel';
 import { createProviderPools } from '../components/poolModel';
@@ -19,8 +18,6 @@ const ICON_PX = 14;
 const PRIMARY_PROVIDER = 'claude';
 
 const used = (c: Credential, key: string | null) => c.windows.find((w) => w.key === key)?.usedPercent ?? null;
-/** Accounts with an account-wide limit reading have a quota history to chart. */
-const hasQuota = (c: Credential) => !c.apiKey && c.windows.some((w) => !w.scoped && w.usedPercent !== null);
 const resetAt = (c: Credential, key: string | null) => {
   const r = c.windows.find((w) => w.key === key)?.resetsAt;
   return r ? Date.parse(r) : Infinity;
@@ -31,8 +28,6 @@ export function Dashboard() {
   const [chosen, setChosen] = persistedSignal<string | null>('dashboard.provider', null, isStringOrNull);
   const [chosenLine, setChosenLine] = persistedSignal<string | null>('dashboard.line', null, isStringOrNull);
   const [query, setQuery] = persistedSignal('dashboard.query', '', isString);
-  // Picking an account swaps the pool chart for that account's; a gone account falls back to the pool.
-  const [chosenAccount, setChosenAccount] = persistedSignal<string | null>('dashboard.account', null, isStringOrNull);
   const [refreshing, setRefreshing] = createSignal(false);
 
   const creds = () => snapshot()?.credentials ?? [];
@@ -51,16 +46,6 @@ export function Dashboard() {
     return multi() ? ALL : (providers()[0]?.id ?? null);
   };
   const credsOf = (id: string) => creds().filter((c) => c.provider === id);
-  const focused = () => creds().find((c) => c.id === chosenAccount() && hasQuota(c)) ?? null;
-  const toggleAccount = (id: string) => setChosenAccount(focused()?.id === id ? null : id);
-  const pickProvider = (p: string) => {
-    setChosen(p);
-    setChosenAccount(null);
-  };
-  const pickLine = (id: string) => {
-    setChosenLine(id);
-    setChosenAccount(null);
-  };
   const providerCreds = createMemo(() => (provider() === ALL ? creds() : credsOf(provider() ?? '')));
 
   // Window lengths across providers (5-hour, weekly). The chart shows one card line; the longest length by default.
@@ -160,19 +145,12 @@ export function Dashboard() {
           total={creds().length}
           selected={provider()}
           chosenLine={lineId()}
-          onSelect={pickProvider}
-          onLine={pickLine}
+          onSelect={setChosen}
+          onLine={setChosenLine}
         />
         {/* API keys report no limits, so a keys-only view has nothing to chart. */}
-        <Show
-          when={focused()}
-          fallback={
-            <Show when={!providerCreds().every((c) => c.apiKey)}>
-              <PoolPanel models={chartModels()} />
-            </Show>
-          }
-        >
-          {(c) => <AccountPanel credential={c()} onClose={() => setChosenAccount(null)} />}
+        <Show when={!providerCreds().every((c) => c.apiKey)}>
+          <PoolPanel models={chartModels()} />
         </Show>
 
         <div class="toolbar">
@@ -193,7 +171,7 @@ export function Dashboard() {
         {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
         <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>
           <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
-            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} />}
+            {(c) => <AccountRow credential={c} />}
           </For>
         </div>
       </Show>

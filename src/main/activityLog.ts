@@ -211,10 +211,12 @@ class ActivityLog {
     return dailyTotals(this.loadTotals().values());
   }
 
-  /** Hourly activity for the last `days` local days; days whose requests expired come from their totals. */
-  buckets(days: number): ActivityBucket[] {
+  /** Totals for the latest `days` local days; null returns all. */
+  buckets(days: number | null): ActivityBucket[] {
+    const all = [...this.loadTotals().values()];
+    if (days === null) return all.map(toBucket);
     const wanted = new Set(lastDays(Date.now(), days));
-    return [...this.loadTotals().values()].filter((t) => wanted.has(t.day)).map(toBucket);
+    return all.filter((t) => wanted.has(t.day)).map(toBucket);
   }
 
   /** Deletes requests outside the retention setting; their totals stay. */

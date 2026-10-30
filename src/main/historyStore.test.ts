@@ -1,61 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { UsageSnapshot } from '@shared/types';
 
-vi.mock('./paths', () => ({ appPaths: { historyFile: 'unused', windowSummariesFile: 'unused-summaries' } }));
+vi.mock('./paths', () => ({ appPaths: { historyFile: 'unused' } }));
 vi.mock('./settingsStore', () => ({ writeFileAtomic: () => undefined }));
 
-const { appendSample, history } = await import('./historyStore');
+const { appendSample } = await import('./historyStore');
 
 const sample = (at: string, used: number, reset?: string) => ({
   at, used: { a: { seven_day: used } }, resets: reset ? { a: { seven_day: Date.parse(reset) } } : undefined,
 });
 const times = (s: { at: string }[]) => s.map((x) => x.at.slice(11, 16));
-
-/** A one-account snapshot; `used` null means the proxy has not looked the account up yet. */
-const snapshot = (fetchedAt: string, used: number | null, resetsAt: string | null): UsageSnapshot => ({
-  fetchedAt, strategy: 'round-robin',
-  credentials: [{
-    id: 'a', name: 'a', authIndex: 'a', provider: 'claude', label: 'a', note: null, email: null,
-    lastUsedAt: null, disabled: false, status: 'ready', statusMessage: null, priority: 0,
-    cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null, resetCredits: null,
-    windows: [{ key: 'seven_day', label: 'Weekly', usedPercent: used, resetsAt, status: 'allowed', durationMs: null, scoped: false, resetCadence: 'fixed' }],
-  }],
-});
-
-describe('history.add', () => {
-  it('keeps the last window after 24 days away, even when the first poll back lacks its usage', () => {
-    history.clear();
-    try {
-      history.add(snapshot('2026-10-01T16:55:00Z', 100, '2026-10-01T17:00:00Z'));
-      history.add(snapshot('2026-10-25T17:00:00Z', null, null));
-      history.add(snapshot('2026-10-25T17:05:00Z', 2, '2026-11-01T17:00:00Z'));
-      expect(history.summaries().map((s) => [s.resetAt, s.peak, s.exhaustedAt])).toEqual([
-        [Date.parse('2026-10-01T17:00:00Z'), 100, Date.parse('2026-10-01T16:55:00Z')],
-        [Date.parse('2026-11-01T17:00:00Z'), 2, null],
-      ]);
-      expect(history.all().map((s) => s.at)).toEqual(['2026-10-25T17:00:00Z', '2026-10-25T17:05:00Z']);
-    } finally {
-      history.clear();
-    }
-  });
-});
-
-describe('history.summaries', () => {
-  it('backfills from stored samples when no summaries file exists yet', async () => {
-    const stored = [sample('2026-10-25T16:50:00Z', 60, '2026-10-25T17:00:00Z'), sample('2026-10-25T17:05:00Z', 3, '2026-11-01T17:00:00Z')];
-    vi.resetModules();
-    vi.doMock('node:fs', () => ({ existsSync: (p: string) => p === 'unused', readFileSync: () => JSON.stringify(stored) }));
-    try {
-      const { history: fresh } = await import('./historyStore');
-      expect(fresh.summaries().map((s) => [s.resetAt, s.peak])).toEqual([
-        [Date.parse('2026-10-25T17:00:00Z'), 60],
-        [Date.parse('2026-11-01T17:00:00Z'), 3],
-      ]);
-    } finally {
-      vi.doUnmock('node:fs');
-    }
-  });
-});
 
 describe('appendSample', () => {
   it('replaces the newest point while it is within the spacing of the one before', () => {

@@ -1,9 +1,12 @@
-import { createMemo, createSignal, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { inScope, type ActivityScope } from '@shared/activityScope';
-import { bucketStarts, byAccount, byClient, byModel, inRange, RANGES, series, summarize, type Range, type SeriesPoint } from '../lib/activityStats';
+import {
+  axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, dayText, isCustomRange, rangeSpan, RANGES, UNIT_NOTE, type CustomRange, type Range,
+} from '../lib/activityRange';
+import { byAccount, byClient, byModel, series, summarize } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
-import { activityBuckets, now } from '../store';
+import { activityBuckets, holdActivityDays, now } from '../store';
 import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
 import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
@@ -11,8 +14,14 @@ import { Seg } from './ui';
 
 /** Date the price table in src/shared/modelPrices.ts was checked. */
 const PRICES_CHECKED = 'Oct 26, 2026';
-const RANGE_OPTIONS = [{ value: '24h', label: '24 hours' }, { value: '7d', label: '7 days' }, { value: '30d', label: '30 days' }] as const;
-const BUCKET_NOTE: Record<Range, string> = { '24h': 'Hourly', '7d': 'Every 3 hours', '30d': 'Daily' };
+const RANGE_LABELS: Record<Range, string> = { '24h': '24h', '7d': '7d', '30d': '30d', '90d': '90d', '1y': '1y', all: 'All', custom: 'Custom' };
+const RANGE_OPTIONS = RANGES.map((value) => ({ value, label: RANGE_LABELS[value] }));
+/** Default custom span: the last 30 days. */
+const DEFAULT_CUSTOM_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Toolbar width that fits the full range switch and the Add menu; with dates showing, room for those too. */
+const FULL_TOOLBAR_PX = 560;
+const FULL_TOOLBAR_CUSTOM_PX = 860;
 
 function Stat(props: { label: string; value: string; sub: string; title?: string }) {
   return (
@@ -26,43 +35,57 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
 
 /** Range and totals for `scope` stay on top; the charts below are tiles the user arranges. */
 export function ActivityOverview(props: { scope: ActivityScope; account: (authIndex: string | null) => string }) {
-  const [range, setRange] = persistedSignal<Range>('activity.range', '7d', RANGE_OPTIONS.map((o) => o.value));
+  const [range, setRange] = persistedSignal<Range>('activity.range', '7d', RANGES);
+  const [custom, setCustom] = persistedSignal<CustomRange>('activity.customRange',
+    { from: dayText(Date.now() - (DEFAULT_CUSTOM_DAYS - 1) * DAY_MS), to: dayText(Date.now()) }, isCustomRange);
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
+  const [compact, setCompact] = createSignal(false);
 
-  const starts = createMemo(() => bucketStarts(range(), now()));
+  const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
+  const span = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
+  createEffect(() => holdActivityDays(daysToFetch(range(), span(), now())));
+  const unit = createMemo(() => bucketUnit(span()));
+  const starts = createMemo(() => bucketStarts(span(), unit()));
   const rows = createMemo(() => activityBuckets().filter((r) => inScope(props.scope, r)));
-  const scoped = createMemo(() => inRange(rows(), starts()));
+  const scoped = createMemo(() => rows().filter((r) => r.start >= span().from && r.start <= span().to));
   const total = createMemo(() => summarize(scoped()));
   const points = createMemo(() => series(scoped(), starts(), now()));
   const models = createMemo(() => byModel(scoped()));
   const accountRows = createMemo(() => byAccount(scoped()));
   const clientRows = createMemo(() => byClient(scoped()));
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
-  const daily = () => RANGES[range()].hoursPerBucket >= 24;
-  /** "Mon, Oct 26" for a day; "Mon 3 AM" for an hour; "Mon 3 AM – 6 AM" for a multi-hour bar. */
-  const bucketLabel = (p: SeriesPoint) => {
-    if (daily()) return new Date(p.start).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    const start = new Date(p.start).toLocaleString(undefined, { weekday: 'short', hour: 'numeric' });
-    return RANGES[range()].hoursPerBucket > 1 ? `${start} – ${new Date(p.end).toLocaleTimeString(undefined, { hour: 'numeric' })}` : start;
+  const measureToolbar = (el: HTMLElement) => {
+    const observer = new ResizeObserver(([entry]) =>
+      setCompact(entry!.contentRect.width < (range() === 'custom' ? FULL_TOOLBAR_CUSTOM_PX : FULL_TOOLBAR_PX)));
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
   };
   const data: ActivityData = {
     points,
     rows,
+    span,
     now,
     models,
     accounts: accountRows,
     clients: clientRows,
     account: (authIndex) => props.account(authIndex),
     total,
-    bucketNote: () => BUCKET_NOTE[range()],
-    xLabel: (t) => new Date(t).toLocaleString(undefined, daily() || range() === '7d' ? { month: 'numeric', day: 'numeric' } : { hour: 'numeric' }),
-    tip: (i) => ({ title: bucketLabel(points()[i]!), rows: countRows(points()[i]!.summary) }),
+    bucketNote: () => UNIT_NOTE[unit()],
+    xLabel: (t) => axisLabel(t, unit()),
+    tip: (i) => ({ title: bucketTitle(points()[i]!.start, points()[i]!.end, unit()), rows: countRows(points()[i]!.summary) }),
   };
 
   return (
     <>
-      <div class="toolbar">
-        <Seg value={range()} options={RANGE_OPTIONS} onChange={setRange} />
+      <div class="toolbar" ref={measureToolbar}>
+        <Seg label="Time frame" compact={compact()} value={range()} options={RANGE_OPTIONS} onChange={setRange} />
+        <Show when={range() === 'custom'}>
+          <input type="date" class="input" aria-label="From" value={custom().from} max={custom().to}
+            onChange={(e) => e.currentTarget.value && setCustom({ ...custom(), from: e.currentTarget.value })} />
+          <span class="muted">to</span>
+          <input type="date" class="input" aria-label="To" value={custom().to} min={custom().from} max={dayText(now())}
+            onChange={(e) => e.currentTarget.value && setCustom({ ...custom(), to: e.currentTarget.value })} />
+        </Show>
         <span class="spacer" />
         <AddChartSelect onPick={setPlacing} />
       </div>

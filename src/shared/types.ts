@@ -113,23 +113,6 @@ export interface HistorySample {
   resets?: Record<string, Record<string, number>>;
 }
 
-/** One limit window of one account (current or finished), folded from readings as they arrive (src/main/windowSummaries.ts). */
-export interface WindowSummary {
-  credentialId: string;
-  key: string;
-  /** First and last history sample inside the window (epoch ms). */
-  firstSampleAt: number;
-  lastSampleAt: number;
-  /** First reset reading for the window (epoch ms). */
-  resetAt: number;
-  /** Set when a new window began before `resetAt` (e.g. a reset credit); the window ended then. */
-  endedAt: number | null;
-  /** Highest used percent seen, as reported (may exceed 100). */
-  peak: number;
-  /** First sample at or above 100%, or null. */
-  exhaustedAt: number | null;
-}
-
 export interface OAuthProvider {
   id: string;
   label: string;

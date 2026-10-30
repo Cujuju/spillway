@@ -20,9 +20,6 @@ export const appPaths = {
   get historyFile() {
     return path.join(this.root, 'usage-history.json');
   },
-  get windowSummariesFile() {
-    return path.join(this.root, 'window-summaries.json');
-  },
   /** Encrypted request log and daily totals (activityDb.ts). */
   get activityDb() {
     return path.join(this.root, 'activity.db');

@@ -7,7 +7,7 @@ import { UpdateSettings } from '../components/UpdateSettings';
 import { WindowStartSettings } from '../components/WindowStartSettings';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
 import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
-import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setWindowSummaries, type SettingsSection } from '../store';
+import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
 
@@ -195,7 +195,7 @@ function Advanced() {
         </For>
       </SettingsGroup>
       <SettingsGroup title="History">
-        <SettingRow label="Usage history" help="Stored samples behind the chart and drain rate, and each account's past windows.">
+        <SettingRow label="Usage history" help="Stored samples behind the chart and drain rate.">
           <button class="btn danger" onClick={() => setConfirming('usage')}>Clear history</button>
         </SettingRow>
         <SettingRow label="Keep requests for" help="Days of per-request activity stored on disk. Daily totals are kept until cleared.">
@@ -212,11 +212,11 @@ function Advanced() {
           actions={
             <>
               <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setWindowSummaries([]); setConfirming(null); })}>Clear</button>
+              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setConfirming(null); })}>Clear</button>
             </>
           }
         >
-          <p class="secondary">The chart, drain rate and past windows start over. Accounts and settings are kept.</p>
+          <p class="secondary">The chart and drain rate start over. Accounts and settings are kept.</p>
         </Dialog>
       </Show>
       <Show when={confirming() === 'activity'}>

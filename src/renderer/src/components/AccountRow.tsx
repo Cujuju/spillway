@@ -1,4 +1,4 @@
-import { ChartLine, RefreshCw, Settings2 } from 'lucide-solid';
+import { RefreshCw, Settings2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
@@ -12,11 +12,8 @@ const ICON_PX = 13;
 /** Providers the proxy's on-demand usage lookup (POST /usage/refresh) supports. */
 const LIVE_LOOKUP_PROVIDERS = new Set(['claude', 'codex']);
 
-/** Controls inside the row keep their own clicks; the rest of the row picks the account. */
-const ROW_CONTROLS = 'button, a, input, select';
-
-/** One account in Theo's list: name, refresh and state, then limit bars. `onSelect` makes the row pick the account. */
-export function AccountRow(props: { credential: Credential; selected?: boolean; onSelect?: () => void }) {
+/** One account in Theo's list: name, refresh and state, then limit bars. */
+export function AccountRow(props: { credential: Credential }) {
   const c = () => props.credential;
   const [busy, setBusy] = createSignal(false);
   const state = () => accountState(c(), now());
@@ -36,14 +33,8 @@ export function AccountRow(props: { credential: Credential; selected?: boolean; 
     }
   };
 
-  // Ignores clicks on controls and the end of a text selection, so the label stays copyable.
-  const pick = (e: MouseEvent) => {
-    if (!props.onSelect || (e.target instanceof Element && e.target.closest(ROW_CONTROLS)) || getSelection()?.toString()) return;
-    props.onSelect();
-  };
-
   return (
-    <div class="account-row" classList={{ disabled: c().disabled, pickable: !!props.onSelect, selected: props.selected }} onClick={pick}>
+    <div class="account-row" classList={{ disabled: c().disabled }}>
       <div class="shrink">
         <div class="account-name">
           <ProviderGlyph provider={c().provider} />
@@ -58,13 +49,6 @@ export function AccountRow(props: { credential: Credential; selected?: boolean; 
             <button class="btn ghost icon-btn" disabled={busy()} onClick={() => void refresh()} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
-          </Show>
-          <Show when={props.onSelect}>
-            {(select) => (
-              <button class="btn ghost icon-btn" aria-pressed={props.selected === true} onClick={() => select()()} title="Show this account's quota history" aria-label="Show this account's quota history">
-                <ChartLine size={ICON_PX} />
-              </button>
-            )}
           </Show>
           <Show when={c().apiKey}>
             <button class="btn ghost icon-btn" onClick={() => setPage('providers')} title="Turn on or off in AI Providers" aria-label="Manage API key">

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEAT_MODES, type HeatMode } from './activityStats';
 import { isString, persistedSignal } from './persisted';
 
 const store = new Map<string, string>();
@@ -19,18 +18,6 @@ describe('persistedSignal', () => {
     setTab('b');
     const [tab] = persistedSignal<(typeof TABS)[number]>('tab', 'a', TABS);
     expect(tab()).toBe('b');
-  });
-
-  it('restores the legacy week heat mode and keeps tile choices independent', () => {
-    const modes = HEAT_MODES.map((m) => m.value);
-    store.set('spillway.view.activity.heatMode.first', JSON.stringify('week'));
-    const [first] = persistedSignal<HeatMode>('activity.heatMode.first', 'hourly', modes);
-    const [second, setSecond] = persistedSignal<HeatMode>('activity.heatMode.second', 'week', modes);
-    expect(first()).toBe('week');
-    expect(HEAT_MODES.find((m) => m.value === first())!.label).toBe('7 days');
-    setSecond('lastWeek');
-    expect(second()).toBe('lastWeek');
-    expect(first()).toBe('week');
   });
 
   it('falls back to the initial value for a rejected or corrupt entry', () => {

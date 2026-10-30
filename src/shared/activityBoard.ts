@@ -1,6 +1,6 @@
 /** The Activity page's chart tiles: which charts exist and how they are tiled. */
 
-export const ACTIVITY_PANEL_KINDS = ['trend', 'cache', 'heatmap', 'models', 'accounts', 'clients'] as const;
+export const ACTIVITY_PANEL_KINDS = ['trend', 'cache', 'heatmap', 'rhythm', 'models', 'accounts', 'clients'] as const;
 export type ActivityPanelKind = (typeof ACTIVITY_PANEL_KINDS)[number];
 export const ACTIVITY_METRICS = ['cost', 'tokens', 'requests'] as const;
 export type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
@@ -25,7 +25,7 @@ const tile = (id: string) => ({ kind: 'tile', id });
 
 const row = (sizes: number[], ...children: unknown[]) => ({ kind: 'split', dir: 'row', sizes, children });
 
-/** Two rows: API cost beside Cache hit, then Activity beside models. Shares favour the wider chart. */
+/** Two rows: API cost beside Cache hit, then Heatmap beside Models. Shares favour the wider chart. */
 export const DEFAULT_ACTIVITY_BOARD: ActivityBoard = {
   tiles: {
     kind: 'split', dir: 'column', sizes: [1, 1.4],

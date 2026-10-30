@@ -7,7 +7,6 @@ import '@cujuju/solidjs-kv-tooltip/styles.css';
 import '@cujuju/solidjs-tiling-window-manager/styles.css';
 import './styles/activity.css';
 import './styles/pool.css';
-import './styles/account.css';
 import './styles/board.css';
 import './styles/pages.css';
 import { App } from './App';

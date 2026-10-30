@@ -1,17 +1,14 @@
 import type { TileSize } from '@cujuju/solidjs-tiling-window-manager';
-import { Match, Switch, type JSX } from 'solid-js';
+import type { JSX } from 'solid-js';
 import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard';
 import { accountKey, clientKey } from '@shared/activityScope';
 import { clientLabel } from '../lib/accountScope';
 import type { ActivityBucket } from '@shared/types';
 import { metricValue, type AccountRow, type ClientRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
+import type { Span } from '../lib/activityRange';
 import { ActivityHeatmap } from './ActivityHeatmap';
-import { ActivityHourly } from './ActivityHourly';
 import { ActivityRhythm } from './ActivityRhythm';
-import { persistedSignal } from '../lib/persisted';
-import { HEAT_MODES, type HeatMode } from '../lib/activityStats';
-import { Seg } from './ui';
 import { axisMetric, countRows, formatMetric, metricLabel } from './activityFormat';
 import type { TipRow } from './ChartTip';
 import { BreakdownTable } from './BreakdownTable';
@@ -23,8 +20,10 @@ const CACHE_Y_TICKS = 2;
 /** Everything the Overview's charts read, for the selected range. */
 export interface ActivityData {
   points: () => SeriesPoint[];
-  /** Every stored hour; the heatmap picks its own window. */
+  /** Held activity in scope; the heatmap and rhythm keep the rows inside `span`. */
   rows: () => ActivityBucket[];
+  /** The page's time frame. */
+  span: () => Span;
   now: () => number;
   models: () => ModelRow[];
   accounts: () => AccountRow[];
@@ -38,11 +37,6 @@ export interface ActivityData {
   tip: (i: number) => { title: string; rows: TipRow[] };
 }
 
-interface PanelContent {
-  headerControls?: (compact: boolean) => JSX.Element;
-  body: JSX.Element;
-}
-
 interface PanelDef {
   title: (spec: ActivityPanelSpec) => string;
   note?: (data: ActivityData) => string;
@@ -50,7 +44,7 @@ interface PanelDef {
   hasMetric: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
   minSize: TileSize;
-  mount: (spec: () => ActivityPanelSpec, data: ActivityData, tileId: string) => PanelContent;
+  body: (spec: () => ActivityPanelSpec, data: ActivityData) => JSX.Element;
 }
 
 export const PANELS: Record<ActivityPanelKind, PanelDef> = {
@@ -59,67 +53,67 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     note: (data) => data.bucketNote(),
     hasMetric: true,
     minSize: { width: 360, height: 170 },
-    mount: (spec, data) => ({ body: (
+    body: (spec, data) => (
       <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)}
         points={data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) }))}
         yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} tooltip={data.tip} />
-    ) }),
+    ),
   },
   cache: {
     title: () => 'Cache hit',
     note: () => 'Share of prompt tokens read from cache',
     hasMetric: false,
     minSize: { width: 320, height: 150 },
-    mount: (_spec, data) => ({ body: (
+    body: (_spec, data) => (
       <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS}
         points={data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate }))}
         yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} tooltip={data.tip} />
-    ) }),
+    ),
   },
   heatmap: {
-    title: () => 'Activity',
+    title: () => 'Heatmap',
     hasMetric: true,
-    minSize: { width: 380, height: 260 },
-    mount: (spec, data, tileId) => {
-      const [mode, setMode] = persistedSignal<HeatMode>(`activity.heatMode.${tileId}`, 'week', HEAT_MODES.map((m) => m.value));
-      return {
-        headerControls: (compact) => <Seg label="Activity time frame" compact={compact} value={mode()} options={HEAT_MODES} onChange={setMode} />,
-        body: <Switch>
-          <Match when={mode() === 'hourly'}><ActivityHourly rows={data.rows()} now={data.now()} metric={spec().metric} /></Match>
-          <Match when={mode() === 'rhythm'}><ActivityRhythm rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} /></Match>
-          <Match when={mode() === 'week' || mode() === 'lastWeek'}>
-            <ActivityHeatmap mode={mode() === 'lastWeek' ? 'lastWeek' : 'week'} rows={data.rows()} now={data.now()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
-          </Match>
-        </Switch>,
-      };
-    },
+    minSize: { width: 380, height: 220 },
+    body: (spec, data) => (
+      <ActivityHeatmap rows={data.rows()} span={data.span()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
+    ),
+  },
+  rhythm: {
+    title: () => 'Rhythm',
+    note: () => 'Each hour of the day, summed',
+    hasMetric: true,
+    minSize: { width: 380, height: 220 },
+    body: (spec, data) => (
+      <ActivityRhythm rows={data.rows()} span={data.span()} now={data.now()} metric={spec().metric}
+        format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
+    ),
   },
   models: {
     title: () => 'Models',
     hasMetric: true,
     minSize: { width: 420, height: 170 },
-    mount: (spec, data) => ({ body: (
+    body: (spec, data) => (
       <BreakdownTable heading="Model" metric={spec().metric} total={data.total()}
         rows={data.models().map((m) => ({ key: `${m.provider}|${m.model}`, provider: m.provider, name: m.model, summary: m.summary }))} />
-    ) }),
+    ),
   },
   accounts: {
     title: () => 'Accounts',
     hasMetric: true,
     minSize: { width: 420, height: 170 },
-    mount: (spec, data) => ({ body: (
+    body: (spec, data) => (
       <BreakdownTable heading="Account" metric={spec().metric} total={data.total()}
         rows={data.accounts().map((a) => ({ key: accountKey(a.authIndex), provider: a.provider, name: data.account(a.authIndex), summary: a.summary }))} />
-    ) }),
+    ),
   },
   clients: {
     title: () => 'Clients',
     hasMetric: true,
     minSize: { width: 420, height: 170 },
-    mount: (spec, data) => ({ body: (
+    body: (spec, data) => (
       <BreakdownTable heading="Client" metric={spec().metric} total={data.total()}
         rows={data.clients().map((c) => ({ key: clientKey(c.client), name: clientLabel(c.client), summary: c.summary }))} />
-    ) }),
+    ),
   },
 };
 
@@ -129,7 +123,8 @@ export const ADD_CHOICES: { label: string; spec: ActivityPanelSpec }[] = [
   { label: 'Tokens', spec: { kind: 'trend', metric: 'tokens' } },
   { label: 'Requests', spec: { kind: 'trend', metric: 'requests' } },
   { label: 'Cache hit', spec: { kind: 'cache', metric: 'cost' } },
-  { label: 'Activity', spec: { kind: 'heatmap', metric: 'cost' } },
+  { label: 'Heatmap', spec: { kind: 'heatmap', metric: 'cost' } },
+  { label: 'Rhythm', spec: { kind: 'rhythm', metric: 'cost' } },
   { label: 'Models', spec: { kind: 'models', metric: 'cost' } },
   { label: 'Accounts', spec: { kind: 'accounts', metric: 'cost' } },
   { label: 'Clients', spec: { kind: 'clients', metric: 'cost' } },

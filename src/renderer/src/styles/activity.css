@@ -82,35 +82,56 @@
   color: var(--color-text-muted);
 }
 
-/* ── Heatmap: 24 flexible columns fill the card ──────────────────── */
-/* Shared by the grid and its legend: day-label column, cell gap, cell sizes, and the accent share per level. */
+/* ── Heatmap: day-by-hour grid for short ranges, a GitHub-style calendar for long ones ── */
+/* Shared by the grids and the legend: label column, gaps, cell sizes, and the accent share per level. */
 .heat-card {
   --heat-label-col: 34px;
   --heat-gap: 3px;
+  --heat-calendar-gap: 2px;
   --heat-cell-min: 6px;
   --heat-cell-height: 16px;
   --heat-legend-cell: 10px;
   --heat-l1: 30%;
   --heat-l2: 55%;
   --heat-l3: 78%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
-/* 24 columns: one per hour. */
+/* 24 columns: one per hour. Rows shrink toward the minimum when a fortnight of days must fit. */
 .heat {
   display: grid;
+  flex: 0 1 auto;
+  min-height: 0;
   grid-template-columns: var(--heat-label-col) repeat(24, minmax(var(--heat-cell-min), 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: minmax(var(--heat-cell-min), var(--heat-cell-height));
   gap: var(--heat-gap);
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
 }
+.heat-calendar {
+  display: grid;
+  flex: 0 1 auto;
+  min-height: 0;
+  grid-template-columns: var(--heat-label-col) repeat(var(--heat-weeks), minmax(0, 1fr));
+  grid-template-rows: repeat(7, minmax(var(--heat-cell-min), var(--heat-cell-height)));
+  gap: var(--heat-calendar-gap);
+  font-size: var(--text-xxs);
+  color: var(--color-text-muted);
+}
 .heat-hour {
+  overflow: hidden;
   white-space: nowrap;
   line-height: var(--leading-loose);
 }
 .heat-day {
+  grid-column: 1;
   align-self: center;
 }
 .heat-cell {
-  height: var(--heat-cell-height);
+  min-height: 0;
   border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
 }
@@ -125,6 +146,7 @@
 .heat-cell.l4 { background: var(--color-accent); }
 .heat-legend {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--heat-gap);
   margin-top: var(--spacing-2_5);

@@ -35,12 +35,18 @@ export interface SeriesPoint {
 
 /** Sums rows into the range's buckets; rows before the first bucket are left out. */
 export function series(rows: ActivityBucket[], starts: number[], now: number): SeriesPoint[] {
+  if (!starts.length) return [];
   const groups = starts.map(() => [] as ActivityBucket[]);
   for (const r of rows) {
-    if (r.start < starts[0]!) continue;
-    let i = starts.length - 1;
-    while (i > 0 && starts[i]! > r.start) i--;
-    groups[i]!.push(r);
+    if (r.start < starts[0]! || r.start > now) continue;
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (starts[mid]! <= r.start) low = mid + 1;
+      else high = mid;
+    }
+    groups[low - 1]!.push(r);
   }
   return starts.map((start, i) => ({ start, end: starts[i + 1] ?? now, summary: summarize(groups[i]!) }));
 }

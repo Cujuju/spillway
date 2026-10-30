@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
-import { bucketStarts, rangeSpan } from './activityRange';
+import { bucketStarts, rangeSpan, type BucketUnit } from './activityRange';
 import { byAccount, byModel, series, summarize } from './activityStats';
 
 // Local-clock times so bucket edges don't depend on the test machine's zone.
@@ -12,6 +12,18 @@ const row = (start: number, patch: Partial<ActivityBucket> = {}): ActivityBucket
 });
 
 describe('series / summarize', () => {
+  it.each<BucketUnit>(['hour', '3h', 'day', 'week', 'month'])('matches every %s boundary, including week and month rollovers', (unit) => {
+    const end = new Date(2027, 1, 2, 14).getTime();
+    const starts = bucketStarts({ from: new Date(2026, 11, 28).getTime(), to: end }, unit);
+    const rows = starts.flatMap((start) => [row(start), row(start + 1)]);
+    const points = series(rows.reverse(), starts, end);
+    expect(points.map((p) => p.summary.requests)).toEqual(starts.map((start) => start === end ? 1 : 2));
+    expect(points.map((p) => p.start)).toEqual(starts);
+  });
+  it('accepts empty bucket lists and excludes future rows', () => {
+    expect(series([row(NOW)], [], NOW)).toEqual([]);
+    expect(series([row(NOW + 1)], [at(0, 14)], NOW)[0]!.summary.requests).toBe(0);
+  });
   it('puts each row in its bucket and drops rows before the range', () => {
     const starts = bucketStarts(rangeSpan('24h', NOW, { from: '', to: '' }, null), 'hour');
     const points = series([row(at(0, 13)), row(at(0, 13)), row(at(0, 14)), row(at(3, 9))], starts, NOW);

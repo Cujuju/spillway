@@ -9,7 +9,7 @@ import { resolveTheme, themeTokens } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
-const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings'] as const;
+const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings', 'help'] as const;
 export type Page = (typeof PAGES)[number];
 
 const api = window.api;

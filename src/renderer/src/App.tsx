@@ -6,6 +6,7 @@ import { TrayIconSync } from './components/TrayIconSync';
 import { Notice } from './components/ui';
 import { Activity } from './pages/Activity';
 import { Dashboard } from './pages/Dashboard';
+import { Help } from './pages/Help';
 import { Logs } from './pages/Logs';
 import { Providers } from './pages/Providers';
 import { Proxy } from './pages/Proxy';
@@ -77,6 +78,7 @@ export function App() {
               <Match when={page() === 'proxy'}><Proxy /></Match>
               <Match when={page() === 'logs'}><Logs /></Match>
               <Match when={page() === 'settings'}><Settings /></Match>
+              <Match when={page() === 'help'}><Help /></Match>
             </Switch>
           </div>
         </main>

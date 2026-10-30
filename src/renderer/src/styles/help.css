@@ -1,0 +1,20 @@
+/* Help page: one card per topic, the situation, numbered steps, then notes. */
+.help-when {
+  margin: var(--spacing-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.help-steps,
+.help-notes {
+  margin: var(--spacing-2_5) 0 0;
+  padding-left: var(--spacing-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading-help);
+}
+.help-notes {
+  color: var(--color-text-muted);
+}
+.help-steps li + li,
+.help-notes li + li {
+  margin-top: var(--spacing-1);
+}

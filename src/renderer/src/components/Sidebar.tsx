@@ -1,5 +1,5 @@
 import { importLabel } from './ActivityImport';
-import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
+import { Activity as ActivityIcon, ChevronLeft, ChevronRight, CircleHelp, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { activityImport, page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { isMac } from '../lib/platform';
@@ -35,6 +35,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { id: 'proxy', label: 'Proxy', icon: () => <ProxyStateIcon size={ICON_PX} /> },
       { id: 'logs', label: 'Logs', icon: () => <ScrollText size={ICON_PX} /> },
       { id: 'settings', label: 'Settings', icon: () => <SettingsIcon size={ICON_PX} /> },
+      { id: 'help', label: 'Help', icon: () => <CircleHelp size={ICON_PX} /> },
     ],
   },
 ];

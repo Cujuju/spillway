@@ -10,6 +10,7 @@ import './styles/pool.css';
 import './styles/account.css';
 import './styles/board.css';
 import './styles/pages.css';
+import './styles/help.css';
 import { App } from './App';
 import { initStore } from './store';
 

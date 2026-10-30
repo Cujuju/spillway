@@ -1,20 +1,39 @@
-import { localDay, localHourStart } from '@shared/activityCounts';
+import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
 import { storedTotalKey } from './activityTotals';
-import type { ActivityEvent } from '@shared/types';
+import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { fallbackKey, sameUsage } from './usageMerge';
+
+/** Reused for bulk migration/seeding as well as individual appends; connections own their statements. */
+const identityInserts = new WeakMap<Db, ReturnType<Db['prepare']>>();
 
 interface IdentityRow { key: string; event: string; row_id: number; matched: number }
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
 
+/** Uses the cost actually counted when available, including migration's historical price scaling. */
+export function accountedUsage(e: ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd'>>): ActivityCounts {
+  const counts = emptyCounts();
+  addEvent(counts, e);
+  counts.costUsd = e.costUsd ?? counts.costUsd;
+  counts.uncachedCostUsd = e.uncachedCostUsd ?? counts.uncachedCostUsd;
+  return counts;
+}
+
 /** Only accounting and match fields survive request retention; no error text, headers or timings. */
-export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at))): void {
+export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
   const { requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed } = e;
-  db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source) VALUES (?, ?, ?, ?, ?, ?)').run(identityKey(e), JSON.stringify({
-    totalStart, requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
+  const { costUsd, uncachedCostUsd } = accountedUsage(e);
+  let insert = identityInserts.get(db);
+  if (!insert) {
+    insert = db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source) VALUES (?, ?, ?, ?, ?, ?)');
+    identityInserts.set(db, insert);
+  }
+  insert.run([identityKey(e), JSON.stringify({
+    costUsd, uncachedCostUsd,
+    totalStart, totalDay, requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
-  }), id, fallbackKey(e), e.upstreamId, e.source);
+  }), id, fallbackKey(e), e.upstreamId, e.source]);
 }
 
 /** Called inside the same transaction as totals, requests and checkpoints. */
@@ -48,6 +67,6 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
 
 /** A legacy identity belongs to the daily baseline even if newer usage shares its hour. */
 function removalKey(json: string): string {
-  const e = JSON.parse(json) as ActivityEvent & { totalStart?: number | null };
-  return storedTotalKey({ ...e, day: localDay(Date.parse(e.at)), start: e.totalStart ?? undefined });
+  const e = JSON.parse(json) as ActivityEvent & { totalStart?: number | null; totalDay?: string };
+  return storedTotalKey({ ...e, day: e.totalDay ?? localDay(Date.parse(e.at)), start: e.totalStart ?? undefined });
 }

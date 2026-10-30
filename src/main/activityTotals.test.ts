@@ -65,6 +65,7 @@ it('keeps both fall-back hours distinct after pruning', () => {
     activityLog.append(event('2026-11-01T01:15:00-07:00'));
     activityLog.append(event('2026-11-01T01:15:00-08:00'));
     activityLog.prune();
+    expect(activityLog.totalsList()).toEqual([expect.objectContaining({ day: '2026-11-01', requests: 2 })]);
     expect(activityLog.buckets(10).map((r) => [r.start, r.requests])).toEqual([
       [Date.parse('2026-11-01T01:00:00-07:00'), 1], [Date.parse('2026-11-01T01:00:00-08:00'), 1],
     ]);
@@ -117,4 +118,33 @@ it('seeds an unreconstructed request into its baseline even when its hour exists
   const rows = activityLog.buckets(10);
   expect(rows.find((r) => r.wholeDay)?.requests).toBe(1);
   expect(rows.find((r) => !r.wholeDay && r.source === 'client-log')?.requests).toBe(1);
+});
+
+it('removes the recorded cost when reconciling a rebuilt client-log request', () => {
+  const old = event('2026-11-01T10:05:00Z', { source: 'client-log', upstreamId: 'repriced', authIndex: null });
+  activityLog.close();
+  const db = openActivityDb(file, key);
+  const total = { ...emptyCounts(), day: localDay(Date.parse(old.at)), provider: old.provider, authIndex: old.authIndex,
+    model: old.model, client: old.client, source: old.source };
+  addEvent(total, old);
+  total.costUsd *= 2;
+  total.uncachedCostUsd *= 2;
+  db.prepare('INSERT INTO activity_totals VALUES (?, ?)').run(totalKey(total), JSON.stringify(total));
+  const id = Number(db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, 0, ?)').run(total.day, JSON.stringify(old)).lastInsertRowid);
+  rememberUsage(db, old, id, null);
+  db.exec("DELETE FROM meta WHERE key = 'retained-hours-rebuilt'");
+  db.close();
+  expect(activityLog.buckets(10).find((r) => r.source === 'client-log')?.costUsd).toBe(total.costUsd);
+  activityLog.append(event(old.at, { upstreamId: old.upstreamId }));
+  expect(activityLog.buckets(10).find((r) => r.source === 'client-log')).toMatchObject({ requests: 0, costUsd: 0, uncachedCostUsd: 0 });
+});
+
+it('aggregates spring-forward hours by local calendar day', () => {
+  vi.stubEnv('TZ', 'America/Los_Angeles');
+  try {
+    activityLog.append(event('2026-03-08T01:15:00-08:00'));
+    activityLog.append(event('2026-03-08T03:15:00-07:00'));
+    activityLog.append(event('2026-03-08T23:15:00-07:00'));
+    expect(activityLog.totalsList()).toEqual([expect.objectContaining({ day: '2026-03-08', requests: 3 })]);
+  } finally { vi.unstubAllEnvs(); }
 });

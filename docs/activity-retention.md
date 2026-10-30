@@ -12,6 +12,9 @@ whose stored requests account for every request in its totals is rebuilt as
 hourly rows: requests, failures, all token counts and unpriced requests must match
 exactly. Its recorded cost is kept by scaling the repriced hours, so price changes
 since then don't alter history. Usage identities move to their hour, including identities not yet seeded.
+Rebuilt identities retain their scaled cost so reconciliation subtracts what
+was counted. New identities retain their original cost too; older, unreconstructed
+identities without cost metadata still use current prices when reconciled.
 A misplaced request rejects the entire filed day. Legacy imports normalize missing
 client/source fields before generating keys. The rebuild scans requests once in
 day order and parses only candidate days.
@@ -23,6 +26,10 @@ Clearing Activity removes both kinds.
 
 Rebuilt requests receive explicit hourly ownership. Ledger seeding leaves other
 requests attached to baselines, even if a matching hourly row exists.
+
+Retained baseline identities remember the request's filed day, so a time-zone
+change does not redirect reconciliation to another day. Residual: already-pruned
+identities without a recorded day cannot recover their original time zone.
 
 Identities still pointing at a baseline (`totalStart` null) make client-log
 reconciliation subtract from that baseline, even when new usage shares its hour.

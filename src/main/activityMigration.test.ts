@@ -7,7 +7,7 @@ import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import { importLegacyFiles, openActivityDb, totalKey, type Db } from './activityDb';
 import { rebuildRetainedTotals } from './activityMigration';
 import { readTotals, storedTotalKey, type ActivityTotal } from './activityTotals';
-import { rememberUsage } from './usageLedger';
+import { reconcileUsage, rememberUsage } from './usageLedger';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-migration-'));
 const key = 'cd'.repeat(32);
@@ -159,3 +159,61 @@ it('rolls back an open migration and its marker on failure', () => {
   db = openActivityDb(file, key);
   expect(rows().every((t) => t.start !== undefined)).toBe(true);
 });
+
+it('keeps removal attached to the filed baseline day after a time-zone mismatch', () => {
+  const e = event('2026-10-21T12:00:00Z', { source: 'client-log', authIndex: null, upstreamId: 'moved-day' });
+  store(e);
+  const old = baseline([e], (t) => { t.day = '2026-10-20'; });
+  db.prepare('UPDATE requests SET day = ?').run(old.day);
+  rebuildRetainedTotals(db);
+  const result = reconcileUsage(db, { ...e, source: 'proxy', requestId: 'proxy-moved-day', authIndex: 'a' });
+  expect(result.removeKey).toBe(storedTotalKey(old));
+  expect(rows()).toEqual([old]);
+});
+
+/** Encryption and 150k ledger inserts can exceed Vitest's default timeout on CI. */
+const LARGE_MIGRATION_TIMEOUT_MS = 30_000;
+it('rebuilds 150,000 requests with one ordered request scan', () => {
+  const requestCount = 150_000;
+  const dayCount = 30;
+  const insert = db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, 0, ?)');
+  db.transaction(() => {
+    for (let day = 1; day <= dayCount; day++) {
+      const e = event(new Date(2026, 8, day, 12).toISOString());
+      const total = baseline([e]);
+      for (const k of Object.keys(emptyCounts()) as (keyof ActivityCounts)[]) total[k] *= requestCount / dayCount;
+      db.prepare('UPDATE activity_totals SET total = ? WHERE key = ?').run(JSON.stringify(total), totalKey(total));
+      for (let n = 0; n < requestCount / dayCount; n++) insert.run(total.day, JSON.stringify({ ...e, requestId: `bulk-${day}-${n}` }));
+    }
+  })();
+  const prepare = vi.spyOn(db, 'prepare');
+  const started = performance.now();
+  db.transaction(() => rebuildRetainedTotals(db))();
+  console.info(`150k rebuild: ${Math.round(performance.now() - started)} ms`);
+  const scans = prepare.mock.calls.filter(([sql]) => /SELECT .*FROM requests/i.test(sql));
+  expect(scans).toHaveLength(1);
+  prepare.mockRestore();
+  expect(sum(rows()).requests).toBe(requestCount);
+  expect(rows().every((t) => t.start !== undefined)).toBe(true);
+}, LARGE_MIGRATION_TIMEOUT_MS);
+
+it('removes the physical legacy key after normalizing a missing client and source', () => {
+  const e = event('2026-10-20T12:00:00Z', { client: null });
+  store(e);
+  const total = baseline([e]);
+  const { client: _client, source: _source, ...legacy } = total;
+  db.prepare('UPDATE activity_totals SET key = ?, total = ?').run(`${totalKey(total)}|undefined`, JSON.stringify(legacy));
+  rebuildRetainedTotals(db);
+  expect(rows()).toHaveLength(1);
+  expect(rows()[0]).toMatchObject({ start: localHourStart(Date.parse(e.at)), client: null, source: 'proxy' });
+});
+
+it.each(['requests', 'failed', 'inputTokens', 'outputTokens', 'cachedTokens', 'cacheWriteTokens', 'unpricedRequests'] as const)(
+  'keeps the baseline when %s differs', (field) => {
+    const e = event('2026-10-20T12:00:00Z');
+    store(e);
+    const old = baseline([e], (t) => { t[field] += 1; });
+    rebuildRetainedTotals(db);
+    expect(rows()).toEqual([old]);
+  },
+);

@@ -1,11 +1,11 @@
-import { addEvent, emptyCounts, localDay } from '@shared/activityCounts';
+import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
   ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
-import { identityKey, reconcileUsage, rememberUsage } from './usageLedger';
+import { accountedUsage, identityKey, reconcileUsage, rememberUsage } from './usageLedger';
 import { appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 
@@ -73,9 +73,9 @@ class ActivityLog {
       importLegacyFiles(this.conn, appPaths.legacyActivityDir);
       if (!this.conn.prepare("SELECT 1 FROM meta WHERE key = 'usage-ledger-seeded'").get()) {
         this.conn.transaction(() => {
-          for (const r of this.conn!.prepare('SELECT id, event FROM requests').all() as RequestRow[]) {
+          for (const r of this.conn!.prepare('SELECT id, day, event FROM requests').all() as (RequestRow & { day: string })[]) {
             const e = toStored(r);
-            rememberUsage(this.conn!, e, r.id, null);
+            rememberUsage(this.conn!, e, r.id, null, r.day);
           }
           this.conn!.prepare("INSERT INTO meta VALUES ('usage-ledger-seeded', '1')").run();
         })();
@@ -116,8 +116,7 @@ class ActivityLog {
           const key = merge.removeKey!;
           const total = totals.get(key);
           if (total) {
-            const counts = emptyCounts();
-            addEvent(counts, old);
+            const counts = accountedUsage(old);
             for (const k of Object.keys(counts) as (keyof typeof counts)[]) total[k] -= counts[k];
             this.db.prepare('INSERT OR REPLACE INTO activity_totals VALUES (?, ?)').run(key, JSON.stringify(total));
           }

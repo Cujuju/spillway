@@ -23,13 +23,16 @@ export function addToTotals(totals: Map<string, ActivityTotal>, e: ActivityEvent
   return row;
 }
 
-export function readTotals(db: Db): Map<string, ActivityTotal> {
-  const rows = db.prepare('SELECT total FROM activity_totals').all() as { total: string }[];
-  return new Map(rows.map((r) => {
+export function readTotalRows(db: Db): { key: string; total: ActivityTotal }[] {
+  const rows = db.prepare('SELECT key, total FROM activity_totals').all() as { key: string; total: string }[];
+  return rows.map((r) => {
     const t = JSON.parse(r.total) as ActivityTotal;
-    const total = { ...t, client: t.client ?? null, source: t.source ?? 'proxy' as const };
-    return [storedTotalKey(total), total];
-  }));
+    return { key: r.key, total: { ...t, client: t.client ?? null, source: t.source ?? 'proxy' as const } };
+  });
+}
+
+export function readTotals(db: Db): Map<string, ActivityTotal> {
+  return new Map(readTotalRows(db).map(({ total }) => [storedTotalKey(total), total]));
 }
 
 /** Daily consumers sum disjoint legacy baselines and newly recorded hours. */

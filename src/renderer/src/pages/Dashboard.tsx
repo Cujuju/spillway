@@ -66,16 +66,28 @@ export function Dashboard() {
   // Window lengths across providers (5-hour, weekly). The chart shows one card line; the longest length by default.
   const lengths = createMemo(() => durationChoices(providers().map((p) => credsOf(p.id))));
   const cards = createProviderPools(() => providers().map((p) => p.id), credsOf, lengths, () => snapshot()?.strategy ?? '');
-  const lineId = () => {
-    const c = chosenLine();
-    if (c && cards().some((p) => p.lines().some((l) => l.id === c))) return c;
-    const longest = lengths().at(-1)?.value;
-    return longest ? lengthLineId(longest) : null;
-  };
-  const chartModels = () =>
+  // Lines of the providers in view; the chart only picks among these, so it never charts an empty window.
+  const visibleLines = createMemo(() =>
     cards()
       .filter((c) => provider() === ALL || c.id === provider())
-      .flatMap((c) => c.lines().filter((l) => l.id === lineId()).map((l) => l.model));
+      .flatMap((c) => c.lines().map((line) => ({ provider: c.id, line }))),
+  );
+  const visibleLengths = () => lengths().filter((l) => visibleLines().some((v) => v.line.id === lengthLineId(l.value)));
+  const lineId = () => {
+    const c = chosenLine();
+    if (c && visibleLines().some((v) => v.line.id === c)) return c;
+    const longest = visibleLengths().at(-1)?.value;
+    return longest ? lengthLineId(longest) : null;
+  };
+  const chartModels = () => visibleLines().filter((v) => v.line.id === lineId()).map((v) => v.line.model);
+  // Chart window picker: each length in view, plus a charted scoped line; the title names the providers it charts.
+  const chartWindows = createMemo(() => {
+    const charted = (id: string) => `Charts ${visibleLines().filter((v) => v.line.id === id).map((v) => providerLabel(v.provider)).join(', ')}`;
+    const options = visibleLengths().map((l) => ({ value: lengthLineId(l.value), label: l.label, title: charted(lengthLineId(l.value)) }));
+    const scoped = visibleLines().find((v) => v.line.scoped && v.line.id === lineId());
+    if (scoped) options.push({ value: scoped.line.id, label: scoped.line.label(), title: charted(scoped.line.id) });
+    return options;
+  });
   // Each provider sorts by its own widest window; keys differ between providers.
   const sortKeys = createMemo(() => new Map(providers().map((p) => [p.id, poolWindowKey(credsOf(p.id))])));
   const loaded = () => creds().filter((c) => c.windows.some((w) => w.usedPercent !== null)).length;
@@ -168,7 +180,7 @@ export function Dashboard() {
           when={focused()}
           fallback={
             <Show when={!providerCreds().every((c) => c.apiKey)}>
-              <PoolPanel models={chartModels()} />
+              <PoolPanel models={chartModels()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
             </Show>
           }
         >

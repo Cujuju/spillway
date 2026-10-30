@@ -5,6 +5,7 @@ import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
+import { Seg } from './ui';
 
 const HOURS_PER_DAY = 24;
 /** Forecast lengths in hours: short ones for 5-hour windows, then days for weekly ones. */
@@ -21,11 +22,18 @@ const hours = () => settings().dashboard.forecastHours;
 const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 const lengthText = (h: number) => (h % HOURS_PER_DAY ? plural(h, 'hour') : plural(h / HOURS_PER_DAY, 'day'));
 
+export interface ChartWindow {
+  /** Card line id (`lengthLineId` or `scopedLineId`). */
+  value: string;
+  label: string;
+  title: string;
+}
+
 /**
- * Remaining/drain chart and forecast, a line per pool (the provider cards pick pools and window).
+ * Remaining/drain chart and forecast, a line per pool. Cards pick pools; cards or picker pick the window.
  * The chart takes the panel's spare height; the wheel zooms its time span.
  */
-export function PoolPanel(props: { models: PoolModel[] }) {
+export function PoolPanel(props: { models: PoolModel[]; windows: ChartWindow[]; line: string | null; onLine: (id: string) => void }) {
   const [tab, setTab] = persistedSignal('dashboard.poolTab', 'remaining', POOL_TABS);
   const shown = createMemo(() => props.models.filter((m) => m.summary()));
   const single = () => shown().length === 1;
@@ -56,6 +64,9 @@ export function PoolPanel(props: { models: PoolModel[] }) {
             <Show when={single()}><span><span class="dot" />Past</span></Show>
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
+            </Show>
+            <Show when={props.windows.length}>
+              <Seg label="Chart window" value={props.line ?? ''} options={props.windows} onChange={props.onLine} />
             </Show>
             <select class="select" value={hours()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastHours = Number(e.currentTarget.value); })}>
               <For each={FORECAST_HOUR_CHOICES}>{(n) => <option value={n}>Next {lengthText(n)}</option>}</For>

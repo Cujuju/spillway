@@ -6,6 +6,14 @@ import { zstdCompressSync } from 'node:zlib';
 import { MessageChannel } from 'node:worker_threads';
 import { expect, it, vi } from 'vitest';
 
+const notifications = vi.hoisted(() => ({ next: undefined as (() => void) | undefined }));
+vi.mock('node:fs', async (original) => {
+  const fs = await original<typeof import('node:fs')>();
+  return { ...fs, watch: (...args: any[]) => {
+    const listener = args.pop();
+    return (fs.watch as any)(...args, (...event: any[]) => { listener(...event); notifications.next?.(); });
+  } };
+});
 const metrics = vi.hoisted(() => ({} as Record<string, { calls: number; ms: number }>));
 function timed(name: string, fn: (...args: any[]) => any) {
   return (...args: any[]) => {
@@ -55,8 +63,11 @@ vi.mock('./usageLedger', async (original) => {
   return { ...mod, reconcileUsage: (...args: any[]) => timed('ledger', mod.reconcileUsage as any)(...args) };
 });
 it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', async () => {
-  const { startClientLogSync } = await import('./clientLogSync');
+  const { startClientLogSync, CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS } = await import('./clientLogSync');
   const { ActivityLog } = await import('./activityStore');
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-perf-'));
   const oldClaude = process.env.CLAUDE_CONFIG_DIR;
   const oldCodex = process.env.CODEX_HOME;
@@ -69,6 +80,9 @@ it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', a
   const channel = new MessageChannel();
   channel.port2.on('message', () => {});
   const broadcast = timed('broadcast', (message) => channel.port1.postMessage(message));
+  let stop: (() => Promise<void>) | undefined;
+  let done: (() => void) | undefined;
+  let progress = 0; let resets = 0;
   try {
     for (let d = 0; d < 300; d++) {
       const folder = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', `project-${d}`, 'sessions');
@@ -85,17 +99,21 @@ it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', a
     log.append({ ...parseClientLine(line('proxy-seed'), 'claude', {})!, source: 'proxy', authIndex: 'synthetic-account' });
     const poll = async (label: string) => {
       for (const key of Object.keys(metrics)) delete metrics[key];
-      let progress = 0; let resets = 0;
+      progress = 0; resets = 0;
       const cpu = process.cpuUsage(); const start = performance.now();
-      let done!: () => void;
+
       const finished = new Promise<void>((resolve) => { done = resolve; });
-      const stop = startClientLogSync(sink, () => {
+      if (!stop) stop = startClientLogSync(sink, () => {
         resets++; timed('prune', log.prune.bind(log))();
         broadcast({ event: 'reset' });
         timed('coverage', log.coverage.bind(log))();
         timed('resetQueries', () => { log.buckets(31); log.daySummaries(); log.page({ day: null, before: null, failedOnly: false, scope: { source: 'all', accounts: null, clients: null } }); })();
-      }, (p) => { progress++; broadcast({ event: 'progress', value: p }); if (p.state === 'idle') done(); });
-      await finished; await stop();
+      }, (p) => { progress++; broadcast({ event: 'progress', value: p }); if (p.state === 'idle') done?.(); });
+      else {
+        clock += label === 'reconciliation' ? CLIENT_LOG_RECONCILE_MS : CLIENT_LOG_POLL_MS;
+        await vi.advanceTimersByTimeAsync(CLIENT_LOG_POLL_MS);
+      }
+      await finished;
       const used = process.cpuUsage(cpu);
       results.push(structuredClone({ label, wallMs: performance.now() - start, cpuMs: (used.user + used.system) / 1000, progress, resets, metrics }));
       if (label === 'unchanged') {
@@ -103,15 +121,23 @@ it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', a
         expect(metrics.open).toBeUndefined();
         expect(metrics.zstd).toBeUndefined();
         expect(metrics.dbBatch).toBeUndefined();
+        expect(metrics.stat).toBeUndefined();
+        expect(metrics.readdir).toBeUndefined();
       }
     };
     await poll('seed');
     for (let run = 0; run < 3; run++) {
       await poll('unchanged');
-      for (let n = 0; n < 5; n++) await appendFile(paths[n]!, line(`append-${run}-${n}`));
-      await poll('append-five');
+      const notified = new Promise<void>((resolve) => { notifications.next = resolve; });
+      await appendFile(paths[0]!, line(`append-${run}`));
+      await notified;
+      notifications.next = undefined;
+      await poll('append-old');
     }
+    await poll('reconciliation');
   } finally {
+    await stop?.();
+    vi.useRealTimers(); vi.restoreAllMocks();
     log.close();
     channel.port1.close(); channel.port2.close();
     if (oldClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = oldClaude;

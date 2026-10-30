@@ -5,20 +5,23 @@ import { readdir, open, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
+import { ClientLogWatcher } from './clientLogWatcher';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
 
-/** Thirty-second polling bounds staleness without reacting to every streaming append, and discovers new directories consistently on Windows/macOS. */
+/** Batch streaming appends at the existing cadence. */
 export const CLIENT_LOG_POLL_MS = 30_000;
+/** Recover missed notifications within five minutes while amortising a full walk over ten polls. */
+export const CLIENT_LOG_RECONCILE_MS = 5 * 60_000;
 /** Bound renderer progress traffic during large individual files. */
 const IMPORT_PROGRESS_INTERVAL_MS = 100;
 const CHECKPOINT_ANCHOR_BYTES = 256;
 const READ_CHUNK_BYTES = 256 * 1024;
 /** Small usage-only lines must not turn a byte-sized read into an unbounded synchronous transaction. */
 const MAX_BATCH_LINES = 128;
-/** Replays unversioned checkpoints once to repair preliminary Claude usage already imported. */
-const CHECKPOINT_VERSION = 1;
-export interface Checkpoint { size: number; mtime: number; offset: number; context: LogContext; birthtime: number; anchor: string; complete?: boolean; version?: number }
+/** Replay older checkpoints once to establish file identities and repair preliminary Claude usage. */
+const CHECKPOINT_VERSION = 2;
+export interface Checkpoint { size: number; mtime: number; offset: number; context: LogContext; birthtime: number; dev: string; ino: string; ctime: number; anchor: string; complete?: boolean; version?: number }
 export interface ImportSink {
   checkpoint(file: string): string | undefined;
   /** False means only the checkpoint changed; void preserves sinks without accounting feedback. */
@@ -60,12 +63,15 @@ async function* archiveChunks(file: string, offset: number): AsyncGenerator<Buff
 export async function importClientFile(file: string, provider: 'claude' | 'codex', sink: ImportSink, stopped = () => false): Promise<boolean> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const info = await stat(file);
+    const raw = await stat(file, { bigint: true });
+    const info = { size: Number(raw.size), mtimeMs: Number(raw.mtimeNs) / 1e6, birthtimeMs: Number(raw.birthtimeNs) / 1e6, ctimeMs: Number(raw.ctimeNs) / 1e6 };
+    const identity = { dev: raw.dev.toString(), ino: raw.ino.toString(), ctime: info.ctimeMs };
     const saved = sink.checkpoint(file);
     const archived = file.endsWith('.zst');
     let cp: Checkpoint | undefined = saved ? JSON.parse(saved) : undefined;
     if (cp?.version !== CHECKPOINT_VERSION) cp = undefined;
-    if (cp && (info.size < cp.size || info.mtimeMs < cp.mtime || info.birthtimeMs !== cp.birthtime || (info.mtimeMs !== cp.mtime && (archived || info.size === cp.size)))) cp = undefined;
+    const replaced = cp && (cp.dev !== identity.dev || cp.ino !== identity.ino);
+    if (cp && (replaced || (cp.ctime !== info.ctimeMs && cp.size === info.size) || info.size < cp.size || info.mtimeMs < cp.mtime || info.birthtimeMs !== cp.birthtime || (info.mtimeMs !== cp.mtime && (archived || info.size === cp.size)))) cp = undefined;
     if (cp?.complete && cp.size === info.size && cp.mtime === info.mtimeMs) return false;
     handle = await open(file, 'r');
     const anchorAt = async (offset: number): Promise<string> => {
@@ -109,7 +115,7 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
           }
           offset += end + 1;
           pending = pending.subarray(end + 1);
-          const state: Checkpoint = { version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context, birthtime: info.birthtimeMs, anchor: archived ? '' : await anchorAt(offset) };
+          const state: Checkpoint = { version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context, birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset) };
           if (stopped()) break;
           const committed = sink.importBatch(file, JSON.stringify(state), events);
           changed = (events.length > 0 && committed !== false) || changed;
@@ -120,7 +126,7 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
       await setImmediate();
     }
     if (!stopped()) sink.importBatch(file, JSON.stringify({ version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context,
-      birthtime: info.birthtimeMs, anchor: archived ? '' : await anchorAt(offset), complete: true } satisfies Checkpoint), []);
+      birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset), complete: true } satisfies Checkpoint), []);
     return changed;
   } catch (e) { if (!missing(e)) throw e; return false; }
   finally { await handle?.close(); }
@@ -130,7 +136,20 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
   let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
   let running: Promise<void>;
+  let reconcile = true;
+  let lastReconcile = 0;
+  let active = false;
+  const roots = clientLogRoots().map((root) => {
+    const dirty = new Set<string>();
+    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.add(file), requestReconcile) };
+  });
+  function requestReconcile() {
+    if (stopped) return;
+    reconcile = true;
+    if (!active) { clearTimeout(timer); running = scan(); }
+  }
   const scan = async () => {
+    active = true;
     let dirty = false;
     const state: import('@shared/ipc').ActivityImportState = { state: 'importing', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
     const pending: { file: string; provider: 'claude' | 'codex' }[] = [];
@@ -152,26 +171,38 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     };
     reportProgress();
     try {
-      for (const root of clientLogRoots()) for await (const file of files(root.dir)) {
-        if (stopped) return;
-        pending.push({ file, provider: root.provider });
+      const full = reconcile || Date.now() - lastReconcile >= CLIENT_LOG_RECONCILE_MS;
+      reconcile = false;
+      if (full) lastReconcile = Date.now();
+      for (const root of roots) {
+        // Swap the work set before awaiting: events during this scan belong to the next poll.
+        const dirtyFiles = [...root.dirty];
+        root.dirty.clear();
+        if (full) await root.watcher.refresh();
+        if (full || root.watcher.fallback) {
+          for await (const file of files(root.dir)) {
+            if (stopped) return;
+            pending.push({ file, provider: root.provider });
+          }
+        } else for (const file of dirtyFiles) pending.push({ file, provider: root.provider });
       }
       state.filesTotal = pending.length;
       reportProgress();
       for (const { file, provider } of pending) {
         if (stopped) return;
         try { dirty = await importClientFile(file, provider, counted, () => stopped) || dirty; }
-        catch (e) { state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
+        catch (e) { roots.find((root) => root.provider === provider)!.dirty.add(file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
         reportProgress();
       }
       if (dirty && !stopped) changed();
-    } catch (e) { state.error = `Local usage scan failed: ${String(e)}`; }
+    } catch (e) { lastReconcile = -Infinity; state.error = `Local usage scan failed: ${String(e)}`; }
     finally {
       progress({ ...state, state: 'idle' });
-      if (!stopped) timer = setTimeout(() => { running = scan(); }, CLIENT_LOG_POLL_MS);
+      active = false;
+      if (!stopped) timer = setTimeout(() => { running = scan(); }, reconcile ? 0 : CLIENT_LOG_POLL_MS);
     }
   };
   running = scan();
-  return async () => { stopped = true; clearTimeout(timer); await running; };
+  return async () => { stopped = true; clearTimeout(timer); for (const root of roots) root.watcher.close(); await running; };
 }

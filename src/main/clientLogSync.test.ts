@@ -67,14 +67,27 @@ it.each(['truncate', 'replace', 'backwards'])('restarts after %s even with a val
   const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
   try {
     await writeFile(file, '{}\n{}\n');
+    await utimes(file, 1_700_000_000, 1_700_000_000);
     await importClientFile(file, 'claude', sink);
     if (mode === 'truncate') await writeFile(file, '{}\n');
     else if (mode === 'replace') {
-      const cp = JSON.parse(state!); cp.birthtime -= 1; state = JSON.stringify(cp);
+      const info = await stat(file);
+      await rm(file);
+      await writeFile(file, '{}\n{}\n');
+      await utimes(file, info.atimeMs / 1000, info.mtimeMs / 1000);
+      expect((await stat(file)).mtimeMs).toBe(info.mtimeMs);
+      expect((await stat(file)).size).toBe(info.size);
+      const replacement = await stat(file, { bigint: true });
+      const cp = JSON.parse(state!);
+      expect([replacement.dev.toString(), replacement.ino.toString()]).not.toEqual([cp.dev, cp.ino]);
+      // Simulate Windows birthtime tunnelling and a coincident ctime; only file identity can invalidate this checkpoint.
+      cp.birthtime = Number(replacement.birthtimeNs) / 1e6;
+      cp.ctime = Number(replacement.ctimeNs) / 1e6;
+      state = JSON.stringify(cp);
     } else {
       await appendFile(file, '{}\n');
       const info = await stat(file);
-      await utimes(file, info.atime, new Date(info.mtimeMs - 10_000));
+      await utimes(file, info.atime, new Date(JSON.parse(state!).mtime - 10_000));
     }
     vi.mocked(open).mockClear();
     const batch = vi.spyOn(sink, 'importBatch');

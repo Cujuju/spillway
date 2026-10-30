@@ -1,0 +1,154 @@
+import { EventEmitter } from 'node:events';
+import { watch, existsSync } from 'node:fs';
+import { mkdtemp, mkdir, writeFile, appendFile, rm, stat, readdir, utimes } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, startClientLogSync, importClientFile } from './clientLogSync';
+import { ActivityLog } from './activityStore';
+import { parseClientLine } from './clientLogParser';
+import type { ActivityImportState } from '@shared/ipc';
+
+vi.mock('node:fs', { spy: true });
+vi.mock('node:fs/promises', { spy: true });
+const handles: { dir: string; recursive: boolean; emit: (event: string, filename: string | null) => void; handle: EventEmitter & { close: ReturnType<typeof vi.fn> } }[] = [];
+let dir: string;
+let log: ActivityLog;
+let stop: (() => Promise<void>) | undefined;
+const line = (id: string, tokens = 1) => JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), sessionId: 's',
+  message: { id, model: 'claude-opus-5-5', usage: { input_tokens: 1, output_tokens: tokens } } }) + '\n';
+let idle: (() => void) | undefined;
+let nextIdle: Promise<void>;
+const progress = vi.fn((p: ActivityImportState) => { if (p.state === 'idle') idle?.(); });
+function waitIdle() { nextIdle = new Promise<void>((resolve) => { idle = resolve; }); return nextIdle; }
+const changed = vi.fn();
+beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.setSystemTime(new Date('2026-10-30T12:00:00Z'));
+  handles.length = 0;
+  changed.mockClear(); progress.mockClear();
+  vi.mocked(watch).mockImplementation(((root: string, options: unknown, listener?: (event: string, filename: string | null) => void) => {
+    if (!existsSync(root)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    const handle = Object.assign(new EventEmitter(), { close: vi.fn() });
+    handles.push({ dir: root, recursive: typeof options !== 'function', emit: typeof options === 'function' ? options : listener, handle } as typeof handles[number]);
+    return handle;
+  }) as unknown as typeof watch);
+  dir = await mkdtemp(path.join(tmpdir(), 'spillway-watch-'));
+  vi.stubEnv('CLAUDE_CONFIG_DIR', dir); vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  await mkdir(path.join(dir, 'projects', 'old', 'subagents'), { recursive: true });
+  await mkdir(path.join(dir, 'codex', 'sessions'), { recursive: true });
+  log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 30 });
+});
+afterEach(async () => {
+  await stop?.(); stop = undefined;
+  log.close(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks();
+  await rm(dir, { recursive: true, force: true });
+});
+const file = () => path.join(dir, 'projects', 'old', 'subagents', 'old.jsonl');
+async function start() { const done = waitIdle(); stop = startClientLogSync(log, changed, progress); await done; }
+async function poll() { const done = waitIdle(); await vi.advanceTimersByTimeAsync(CLIENT_LOG_POLL_MS); await done; }
+function root() { return handles.findLast((h) => h.dir === path.join(dir, 'projects') && h.recursive)!; }
+
+it('imports old-file appends without walking and does no filesystem work on an idle poll', async () => {
+  await writeFile(file(), line('a')); await start();
+  vi.mocked(stat).mockClear(); vi.mocked(readdir).mockClear();
+  await poll();
+  expect(stat).not.toHaveBeenCalled(); expect(readdir).not.toHaveBeenCalled();
+  await appendFile(file(), line('b'));
+  root().emit('change', path.relative(path.join(dir, 'projects'), file()));
+  await poll();
+  expect(readdir).not.toHaveBeenCalled(); expect(stat).toHaveBeenCalledTimes(1);
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+});
+
+it.each(['null', 'error', 'replacement'])('reconciles immediately on %s and closes watchers', async (event) => {
+  await start(); vi.mocked(readdir).mockClear();
+  const done = waitIdle();
+  if (event === 'null') root().emit('change', null);
+  else if (event === 'error') root().handle.emit('error', new Error('lost watch'));
+  else handles.find((h) => h.dir === dir)!.emit('rename', 'projects');
+  await vi.advanceTimersByTimeAsync(0); await done;
+  expect(readdir).toHaveBeenCalled();
+  await stop!();
+  expect(handles.every((h) => h.handle.close.mock.calls.length === 1)).toBe(true);
+  const oldHandles = handles.slice();
+  await start();
+  expect(oldHandles.every((h) => h.handle.close.mock.calls.length === 1)).toBe(true);
+  expect(handles.length).toBeGreaterThan(oldHandles.length);
+});
+
+it('falls back to polling if watch creation fails and logs once', async () => {
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.mocked(watch).mockImplementation(() => { throw new Error('unsupported'); });
+  await start(); await writeFile(file(), line('new')); await poll();
+  expect(log.totalsList()).toHaveLength(1);
+  await poll(); expect(warning).toHaveBeenCalledTimes(2); // Once per root.
+});
+
+it('discovers a missing root from its nearest existing ancestor', async () => {
+  await rm(path.join(dir, 'projects'), { recursive: true }); await start();
+  await mkdir(path.dirname(file()), { recursive: true }); await writeFile(file(), line('appeared'));
+  const done = waitIdle(); handles.find((h) => h.dir === dir)!.emit('rename', 'projects');
+  await vi.advanceTimersByTimeAsync(0); await done;
+  expect(log.totalsList()).toHaveLength(1); expect(root()).toBeDefined();
+});
+
+it('reconciles at five minutes even without notifications', async () => {
+  await start(); await writeFile(file(), line('missed'));
+  for (let n = 0; n < CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+  expect(log.totalsList()).toHaveLength(1);
+});
+
+it('retains events arriving during an active scan for the next poll', async () => {
+  await writeFile(file(), line('first'));
+  const original = log.importBatch.bind(log);
+  let injected = false;
+  vi.spyOn(log, 'importBatch').mockImplementation((f, s, events) => {
+    if (!injected && events.length) { injected = true; root().emit('change', path.relative(path.join(dir, 'projects'), file())); }
+    return original(f, s, events);
+  });
+  await start();
+  await appendFile(file(), line('later'));
+  await poll();
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+});
+
+it('emits resets for coverage-only matches and usage replacement, but not replay', async () => {
+  const first = line('matched');
+  const event = parseClientLine(first, 'claude', {})!;
+  log.append({ ...event, source: 'proxy', requestId: 'proxy', authIndex: 'account' });
+  expect(log.coverage().clients).toEqual([]);
+  await writeFile(file(), first); await start();
+  expect(log.coverage().clients).toEqual([expect.objectContaining({ requests: 1, viaProxy: 1 })]);
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
+  await appendFile(file(), line('matched', 5)); root().emit('change', path.relative(path.join(dir, 'projects'), file()));
+  await poll(); // Matched proxy usage remains authoritative.
+  await appendFile(file(), line('local', 2)); root().emit('change', path.relative(path.join(dir, 'projects'), file()));
+  await poll();
+  const before = changed.mock.calls.length;
+  await appendFile(file(), line('local', 8)); root().emit('change', path.relative(path.join(dir, 'projects'), file()));
+  await poll(); expect(changed).toHaveBeenCalledTimes(before + 1);
+  const totals = log.totalsList();
+  const info = await stat(file()); await utimes(file(), info.atime, new Date(info.mtimeMs - 10_000));
+  await importClientFile(file(), 'claude', log);
+  expect(log.totalsList()).toEqual(totals);
+});
+
+it.each([false, true])('delivers clock-controlled long-scan progress and final idle (cancel: %s)', async (cancel) => {
+  await writeFile(file(), Array.from({ length: 1000 }, (_, i) => line(String(i))).join(''));
+  const original = log.importBatch.bind(log);
+  let batches = 0;
+  vi.spyOn(log, 'importBatch').mockImplementation((...args) => {
+    vi.setSystemTime(Date.now() + 100);
+    const result = original(...args); batches++;
+    if (cancel && batches === 2) void stop!();
+    return result;
+  });
+  await start();
+  const updates = progress.mock.calls.map(([p]) => p);
+  expect(updates.filter((p) => p.state === 'importing').length).toBeGreaterThan(2);
+  expect(updates.at(-1)?.state).toBe('idle');
+  expect(updates.at(-1)?.recordsImported).toBe(cancel ? 256 : 1000);
+  expect(JSON.parse(log.checkpoint(file())!).complete).toBe(cancel ? undefined : true);
+});

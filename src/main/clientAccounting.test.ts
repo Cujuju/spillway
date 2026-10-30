@@ -63,11 +63,14 @@ it('reconciles an existing client row when a late upstream ID joins an already s
 
 it('rolls back rows, totals and checkpoints together on a failed batch', () => {
   const e = sampleUsage({ at, requestId: 'rollback', source: 'client-log' });
+  activityLog.importBatch('failed', 'warm', []);
+  expect(activityLog.checkpoint('failed')).toBe('warm');
   expect(() => activityLog.importBatch('failed', '1', [e, null as unknown as ActivityEvent])).toThrow();
-  expect(activityLog.checkpoint('failed')).toBeUndefined();
+  expect(activityLog.checkpoint('failed')).toBe('warm');
   expect(totals()).toBe(0);
   expect(activityLog.day(localDay(Date.now()))).toHaveLength(0);
   activityLog.close();
+  expect(activityLog.checkpoint('failed')).toBe('warm');
   activityLog.importBatch('failed', '1', [e]);
   expect(totals()).toBe(1);
 });

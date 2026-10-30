@@ -21,8 +21,10 @@ const MOON_RADIUS_PX = 6;
 /** Axis labels every 6 hours, closing on midnight. */
 const AXIS_HOURS = [0, 6, 12, 18, 24];
 const STAR_COUNT = 22;
-/** Fractional part of the golden ratio: successive multiples scatter evenly. */
-const GOLDEN_FRACTION = 0.618034;
+/** R2 low-discrepancy steps (1/φ₂, 1/φ₂²): independent in x and y, so points scatter evenly in 2-D without forming lines. */
+const R2_X = 0.7548776662;
+const R2_Y = 0.569840291;
+const R2_OFFSET = 0.5;
 /** Stars stay in the upper part of the sky above the horizon. */
 const STAR_BAND = 0.9;
 /** Every third star is fainter. */
@@ -30,12 +32,12 @@ const DIM_EVERY = 3;
 const pct = (share: number) => `${share * 100}%`;
 const skyY = (height: number) => HORIZON_Y - height * (HORIZON_Y - ARC_TOP_Y);
 
-/** Fixed, evenly scattered stars in the night parts of the sky (golden-ratio sequence, so no randomness per render). */
+/** Fixed, evenly scattered stars in the night parts of the sky (R2 sequence, so no randomness per render). */
 const STARS = Array.from({ length: STAR_COUNT }, (_, i) => {
   const nightHours = HOURS_PER_DAY - (SUNSET_HOUR - SUNRISE_HOUR) - 2 * TWILIGHT_HOURS;
-  const h = ((i * GOLDEN_FRACTION) % 1) * nightHours;
+  const h = ((R2_OFFSET + i * R2_X) % 1) * nightHours;
   const hour = h < SUNRISE_HOUR - TWILIGHT_HOURS ? h : h + (SUNSET_HOUR - SUNRISE_HOUR) + 2 * TWILIGHT_HOURS;
-  return { x: hour / HOURS_PER_DAY, y: ((i * GOLDEN_FRACTION * GOLDEN_FRACTION) % 1) * HORIZON_Y * STAR_BAND, dim: i % DIM_EVERY === 0 };
+  return { x: hour / HOURS_PER_DAY, y: ((R2_OFFSET + i * R2_Y) % 1) * HORIZON_Y * STAR_BAND, dim: i % DIM_EVERY === 0 };
 });
 
 export function ActivityRhythm(props: {

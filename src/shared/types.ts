@@ -237,6 +237,13 @@ export interface ActivityPage {
 }
 
 /** One stored day for the Requests list's section header. */
+/** Client-log requests since the proxy could first be matched, per client: how many the proxy also saw. */
+export interface ProxyCoverage {
+  /** Epoch ms of the first proxy record with a session or response ID; null before there is one. */
+  since: number | null;
+  clients: { provider: string; client: string | null; requests: number; viaProxy: number }[];
+}
+
 export interface ActivityDaySummary extends Pick<ActivityCounts, 'requests' | 'failed' | 'costUsd' | 'unpricedRequests'> {
   /** Local day, YYYY-MM-DD. */
   day: string;

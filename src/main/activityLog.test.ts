@@ -107,6 +107,21 @@ describe('hourlyBuckets / lastDays', () => {
 describe('activityLog', () => {
   beforeEach(() => activityLog.clear());
 
+  it('reports client-log requests since the first matchable proxy record, and how many the proxy also saw', () => {
+    expect(activityLog.coverage()).toEqual({ since: null, clients: [] });
+    const cli = { source: 'client-log' as const, client: 'claude-cli', authIndex: null };
+    activityLog.append(event(daysAgo(4), { requestId: 'no-match-key' }));
+    activityLog.importBatch('early.jsonl', 'done', [event(daysAgo(3), { ...cli, requestId: 'before-matchable' })]);
+    activityLog.append(event(daysAgo(1, 9), { upstreamId: 'msg_1' }));
+    activityLog.importBatch('log.jsonl', 'done', [
+      event(daysAgo(1, 9), { ...cli, requestId: 'seen', upstreamId: 'msg_1' }),
+      event(daysAgo(1, 10), { ...cli, requestId: 'bypassed', upstreamId: 'msg_2' }),
+    ]);
+    const report = activityLog.coverage();
+    expect(report.since).toBe(daysAgo(1, 9).getTime());
+    expect(report.clients).toEqual([{ provider: 'claude', client: 'claude-cli', requests: 2, viaProxy: 1 }]);
+  });
+
   it('returns every stored weekend hour to the heatmap and rhythm', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 9, 29, 14, 30).getTime());
     try {

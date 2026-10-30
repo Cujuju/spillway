@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, createMemo, Show } from 'solid-js';
+import { createMemo, createResource, createSignal, For, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
 import { ActivityOverview } from '../components/ActivityOverview';
@@ -8,9 +8,12 @@ import { ClientFilter } from '../components/ClientFilter';
 import { Notice, Seg } from '../components/ui';
 import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
+import { pct } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
 
+/** Coverage changes slowly; a minute keeps it current without re-querying every request burst. */
+const COVERAGE_REFRESH_MS = 60_000;
 const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'totals', label: 'Daily totals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 
@@ -24,6 +27,10 @@ export function Activity() {
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
   const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source() }));
   const days = createDaySummaries(scope);
+  const [coverage, { refetch: refetchCoverage }] = createResource(revision, () => window.api.activityCoverage());
+  const coverageTimer = setInterval(() => void refetchCoverage(), COVERAGE_REFRESH_MS);
+  onCleanup(() => clearInterval(coverageTimer));
+  const covered = createMemo(() => (coverage()?.clients ?? []).filter((c) => c.requests > 0));
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
     { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString()}` },
@@ -55,6 +62,18 @@ export function Activity() {
         <Notice>Proxy activity appears while the proxy is running. Local usage syncs automatically.</Notice>
       </Show>
 
+      <Show when={view() === 'overview' && covered().length > 0}>
+        <p class="muted chart-note" title="Requests in Claude Code and Codex logs since the proxy began recording session or response IDs, and how many of them the proxy also recorded">
+          Proxy coverage since {new Date(coverage()!.since!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}:{' '}
+          <For each={covered()}>{(c, i) => (
+            <>
+              {i() > 0 ? ' · ' : ''}
+              <span title={c.provider}>{c.client ?? c.provider}</span>{' '}
+              {pct((c.viaProxy / c.requests) * 100)} via proxy ({(c.requests - c.viaProxy).toLocaleString()} bypassed)
+            </>
+          )}</For>
+        </p>
+      </Show>
       <Show when={view() === 'overview'}>
         <ActivityOverview scope={scope()} account={accountName} />
       </Show>

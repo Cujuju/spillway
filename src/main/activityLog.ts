@@ -1,7 +1,7 @@
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
-  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type StoredActivityEvent,
+  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
@@ -204,6 +204,22 @@ class ActivityLog {
     const clause = scopeClause(normalizeScope(scope));
     const sql = `SELECT id, event FROM requests WHERE day = ?${failedOnly === true ? ' AND failed = 1' : ''}${clause ? ` AND ${clause.sql}` : ''} ORDER BY id DESC`;
     return (this.db.prepare(sql).all(day, ...(clause?.params ?? [])) as RequestRow[]).map(toStored);
+  }
+
+  /**
+   * Matched client-log identities went through the proxy; unmatched ones bypassed it. Counted only from the first
+   * proxy record carrying a session or response ID: earlier ones can never match.
+   */
+  coverage(): ProxyCoverage {
+    const first = (this.db.prepare(`SELECT min(json_extract(event, '$.at')) AS at FROM usage_identities
+      WHERE source = 'proxy' AND (upstream_id IS NOT NULL OR json_extract(event, '$.sessionId') IS NOT NULL)`).get() as { at: string | null }).at;
+    if (first === null) return { since: null, clients: [] };
+    const since = Date.parse(first);
+    const rows = this.db.prepare(`SELECT json_extract(event, '$.provider') AS provider, json_extract(event, '$.client') AS client,
+      count(*) AS requests, sum(matched) AS viaProxy FROM usage_identities
+      WHERE source = 'client-log' AND json_extract(event, '$.at') >= ? GROUP BY provider, client ORDER BY requests DESC`)
+      .all(first) as ProxyCoverage['clients'];
+    return { since, clients: rows };
   }
 
   totalsList(): ActivityDayTotal[] {

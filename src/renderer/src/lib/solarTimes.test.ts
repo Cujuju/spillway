@@ -24,6 +24,18 @@ describe('solar times', () => {
     }
   });
 
+  it.each([
+    ['America/New_York', '2026-03-08', '96910', 16 * 60 + 33, null],
+    ['Europe/London', '2026-03-28', '96813', null, 4 * 60 + 45],
+  ] as const)('uses the requested local date and event offset in %s', async (zone, day, zip, rise, set) => {
+    try {
+      vi.stubEnv('TZ', zone);
+      const times = solarTimes(new Date(`${day}T12:00:00`), (await zipCoordinates(zip))!);
+      if (rise !== null) expect(Math.abs(times.sunrise * 60 - rise)).toBeLessThan(5);
+      if (set !== null) expect(Math.abs(times.sunset * 60 - set)).toBeLessThan(5);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('keeps polar day/night finite', () => {
     for (const month of [5, 11]) {
       const times = solarTimes(new Date(2026, month, 21), { latitude: 90, longitude: 0 });

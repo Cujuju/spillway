@@ -1,6 +1,7 @@
-import { createEffect, createMemo, createSignal, onCleanup, For, Match, Show, Switch } from 'solid-js';
+import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ActivityBucket } from '@shared/types';
 import { calendarWeeks, heatShape, hourRows } from '../lib/activityHeat';
+import { createHeatScroll } from '../lib/heatScroll';
 import type { Span } from '../lib/activityRange';
 import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { ChartTip, type TipRow } from './ChartTip';
@@ -31,12 +32,7 @@ export function ActivityHeatmap(props: {
 }) {
   const [tip, setTip] = createSignal<{ cell: HTMLElement; title: string; s: Summary } | null>(null);
   let scroller!: HTMLDivElement;
-  createEffect(() => {
-    // A new range opens at its newest column; resizing preserves the user's scroll position.
-    void props.span;
-    const frame = requestAnimationFrame(() => { scroller.scrollLeft = scroller.scrollWidth; });
-    onCleanup(() => cancelAnimationFrame(frame));
-  });
+  createHeatScroll(() => props.span, () => scroller);
   const shape = createMemo(() => heatShape(props.span));
   const hours = createMemo(() => (shape() === 'calendar' ? [] : hourRows(props.rows, props.span)));
   const weeks = createMemo(() => (shape() === 'calendar' ? calendarWeeks(props.rows, props.span) : []));

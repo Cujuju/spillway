@@ -55,3 +55,36 @@ export function sunArc(steps: number, times: SunTimes = FALLBACK_SUN_TIMES): { x
     return { x: (times.sunrise + t * daylight) / HOURS_PER_DAY, height: Math.sin(Math.PI * t) };
   });
 }
+
+const STAR_COUNT = 22;
+/** R2 low-discrepancy steps scatter stars without rows. */
+const R2_X = 0.7548776662;
+const R2_Y = 0.569840291;
+const R2_OFFSET = 0.5;
+const STAR_HORIZON = 0.6;
+const STAR_BAND = 0.9;
+const DIM_EVERY = 3;
+
+/** One 24-hour gradient cycle and the strictly dark interval share the same twilight bounds. */
+export function skyGeometry(times: SunTimes = FALLBACK_SUN_TIMES) {
+  const polarDay = times.sunset - times.sunrise === HOURS_PER_DAY;
+  const polarNight = times.sunrise === times.sunset;
+  const daylight = polarDay ? HOURS_PER_DAY : (times.sunset - times.sunrise + HOURS_PER_DAY) % HOURS_PER_DAY;
+  const twilight = Math.min(TWILIGHT_HOURS, daylight / 2, (HOURS_PER_DAY - daylight) / 2);
+  const rise = times.sunrise;
+  const set = rise + daylight;
+  const stops = [rise - twilight, rise, rise + twilight, set - twilight, set, set + twilight, rise - twilight + HOURS_PER_DAY];
+  const colours = ['night', 'glow', 'day', 'day', 'glow', 'night', 'night'];
+  const gradient = polarDay ? 'var(--sky-day)' : polarNight ? 'var(--sky-night)'
+    : `repeating-linear-gradient(90deg, ${stops.map((hour, i) => `var(--sky-${colours[i]}) ${hour / HOURS_PER_DAY * 100}%`).join(', ')})`;
+  const dawn = polarNight ? 0 : (rise - twilight + HOURS_PER_DAY) % HOURS_PER_DAY;
+  const dusk = polarNight ? 0 : (set + twilight) % HOURS_PER_DAY;
+  const nightHours = polarNight ? HOURS_PER_DAY : Math.max(0, HOURS_PER_DAY - daylight - 2 * twilight);
+  const wrapped = dusk > dawn;
+  const stars = nightHours === 0 ? [] : Array.from({ length: STAR_COUNT }, (_, i) => {
+    const h = ((R2_OFFSET + i * R2_X) % 1) * nightHours;
+    const hour = wrapped ? h < dawn ? h : h + dusk - dawn : dusk + h;
+    return { x: hour / HOURS_PER_DAY, y: ((R2_OFFSET + i * R2_Y) % 1) * STAR_HORIZON * STAR_BAND, dim: i % DIM_EVERY === 0 };
+  });
+  return { twilight, stops, gradient, nightHours, stars };
+}

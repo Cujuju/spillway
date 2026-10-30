@@ -23,12 +23,7 @@
   min-height: 0;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: repeating-linear-gradient(90deg,
-    var(--sky-night) calc(var(--sunrise) - var(--twilight)),
-    var(--sky-glow) var(--sunrise), var(--sky-day) calc(var(--sunrise) + var(--twilight)),
-    var(--sky-day) calc(var(--sunset) - var(--twilight)), var(--sky-glow) var(--sunset),
-    var(--sky-night) calc(var(--sunset) + var(--twilight)),
-    var(--sky-night) calc(var(--sunrise) - var(--twilight) + 100%));
+  background: var(--sky-gradient);
 }
 .rhythm-sky.polar-day { background: var(--sky-day); }
 .rhythm-sky.polar-night { background: var(--sky-night); }

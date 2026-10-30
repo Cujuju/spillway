@@ -1,11 +1,11 @@
 import { createMemo } from 'solid-js';
 import type { ActivityBucket } from '@shared/types';
-import { bucketStarts, hourLabel, metricValue, series, type Metric } from '../lib/activityStats';
+import { hourLabel, hourlySeries, metricValue, type Metric } from '../lib/activityStats';
 import { axisMetric, countRows } from './activityFormat';
 import { TrendChart } from './TrendChart';
 
 export function ActivityHourly(props: { rows: ActivityBucket[]; now: number; metric: Metric }) {
-  const points = createMemo(() => series(props.rows.filter((r) => !r.wholeDay && r.start <= props.now), bucketStarts('24h', props.now), props.now));
+  const points = createMemo(() => hourlySeries(props.rows, props.now));
   return (
     <TrendChart kind="bar" ariaLabel="Hourly activity"
       points={points().map((p) => ({ start: p.start, value: metricValue(p.summary, props.metric) }))}

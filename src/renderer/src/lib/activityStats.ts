@@ -91,6 +91,11 @@ export function series(rows: ActivityBucket[], starts: number[], now: number): S
   return starts.map((start, i) => ({ start, end: starts[i + 1] ?? now, summary: summarize(groups[i]!) }));
 }
 
+/** The latest 24 elapsed local hours, excluding daily totals and future activity. */
+export function hourlySeries(rows: ActivityBucket[], now: number): SeriesPoint[] {
+  return series(rows.filter((r) => !r.wholeDay && r.start <= now), bucketStarts('24h', now), now);
+}
+
 export const inRange = (rows: ActivityBucket[], starts: number[]) => rows.filter((r) => r.start >= starts[0]!);
 
 export interface ModelRow {
@@ -188,9 +193,9 @@ export function heatGrid(rows: ActivityBucket[], mode: HeatMode, now: number): H
   const hourly = rows.filter((r) => !r.wholeDay && r.start <= now);
   const hours = Array.from({ length: HOURS_PER_DAY }, (_, h) => h);
   if (mode === 'hourly') {
-    const starts = bucketStarts('24h', now);
-    return [{ label: '24h', hours: starts.map((t) => new Date(t).getHours()),
-      cells: series(hourly, starts, now).map((p) => p.summary) }];
+    const points = hourlySeries(rows, now);
+    return [{ label: '24h', hours: points.map((p) => new Date(p.start).getHours()),
+      cells: points.map((p) => p.summary) }];
   }
   const cellsOf = (match: (d: Date) => boolean) => {
     const byHour = Array.from({ length: HOURS_PER_DAY }, () => [] as ActivityBucket[]);

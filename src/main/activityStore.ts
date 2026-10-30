@@ -1,3 +1,4 @@
+import { clientLogKey } from './clientLogPaths';
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
@@ -88,12 +89,14 @@ export class ActivityLog {
   }
 
   checkpoint(file: string): string | undefined {
+    file = clientLogKey(file);
     if (!this.checkpoints.has(file)) this.checkpoints.set(file,
       (this.db.prepare('SELECT state FROM client_log_checkpoints WHERE path = ?').get(file) as { state: string } | undefined)?.state);
     return this.checkpoints.get(file);
   }
 
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean {
+    file = clientLogKey(file);
     try {
       const changed = this.db.transaction(() => {
         const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;

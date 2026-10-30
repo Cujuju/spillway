@@ -170,3 +170,48 @@ it.each([false, true])('resumes an interrupted scan of an unchanged file (archiv
     expect(await importClientFile(file, 'claude', sink)).toBe(false);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+it('adopts 100 unchanged legacy identities without opening files; rereads changed files', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-upgrade-'));
+  const states = new Map<string, string>();
+  const sink: ImportSink = { checkpoint: (f) => states.get(f), importBatch: (f, s) => { states.set(f, s); } };
+  try {
+    const files = Array.from({ length: 100 }, (_, n) => path.join(dir, `${n}.jsonl`));
+    for (const file of files) {
+      await writeFile(file, '{}\n'); await importClientFile(file, 'claude', sink);
+    }
+    for (const [key, state] of states) {
+      const cp = JSON.parse(state);
+      delete cp.version; delete cp.dev; delete cp.ino; delete cp.ctime;
+      states.set(key, JSON.stringify(cp));
+    }
+    vi.mocked(open).mockClear();
+    for (const file of files) await importClientFile(file, 'claude', sink);
+    expect([...states.values()].every((s) => JSON.parse(s).version === 2)).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+    const cp = JSON.parse(states.values().next().value!); delete cp.version;
+    states.set([...states.keys()][0]!, JSON.stringify(cp));
+    await appendFile(files[0]!, '{}\n'); await importClientFile(files[0]!, 'claude', sink);
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it.each(['zero', 'large'])('compares %s filesystem identities without false replacement or precision loss', async (mode) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-identity-'));
+  let state: string | undefined;
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
+  try {
+    const file = path.join(dir, 'log.jsonl'); await writeFile(file, '{}\n');
+    const raw = await stat(file, { bigint: true });
+    const info = { ...raw, isFile: () => true, dev: mode === 'zero' ? 0n : 1n, ino: mode === 'zero' ? 0n : 9007199254740992n };
+    vi.mocked(stat).mockResolvedValueOnce(info as never);
+    await importClientFile(file, 'claude', sink);
+    const cp = JSON.parse(state!);
+    if (mode === 'zero') { cp.dev = '1'; cp.ino = '123'; state = JSON.stringify(cp); }
+    vi.mocked(open).mockClear(); vi.mocked(parseClientLine).mockClear();
+    vi.mocked(stat).mockResolvedValueOnce({ ...info, ino: mode === 'zero' ? 0n : 9007199254740993n } as never);
+    await importClientFile(file, 'claude', sink);
+    expect(open).toHaveBeenCalledTimes(mode === 'zero' ? 0 : 1);
+    expect(parseClientLine).toHaveBeenCalledTimes(mode === 'zero' ? 0 : 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

@@ -1,6 +1,10 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { isClientLogFile } from './clientLogPaths';
+
+/** Retry once per reconciliation window; persistent OS failures must not turn polling into a scan loop. */
+export const CLIENT_LOG_WATCH_RETRY_MS = 5 * 60_000;
 
 /** Parent watches detect root replacement; missing ancestors are advanced on each reconciliation. */
 export class ClientLogWatcher {
@@ -8,10 +12,13 @@ export class ClientLogWatcher {
   private closed = false;
   private logged = false;
   fallback = false;
+  private retryAt = 0;
+  private reconciledFailure = false;
 
   constructor(readonly dir: string, private dirty: (file: string) => void, private reconcile: () => void) {}
 
   async refresh(): Promise<void> {
+    if (this.closed || (this.fallback && Date.now() < this.retryAt)) return;
     this.closeHandles();
     let parent = path.dirname(this.dir);
     let target = this.dir;
@@ -31,9 +38,9 @@ export class ClientLogWatcher {
         this.add(watch(this.dir, { recursive: true }, (event, filename) => {
           if (filename === null || filename.toString() === path.basename(this.dir)) { this.reconcile(); return; }
           const file = path.resolve(this.dir, filename.toString());
-          if (/\.jsonl(?:\.zst)?$/.test(file)) this.dirty(file);
-          // Directory renames may introduce populated subtrees without individual file events.
-          else if (event === 'rename') this.reconcile();
+          // Any rename can introduce a populated directory, including one with a log extension.
+          if (event === 'rename') this.reconcile();
+          else if (isClientLogFile(file)) this.dirty(file);
         }));
       } catch (e) {
         if (!['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code ?? '')) throw e;
@@ -44,11 +51,16 @@ export class ClientLogWatcher {
 
   private add(handle: FSWatcher): void {
     this.handles.push(handle);
-    handle.on('error', (e) => { this.fail(e); this.reconcile(); });
+    handle.on('error', (e) => {
+      if (this.closed || !this.handles.includes(handle)) return;
+      this.fail(e);
+      if (!this.reconciledFailure) { this.reconciledFailure = true; this.reconcile(); }
+    });
   }
 
   private fail(e: unknown): void {
     this.closeHandles(); this.fallback = true;
+    this.retryAt = Date.now() + CLIENT_LOG_WATCH_RETRY_MS;
     if (!this.logged) {
       console.warn('[activity] Client log watcher unavailable; polling every 30 seconds:', this.dir, e);
       this.logged = true;

@@ -1,3 +1,4 @@
+import { clientLogKey } from './clientLogPaths';
 import Database from 'better-sqlite3-multiple-ciphers';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
@@ -79,6 +80,13 @@ export function openActivityDb(file: string, hexKey: string): Db {
     db.pragma('journal_mode = WAL');
     db.transaction(() => {
       db.exec(SCHEMA);
+      if (!db.prepare("SELECT 1 FROM meta WHERE key = 'checkpoint-paths-normalized'").get()) {
+        const rows = db.prepare('SELECT path, state FROM client_log_checkpoints ORDER BY json_extract(state, \'$.mtime\'), json_extract(state, \'$.offset\'), path').all() as { path: string; state: string }[];
+        db.exec('DELETE FROM client_log_checkpoints');
+        const insert = db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)');
+        for (const row of rows) insert.run(clientLogKey(row.path), row.state);
+        db.prepare("INSERT INTO meta VALUES ('checkpoint-paths-normalized', '1')").run();
+      }
       const columns = db.prepare('PRAGMA table_info(usage_identities)').all() as { name: string }[];
       if (!columns.some((c) => c.name === 'at')) {
         db.exec(`ALTER TABLE usage_identities ADD COLUMN at TEXT;

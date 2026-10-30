@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { ClientLogWatcher } from './clientLogWatcher';
+import { clientLogKey, isClientLogFile } from './clientLogPaths';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
 
@@ -19,7 +20,7 @@ const CHECKPOINT_ANCHOR_BYTES = 256;
 const READ_CHUNK_BYTES = 256 * 1024;
 /** Small usage-only lines must not turn a byte-sized read into an unbounded synchronous transaction. */
 const MAX_BATCH_LINES = 128;
-/** Replay older checkpoints once to establish file identities and repair preliminary Claude usage. */
+/** Identity-aware checkpoints; unchanged legacy files adopt identity without replay. */
 const CHECKPOINT_VERSION = 2;
 export interface Checkpoint { size: number; mtime: number; offset: number; context: LogContext; birthtime: number; dev: string; ino: string; ctime: number; anchor: string; complete?: boolean; version?: number }
 export interface ImportSink {
@@ -39,7 +40,7 @@ async function* files(dir: string): AsyncGenerator<string> {
     for (const entry of entries) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) yield* files(file);
-      else if (entry.isFile() && /\.jsonl(?:\.zst)?$/.test(entry.name)) yield file;
+      else if (entry.isFile() && isClientLogFile(entry.name)) yield file;
     }
   } catch (e) { if (!missing(e)) throw e; }
 }
@@ -64,13 +65,23 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     const raw = await stat(file, { bigint: true });
+    if (!raw.isFile()) return false;
+    const key = clientLogKey(file);
     const info = { size: Number(raw.size), mtimeMs: Number(raw.mtimeNs) / 1e6, birthtimeMs: Number(raw.birthtimeNs) / 1e6, ctimeMs: Number(raw.ctimeNs) / 1e6 };
     const identity = { dev: raw.dev.toString(), ino: raw.ino.toString(), ctime: info.ctimeMs };
-    const saved = sink.checkpoint(file);
+    const saved = sink.checkpoint(key);
     const archived = file.endsWith('.zst');
     let cp: Checkpoint | undefined = saved ? JSON.parse(saved) : undefined;
-    if (cp?.version !== CHECKPOINT_VERSION) cp = undefined;
-    const replaced = cp && (cp.dev !== identity.dev || cp.ino !== identity.ino);
+    if (cp && cp.version !== CHECKPOINT_VERSION) {
+      if (cp.size === info.size && cp.mtime === info.mtimeMs) {
+        cp = { ...cp, version: CHECKPOINT_VERSION, birthtime: info.birthtimeMs, ...identity };
+        sink.importBatch(key, JSON.stringify(cp), []);
+      } else cp = undefined;
+    }
+    // Some network filesystems expose no stable identity. Metadata and anchors remain authoritative there.
+    const hasIdentity = (dev: string, ino: string) => !!dev && !!ino && dev !== '0' && ino !== '0';
+    const replaced = cp && hasIdentity(cp.dev, cp.ino) && hasIdentity(identity.dev, identity.ino)
+      && (cp.dev !== identity.dev || cp.ino !== identity.ino);
     if (cp && (replaced || (cp.ctime !== info.ctimeMs && cp.size === info.size) || info.size < cp.size || info.mtimeMs < cp.mtime || info.birthtimeMs !== cp.birthtime || (info.mtimeMs !== cp.mtime && (archived || info.size === cp.size)))) cp = undefined;
     if (cp?.complete && cp.size === info.size && cp.mtime === info.mtimeMs) return false;
     handle = await open(file, 'r');
@@ -117,7 +128,7 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
           pending = pending.subarray(end + 1);
           const state: Checkpoint = { version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context, birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset) };
           if (stopped()) break;
-          const committed = sink.importBatch(file, JSON.stringify(state), events);
+          const committed = sink.importBatch(key, JSON.stringify(state), events);
           changed = (events.length > 0 && committed !== false) || changed;
           await setImmediate();
           end = pending.lastIndexOf(10);
@@ -125,7 +136,7 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
       }
       await setImmediate();
     }
-    if (!stopped()) sink.importBatch(file, JSON.stringify({ version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context,
+    if (!stopped()) sink.importBatch(key, JSON.stringify({ version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context,
       birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset), complete: true } satisfies Checkpoint), []);
     return changed;
   } catch (e) { if (!missing(e)) throw e; return false; }
@@ -140,8 +151,8 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
   let lastReconcile = 0;
   let active = false;
   const roots = clientLogRoots().map((root) => {
-    const dirty = new Set<string>();
-    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.add(file), requestReconcile) };
+    const dirty = new Map<string, string>();
+    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.set(clientLogKey(file), file), requestReconcile) };
   });
   function requestReconcile() {
     if (stopped) return;
@@ -176,10 +187,11 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
       if (full) lastReconcile = Date.now();
       for (const root of roots) {
         // Swap the work set before awaiting: events during this scan belong to the next poll.
-        const dirtyFiles = [...root.dirty];
+        const dirtyFiles = [...root.dirty.values()];
         root.dirty.clear();
-        if (full) await root.watcher.refresh();
-        if (full || root.watcher.fallback) {
+        const polling = root.watcher.fallback;
+        if (full || polling) await root.watcher.refresh();
+        if (full || polling || root.watcher.fallback) {
           for await (const file of files(root.dir)) {
             if (stopped) return;
             pending.push({ file, provider: root.provider });
@@ -191,7 +203,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
       for (const { file, provider } of pending) {
         if (stopped) return;
         try { dirty = await importClientFile(file, provider, counted, () => stopped) || dirty; }
-        catch (e) { roots.find((root) => root.provider === provider)!.dirty.add(file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
+        catch (e) { roots.find((root) => root.provider === provider)!.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
         reportProgress();
       }

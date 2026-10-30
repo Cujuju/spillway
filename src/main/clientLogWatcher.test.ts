@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { watch, existsSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, appendFile, rm, stat, readdir, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rm, stat, readdir, utimes, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, startClientLogSync, importClientFile } from './clientLogSync';
+import { ClientLogWatcher, CLIENT_LOG_WATCH_RETRY_MS } from './clientLogWatcher';
 import { ActivityLog } from './activityStore';
 import { parseClientLine } from './clientLogParser';
 import type { ActivityImportState } from '@shared/ipc';
@@ -151,4 +152,92 @@ it.each([false, true])('delivers clock-controlled long-scan progress and final i
   expect(updates.at(-1)?.state).toBe('idle');
   expect(updates.at(-1)?.recordsImported).toBe(cancel ? 256 : 1000);
   expect(JSON.parse(log.checkpoint(file())!).complete).toBe(cancel ? undefined : true);
+});
+
+it('bounds repeated asynchronous failures to one immediate scan and recovers on the retry cadence', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await start();
+  const failed = root();
+  const count = handles.length;
+  vi.mocked(readdir).mockClear();
+  const done = waitIdle();
+  failed.handle.emit('error', new Error('lost'));
+  await done;
+  const walks = vi.mocked(readdir).mock.calls.length;
+  for (let n = 0; n < 5; n++) failed.handle.emit('error', new Error('still lost'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(readdir).toHaveBeenCalledTimes(walks);
+  expect(handles.filter((h) => h.dir === failed.dir && h.recursive)).toHaveLength(1);
+  expect(handles.length).toBeGreaterThanOrEqual(count);
+  for (let n = 0; n < CLIENT_LOG_WATCH_RETRY_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+  expect(root()).not.toBe(failed);
+  vi.mocked(readdir).mockClear();
+  await poll();
+  expect(readdir).not.toHaveBeenCalled();
+  await stop!();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each(['archive.jsonl', 'x.jsonl.zst', 'ordinary'])('discovers populated renamed directories named %s', async (name) => {
+  await start();
+  const source = path.join(dir, 'staged');
+  await mkdir(path.join(source, 'nested'), { recursive: true });
+  await writeFile(path.join(source, 'nested', 'child.jsonl'), line('child'));
+  await rename(source, path.join(dir, 'projects', name));
+  const done = waitIdle(); root().emit('rename', name); await done;
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
+  const batch = vi.spyOn(log, 'importBatch');
+  root().emit('change', name); await poll();
+  expect(batch).not.toHaveBeenCalled();
+  expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
+  await poll(); expect(batch).not.toHaveBeenCalled();
+});
+
+it('retries a failed import on the next poll', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  await start(); await writeFile(file(), line('retry'));
+  vi.spyOn(log, 'importBatch').mockImplementationOnce(() => { throw new Error('locked'); });
+  root().emit('change', path.relative(path.join(dir, 'projects'), file()));
+  await poll(); expect(log.totalsList()).toHaveLength(0);
+  await poll(); expect(log.totalsList()).toHaveLength(1);
+});
+
+it('advances through multiple missing ancestors', async () => {
+  vi.stubEnv('CLAUDE_CONFIG_DIR', path.join(dir, 'missing', 'config'));
+  await start();
+  await mkdir(path.join(dir, 'missing'));
+  let done = waitIdle(); handles.findLast((h) => h.dir === dir)!.emit('rename', 'missing'); await done;
+  await mkdir(path.join(dir, 'missing', 'config'));
+  done = waitIdle(); handles.findLast((h) => h.dir === path.join(dir, 'missing'))!.emit('rename', 'config'); await done;
+  const projects = path.join(dir, 'missing', 'config', 'projects');
+  await mkdir(projects); await writeFile(path.join(projects, 'a.jsonl'), line('deep'));
+  done = waitIdle(); handles.findLast((h) => h.dir === path.dirname(projects))!.emit('rename', 'projects'); await done;
+  expect(log.totalsList()).toHaveLength(1);
+});
+
+it('requests only one immediate reconciliation across repeated failing watcher creations', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const reconcile = vi.fn();
+  const watcher = new ClientLogWatcher(path.join(dir, 'projects'), vi.fn(), reconcile);
+  try {
+    await watcher.refresh();
+    for (let n = 0; n < 4; n++) {
+      root().handle.emit('error', new Error('lost'));
+      expect(watcher.fallback).toBe(true);
+      await watcher.refresh();
+      expect(watcher.fallback).toBe(true);
+      vi.setSystemTime(Date.now() + CLIENT_LOG_WATCH_RETRY_MS);
+      await watcher.refresh();
+    }
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  } finally { watcher.close(); }
+});
+
+it.each(['archive.jsonl', 'x.jsonl.zst'])('discovers a newly populated directory named %s without importing the directory', async (name) => {
+  await start();
+  const nested = path.join(dir, 'projects', name, 'nested');
+  await mkdir(nested, { recursive: true }); await writeFile(path.join(nested, 'child.jsonl'), line('created'));
+  const done = waitIdle(); root().emit('rename', name); await done;
+  expect(log.totalsList()).toHaveLength(1);
+  expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
 });

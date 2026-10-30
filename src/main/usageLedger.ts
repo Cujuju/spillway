@@ -2,7 +2,7 @@ import type { ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { fallbackKey, sameUsage } from './usageMerge';
 
-interface IdentityRow { key: string; event: string; row_id: number }
+interface IdentityRow { key: string; event: string; row_id: number; matched: number }
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
 
 /** Only accounting and match fields survive request retention; no error text, headers or timings. */
@@ -17,13 +17,15 @@ export function rememberUsage(db: Db, e: ActivityEvent, id: number): void {
 
 /** Called inside the same transaction as totals, requests and checkpoints. */
 export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remove?: ActivityEvent; id?: number } {
-  const existing = db.prepare('SELECT row_id FROM usage_identities WHERE key = ?').get(identityKey(e)) as { row_id: number } | undefined;
+  const existing = db.prepare('SELECT * FROM usage_identities WHERE key = ?').get(identityKey(e)) as IdentityRow | undefined;
   if (existing) {
-    if (e.source === 'client-log' && e.upstreamId) {
-      db.prepare("UPDATE usage_identities SET upstream_id = ?, event = json_set(event, '$.upstreamId', ?) WHERE key = ? AND upstream_id IS NULL")
-        .run(e.upstreamId, e.upstreamId, identityKey(e));
-      db.prepare("UPDATE requests SET event = json_set(event, '$.upstreamId', ?) WHERE id = ? AND json_extract(event, '$.requestId') = ? AND json_extract(event, '$.source') = 'client-log'")
-        .run(e.upstreamId, existing.row_id, e.requestId);
+    const old = JSON.parse(existing.event) as ActivityEvent;
+    // Streaming blocks can precede final usage; copied earlier blocks must never undo the final count.
+    if (e.source === 'client-log' && !existing.matched && ((!old.upstreamId && e.upstreamId) || e.outputTokens > old.outputTokens)) {
+      db.prepare('DELETE FROM usage_identities WHERE key = ?').run(identityKey(e));
+      db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?").run(existing.row_id, old.requestId);
+      const updated = { ...e, upstreamId: e.upstreamId ?? old.upstreamId };
+      return { ...reconcileUsage(db, updated), remove: old };
     }
     return { skip: true, id: existing.row_id };
   }

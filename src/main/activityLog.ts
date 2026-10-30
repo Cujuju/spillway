@@ -121,6 +121,8 @@ class ActivityLog {
     } catch (e) {
       this.totals = null;
       this.pastBuckets.clear();
+      this.conversationAccounts.clear();
+      this.prunedOn = '';
       throw e;
     }
   }
@@ -133,7 +135,6 @@ class ActivityLog {
     try {
       id = this.db.transaction(() => {
         const merge = reconcileUsage(this.db, e);
-        if (merge.skip) return merge.id ?? 0;
         if (merge.remove) {
           this.revision += 1;
           this.pastBuckets.delete(localDay(Date.parse(merge.remove.at)));
@@ -147,6 +148,7 @@ class ActivityLog {
             this.db.prepare('INSERT OR REPLACE INTO day_totals VALUES (?, ?)').run(key, JSON.stringify(total));
           }
         }
+        if (merge.skip) return merge.id ?? 0;
         this.pastBuckets.delete(day);
         const row = addToTotals(totals, e);
         this.db.prepare('INSERT OR REPLACE INTO day_totals (key, total) VALUES (?, ?)').run(totalKey(row), JSON.stringify(row));

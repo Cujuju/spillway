@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { importClientFile, type ImportSink } from './clientLogSync';
 import type { ActivityEvent } from '@shared/types';
+import { zstdCompressSync } from 'node:zlib';
 
 it('resumes complete UTF-8 lines, checkpoints context, tolerates truncation and deletion', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-sync-'));
@@ -33,6 +34,30 @@ it('resumes complete UTF-8 lines, checkpoints context, tolerates truncation and 
     await importClientFile(file, 'claude', sink);
     expect(records.size).toBe(4);
     await rm(file);
+    expect(await importClientFile(file, 'claude', sink)).toBe(false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it.each([false, true])('resumes an interrupted scan of an unchanged file (archive: %s)', async (archived) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-resume-'));
+  const file = path.join(dir, archived ? 'session.jsonl.zst' : 'session.jsonl');
+  let state: string | undefined;
+  let stopped = false;
+  const records = new Map<string, ActivityEvent>();
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s, events) => {
+    state = s;
+    for (const e of events) records.set(e.requestId, e);
+    if (events.length) stopped = true;
+  } };
+  const lines = Array.from({ length: 1000 }, (_, i) => JSON.stringify({ type: 'assistant', sessionId: 's',
+    timestamp: '2026-10-29', message: { id: `msg_${i}`, model: 'claude-opus-5-5', usage: { input_tokens: 1 } } })).join('\n') + '\n';
+  try {
+    await writeFile(file, archived ? zstdCompressSync(lines) : lines);
+    await importClientFile(file, 'claude', sink, () => stopped);
+    expect(records.size).toBeGreaterThan(0);
+    expect(records.size).toBeLessThan(1000);
+    await importClientFile(file, 'claude', sink);
+    expect(records.size).toBe(1000);
     expect(await importClientFile(file, 'claude', sink)).toBe(false);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

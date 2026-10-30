@@ -1,6 +1,7 @@
+import { importLabel } from './ActivityImport';
 import { Activity as ActivityIcon, ChevronLeft, ChevronRight, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
+import { activityImport, page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { isMac } from '../lib/platform';
 import { BuildCard } from './BuildCard';
 import { ProxyStateIcon, proxyStatusText } from './ProxyState';
@@ -53,7 +54,7 @@ export function Sidebar() {
   onCleanup(() => window.removeEventListener('keydown', onKey));
   const toggleLabel = () => `${collapsed() ? 'Expand' : 'Collapse'} sidebar (${TOGGLE_SHORTCUT})`;
   const tooltip = (item: { id: Page; label: string }) => {
-    const status = item.id === 'proxy' ? proxyStatusText() : undefined;
+    const status = item.id === 'activity' && activityImport().state === 'importing' ? importLabel() : item.id === 'proxy' ? proxyStatusText() : undefined;
     if (!collapsed()) return status;
     return status ? `${item.label} · ${status}` : item.label;
   };
@@ -78,6 +79,7 @@ export function Sidebar() {
                   onDblClick={toggle}
                 >
                   {item.icon()}
+                  <Show when={item.id === 'activity' && activityImport().state === 'importing'}><span class="badge" aria-label={importLabel()}>•</span></Show>
                   <Show when={!collapsed()}>
                     <span class="spacer">{item.label}</span>
                   </Show>

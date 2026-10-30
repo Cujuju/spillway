@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { StoredActivityEvent } from '@shared/types';
-import { activityLog } from './activityLog';
+import { activityLog } from './activityService';
 import { management } from './managementClient';
 import { parseActivityEvent, SseParser } from './sse';
 import { usage } from './usagePoller';
@@ -14,33 +13,43 @@ const USAGE_RELOAD_EVENTS = new Set(['ready', 'resync', 'usage']);
 
 /** Reads the proxy's live request stream: stores each attempt and refreshes usage when traffic changed it. */
 class ActivityStream extends EventEmitter {
+  private reading: Promise<void> = Promise.resolve();
+  private draining = false;
+  private running: Promise<void> = Promise.resolve();
   private abort: AbortController | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
 
   start(): void {
-    this.stop();
+    void this.stop();
+    this.draining = false;
     const abort = new AbortController();
     this.abort = abort;
-    void this.run(abort.signal);
+    this.running = this.run(abort.signal);
   }
 
-  stop(): void {
+  async stop(drain = false): Promise<void> {
+    this.draining = true;
+    if (drain) await this.reading.catch(() => undefined);
     this.abort?.abort();
     this.abort = null;
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
+    return this.running;
   }
 
   private async run(signal: AbortSignal): Promise<void> {
     while (!signal.aborted) {
       try {
-        await this.read(await management.events(signal), signal);
+        const body = await management.events(signal);
+        this.reading = this.read(body, signal);
+        await this.reading;
       } catch (err) {
         if (signal.aborted) return;
         console.error('[activity] stream failed:', err instanceof Error ? err.message : err);
       }
       // A dropped stream may have missed events; the next poll catches usage up.
-      if (!signal.aborted) this.scheduleUsageRefresh();
+      if (signal.aborted || this.draining) return;
+      this.scheduleUsageRefresh();
       await new Promise((r) => setTimeout(r, RECONNECT_MS));
     }
   }
@@ -66,17 +75,13 @@ class ActivityStream extends EventEmitter {
     if (event !== 'request') return;
     const e = parseActivityEvent(data);
     if (!e) return;
-    let stored: StoredActivityEvent;
-    try {
-      const revision = activityLog.revision;
-      stored = activityLog.append(e);
-      if (revision !== activityLog.revision) this.emit('reset');
-    } catch (err) {
+    void activityLog.call('append', e).then((stored) => {
+      this.emit('event', stored);
+      this.scheduleUsageRefresh();
+    }).catch((err) => {
       console.error('[activity] request not stored:', err);
-      return this.scheduleUsageRefresh();
-    }
-    this.emit('event', stored);
-    this.scheduleUsageRefresh();
+      this.scheduleUsageRefresh();
+    });
   }
 
   private scheduleUsageRefresh(): void {

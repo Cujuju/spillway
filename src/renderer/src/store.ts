@@ -1,3 +1,4 @@
+import type { ActivityImportState } from '@shared/ipc';
 import { createComputed, createRoot, createSignal } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
@@ -59,6 +60,7 @@ export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(nu
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
+export const [activityImport, setActivityImport] = createSignal<ActivityImportState>({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null });
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
 
@@ -112,6 +114,10 @@ function applyTheme(choice: string): void {
 }
 
 export async function initStore(): Promise<void> {
+  let receivedImportEvent = false;
+  api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
+  const initialImport = await api.activityImportState();
+  if (!receivedImportEvent) setActivityImport(initialImport);
   const [s, latest, status, hist, summaries, logLines, dark] = await Promise.all([
     api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.proxyLogs(), api.taskbarDark(),
   ]);

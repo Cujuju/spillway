@@ -79,6 +79,18 @@ export function openActivityDb(file: string, hexKey: string): Db {
     db.pragma('journal_mode = WAL');
     db.transaction(() => {
       db.exec(SCHEMA);
+      const columns = db.prepare('PRAGMA table_info(usage_identities)').all() as { name: string }[];
+      if (!columns.some((c) => c.name === 'at')) {
+        db.exec(`ALTER TABLE usage_identities ADD COLUMN at TEXT;
+          ALTER TABLE usage_identities ADD COLUMN provider TEXT;
+          ALTER TABLE usage_identities ADD COLUMN client TEXT;
+          UPDATE usage_identities SET at = json_extract(event, '$.at'), provider = json_extract(event, '$.provider'), client = json_extract(event, '$.client');`);
+      }
+      // Group-first avoids sorting every identity; time-first also supports bounded range scans.
+      db.exec(`CREATE INDEX IF NOT EXISTS usage_coverage ON usage_identities (source, at, provider, client, matched);
+        CREATE INDEX IF NOT EXISTS usage_coverage_groups ON usage_identities (source, provider, client, at, matched);`);
+      if (!db.prepare("SELECT 1 FROM meta WHERE key = 'first-matchable-proxy'").get()) db.exec(`INSERT OR IGNORE INTO meta SELECT 'first-matchable-proxy', min(at) FROM usage_identities
+        WHERE source = 'proxy' AND (upstream_id IS NOT NULL OR json_extract(event, '$.sessionId') IS NOT NULL) HAVING min(at) IS NOT NULL;`);
       db.exec(`UPDATE requests SET event = json_set(event, '$.source', 'proxy', '$.upstreamId', null) WHERE json_extract(event, '$.source') IS NULL;`);
       if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_totals'").get()) {
         db.exec('INSERT OR IGNORE INTO activity_totals SELECT * FROM day_totals; DROP TABLE day_totals;');

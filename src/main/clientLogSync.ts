@@ -10,6 +10,8 @@ import type { ActivityEvent } from '@shared/types';
 
 /** Thirty-second polling bounds staleness without reacting to every streaming append, and discovers new directories consistently on Windows/macOS. */
 export const CLIENT_LOG_POLL_MS = 30_000;
+/** Bound renderer progress traffic during large individual files. */
+const IMPORT_PROGRESS_INTERVAL_MS = 100;
 const CHECKPOINT_ANCHOR_BYTES = 256;
 const READ_CHUNK_BYTES = 256 * 1024;
 /** Small usage-only lines must not turn a byte-sized read into an unbounded synchronous transaction. */
@@ -123,23 +125,48 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
   finally { await handle?.close(); }
 }
 
-export function startClientLogSync(sink: ImportSink, changed: () => void): () => void {
+export function startClientLogSync(sink: ImportSink, changed: () => void, progress: (p: import('@shared/ipc').ActivityImportState) => void = () => {}): () => Promise<void> {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
+  let running: Promise<void>;
   const scan = async () => {
     let dirty = false;
-    for (const root of clientLogRoots()) {
-      try {
-        for await (const file of files(root.dir)) {
-          if (stopped) return;
-          try { dirty = await importClientFile(file, root.provider, sink, () => stopped) || dirty; }
-          catch (e) { console.error('[activity] client log import failed:', file, e); }
+    const state: import('@shared/ipc').ActivityImportState = { state: 'importing', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
+    const pending: { file: string; provider: 'claude' | 'codex' }[] = [];
+    let lastProgress = 0;
+    const counted: ImportSink = {
+      checkpoint: (file) => sink.checkpoint(file),
+      importBatch: (file, checkpoint, events) => {
+        sink.importBatch(file, checkpoint, events);
+        state.recordsImported += events.length;
+        if (Date.now() - lastProgress >= IMPORT_PROGRESS_INTERVAL_MS) {
+          progress({ ...state });
+          lastProgress = Date.now();
         }
-      } catch (e) { console.error('[activity] client log scan failed:', e); }
+      },
+    };
+    progress({ ...state });
+    try {
+      for (const root of clientLogRoots()) for await (const file of files(root.dir)) {
+        if (stopped) return;
+        pending.push({ file, provider: root.provider });
+      }
+      state.filesTotal = pending.length;
+      progress({ ...state });
+      for (const { file, provider } of pending) {
+        if (stopped) return;
+        try { dirty = await importClientFile(file, provider, counted, () => stopped) || dirty; }
+        catch (e) { state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
+        state.filesDone++;
+        progress({ ...state });
+      }
+      if (dirty && !stopped) changed();
+    } catch (e) { state.error = `Local usage scan failed: ${String(e)}`; }
+    finally {
+      progress({ ...state, state: 'idle' });
+      if (!stopped) timer = setTimeout(() => { running = scan(); }, CLIENT_LOG_POLL_MS);
     }
-    if (dirty && !stopped) changed();
-    if (!stopped) timer = setTimeout(() => void scan(), CLIENT_LOG_POLL_MS);
   };
-  void scan();
-  return () => { stopped = true; clearTimeout(timer); };
+  running = scan();
+  return async () => { stopped = true; clearTimeout(timer); await running; };
 }

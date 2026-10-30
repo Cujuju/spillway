@@ -10,7 +10,7 @@ import { Logs } from './pages/Logs';
 import { Providers } from './pages/Providers';
 import { Proxy } from './pages/Proxy';
 import { Settings } from './pages/Settings';
-import { applyTheme, page, setSettingsError, settings, settingsError, type Page } from './store';
+import { activityImport, applyTheme, page, setSettingsError, settings, settingsError, type Page } from './store';
 
 /** Scroll saves wait for the scrolling to settle, so a fling writes storage once. */
 const SCROLL_SAVE_DEBOUNCE_MS = 250;
@@ -61,6 +61,7 @@ export function App() {
         <main class="page" ref={main} onScroll={onScroll}>
           {/* These pages give their spare height to one child (log view, board, quota chart) instead of leaving it blank. */}
           <div class="page-inner" classList={{ fill: page() === 'logs' || page() === 'activity' || page() === 'dashboard' }}>
+            <Show when={activityImport().error}><Notice>{activityImport().error}</Notice></Show>
             <Show when={settingsError()}>
               {(message) => (
                 <Notice tone="error" class="save-error">

@@ -342,3 +342,15 @@ it('does not delete a newer request when SQLite reuses a pruned imported row id'
   expect(activityLog.day(localDay(Date.now())).map((e) => e.requestId)).toContain('new-proxy');
   expect(activityLog.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
 });
+
+it('returns the original account move when a committed proxy append is replayed after reopening', () => {
+  activityLog.clear();
+  const at = new Date();
+  activityLog.append(event(at, { requestId: 'first-account', sessionId: 'claude:replay', authIndex: 'a1' }));
+  const moved = event(at, { requestId: 'moved-account', sessionId: 'claude:replay', authIndex: 'a2' });
+  const stored = activityLog.append(moved);
+  expect(stored.movedFrom).toBe('a1');
+  activityLog.close();
+  expect(activityLog.append(moved)).toEqual(stored);
+  expect(activityLog.daySummaries().reduce((n, row) => n + row.requests, 0)).toBe(2);
+});

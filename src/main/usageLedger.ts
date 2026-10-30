@@ -26,14 +26,17 @@ export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: 
   const { costUsd, uncachedCostUsd } = accountedUsage(e);
   let insert = identityInserts.get(db);
   if (!insert) {
-    insert = db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source) VALUES (?, ?, ?, ?, ?, ?)');
+    insert = db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source, at, provider, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     identityInserts.set(db, insert);
   }
   insert.run([identityKey(e), JSON.stringify({
     costUsd, uncachedCostUsd,
     totalStart, totalDay, requestId, source, upstreamId, at, provider, model, authIndex, client, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
-  }), id, fallbackKey(e), e.upstreamId, e.source]);
+  }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);
+  if (e.source === 'proxy' && (e.upstreamId || e.sessionId)) {
+    db.prepare("INSERT INTO meta (key, value) VALUES ('first-matchable-proxy', ?) ON CONFLICT(key) DO UPDATE SET value = min(value, excluded.value)").run(e.at);
+  }
 }
 
 /** Called inside the same transaction as totals, requests and checkpoints. */

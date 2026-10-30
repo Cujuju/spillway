@@ -1,3 +1,4 @@
+import { ActivityImport } from '../components/ActivityImport';
 import { createMemo, createResource, createSignal, For, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
@@ -47,6 +48,7 @@ export function Activity() {
     <>
       <header class="dash-header title-row">
         <h1 class="dash-title">Activity</h1>
+        <ActivityImport />
         <div class="dash-actions card-spaced">
           <Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />

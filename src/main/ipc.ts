@@ -4,8 +4,7 @@ import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
 import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
-import { activityLog } from './activityLog';
-import { conversationNames } from './conversationNames';
+import { activityLog, activityImportState } from './activityService';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
@@ -160,17 +159,18 @@ const handlers: Handlers = {
   usageHistory: () => history.all(),
   usageWindowSummaries: () => history.summaries(),
   clearHistory: () => history.clear(),
-  activityPage: (query) => activityLog.page(query),
-  activityDay: (day, failedOnly, scope) => activityLog.day(day, failedOnly, scope),
-  activityDaySummaries: (scope) => activityLog.daySummaries(scope),
-  activityTotals: () => activityLog.totalsList(),
-  activityCoverage: () => activityLog.coverage(),
+  activityImportState: () => activityImportState(),
+  activityPage: (query) => activityLog.call('page', query),
+  activityDay: (day, failedOnly, scope) => activityLog.call('day', day, failedOnly, scope),
+  activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
+  activityTotals: () => activityLog.call('totalsList'),
+  activityCoverage: () => activityLog.call('coverage'),
   activityBuckets: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
-    return activityLog.buckets(days === null || n > MAX_BUCKET_DAYS ? null : n);
+    return activityLog.call('buckets', days === null || n > MAX_BUCKET_DAYS ? null : n);
   },
-  clearActivity: () => activityLog.clear(),
-  conversationNames: (sessionIds) => conversationNames.names(sessionIds),
+  clearActivity: () => activityLog.call('clear'),
+  conversationNames: (sessionIds) => activityLog.call('names', sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
   oauthStart: async (provider) => {
     const start = await management.startOAuth(provider);

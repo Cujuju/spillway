@@ -2,6 +2,9 @@ import { app } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+const userDataOverride = app.commandLine.getSwitchValue('user-data-dir');
+if (userDataOverride) app.setPath('userData', path.resolve(userDataOverride));
+
 export const USER_CONFIG_NAME = 'config.user.yaml';
 
 export const PROXY_EXE_NAME = process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';

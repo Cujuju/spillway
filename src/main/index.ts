@@ -1,8 +1,7 @@
 import { app, nativeTheme, Notification, session } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
-import { startClientLogSync } from './clientLogSync';
-import { activityLog } from './activityLog';
+import { activityLog } from './activityService';
 import { activity } from './activityStream';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
@@ -16,7 +15,6 @@ import { usage } from './usagePoller';
 import { windowStarter } from './windowStarter';
 import { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } from './window';
 
-let stopClientLogs: (() => void) | undefined;
 /** Windows: passed by the login item so a login launch can start hidden in the tray. */
 const HIDDEN_ARG = '--hidden';
 const isMac = process.platform === 'darwin';
@@ -27,7 +25,7 @@ if (!app.isPackaged) app.setVersion(__APP_VERSION__);
 const send = (channel: string, payload: unknown) => mainWindow()?.webContents.send(channel, payload);
 
 function applyLoginItem(): void {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged || app.commandLine.hasSwitch('user-data-dir')) return;
   const g = getSettings().general;
   // Login-item args are Windows-only; macOS detects a login launch with wasOpenedAtLogin instead.
   app.setLoginItemSettings(isMac ? { openAtLogin: g.launchAtLogin } : { openAtLogin: g.launchAtLogin, args: g.startMinimized ? [HIDDEN_ARG] : [] });
@@ -45,8 +43,10 @@ function wireEvents(): void {
   windowStarter.attach();
   proxy.on('status', (s) => {
     send(EVENTS.onProxyStatus, s);
-    if (s.state !== 'running') activity.stop();
+    if (s.state !== 'running' && !isQuitting()) void activity.stop();
   });
+  activityLog.on('reset', () => send(EVENTS.onActivityReset, undefined));
+  activityLog.on('progress', (state) => send(EVENTS.onActivityImport, state));
   activity.on('reset', () => send(EVENTS.onActivityReset, undefined));
   activity.on('event', (e) => send(EVENTS.onActivity, e));
   proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
@@ -76,7 +76,7 @@ function wireEvents(): void {
     if (next.general.launchAtLogin !== prev.general.launchAtLogin || next.general.startMinimized !== prev.general.startMinimized) applyLoginItem();
     if (next.general.theme !== prev.general.theme) syncWindowBackground();
     if (next.updates.autoCheck !== prev.updates.autoCheck) updates.setAutoCheck(next.updates.autoCheck);
-    if (next.activity.retentionDays !== prev.activity.retentionDays) activityLog.prune();
+    if (next.activity.retentionDays !== prev.activity.retentionDays) void activityLog.call('setRetention', next.activity.retentionDays).catch(console.error);
   });
   // 'system' theme follows the OS light/dark switch.
   nativeTheme.on('updated', () => {
@@ -98,8 +98,7 @@ if (!app.requestSingleInstanceLock()) {
     await loadSecrets();
     registerIpc();
     wireEvents();
-    activityLog.prune();
-    stopClientLogs = startClientLogSync(activityLog, () => { activityLog.prune(); send(EVENTS.onActivityReset, undefined); });
+    activityLog.start();
     applyLoginItem();
     // The tray is always present: it hosts the limit icons and the hidden-start entry point.
     ensureAppTray();
@@ -118,11 +117,8 @@ if (!app.requestSingleInstanceLock()) {
     // Writes the renderer's saved view state (localStorage) to disk before exit.
     session.defaultSession.flushStorageData();
     usage.stop();
-    activity.stop();
     history.flush();
-    stopClientLogs?.();
-    activityLog.close();
-    void proxy.stop().finally(() => {
+    void proxy.stop().catch(console.error).then(() => activity.stop(true)).then(() => activityLog.close()).finally(() => {
       destroyTrays();
       app.quit();
     });

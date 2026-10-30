@@ -1,3 +1,4 @@
+export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
@@ -62,6 +63,7 @@ export interface DesktopApi {
   activityDaySummaries(scope: ActivityScope): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
   /** Share of local client usage that went through the proxy. */
+  activityImportState(): Promise<ActivityImportState>;
   activityCoverage(): Promise<ProxyCoverage>;
   /** Totals for the latest `days` local days; null returns all. */
   activityBuckets(days: number | null): Promise<ActivityBucket[]>;
@@ -117,6 +119,7 @@ export interface DesktopApi {
   onMaximized(cb: (maximized: boolean) => void): () => void;
   onNavigate(cb: (page: string) => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
+  onActivityImport(cb: (state: ActivityImportState) => void): () => void;
   onActivityReset(cb: () => void): () => void;
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
@@ -158,6 +161,7 @@ export const INVOKE = {
   activityDay: 'activity:day',
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
+  activityImportState: 'activity:import-state',
   activityCoverage: 'activity:coverage',
   activityBuckets: 'activity:buckets',
   clearActivity: 'activity:clear',
@@ -205,6 +209,7 @@ export const EVENTS = {
   onNavigate: 'app:navigate',
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
+  onActivityImport: 'activity:import',
   onActivityReset: 'activity:reset',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',

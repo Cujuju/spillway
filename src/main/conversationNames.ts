@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { clientHomes } from './clientSetup';
+import { clientHomes } from './clientHomes';
 
 /** Titles change after a conversation starts (T3 Code renames threads), so title lists are reread at most this often. */
 const TITLE_LIST_REFRESH_MS = 30_000;

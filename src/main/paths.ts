@@ -37,6 +37,10 @@ export const appPaths = {
   get legacyActivityDir() {
     return path.join(this.root, 'activity');
   },
+  /** Downloaded and staged updates; the updater owns and clears it. */
+  get updatesDir() {
+    return path.join(this.root, 'updates');
+  },
   get windowStateFile() {
     return path.join(this.root, 'window-state.json');
   },

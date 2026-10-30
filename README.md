@@ -12,7 +12,7 @@ Windows and macOS tray (menu bar) app that runs the private CLIProxyAPI fork, si
 - Tray "Use account" menu pins a provider to one account while it is available; Automatic returns to the routing strategy.
 - Optional tray icons, one per limit: active account, pool average, least left, or one specific account.
 - Launches at login, starts minimised, and closes or minimises to the tray.
-- Checks for updates and installs them after verifying their signature (macOS: downloads the disk image).
+- Stable or nightly updates, installed after verifying their signature, the same way on Windows and macOS.
 - Ten colour themes (Midnight, Tonal, OLED Black, Nord, Dracula, Catppuccin Mocha and Latte, Solarized Dark and Light, Light), or follow the system light/dark mode.
 - "Show emails" off masks every account email in the window, tray tooltips and notifications.
 
@@ -104,30 +104,29 @@ $env:ANTHROPIC_CUSTOM_HEADERS = "X-Api-Key: <client key from the Proxy page>"
 
 ## Updates
 
-Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`publish` in `electron-builder.yml`), which holds only release files. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification; nothing downloads or installs until you click.
+Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`src/shared/updateFeed.ts`), which holds only release files. Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
 
-- Each installer listed in `latest.yml` / `latest-mac.yml` carries an Ed25519 signature over the app, version, file name and SHA-512. The app checks the downloaded file against the public key built into it (`resources/update-public-key.pem`) and deletes a file that fails.
-- Windows: **Download**, then **Restart and install**: the app stops the proxy and runs the installer, which reopens the app.
-- macOS: Squirrel.Mac only installs Developer ID-signed apps, so with ad-hoc signing the app downloads the verified disk image to Downloads; open it and drag the app to Applications.
+- **Channel**: Nightly takes every published build (GitHub prereleases); Stable takes only promoted ones (the latest release). Switching to Stable never downgrades.
+- Each update file is listed in the release's `update-<platform>.json`, with an Ed25519 signature over the app, version, platform, arch, file name, size and SHA-512. The app checks the listing against the public key built into it (`resources/update-public-key.pem`) before offering the update, and checks the download's hash before installing.
+- **Download**, then **Restart and install**: the app quits (stopping the proxy) and applies the update, then reopens. Windows runs the installer silently. macOS swaps in the new app bundle, so ad-hoc signed builds update without Squirrel.Mac; the app must be in a folder you can write to, such as Applications.
 - A build made without `resources/update-public-key.pem` cannot verify updates and never offers one.
-- The listing itself is not signed. Someone with write access to the updates repo can withhold updates, or list an old signed installer under its own older version, which the app ignores; they cannot get an unsigned or relabelled file installed.
+- Someone with write access to the updates repo can withhold updates. They cannot get an unsigned file, an older version, or another app's file installed.
 
 ### Signing key (once)
 
 ```sh
-node scripts/release.mts keygen
+pnpm release keygen
 ```
 
-Writes the private key to `~/.config/spillway/update_key` (or `$SPILLWAY_UPDATE_KEY`) and the public key to `resources/update-public-key.pem`. Commit the public key so every build embeds it. Back up the private key outside the repo: installed copies accept updates only from it. On Windows the file is protected by your user profile's permissions.
+Writes the private key to `~/.config/spillway/update_key` (or `$SPILLWAY_UPDATE_KEY`) and the public key to `resources/update-public-key.pem`. Commit the public key so every build embeds it. Back up the private key outside the repo: installed copies accept updates only from it. Copy it to each machine that publishes (the Mac too).
 
 ### Release
 
-1. Bump `version` in `package.json` and commit.
-2. Build the installers: `pnpm package` on each platform, or download the CI artifacts into one folder.
-3. `pnpm release sign [dist]` adds the signatures to `latest.yml` / `latest-mac.yml`.
-4. `pnpm release publish [dist] --dry-run` shows the `gh` commands; run it without `--dry-run` to create the `v<version>` release, or add the other platform's files to it. Needs `gh` with push access to the updates repo.
+Releases are built and published from your own machines; there is no CI release.
 
-Publish both platforms' files: until the newest release has `latest-mac.yml`, Mac checks report an error (and Windows ones until it has `latest.yml`).
+1. Commit and push. The version comes from git history (`appVersion.ts`).
+2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to the updates repo.
+3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures).
 
 ## Data
 

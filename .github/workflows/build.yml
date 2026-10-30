@@ -1,6 +1,6 @@
 # Builds the installers on Windows and macOS, including the proxy from the private fork.
 # Needs the repository secret CLIPROXY_SRC_TOKEN: a token with read access to Cujuju/CLIProxyAPI.
-# Builds only; releases are signed and published by hand (scripts/release.mjs).
+# Builds only; releases are signed and published locally (scripts/release.mts, README → Updates).
 name: build
 
 on:
@@ -23,15 +23,12 @@ jobs:
             proxy-targets: ''
             artifacts: |
               desktop/dist/*.exe
-              desktop/dist/*.blockmap
-              desktop/dist/latest.yml
-          # Apple Silicon runner; electron-builder.yml packages both arm64 and x64 dmgs.
+          # Apple Silicon runner; electron-builder.ts packages arm64 and x64 dmgs and zips.
           - os: macos-latest
             proxy-targets: darwin-arm64 darwin-x64
             artifacts: |
               desktop/dist/*.dmg
-              desktop/dist/*.blockmap
-              desktop/dist/latest-mac.yml
+              desktop/dist/*-mac.zip
     runs-on: ${{ matrix.os }}
     defaults:
       run:

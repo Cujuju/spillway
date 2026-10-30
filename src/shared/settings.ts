@@ -2,6 +2,7 @@
 
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { THEME_CHOICES } from './themes';
+import { UPDATE_CHANNELS, type UpdateChannel } from './updateFeed';
 import { DEFAULT_WINDOW_START, normalizeWindowStart, type WindowStartSettings } from './windowStartSettings';
 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
@@ -94,6 +95,8 @@ export interface AppSettings {
   updates: {
     /** Check for a new release at start and periodically; downloading and installing stay manual. */
     autoCheck: boolean;
+    /** Nightly also takes prereleases, built on each push; stable takes promoted ones only. */
+    channel: UpdateChannel;
   };
   activity: {
     /** Days of per-request logs kept on disk; daily totals are kept until cleared. */
@@ -183,6 +186,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   updates: {
     autoCheck: true,
+    channel: 'stable',
   },
   activity: {
     retentionDays: DEFAULT_ACTIVITY_RETENTION_DAYS,
@@ -287,6 +291,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
     },
     updates: {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),
+      channel: pick(u.channel, UPDATE_CHANNELS, d.updates.channel),
     },
     activity: {
       zipCode: typeof a.zipCode === 'string' && /^\d{5}$/.test(a.zipCode.trim()) ? a.zipCode.trim() : '',

@@ -52,6 +52,12 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({}).updates.autoCheck).toBe(true);
     expect(normalizeSettings({ updates: { autoCheck: false } }).updates.autoCheck).toBe(false);
   });
+
+  it('defaults the update channel to stable and drops unknown ones', () => {
+    expect(normalizeSettings({}).updates.channel).toBe('stable');
+    expect(normalizeSettings({ updates: { channel: 'nightly' } }).updates.channel).toBe('nightly');
+    expect(normalizeSettings({ updates: { channel: 'beta' } }).updates.channel).toBe('stable');
+  });
 });
 
 describe('forecastHours', () => {

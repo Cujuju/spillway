@@ -143,11 +143,8 @@ const handlers: Handlers = {
   updateStatus: () => updates.status(),
   checkForUpdates: () => updates.check(),
   downloadUpdate: () => updates.download(),
-  installUpdate: async () => {
-    // The installer replaces the bundled proxy binary, which a running proxy keeps locked.
-    if (updates.status().state === 'ready') await proxy.stop();
-    await updates.install();
-  },
+  // Quitting stops the proxy (before-quit) before the update replaces its binary.
+  installUpdate: () => updates.quitAndInstall(),
   usageLatest: () => ({ snapshot: usage.latest(), error: usage.lastError }),
   usageRefresh: (credentialId) => usage.refresh(credentialId ? usage.latest()?.credentials.find((c) => c.id === credentialId)?.authIndex : undefined),
   useResetCredit: (credentialId) => {

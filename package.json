@@ -38,13 +38,13 @@
     "node": "^24.0.0"
   },
   "dependencies": {
+    "@cujuju/electron-updates": "link:../solidjs-toolkit/packages/electron-updates",
     "@cujuju/solidjs-color-picker": "0.3.0",
     "@cujuju/solidjs-hold-action": "link:../solidjs-toolkit/packages/hold-action",
     "@cujuju/solidjs-hooks": "link:../solidjs-toolkit/packages/hooks",
     "@cujuju/solidjs-kv-tooltip": "link:../solidjs-toolkit/packages/kv-tooltip",
     "@cujuju/solidjs-tiling-window-manager": "link:../solidjs-toolkit/packages/tiling-window-manager",
     "better-sqlite3-multiple-ciphers": "^13.0.3",
-    "electron-updater": "^6.8.11",
     "yaml": "^2.9.1"
   },
   "optionalDependencies": {

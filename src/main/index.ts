@@ -84,6 +84,7 @@ function wireEvents(): void {
     if (next.general.launchAtLogin !== prev.general.launchAtLogin || next.general.startMinimized !== prev.general.startMinimized) applyLoginItem();
     if (next.general.theme !== prev.general.theme) syncWindowBackground();
     if (next.updates.autoCheck !== prev.updates.autoCheck) updates.setAutoCheck(next.updates.autoCheck);
+    if (next.updates.channel !== prev.updates.channel) void updates.check();
     if (next.activity.retentionDays !== prev.activity.retentionDays) void activityLog.call('setRetention', next.activity.retentionDays).catch(console.error);
   });
   // 'system' theme follows the OS light/dark switch.

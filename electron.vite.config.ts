@@ -15,7 +15,8 @@ const TOOLKIT_DIR = resolve('../solidjs-toolkit');
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // Bundled: a linked package isn't in the packaged app's node_modules.
+    plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] })],
     resolve: { alias: { '@shared': resolve('src/shared') } },
     define: { __UPDATE_PUBLIC_KEY__: JSON.stringify(updatePublicKey), __APP_VERSION__: JSON.stringify(version), __APP_BUILD__: JSON.stringify(build) },
   },

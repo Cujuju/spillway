@@ -17,9 +17,7 @@ const config: Configuration = {
     { from: 'resources/icon.png', to: 'icon.png' },
     { from: 'resources/icon.ico', to: 'icon.ico' },
   ],
-  // Update feed. Builds write app-update.yml and latest*.yml from it but never publish (package runs
-  // with --publish never); scripts/release.mts signs the files and uploads them.
-  publish: { provider: 'github', owner: 'Cujuju', repo: 'spillway-updates', releaseType: 'release' },
+  // No publish feed: scripts/release.mts signs the update files and uploads them (src/shared/updateFeed.ts).
   win: {
     target: [{ target: 'nsis', arch: 'x64' }],
     icon: 'resources/icon.ico',
@@ -35,7 +33,13 @@ const config: Configuration = {
   },
   // macOS builds must run on a Mac (dmg and code signing need macOS tools).
   mac: {
-    target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
+    // The disk image is the first install; the zip is what the updater downloads (@cujuju/electron-updates).
+    target: [
+      { target: 'dmg', arch: ['arm64', 'x64'] },
+      { target: 'zip', arch: ['arm64', 'x64'] },
+    ],
+    // The arch in every name: the updater picks its own build by it.
+    artifactName: '${productName}-${version}-${arch}-mac.${ext}',
     icon: 'resources/icon-1024.png',
     category: 'public.app-category.developer-tools',
     darkModeSupport: true,

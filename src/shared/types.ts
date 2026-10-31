@@ -306,6 +306,7 @@ export type ClientSetupState = 'not-applied' | 'applied' | 'out-of-date';
 
 /** Claude Code's machine-wide managed policy, which apps that skip user settings still read. */
 export interface ManagedPolicyStatus {
+  monitored: boolean;
   state: ClientSetupState;
   /** The policy file Spillway owns. */
   path: string;
@@ -314,6 +315,7 @@ export interface ManagedPolicyStatus {
 }
 
 export interface ClientSetupStatus {
+  monitored: boolean;
   client: ClientId;
   state: ClientSetupState;
   /** Config file, with the home folder shown as ~. */

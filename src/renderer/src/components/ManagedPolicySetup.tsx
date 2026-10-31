@@ -1,7 +1,7 @@
 import { HoverTip } from './ChartTip';
-import { createResource, createSignal, Show } from 'solid-js';
+import { createResource, createSignal, onCleanup, Show } from 'solid-js';
 import type { ManagedPolicyStatus } from '@shared/types';
-import { SETUP_STATE } from './ClientSetup';
+import { SETUP_STATE, STOP_WATCHING } from './ClientSetup';
 import { Notice } from './ui';
 
 const HELP =
@@ -10,10 +10,12 @@ const HELP =
 /** Apply/Undo of Claude Code's managed policy; hidden where the platform has none. */
 export function ManagedPolicySetup(props: { endpoint: string; clientKey: string }) {
   // Re-read on endpoint or key change, so a port change or new key shows as out of date.
-  const [status, { mutate }] = createResource(
+  const [status, { mutate, refetch }] = createResource(
     () => (props.endpoint && props.clientKey ? `${props.endpoint} ${props.clientKey}` : false),
     () => window.api.managedPolicyStatus(),
   );
+  // Main reports when the files change outside the app, so drift shows without reopening the page.
+  onCleanup(window.api.onClientSetupChanged(() => void refetch()));
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -49,8 +51,8 @@ export function ManagedPolicySetup(props: { endpoint: string; clientKey: string 
               <Show when={s().error ?? error()}>{(message) => <div class="list-row-help error">{message()}</div>}</Show>
             </div>
             <div class="list-row-actions">
-              <Show when={s().state !== 'not-applied'}>
-                <button class="btn ghost" disabled={busy()} title="Remove the managed policy file" onClick={() => void act(window.api.undoManagedPolicy)}>
+              <Show when={s().state !== 'not-applied' || s().monitored}>
+                <button class="btn ghost" disabled={busy()} title={s().state === 'not-applied' ? STOP_WATCHING : 'Remove the managed policy file'} onClick={() => void act(window.api.undoManagedPolicy)}>
                   Undo
                 </button>
               </Show>

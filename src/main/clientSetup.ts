@@ -58,7 +58,7 @@ function retireCodexPoolLogin(configFile: string): void {
 }
 
 export function clientStatus(client: ClientId, file: string, target: ClientTarget, home = os.homedir()): ClientSetupStatus {
-  const base = { client, path: display(file, home) };
+  const base = { client, path: display(file, home), monitored: false };
   try {
     const state = EDITS[client].state(read(file), target, existsSync(`${file}${BACKUP_SUFFIX}`));
     return { ...base, state, error: null };
@@ -82,8 +82,12 @@ export function applyClient(client: ClientId, file: string, target: ClientTarget
 }
 
 /** Reverses the apply and removes the backup. A file the apply created is deleted when nothing else was added. */
-export function undoClient(client: ClientId, file: string): void {
+export function undoClient(client: ClientId, file: string, target?: ClientTarget): void {
   const backupFile = `${file}${BACKUP_SUFFIX}`;
+  if (target && clientStatus(client, file, target).state === 'not-applied') {
+    rmSync(backupFile, { force: true });
+    return;
+  }
   const backup = read(backupFile);
   if (backup === null && EDITS[client].undoNeedsBackup) throw new Error(`No backup at ${backupFile}; nothing to undo`);
   const text = read(file);

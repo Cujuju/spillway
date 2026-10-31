@@ -121,6 +121,8 @@ export interface DesktopApi {
   onMaximized(cb: (maximized: boolean) => void): () => void;
   /** Main asks to show a Settings section (an id from the renderer's SettingsSection). */
   onOpenSettings(cb: (section: string) => void): () => void;
+  onOpenProxy(cb: () => void): () => void;
+  onClientSetupChanged(cb: () => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
   onActivityImport(cb: (state: ActivityImportState) => void): () => void;
   onActivityReset(cb: () => void): () => void;
@@ -211,6 +213,8 @@ export const EVENTS = {
   onProxyLog: 'proxy:log',
   onMaximized: 'window:maximized',
   onOpenSettings: 'app:open-settings',
+  onOpenProxy: 'app:open-proxy',
+  onClientSetupChanged: 'clients:changed',
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
   onActivityImport: 'activity:import',

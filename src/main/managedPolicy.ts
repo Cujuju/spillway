@@ -47,10 +47,10 @@ export const policyState = (text: string | null, target: ClientTarget): ClientSe
 export function managedPolicyStatus(target: ClientTarget, file = managedPolicyFile()): ManagedPolicyStatus | null {
   if (!file) return null;
   try {
-    return { state: policyState(readFileSync(file, 'utf8'), target), path: file, error: null };
+    return { state: policyState(readFileSync(file, 'utf8'), target), path: file, error: null, monitored: false };
   } catch (err) {
     const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
-    return { state: 'not-applied', path: file, error: missing ? null : (err as Error).message };
+    return { state: 'not-applied', path: file, error: missing ? null : (err as Error).message, monitored: false };
   }
 }
 
@@ -126,4 +126,7 @@ export async function applyManagedPolicy(target: ClientTarget): Promise<void> {
   }
 }
 
-export const undoManagedPolicy = (): Promise<void> => elevated(requireFile(), null);
+export async function undoManagedPolicy(target: ClientTarget, file = requireFile()): Promise<void> {
+  if (managedPolicyStatus(target, file)?.state === 'not-applied') return;
+  await elevated(file, null);
+}

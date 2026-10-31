@@ -37,6 +37,12 @@ const SERVER_ERROR_ACTIONS: readonly { value: ServerErrorAction; label: string; 
   { value: 'switch', label: 'Switch account', help: 'Retry on another account. The conversation moves there and its prompt cache starts over; the failed account rests for a minute.' },
 ];
 
+type ClientDrift = AppSettings['proxy']['clientDrift'];
+const CLIENT_DRIFT_ACTIONS: readonly { value: ClientDrift; label: string; help: string }[] = [
+  { value: 'warn', label: 'Warn', help: 'When something removes or overrides the settings applied on the Proxy page, show a notification. Re-apply from the Proxy page.' },
+  { value: 'reapply', label: 'Re-apply', help: 'When something removes or overrides the settings applied on the Proxy page, put them back. Claude Code’s managed settings need administrator approval, so they only warn.' },
+];
+
 type Draft = AppSettings;
 const set = (fn: (d: Draft) => void) => void updateSettings(fn);
 
@@ -129,6 +135,11 @@ function ProxySection() {
           <Show when={p().executablePath}>
             <button class="btn ghost" onClick={() => set((d) => void (d.proxy.executablePath = ''))}>Use bundled</button>
           </Show>
+        </SettingRow>
+      </SettingsGroup>
+      <SettingsGroup title="Clients">
+        <SettingRow label="When client settings change" help={CLIENT_DRIFT_ACTIONS.find((o) => o.value === p().clientDrift)?.help}>
+          <Seg value={p().clientDrift} options={CLIENT_DRIFT_ACTIONS} onChange={(v) => set((d) => void (d.proxy.clientDrift = v))} />
         </SettingRow>
       </SettingsGroup>
     </>

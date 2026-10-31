@@ -27,6 +27,19 @@ beforeEach(() => {
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 describe('client setup files', () => {
+  it('Undo preserves externally replaced configs when not applied and removes stale backups', () => {
+    for (const client of ['claude', 'codex'] as const) {
+      const file = files[client];
+      mkdirSync(path.dirname(file), { recursive: true });
+      const newer = client === 'claude' ? '{"theme":"new"}' : 'model = "new"\n';
+      writeFileSync(file, newer);
+      if (client === 'codex') writeFileSync(`${file}${BACKUP_SUFFIX}`, 'old backup');
+      expect(clientStatus(client, file, target).state).toBe('not-applied');
+      undoClient(client, file, target);
+      expect(readFileSync(file, 'utf8')).toBe(newer);
+      expect(existsSync(`${file}${BACKUP_SUFFIX}`)).toBe(false);
+    }
+  });
   it('honours CLAUDE_CONFIG_DIR and CODEX_HOME', () => {
     const f = clientConfigFiles({ CLAUDE_CONFIG_DIR: '/c', CODEX_HOME: '/x' }, home);
     expect(f.claude).toBe(path.join('/c', 'settings.json'));

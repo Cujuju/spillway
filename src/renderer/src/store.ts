@@ -119,6 +119,7 @@ function applyTheme(choice: string): void {
 export async function initStore(): Promise<void> {
   // Before any await: main sends this once the page loads, which can beat the startup reads below.
   api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
+  api.onOpenProxy(() => setPage('proxy'));
   let receivedImportEvent = false;
   api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
   const initialImport = await api.activityImportState();

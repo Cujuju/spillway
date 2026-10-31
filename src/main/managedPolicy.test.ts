@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  macElevatedScript, managedPolicyFile, managedPolicyStatus, policyState, policyText, windowsElevatedScript, windowsLauncher,
+  macElevatedScript, managedPolicyFile, managedPolicyStatus, policyState, policyText, undoManagedPolicy, windowsElevatedScript, windowsLauncher,
 } from './managedPolicy';
 
 const TARGET = { endpoint: 'http://127.0.0.1:8317', key: 'client-key' };
@@ -32,10 +32,17 @@ describe('managed policy status', () => {
   let dir: string;
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+  it('Undo on a missing policy completes without elevation or file writes', async () => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-policy-test-'));
+    const file = path.join(dir, 'spillway.json');
+    await undoManagedPolicy(TARGET, file);
+    expect(existsSync(file)).toBe(false);
+  });
+
   it('reads a missing file as not applied and reports unreadable ones', () => {
     dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-policy-test-'));
     const file = path.join(dir, 'spillway.json');
-    expect(managedPolicyStatus(TARGET, file)).toEqual({ state: 'not-applied', path: file, error: null });
+    expect(managedPolicyStatus(TARGET, file)).toEqual({ state: 'not-applied', path: file, error: null, monitored: false });
     writeFileSync(file, policyText(TARGET));
     expect(managedPolicyStatus(TARGET, file)?.state).toBe('applied');
     // A folder at the path fails to read with something other than ENOENT.

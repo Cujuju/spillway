@@ -1,5 +1,5 @@
 import { HoverTip } from './ChartTip';
-import { createResource, createSignal, For, Show } from 'solid-js';
+import { createResource, createSignal, onCleanup, For, Show } from 'solid-js';
 import type { ClientId, ClientProcess, ClientSetupResult, ClientSetupState } from '@shared/types';
 import { Notice } from './ui';
 
@@ -9,6 +9,8 @@ const CLIENTS: { id: ClientId; label: string; help: string }[] = [
 ];
 /** Shared by every config client: Apply backs up the file first. */
 const BACKUP_NOTE = 'Undo restores the backup.';
+/** Undo on settings already removed outside the app only stops drift checks. */
+export const STOP_WATCHING = 'Already removed outside Spillway. Undo stops watching for changes; the file is left as is.';
 /** A running Codex keeps its old settings, and its calls fail until restarted. */
 const RESTART_UNKNOWN = 'Restart any app running Codex (in T3 Code, start a new Codex session): it keeps its old settings until then.';
 const restartNote = (apps: ClientProcess[]) =>
@@ -17,16 +19,18 @@ const restartNote = (apps: ClientProcess[]) =>
 export const SETUP_STATE: Record<ClientSetupState, { label: string; tone: string; title: string }> = {
   'not-applied': { label: 'Not applied', tone: '', title: 'This client does not use the proxy through its config file.' },
   applied: { label: 'Applied', tone: 'green', title: 'The config file points at this proxy and gets the current key.' },
-  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port or key changed since it was applied. Re-apply to update it.' },
+  'out-of-date': { label: 'Out of date', tone: 'amber', title: 'The port, the key or the file changed since it was applied. Re-apply to update it.' },
 };
 
 /** Apply/Undo of the proxy endpoint and key in each client's own config file; main keeps a backup. */
 export function ClientSetup(props: { endpoint: string; clientKey: string }) {
   // Re-read whenever the endpoint or key changes, so a port change or new key shows as out of date.
-  const [status, { mutate }] = createResource(
+  const [status, { mutate, refetch }] = createResource(
     () => (props.endpoint && props.clientKey ? `${props.endpoint} ${props.clientKey}` : false),
     () => window.api.clientSetupStatus(),
   );
+  // Main reports when the files change outside the app, so drift shows without reopening the page.
+  onCleanup(window.api.onClientSetupChanged(() => void refetch()));
   const [busy, setBusy] = createSignal<ClientId | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [restart, setRestart] = createSignal<string | null>(null);
@@ -72,8 +76,8 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
                 </Show>
               </div>
               <div class="list-row-actions">
-                <Show when={s() && s()!.state !== 'not-applied'}>
-                  <button class="btn ghost" disabled={busy() !== null} title="Restore what this changed and remove the backup" onClick={() => void act(c.id, window.api.undoClientSetup)}>
+                <Show when={s() && (s()!.state !== 'not-applied' || s()!.monitored)}>
+                  <button class="btn ghost" disabled={busy() !== null} title={s()!.state === 'not-applied' ? STOP_WATCHING : 'Restore what this changed and remove the backup'} onClick={() => void act(c.id, window.api.undoClientSetup)}>
                     Undo
                   </button>
                 </Show>

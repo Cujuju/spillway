@@ -8,6 +8,7 @@ import { activity } from './activityStream';
 import { drainActivity } from './activityShutdown';
 import { history } from './historyStore';
 import { registerIpc } from './ipc';
+import { startClientDrift } from './clientDriftService';
 import { appIconPath } from './paths';
 import { syncPreferredAccounts } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
@@ -116,6 +117,7 @@ if (!app.requestSingleInstanceLock()) {
     const hidden = launchedHidden();
     if (hidden) app.dock?.hide();
     createMainWindow(!hidden);
+    startClientDrift();
     updates.setAutoCheck(getSettings().updates.autoCheck);
     if (getSettings().proxy.autoStart) await proxy.start();
   });

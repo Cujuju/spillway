@@ -67,6 +67,7 @@ export interface AppSettings {
     firstByteTimeoutSeconds: number;
     /** Proxy writes every request and response, prompts included, to its logs folder. */
     requestLog: boolean;
+    clientDrift: 'warn' | 'reapply';
     /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
     preferredAccounts: Record<string, string>;
   };
@@ -158,6 +159,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
     // Off: full request logs hold prompts and grow quickly. Failed requests are logged regardless.
     requestLog: false,
+    clientDrift: 'warn',
     preferredAccounts: {},
   },
   windowStart: DEFAULT_WINDOW_START,
@@ -264,6 +266,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
       requestLog: bool(p.requestLog, d.proxy.requestLog),
+      clientDrift: pick(p.clientDrift, ['warn', 'reapply'] as const, d.proxy.clientDrift),
       preferredAccounts: stringRecord(p.preferredAccounts),
     },
     windowStart: normalizeWindowStart(r.windowStart),

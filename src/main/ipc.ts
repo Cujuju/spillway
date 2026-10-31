@@ -9,6 +9,7 @@ import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKey
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
 import { runningCodexApps } from './codexProcesses';
+import { checkClientDrift, clientIntent, clientMonitored, clientTarget } from './clientDriftService';
 import { applyManagedPolicy, managedPolicyStatus, undoManagedPolicy } from './managedPolicy';
 import { exportLoginFile, importLoginFiles } from './credentialFiles';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
@@ -39,10 +40,13 @@ function credentialName(id: string): string {
 
 const keys = () => ({ clientApiKey: getSecrets().clientApiKey, managementKey: getSecrets().managementKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
 
-const clientTarget = () => ({ endpoint: keys().endpoint, key: getSecrets().clientApiKey });
 const clientStatuses = () => {
   const files = clientConfigFiles();
-  return CLIENT_IDS.map((c) => clientStatus(c, files[c], clientTarget()));
+  return CLIENT_IDS.map((c) => ({ ...clientStatus(c, files[c], clientTarget()), monitored: clientMonitored(c) }));
+};
+const policyStatus = () => {
+  const status = managedPolicyStatus(clientTarget());
+  return status && { ...status, monitored: clientMonitored('managed-policy') };
 };
 /** A running Codex keeps its old URLs until restarted. */
 async function setupResult(client: ClientId) {
@@ -104,6 +108,7 @@ const handlers: Handlers = {
   proxyKeys: () => keys(),
   regenerateClientKey: async () => {
     await regenerateClientApiKey();
+    checkClientDrift();
     if (proxy.isRunning()) await proxy.restart();
     return keys();
   },
@@ -125,20 +130,30 @@ const handlers: Handlers = {
   },
   applyClientSetup: (client) => {
     applyClient(client, clientFile(client), clientTarget());
+    clientIntent(client, true);
     return setupResult(client);
   },
   undoClientSetup: (client) => {
-    undoClient(client, clientFile(client));
+    undoClient(client, clientFile(client), clientTarget());
+    clientIntent(client, false);
     return setupResult(client);
   },
-  managedPolicyStatus: () => managedPolicyStatus(clientTarget()),
+  managedPolicyStatus: () => policyStatus(),
   applyManagedPolicy: async () => {
     await applyManagedPolicy(clientTarget());
-    return managedPolicyStatus(clientTarget());
+    clientIntent('managed-policy', true);
+    return policyStatus();
   },
   undoManagedPolicy: async () => {
-    await undoManagedPolicy();
-    return managedPolicyStatus(clientTarget());
+    clientIntent('managed-policy', false);
+    try {
+      await undoManagedPolicy(clientTarget());
+    } catch (err) {
+      clientIntent('managed-policy', true);
+      throw err;
+    }
+    checkClientDrift();
+    return policyStatus();
   },
   updateStatus: () => updates.status(),
   checkForUpdates: () => updates.check(),

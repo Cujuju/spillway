@@ -245,12 +245,6 @@
   align-items: center;
   gap: var(--spacing-1_5);
 }
-/* Shorter than a badge so the head row keeps its height. */
-.pace-chip {
-  --badge-height: 16px;
-  --badge-pad-x: 5px;
-  font-variant-numeric: tabular-nums;
-}
 /* Visible overflow lets the pace tick stand proud of the bar. */
 .limit-bar {
   position: relative;

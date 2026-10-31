@@ -9,6 +9,8 @@ const HOUR_MS = 60 * 60_000;
 const FULL = 100;
 /** 15-minute steps resolve a 5-hour window and keep a 14-day projection under 1.4k points. */
 const STEP_MS = 15 * 60_000;
+/** Bound unknown or distant reset horizons while covering weekly caps and recovery. */
+const MAX_SIMULATION_MS = 28 * 24 * HOUR_MS;
 /** Proxy routing strategies (routing.strategy) the projection models specifically. */
 const SOONEST_RESET = 'soonest-reset';
 const FILL_FIRST = 'fill-first';
@@ -170,6 +172,22 @@ function spend(accounts: Account[], amount: number, t: number, strategy: string)
   }
 }
 
+/** Pool use until the next routed account caps; split there so exhaustion has its own time. */
+function exhaustionBudget(accounts: Account[], t: number, strategy: string): number {
+  let open = accounts.filter((a) => roomOf(a) > 0 && (a.cooldownUntil === null || a.cooldownUntil <= t));
+  const preferred = open.find((a) => a.preferred);
+  if (preferred) return roomOf(preferred);
+  const weighted = strategy === WEIGHTED_ROUND_ROBIN;
+  if (weighted) open = open.filter((a) => a.weight > 0);
+  const priority = Math.max(...open.map((a) => a.priority));
+  const tier = open.filter((a) => a.priority === priority);
+  const order = pickOrder(tier, t, strategy);
+  if (order?.length) return roomOf(order[0]!);
+  const weight = (a: Account) => weighted ? a.weight : 1;
+  const total = tier.reduce((sum, a) => sum + weight(a), 0);
+  return Math.min(...tier.map((a) => roomOf(a) * total / weight(a)));
+}
+
 /** Refills every window whose reset is due by `t`; returns the pool percent restored and the first reset. */
 function applyResets(accounts: Account[], t: number): { restored: number; firstAt: number } {
   let restored = 0;
@@ -188,29 +206,72 @@ function applyResets(accounts: Account[], t: number): { restored: number; firstA
   return { restored, firstAt };
 }
 
+export interface AccountForecast {
+  /** When the projected window reaches 100%; null unless before its next reset. */
+  runsOutAt: number | null;
+  /** Used percent just before the next reset, capped at 100. */
+  endsAtPercent: number;
+}
+
+/** Provider-wide outage; project returns null unless every enabled credential is included in the projected accounts. */
+export interface PoolStuck {
+  /** First time routing cannot place all use. */
+  at: number;
+  /** First time an account can take use again, within the simulated span. */
+  until: number | null;
+}
+
 export interface Projection {
   points: SeriesPoint[];
   /** First upcoming reset and the pool percent it restores. */
   nextReset: { at: number; restores: number } | null;
+  accounts: Map<string, AccountForecast>;
+  stuck: PoolStuck | null;
 }
 
-/** Projects the pool forward at a steady drain (pool %/hour), routed as the proxy would (`strategy`). */
+/** Projects steady drain through the proxy router; account forecasts cover their current windows. */
 export function project(
   credentials: Credential[], key: string, perHour: number, now: number, hours: number, strategy: string, shares: Map<string, AccountShare>,
 ): Projection {
   const accounts = accountsFor(credentials, key, shares);
   const end = now + hours * HOUR_MS;
   const points: SeriesPoint[] = [{ t: now, remaining: remainingOf(accounts) }];
+  const forecasts = new Map(accounts.map((a) => [a.id, { runsOutAt: a.windows[0]!.used >= FULL ? now : null, endsAtPercent: a.windows[0]!.used }]));
+  const deadlines = new Map(accounts.map((a) => [a.id, a.windows[0]!.resetAt]));
+  const limit = now + MAX_SIMULATION_MS;
+  // Unknown deadlines stay bounded; on-use windows acquire their deadline when first used.
+  const horizon = () => Math.min(limit, Math.max(now, ...[...deadlines.values()].map((v) => v ?? limit)));
   let nextReset: Projection['nextReset'] = null;
-  const drainPerStep = (perHour * STEP_MS) / HOUR_MS;
-
-  for (let t = now + STEP_MS; t <= end; t += STEP_MS) {
-    // Fixed-cadence windows refill every period; others on their next use after the reset.
-    const { restored, firstAt } = applyResets(accounts, t);
-    if (restored > 0 && !nextReset) nextReset = { at: firstAt, restores: restored };
-    // Rotation splits use equally (or by weight); an account takes use only while every account-wide window has room.
-    spend(accounts, drainPerStep, t, strategy);
-    points.push({ t, remaining: remainingOf(accounts) });
+  let stuck: PoolStuck | null = null;
+  const canUse = (t: number) => accounts.some((a) => roomOf(a) > 0 && (a.cooldownUntil === null || a.cooldownUntil <= t)
+    && (strategy !== WEIGHTED_ROUND_ROBIN || a.weight > 0 || a.preferred));
+  if (accounts.length && !canUse(now)) stuck = { at: now, until: null };
+  let t = now;
+  while (t < Math.max(end, horizon()) || (stuck && stuck.until === null && t < limit)) {
+    const chartStep = now + (Math.floor((t - now) / STEP_MS) + 1) * STEP_MS;
+    const events = accounts.flatMap((a) => [a.cooldownUntil, ...a.windows.map((w) => w.resetAt)])
+      .filter((v): v is number => v !== null && v > t);
+    const boundary = Math.min(chartStep, ...events, t < horizon() ? horizon() : Infinity);
+    const budget = perHour > 0 ? exhaustionBudget(accounts, t, strategy) : Infinity;
+    const exhaustion = perHour > 0 ? t + budget * HOUR_MS / perHour : Infinity;
+    const next = Math.min(boundary, Math.max(t + 1, exhaustion));
+    // Eligibility and reset ranking belong to the interval before the event.
+    spend(accounts, exhaustion <= next ? budget : perHour * (next - t) / HOUR_MS, t, strategy);
+    for (const a of accounts) {
+      if (deadlines.get(a.id) === null && a.windows[0]!.resetAt !== null) deadlines.set(a.id, a.windows[0]!.resetAt);
+      const deadline = deadlines.get(a.id);
+      if (t >= (deadline ?? limit)) continue;
+      const forecast = forecasts.get(a.id)!;
+      forecast.endsAtPercent = a.windows[0]!.used;
+      if (forecast.runsOutAt === null && a.windows[0]!.used >= FULL && next < (deadline ?? limit)) forecast.runsOutAt = next;
+    }
+    const exhausted = !canUse(t);
+    const { restored, firstAt } = applyResets(accounts, next);
+    if (next <= end && restored > 0 && !nextReset) nextReset = { at: firstAt, restores: restored };
+    if (!stuck && next < horizon() && perHour > 0 && exhausted && !canUse(next)) stuck = { at: next, until: null };
+    if (stuck && stuck.until === null && next <= limit && canUse(next)) stuck.until = next;
+    if (next === chartStep && next <= end) points.push({ t: next, remaining: remainingOf(accounts) });
+    t = next;
   }
-  return { points, nextReset };
+  return { points, nextReset, accounts: forecasts, stuck: credentials.every((c) => c.disabled || forecasts.has(c.id)) ? stuck : null };
 }

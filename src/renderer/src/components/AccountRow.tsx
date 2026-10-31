@@ -2,6 +2,7 @@ import { ChartLine, RefreshCw, Settings2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
+import type { AccountForecast } from '../lib/forecast';
 import { compactDuration } from '../lib/format';
 import { isExhausted } from '../lib/quotaColor';
 import { now, setPage } from '../store';
@@ -15,8 +16,8 @@ const LIVE_LOOKUP_PROVIDERS = new Set(['claude', 'codex']);
 /** Controls inside the row keep their own clicks; the rest of the row picks the account. */
 const ROW_CONTROLS = 'button, a, input, select';
 
-/** One account in Theo's list: name, refresh and state, then limit bars. `onSelect` makes the row pick the account. */
-export function AccountRow(props: { credential: Credential; selected?: boolean; onSelect?: () => void }) {
+/** One account in Theo's list: name, refresh and state, then limit bars. `onSelect` makes the row pick the account; `forecastOf` gives a window's pool forecast. */
+export function AccountRow(props: { credential: Credential; selected?: boolean; onSelect?: () => void; forecastOf?: (key: string) => AccountForecast | null }) {
   const c = () => props.credential;
   const [busy, setBusy] = createSignal(false);
   const state = () => accountState(c(), now());
@@ -92,7 +93,7 @@ export function AccountRow(props: { credential: Credential; selected?: boolean; 
       </div>
       <div class="limits">
         <For each={c().windows} fallback={<span class="muted">{c().apiKey ? 'No quota reported' : 'No limit data yet — refresh to look it up.'}</span>}>
-          {(w) => <LimitBar window={w} />}
+          {(w) => <LimitBar window={w} forecast={props.forecastOf?.(w.key) ?? null} />}
         </For>
       </div>
     </div>

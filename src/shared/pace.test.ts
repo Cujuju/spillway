@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ON_PACE_BAND, PACE_MIN_ELAPSED_SHARE, windowPace } from './pace';
+import { ON_PACE_BAND, windowPace } from './pace';
 import type { LimitWindow } from './types';
 
 const H = 60 * 60_000;
@@ -32,11 +32,10 @@ describe('windowPace', () => {
     expect(windowPace(window(), RESET + H)).toBeNull();
   });
 
-  it('waits for the minimum elapsed share, including a future start', () => {
-    const threshold = START + DURATION * PACE_MIN_ELAPSED_SHARE;
+  it('judges immediately after start, but not at or before it', () => {
     expect(windowPace(window(), START - H)).toBeNull();
-    expect(windowPace(window(), threshold - 1)).toBeNull();
-    expect(windowPace(window(), threshold)?.elapsedPercent).toBe(PACE_MIN_ELAPSED_SHARE * 100);
+    expect(windowPace(window(), START)).toBeNull();
+    expect(windowPace(window(), START + 1)?.elapsedPercent).toBeGreaterThan(0);
   });
 
   it.each([
@@ -51,26 +50,9 @@ describe('windowPace', () => {
     });
   });
 
-  it('projects exhaustion before reset at the average rate so far', () => {
-    expect(windowPace(window({ usedPercent: 80 }), NOW)?.runsOutAt).toBe(START + DURATION / 2 * (100 / 80));
-  });
-
-  it('projects usage below 100 at reset', () => {
-    expect(windowPace(window({ usedPercent: 25 }), NOW)?.projectedPercent).toBe(50);
-  });
-
-  it('caps projected usage at 100', () => {
-    expect(windowPace(window({ usedPercent: 80 }), NOW)?.projectedPercent).toBe(100);
-  });
-
-  it('has no exhaustion time when the projection reaches or passes reset', () => {
-    expect(windowPace(window(), NOW)?.runsOutAt).toBeNull();
-    expect(windowPace(window({ usedPercent: 25 }), NOW)?.runsOutAt).toBeNull();
-  });
-
-  it('handles zero usage without an exhaustion time', () => {
+  it('handles zero usage', () => {
     expect(windowPace(window({ usedPercent: 0 }), NOW)).toEqual({
-      elapsedPercent: 50, deltaPercent: -50, state: 'under', projectedPercent: 0, runsOutAt: null,
+      elapsedPercent: 50, deltaPercent: -50, state: 'under',
     });
   });
 });

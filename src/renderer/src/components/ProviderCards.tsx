@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
+import type { PoolStuck } from '../lib/forecast';
 import { compactDuration, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
@@ -44,6 +45,13 @@ export function ProviderCards(props: CardsProps) {
           const folded = () => p.lines().filter((l) => l.scoped).length;
           // A charted scoped line stays visible while folded.
           const shown = () => p.lines().filter((l) => !l.scoped || expanded() || l.id === props.chosenLine);
+          // Only account-wide windows bench a whole account; a model or spend window leaves the rest usable.
+          const stuck = () =>
+            p.lines()
+              .filter((l) => !l.scoped)
+              .map((l) => l.model.forecast()?.stuck ?? null)
+              .filter((s): s is PoolStuck => s !== null)
+              .sort((a, b) => a.at - b.at)[0];
           return (
             <div class="pool-card card-wash" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
               <div class="pool-card-top">
@@ -54,6 +62,7 @@ export function ProviderCards(props: CardsProps) {
                   <span class="count">{p.count()}</span>
                   <span class="pool-card-plans truncate" title="Accounts count by plan size">{p.lines()[0]?.model.plans()}</span>
                   <span class="spacer" />
+                  <Show when={stuck()}>{(s) => <StuckBadge stuck={s()} />}</Show>
                   <Show when={rate() != null}>
                     <span class="pool-card-rate" title="Drain rate of the highlighted window">~{rate()!.toFixed(1)}%/h</span>
                   </Show>
@@ -84,6 +93,19 @@ export function ProviderCards(props: CardsProps) {
         }}
       </For>
     </div>
+  );
+}
+
+/** When every account is forecast to be out at once, and for how long; "now" when already out. */
+function StuckBadge(props: { stuck: PoolStuck }) {
+  const start = () => compactDuration(props.stuck.at - now());
+  const length = () => (props.stuck.until === null ? null : compactDuration(props.stuck.until - Math.max(now(), props.stuck.at)));
+  const when = () => (start() === 'now' ? 'Stuck now' : `Stuck in ${start()}`);
+  return (
+    <span class="badge compact red" title="Every account forecast to be out of quota at once, at the current rate">
+      {when()}
+      <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
+    </span>
   );
 }
 

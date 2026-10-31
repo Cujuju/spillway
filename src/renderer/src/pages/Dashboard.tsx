@@ -66,6 +66,9 @@ export function Dashboard() {
   // Window lengths across providers (5-hour, weekly). The chart shows one card line; the longest length by default.
   const lengths = createMemo(() => durationChoices(providers().map((p) => credsOf(p.id))));
   const cards = createProviderPools(() => providers().map((p) => p.id), credsOf, lengths, () => snapshot()?.strategy ?? '');
+  /** A row's forecast comes from its provider's pool projection for that window, so rows and cards agree. */
+  const forecastOf = (c: Credential, key: string) =>
+    cards().find((p) => p.id === c.provider)?.lines().find((l) => l.model.key() === key)?.model.forecast()?.accounts.get(c.id) ?? null;
   // Lines of the providers in view; the chart only picks among these, so it never charts an empty window.
   const visibleCards = () => cards().filter((c) => provider() === ALL || c.id === provider());
   const visibleLines = createMemo(() => visibleCards().flatMap((c) => c.lines().map((line) => ({ provider: c.id, line }))));
@@ -204,7 +207,7 @@ export function Dashboard() {
         {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
         <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>
           <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
-            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} />}
+            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} forecastOf={(key) => forecastOf(c, key)} />}
           </For>
         </div>
       </Show>

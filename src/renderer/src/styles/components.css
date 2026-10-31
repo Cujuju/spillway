@@ -241,6 +241,12 @@
   background: var(--color-surface-input);
   color: var(--color-text-secondary);
 }
+/* Shorter badge for rows that must keep their height (limit heads, card heads). */
+.badge.compact {
+  --badge-height: 16px;
+  --badge-pad-x: 5px;
+  font-variant-numeric: tabular-nums;
+}
 .badge.green {
   background: var(--color-green-subtle);
   color: var(--color-green);

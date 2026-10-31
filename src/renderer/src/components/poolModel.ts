@@ -1,10 +1,11 @@
 import { createMemo, mapArray } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { poolSummary, project } from '../lib/forecast';
+import { forecastRate } from '../lib/forecastRate';
 import { poolShares } from '../lib/poolCapacity';
 import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
 import { keyForDuration, lengthLineId, nextResetAt, poolSegments, scopedChoices, scopedLineId, type WindowChoice } from '../lib/poolWindows';
-import { activityBuckets, history, now, settings } from '../store';
+import { activityBuckets, history, now, settings, windowSummaries } from '../store';
 
 const HOUR_MS = 3_600_000;
 
@@ -39,13 +40,22 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
     return [...pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), { t: now(), remaining: s.remaining }];
   });
   const projection = createMemo(() =>
-    key() ? project(pool().credentials, key()!, rate() ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares()) : null,
+    key() ? project(pool().credentials, key()!, forecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), now()) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares()) : null,
   );
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, WHOLE_HISTORY) : []));
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));
   const resetAt = () => (key() ? nextResetAt(pool().credentials, key()!, now()) : null);
   const plans = () => [...new Set(pool().credentials.filter((c) => !c.disabled && !c.apiKey).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
-  return { provider: () => pool().provider, summary, rate, past, projection, drain, segments, resetAt, plans };
+  /** Account forecasts and stuck time for this window; null without a key. */
+  const forecast = () => {
+    const p = projection();
+    return p ? { accounts: p.accounts, stuck: p.stuck } : null;
+  };
+  return {
+    /** Window key this model projects. */
+    key,
+    forecast, provider: () => pool().provider, summary, rate, past, projection, drain, segments, resetAt, plans,
+  };
 }
 
 export type PoolModel = ReturnType<typeof createPoolModel>;

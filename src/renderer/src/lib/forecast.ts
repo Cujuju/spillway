@@ -3,6 +3,7 @@ import { nextResetAfter } from '@shared/usageWindows';
 import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
 import { accountsFor, remainingOf, roomIn, roomOf, stuckBlockers, type Account, type Win } from './forecastState';
+import { FLAT_RHYTHM, localHour, localOffset, nextLocalHour, type RhythmProfile, type TimezoneOffset } from './rhythmProfile';
 
 /** Pool forecast for one provider and one limit window, in percent of the whole pool (see poolCapacity). */
 
@@ -184,9 +185,10 @@ export interface Projection {
   stuck: PoolStuck | null;
 }
 
-/** Projects steady drain through the proxy router; account forecasts cover their current windows. */
+/** Projects hourly demand through the proxy router; account forecasts cover their current windows. */
 export function project(
   credentials: Credential[], key: string, perHour: number, now: number, hours: number, strategy: string, shares: Map<string, AccountShare>,
+  profile: RhythmProfile = FLAT_RHYTHM, offset: TimezoneOffset = localOffset,
 ): Projection {
   const accounts = accountsFor(credentials, key, shares);
   const end = now + hours * HOUR_MS;
@@ -202,16 +204,18 @@ export function project(
     && (strategy !== WEIGHTED_ROUND_ROBIN || a.weight > 0 || a.preferred));
   if (accounts.length && !canUse(now)) stuck = { at: now, until: null, blockers: stuckBlockers(accounts, now, strategy === WEIGHTED_ROUND_ROBIN) };
   let t = now;
+  const flat = profile.every((n) => n === 1);
   while (t < Math.max(end, horizon()) || (stuck && stuck.until === null && t < limit)) {
     const chartStep = now + (Math.floor((t - now) / STEP_MS) + 1) * STEP_MS;
     const events = accounts.flatMap((a) => [a.cooldownUntil, ...a.windows.map((w) => w.resetAt)])
       .filter((v): v is number => v !== null && v > t);
-    const boundary = Math.min(chartStep, ...events, t < horizon() ? horizon() : Infinity);
-    const budget = perHour > 0 ? exhaustionBudget(accounts, t, strategy) : Infinity;
-    const exhaustion = perHour > 0 ? t + budget * HOUR_MS / perHour : Infinity;
+    const boundary = Math.min(chartStep, ...events, t < horizon() ? horizon() : Infinity, flat ? Infinity : nextLocalHour(t, offset));
+    const rate = perHour * profile[localHour(t, offset)]!;
+    const budget = rate > 0 ? exhaustionBudget(accounts, t, strategy) : Infinity;
+    const exhaustion = rate > 0 ? t + budget * HOUR_MS / rate : Infinity;
     const next = Math.min(boundary, Math.max(t + 1, exhaustion));
     // Eligibility and reset ranking belong to the interval before the event.
-    spend(accounts, exhaustion <= next ? budget : perHour * (next - t) / HOUR_MS, t, strategy);
+    spend(accounts, exhaustion <= next ? budget : rate * (next - t) / HOUR_MS, t, strategy);
     for (const a of accounts) {
       if (deadlines.get(a.id) === null && a.windows[0]!.resetAt !== null) deadlines.set(a.id, a.windows[0]!.resetAt);
       const deadline = deadlines.get(a.id);

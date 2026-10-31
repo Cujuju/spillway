@@ -7,6 +7,7 @@ import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
+import { RHYTHM_LOOKBACK_DAYS } from './lib/rhythmProfile';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings', 'help'] as const;
@@ -63,6 +64,8 @@ export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(nu
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
+/** Fixed forecast evidence, independent of the Activity page's chosen range. */
+export const [forecastBuckets, setForecastBuckets] = createSignal<ActivityBucket[]>([]);
 export const [activityImport, setActivityImport] = createSignal<ActivityImportState>({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null });
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
@@ -74,7 +77,10 @@ const HISTORY_REFRESH_MS = 5 * 60_000;
 const MIN_ACTIVITY_DAYS = 31;
 /** Local days of activity held; null holds all. The Activity page widens it to its time frame. */
 const [activityDays, setActivityDays] = createSignal<number | null>(MIN_ACTIVITY_DAYS);
-const loadActivity = () => void api.activityBuckets(activityDays()).then(setActivityBuckets);
+const loadActivity = () => {
+  void api.activityBuckets(activityDays()).then(setActivityBuckets);
+  void api.activityBuckets(RHYTHM_LOOKBACK_DAYS).then(setForecastBuckets);
+};
 
 /** Holds at least `days` local days of activity (null: all), reloading when that widens or narrows. */
 export function holdActivityDays(days: number | null): void {

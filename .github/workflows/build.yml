@@ -1,12 +1,13 @@
 # Builds the installers on Windows and macOS, including the proxy from the private fork.
 # Needs the repository secret CLIPROXY_SRC_TOKEN: a token with read access to Cujuju/CLIProxyAPI.
 # Builds only; releases are signed and published locally (scripts/release.mts, README → Updates).
+# Full installers wait for a stable release (promote) or a manual run; every push to main
+# already publishes a nightly update from the local machines (.githooks/pre-push).
 name: build
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  release:
+    types: [released]
   workflow_dispatch:
 
 permissions:

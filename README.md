@@ -131,6 +131,14 @@ Releases are built and published from your own machines; there is no CI release.
 2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
 3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures).
 
+#### Nightly on push
+
+`pnpm install` enables the tracked hooks in `.githooks`. Pushing `main` to origin then publishes this OS's nightly in the background: a worker waits for the push to land, builds the pushed commit in a clean worktree (`../spillway-nightly`, so uncommitted edits never ship), and runs `pnpm release nightly` with update files only. macOS disk images wait for a manual `pnpm release nightly`. The CI installer build runs on a stable release (promote) or a manual run.
+
+- Log: `.git/spillway-nightly.log`. One worker per machine; a push during a build gets its own nightly when the build finishes, if origin has moved.
+- Skip once: `SPILLWAY_SKIP_NIGHTLY=1 git push`.
+- Each machine needs the signing key and `gh` with push access.
+
 ## Data
 
 Everything lives in `%APPDATA%\Spillway` (macOS: `~/Library/Application Support/Spillway`):

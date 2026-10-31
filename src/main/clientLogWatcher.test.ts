@@ -113,10 +113,28 @@ it('discovers a missing root from its nearest existing ancestor', async () => {
   expect(log.totalsList()).toHaveLength(1); expect(root()).toBeDefined();
 });
 
-it('reconciles at five minutes even without notifications', async () => {
-  await start(); await writeFile(file(), line('missed'));
-  for (let n = 0; n < CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
-  expect(log.totalsList()).toHaveLength(1);
+function onPlatform(platform: NodeJS.Platform) {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { ...original, value: platform });
+  return () => Object.defineProperty(process, 'platform', original);
+}
+
+it('reconciles at five minutes on a Node watcher that hides drops', async () => {
+  const restore = onPlatform('darwin');
+  try {
+    await start(); await writeFile(file(), line('missed'));
+    for (let n = 0; n < CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+    expect(log.totalsList()).toHaveLength(1);
+  } finally { restore(); }
+});
+
+it('never sweeps on a timer on Windows, whose watcher reports drops', async () => {
+  const restore = onPlatform('win32');
+  try {
+    await start(); vi.mocked(readdir).mockClear();
+    for (let n = 0; n < 2 * CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
+    expect(readdir).not.toHaveBeenCalled();
+  } finally { restore(); }
 });
 
 it('retains events arriving during an active scan for the next poll', async () => {

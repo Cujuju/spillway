@@ -12,7 +12,7 @@ import type { ActivityEvent } from '@shared/types';
 
 /** Batch streaming appends at the existing cadence. */
 export const CLIENT_LOG_POLL_MS = 30_000;
-/** Safety net for Node watchers; native macOS streams report when reconciliation is needed. */
+/** Safety net for watchers that hide dropped events (Node on macOS without fsevents). */
 export const CLIENT_LOG_RECONCILE_MS = 5 * 60_000;
 /** Bound renderer progress traffic during large individual files. */
 const IMPORT_PROGRESS_INTERVAL_MS = 100;

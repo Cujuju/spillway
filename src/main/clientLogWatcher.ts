@@ -19,8 +19,8 @@ export class ClientLogWatcher {
   private closing: Promise<void> = Promise.resolve();
   private generation = 0;
 
-  /** Node's macOS backend hides overflow flags; only the native stream can replace timed scans. */
-  get needsPeriodicReconcile(): boolean { return !this.nativeStop; }
+  /** Windows' Node watcher reports overflow as a null filename; elsewhere Node hides drops, so only native streams skip timed scans. */
+  get needsPeriodicReconcile(): boolean { return !this.nativeStop && process.platform !== 'win32'; }
 
   constructor(readonly dir: string, private dirty: (file: string) => void, private reconcile: () => void) {}
 

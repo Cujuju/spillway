@@ -60,12 +60,12 @@ export function ResetCreditButton(props: {
 
   return (
     <>
-      <HoverTip title="Rate-limit reset credits" focusable={false} rows={[
+      <HoverTip title="Rate-limit reset credits" focusable={false} note={action()} rows={[
         { label: 'Held', value: credits().available.toLocaleString() },
         { label: 'Usable now', value: credits().applicable.toLocaleString() },
-        ...upcoming(credits(), now()).map((t) => ({ label: 'Expires', value: `${dateTime(t)} · ${resetParts(t, now()).left}` })),
+        ...upcoming(credits(), now()).map((t) => ({ label: 'Expires', value: dateTime(t) })),
+        ...(soonest() ? [{ label: 'First expires in', value: resetParts(soonest()!, now()).left }] : []),
         { label: 'Checked', value: dateTime(credits().checkedAt) },
-        { label: 'Action', value: action().replace(/\.$/, '') },
       ]}>
         <button
           type="button"

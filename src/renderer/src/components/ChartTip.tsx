@@ -31,7 +31,7 @@ export function ChartTip(props: { title: string; rows: TipRow[]; x?: number; y?:
 }
 
 /** The same readout on hover or focus of `children`. Use `contents` around a focusable control to preserve its layout. */
-export function HoverTip(props: { title: string; rows: TipRow[]; class?: string; focusable?: boolean; layout?: 'control' | 'block' | 'contents'; children: JSX.Element }) {
+export function HoverTip(props: { title: string; rows: TipRow[]; note?: string; class?: string; focusable?: boolean; layout?: 'control' | 'block' | 'contents'; children: JSX.Element }) {
   return (
     <KvTooltip
       entries={{}}
@@ -40,15 +40,16 @@ export function HoverTip(props: { title: string; rows: TipRow[]; class?: string;
       class={props.class}
       wrapperLayout={props.layout ?? 'control'}
       focusable={props.focusable}
-      description={[props.title, ...props.rows.map((r) => `${r.label}: ${r.value}`)].join('. ')}
-      extraContent={<TipBody title={props.title} rows={props.rows} />}
+      description={[props.title, ...props.rows.map((r) => `${r.label}: ${r.value}`), ...(props.note ? [props.note] : [])].join('. ')}
+      extraContent={<TipBody title={props.title} rows={props.rows} note={props.note} />}
     >
       {props.children}
     </KvTooltip>
   );
 }
 
-function TipBody(props: { title: string; rows: TipRow[] }) {
+/** Title, label/value rows, then an optional sentence (an explanation or what a click does) that would not fit a row. */
+function TipBody(props: { title: string; rows: TipRow[]; note?: string }) {
   return (
     <>
       <div class="tip-title">{props.title}</div>
@@ -63,6 +64,7 @@ function TipBody(props: { title: string; rows: TipRow[] }) {
           </div>
         )}
       </For>
+      <Show when={props.note}><div class="tip-note">{props.note}</div></Show>
     </>
   );
 }

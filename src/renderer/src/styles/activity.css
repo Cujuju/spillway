@@ -74,12 +74,24 @@
   line-height: var(--leading-loose);
   font-variant-numeric: tabular-nums;
 }
+/* Labels never shrink or wrap; a long value wraps within its own right-aligned column. */
 .tip-row strong {
+  min-width: 0;
+  text-align: right;
   color: var(--color-text);
   font-weight: 600;
 }
 .tip-row span {
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--color-text-muted);
+}
+.tip-note {
+  margin-top: var(--spacing-1);
+  padding-top: var(--spacing-1);
+  border-top: var(--border-width) solid var(--color-divider);
+  color: var(--color-text-muted);
+  line-height: var(--leading-loose);
 }
 
 /* ── Heatmap: day-by-hour grid for short ranges, a GitHub-style calendar for long ones ── */

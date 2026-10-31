@@ -104,13 +104,13 @@ $env:ANTHROPIC_CUSTOM_HEADERS = "X-Api-Key: <client key from the Proxy page>"
 
 ## Updates
 
-Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`src/shared/updateFeed.ts`), which holds only release files. Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS, downloading only chunks missing from the installed version. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
+Settings → Updates checks this repo's [GitHub releases](https://github.com/Cujuju/spillway/releases) (`src/shared/updateFeed.ts`). Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS, downloading only chunks missing from the installed version. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
 
 - **Channel**: Nightly takes every published build (GitHub prereleases); Stable takes only promoted ones (the latest release). Switching to Stable never downgrades.
 - Each update file is listed in the release's `update-<platform>.json`, with an Ed25519 signature over the app, version, platform, arch, file name, size and SHA-512. The app checks the listing against the public key built into it (`resources/update-public-key.pem`) before offering the update, and checks the download's hash before installing.
 - **Download**, then **Restart and install**: the app quits (stopping the proxy) and applies the update, then reopens. Windows runs the installer silently. macOS swaps in the new app bundle, so ad-hoc signed builds update without Squirrel.Mac; the app must be in a folder you can write to, such as Applications.
 - A build made without `resources/update-public-key.pem` cannot verify updates and never offers one.
-- Someone with write access to the updates repo can withhold updates. They cannot get an unsigned file, an older version, or another app's file installed.
+- Someone with write access to this repo can withhold updates. They cannot get an unsigned file, an older version, or another app's file installed.
 
 ### Signing key (once)
 
@@ -125,7 +125,7 @@ Writes the private key to `~/.config/spillway/update_key` (or `$SPILLWAY_UPDATE_
 Releases are built and published from your own machines; there is no CI release.
 
 1. Commit and push. The version comes from git history (`appVersion.ts`).
-2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to the updates repo.
+2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
 3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures).
 
 ## Data

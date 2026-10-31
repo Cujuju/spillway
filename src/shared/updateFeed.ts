@@ -4,8 +4,8 @@ import type { UpdateChannel } from '@cujuju/electron-updates';
 
 export type { UpdateChannel };
 
-/** Public repo holding only release files; the source repo is private. */
-export const UPDATE_REPO = 'Cujuju/spillway-updates';
+/** GitHub releases on the source repo carry the update files. */
+export const UPDATE_REPO = 'Cujuju/spillway';
 
 /** Binds signatures to Spillway, so a signature made for another app's files never verifies here. */
 export const UPDATE_SIGNATURE_CONTEXT = 'spillway-update-v1';

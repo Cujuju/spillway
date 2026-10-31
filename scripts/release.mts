@@ -18,6 +18,7 @@ const MAC_ARCHS = ['arm64', 'x64'];
 await runReleaseCli({
   appName: APP_NAME,
   repo: UPDATE_REPO,
+  tagSourceCommit: true,
   signatureContext: UPDATE_SIGNATURE_CONTEXT,
   dist: path.join(ROOT, 'dist'),
   publicKeyFile: path.join(ROOT, 'resources', 'update-public-key.pem'),

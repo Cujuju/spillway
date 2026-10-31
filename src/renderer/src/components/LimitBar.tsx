@@ -1,3 +1,4 @@
+import { TimerOff } from 'lucide-solid';
 import { Show } from 'solid-js';
 import { windowPace, type WindowPace } from '@shared/pace';
 import type { LimitWindow } from '@shared/types';
@@ -65,19 +66,28 @@ function PaceChip(props: { pace: WindowPace; runsOut: boolean }) {
   );
 }
 
-/** When this account runs out, or where it ends, at the forecast rate; the hover text adds the time lost before reset. */
+/** Where the window ends at the forecast rate, or, when it runs out first, the time stuck before its reset. */
 function Forecast(props: { forecast: AccountForecast; resetsAt: string | null }) {
   const unit = () => settings().trayIcons.value;
   const endsAt = () => `${pct(shownPercent(props.forecast.endsAtPercent, unit()) ?? 0)} ${unit() === 'remaining' ? 'left' : 'used'}`;
+  /** Time between running out and the reset; runsOutAt is only set before a known reset. */
+  const deficit = (out: number) => (props.resetsAt ? compactDuration(Date.parse(props.resetsAt) - out) : null);
   const title = () => {
     const out = props.forecast.runsOutAt;
     if (out === null) return `Forecast: ends near ${endsAt()} at reset`;
-    const early = props.resetsAt ? `, ${compactDuration(Date.parse(props.resetsAt) - out)} before reset` : '';
-    return `Forecast: runs out ${new Date(out).toLocaleString()}${early}`;
+    return `Forecast: runs out ${new Date(out).toLocaleString()} (in ${compactDuration(out - now())})${deficit(out) ? `, ${deficit(out)} before reset` : ''}`;
   };
   return (
     <div class="limit-forecast" classList={{ 'runs-out': props.forecast.runsOutAt !== null }} title={title()}>
-      <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>{(out) => `Out in ${compactDuration(out() - now())}`}</Show>
+      <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>
+        {(out) => (
+          <span class="reset-time">
+            <TimerOff size="1em" role="img" aria-label="Out of quota before reset for" />
+            {/* A window not yet started has no reset to measure against; show when it runs out instead. */}
+            {deficit(out()) ? `−${deficit(out())}` : compactDuration(out() - now())}
+          </span>
+        )}
+      </Show>
     </div>
   );
 }

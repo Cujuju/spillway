@@ -40,7 +40,7 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
     return [...pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), { t: now(), remaining: s.remaining }];
   });
   const projection = createMemo(() =>
-    key() ? project(pool().credentials, key()!, forecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), now()) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares()) : null,
+    key() ? project(pool().credentials, key()!, forecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), now(), settings().dashboard.drainLookbackHours) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares()) : null,
   );
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, WHOLE_HISTORY) : []));
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));

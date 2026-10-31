@@ -2,13 +2,20 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Arch, type Configuration } from 'electron-builder';
 import { appVersion } from './appVersion.ts';
+import { appIdentity } from './src/shared/app.ts';
+
+/** Set by scripts/package-dev.mjs: the dev build, installed beside production under its own id and name. */
+const devBuild = process.env.SPILLWAY_DEV_BUILD === '1';
+const identity = appIdentity(devBuild);
 
 const config: Configuration = {
-  appId: 'dev.cujuju.spillway',
-  productName: 'Spillway',
+  appId: identity.id,
+  productName: identity.name,
   // package.json carries no version; the packaged app, installer and update listings take appVersion.ts's.
-  extraMetadata: { version: appVersion(import.meta.dirname) },
-  directories: { output: 'dist', buildResources: 'resources' },
+  // The dev build also renames the packaged package.json, which names the app and its data folder.
+  extraMetadata: { version: appVersion(import.meta.dirname), ...(devBuild && { name: 'spillway-dev', productName: identity.name }) },
+  // Separate output, so a dev build never overwrites production installers.
+  directories: { output: devBuild ? 'dist-dev' : 'dist', buildResources: 'resources' },
   // out/licenses ships beside the app as plain files (extraResources), not inside app.asar.
   files: ['out/**', '!out/licenses/**', 'package.json'],
   extraResources: [
@@ -43,15 +50,18 @@ const config: Configuration = {
     target: [{ target: 'nsis', arch: 'x64' }],
     icon: 'resources/icon.ico',
   },
-  nsis: {
-    // No spaces: GitHub renames spaced uploads, and the update manifest names the file as built.
-    artifactName: '${productName}-Setup-${version}.${ext}',
-    oneClick: false,
-    perMachine: false,
-    allowToChangeInstallationDirectory: true,
-    createDesktopShortcut: true,
-    runAfterFinish: true,
-  },
+  nsis: devBuild
+    ? // Reinstalled after every build: one click, no wizard.
+      { artifactName: 'Spillway-Dev-Setup-${version}.${ext}', oneClick: true, perMachine: false, createDesktopShortcut: false, runAfterFinish: true }
+    : {
+        // No spaces: GitHub renames spaced uploads, and the update manifest names the file as built.
+        artifactName: '${productName}-Setup-${version}.${ext}',
+        oneClick: false,
+        perMachine: false,
+        allowToChangeInstallationDirectory: true,
+        createDesktopShortcut: true,
+        runAfterFinish: true,
+      },
   // macOS builds must run on a Mac (dmg and code signing need macOS tools).
   mac: {
     // Disk images serve first installs; updates rebuild the unpacked app bundle.

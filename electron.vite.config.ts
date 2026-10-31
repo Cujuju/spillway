@@ -25,25 +25,38 @@ const bundledLicenses = (bundle: 'main' | 'preload' | 'renderer') =>
     },
   });
 
-export default defineConfig({
-  main: {
-    // Bundled: a linked package isn't in the packaged app's node_modules.
-    plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] }), bundledLicenses('main')],
-    resolve: { alias: { '@shared': resolve('src/shared') } },
-    define: { __UPDATE_PUBLIC_KEY__: JSON.stringify(updatePublicKey), __APP_VERSION__: JSON.stringify(version), __APP_BUILD__: JSON.stringify(build) },
-  },
-  preload: {
-    plugins: [externalizeDepsPlugin(), bundledLicenses('preload')],
-    resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
-  },
-  renderer: {
-    plugins: [solid(), bundledLicenses('renderer')],
-    resolve: {
-      alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') },
-      // Linked toolkit packages sit outside this tree; one Solid runtime, or their signals never update ours.
-      dedupe: ['solid-js'],
+// The dev build (src/shared/app.ts): `pnpm dev`, and builds made by scripts/package-dev.mjs.
+export default defineConfig(({ command }) => {
+  const devBuild = command === 'serve' || process.env.SPILLWAY_DEV_BUILD === '1';
+  const devDefine = { __DEV_BUILD__: JSON.stringify(devBuild) };
+  return {
+    main: {
+      // Bundled: a linked package isn't in the packaged app's node_modules.
+      plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] }), bundledLicenses('main')],
+      resolve: { alias: { '@shared': resolve('src/shared') } },
+      define: {
+        ...devDefine,
+        // No key, no updates: the production feed would install production, not update the dev build.
+        __UPDATE_PUBLIC_KEY__: JSON.stringify(devBuild ? '' : updatePublicKey),
+        __APP_VERSION__: JSON.stringify(version),
+        __APP_BUILD__: JSON.stringify(build),
+      },
     },
-    server: { fs: { allow: ['.', TOOLKIT_DIR] } },
-  },
+    preload: {
+      plugins: [externalizeDepsPlugin(), bundledLicenses('preload')],
+      resolve: { alias: { '@shared': resolve('src/shared') } },
+      define: devDefine,
+      build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
+    },
+    renderer: {
+      plugins: [solid(), bundledLicenses('renderer')],
+      define: devDefine,
+      resolve: {
+        alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') },
+        // Linked toolkit packages sit outside this tree; one Solid runtime, or their signals never update ours.
+        dedupe: ['solid-js'],
+      },
+      server: { fs: { allow: ['.', TOOLKIT_DIR] } },
+    },
+  };
 });

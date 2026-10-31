@@ -1,4 +1,5 @@
 import { createResource, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import { IS_DEV_BUILD } from '@shared/app';
 import type { UpdateStatus } from '@shared/types';
 import type { UpdateChannel } from '@shared/updateFeed';
 import { settings, updateSettings } from '../store';
@@ -45,7 +46,7 @@ export function UpdateSettings() {
             </>
           }
         >
-          <Match when={when('unavailable')}>{(u) => <span class="muted">{u().reason}</span>}</Match>
+          <Match when={when('unavailable')}>{(u) => <span class="muted">{IS_DEV_BUILD ? 'The dev build does not update. Rebuild it with pnpm package:dev.' : u().reason}</span>}</Match>
           <Match when={when('checking')}>
             <span class="muted">Checking…</span>
           </Match>

@@ -1,5 +1,6 @@
+import './identity';
 import { app, nativeTheme, Notification, session } from 'electron';
-import { APP_NAME } from '@shared/app';
+import { APP_ID, APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
 import { activityLog } from './activityService';
 import { installAppMenu } from './appMenu';
@@ -98,7 +99,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   // Windows groups notifications and taskbar entries by this id.
-  if (process.platform === 'win32') app.setAppUserModelId('dev.cujuju.spillway');
+  if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
   app.on('second-instance', () => showMainWindow());
   // macOS: clicking the Dock icon reopens the window.
   app.on('activate', () => showMainWindow());

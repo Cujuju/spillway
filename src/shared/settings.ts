@@ -1,5 +1,6 @@
 /** App settings: shape, defaults and normalization of untrusted stored JSON. */
 
+import { IS_DEV_BUILD } from './app';
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { THEME_CHOICES } from './themes';
 import { UPDATE_CHANNELS, type UpdateChannel } from './updateFeed';
@@ -129,7 +130,8 @@ const MAX_ACTIVITY_RETENTION_DAYS = 365;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
-    launchAtLogin: true,
+    // Off in the dev build: it shares production's proxy port, so only one should start at login.
+    launchAtLogin: !IS_DEV_BUILD,
     startMinimized: true,
     closeToTray: true,
     minimizeToTray: false,

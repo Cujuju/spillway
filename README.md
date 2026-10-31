@@ -59,9 +59,12 @@ The client key can't reach a ChatGPT account's data. Codex's account calls (usag
 | Build the proxy into `resources/bin/<platform>-<arch>` | `pnpm proxy:build` for this machine, or `pnpm proxy:build darwin-arm64 darwin-x64`, or `all` (source: `CLIPROXY_SRC` or `../CLIProxyAPI`) |
 | Dev, with hot reload | `pnpm dev` (rebuilds the proxy first; if that fails, it keeps the last good binary and logs why) |
 | Installer | `pnpm package` → Windows: `dist/Spillway-Setup-<ver>.exe` (per-user install with Start Menu and desktop shortcuts); macOS: `dist/Spillway-<ver>-<arch>.dmg` |
+| Dev build, installed beside production | `pnpm package:dev` → `dist-dev/`; on Windows it also runs the one-click installer, which adds or updates **Spillway Dev** in the Start Menu (`--no-install` skips that) |
 | Checks | `pnpm typecheck`, `pnpm test` |
 
 CI (`.github/workflows/build.yml`) builds the Windows and macOS installers on each push to `main` and uploads them as artifacts. It checks out the private fork with the repository secret `CLIPROXY_SRC_TOKEN` (a fine-grained token with read access to `Cujuju/CLIProxyAPI` contents); Go comes from the fork's `go.mod`, Node from `engines.node`, pnpm from `packageManager`.
+
+Spillway Dev (`pnpm package:dev` and `pnpm dev`) has its own app id, name and data folder (`%APPDATA%\Spillway Dev`, `~/Library/Application Support/Spillway Dev`), so it never replaces or reads the production install. It starts with no accounts, and it never updates itself. It uses the same default proxy port, so run one copy at a time.
 
 `pnpm dev` breaks if the environment has `ELECTRON_RUN_AS_NODE` set: Electron then runs as plain Node. Unset it first.
 

@@ -9,7 +9,8 @@ const config: Configuration = {
   // package.json carries no version; the packaged app, installer and update listings take appVersion.ts's.
   extraMetadata: { version: appVersion(import.meta.dirname) },
   directories: { output: 'dist', buildResources: 'resources' },
-  files: ['out/**', 'package.json'],
+  // out/licenses ships beside the app as plain files (extraResources), not inside app.asar.
+  files: ['out/**', '!out/licenses/**', 'package.json'],
   extraResources: [
     // Proxy binary for this platform and arch, built by `pnpm proxy:build`.
     // Folders match scripts/build-proxy.mjs and src/main/paths.ts.
@@ -21,12 +22,21 @@ const config: Configuration = {
     // License notices for Spillway and the third-party work it ships. The proxy's comes from its fork (scripts/build-proxy.mjs).
     { from: 'LICENSE', to: 'licenses/Spillway.txt' },
     { from: 'resources/bin/${platform}-${arch}/LICENSE', to: 'licenses/CLIProxyAPI.txt' },
+    // The proxy's compiled-in Go modules (scripts/build-proxy.mjs) and the npm packages bundled into the app (electron.vite.config.ts).
+    { from: 'resources/bin/${platform}-${arch}/licenses', to: 'licenses/CLIProxyAPI-dependencies' },
+    { from: 'out/licenses', to: 'licenses', filter: ['npm-*.txt'] },
     { from: 'src/renderer/src/assets/providers/LICENSE', to: 'licenses/LobeHub-Icons.txt' },
   ],
-  // electron-builder only warns on a missing extraResources source; the proxy must not ship without its notice.
+  // electron-builder only warns on a missing extraResources source; nothing ships without its license notices.
   beforePack: (context) => {
-    const license = path.join(import.meta.dirname, 'resources', 'bin', `${context.electronPlatformName}-${Arch[context.arch]}`, 'LICENSE');
-    if (!existsSync(license)) throw new Error(`${license} is missing. Run pnpm proxy:build for this target.`);
+    const proxyDir = path.join(import.meta.dirname, 'resources', 'bin', `${context.electronPlatformName}-${Arch[context.arch]}`);
+    const npmDir = path.join(import.meta.dirname, 'out', 'licenses');
+    const required = [
+      { file: path.join(proxyDir, 'LICENSE'), fix: 'pnpm proxy:build for this target' },
+      { file: path.join(proxyDir, 'licenses'), fix: 'pnpm proxy:build for this target' },
+      ...['main', 'preload', 'renderer'].map((b) => ({ file: path.join(npmDir, `npm-${b}.txt`), fix: 'pnpm build' })),
+    ];
+    for (const { file, fix } of required) if (!existsSync(file)) throw new Error(`${file} is missing. Run ${fix}.`);
   },
   // No publish feed: scripts/release.mts signs the update files and uploads them (src/shared/updateFeed.ts).
   win: {

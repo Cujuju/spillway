@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
+import license from 'rollup-plugin-license';
 import solid from 'vite-plugin-solid';
 import { appVersion, gitBuild } from './appVersion.ts';
 
@@ -12,21 +13,32 @@ const version = appVersion(import.meta.dirname);
 const build = gitBuild(import.meta.dirname);
 /** The @cujuju/solidjs-* packages are linked from a sibling checkout (package.json `link:`). */
 const TOOLKIT_DIR = resolve('../solidjs-toolkit');
+/** Licenses whose notice file covers redistribution; anything else, or a package with no license, fails the build. */
+const SHIPPABLE_LICENSES = '(MIT OR ISC OR 0BSD OR BSD-2-Clause OR BSD-3-Clause OR Apache-2.0)';
+
+/** Writes the license text of every npm package bundled into `bundle` to out/licenses/, which electron-builder.ts ships. */
+const bundledLicenses = (bundle: 'main' | 'preload' | 'renderer') =>
+  license({
+    thirdParty: {
+      allow: { test: SHIPPABLE_LICENSES, failOnUnlicensed: true, failOnViolation: true },
+      output: { file: resolve(`out/licenses/npm-${bundle}.txt`) },
+    },
+  });
 
 export default defineConfig({
   main: {
     // Bundled: a linked package isn't in the packaged app's node_modules.
-    plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] }), bundledLicenses('main')],
     resolve: { alias: { '@shared': resolve('src/shared') } },
     define: { __UPDATE_PUBLIC_KEY__: JSON.stringify(updatePublicKey), __APP_VERSION__: JSON.stringify(version), __APP_BUILD__: JSON.stringify(build) },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), bundledLicenses('preload')],
     resolve: { alias: { '@shared': resolve('src/shared') } },
     build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
   },
   renderer: {
-    plugins: [solid()],
+    plugins: [solid(), bundledLicenses('renderer')],
     resolve: {
       alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') },
       // Linked toolkit packages sit outside this tree; one Solid runtime, or their signals never update ours.

@@ -45,8 +45,8 @@ async function waitForPush(sha) {
 
 function run(cmd, args, env = {}) {
   log(`$ ${cmd} ${args.join(' ')}`);
-  // Windows resolves pnpm through its .cmd shim, which needs a shell.
-  execFileSync(cmd, args, { cwd: WORKTREE, stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, ...env } });
+  // Windows resolves pnpm through its .cmd shim, which needs a shell; the arguments are fixed literals.
+  execFileSync([cmd, ...args].join(' '), { cwd: WORKTREE, stdio: 'inherit', shell: true, env: { ...process.env, ...env } });
 }
 
 function publish(sha) {

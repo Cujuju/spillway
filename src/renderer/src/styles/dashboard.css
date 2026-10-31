@@ -240,12 +240,59 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.limit-figures {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+}
+/* Shorter than a badge so the head row keeps its height. */
+.pace-chip {
+  --badge-height: 16px;
+  --badge-pad-x: 5px;
+  font-variant-numeric: tabular-nums;
+}
+/* Visible overflow lets the pace tick stand proud of the bar. */
 .limit-bar {
+  position: relative;
   height: var(--bar-height);
   border-radius: var(--radius-pill);
   background: var(--color-surface-input);
   margin: var(--spacing-2) 0;
+}
+/* Even pace: where the fill would sit if usage were spread evenly over the window. */
+.pace-tick {
+  --pace-tick-overhang: var(--spacing-0_5);
+  position: absolute;
+  top: calc(-1 * var(--pace-tick-overhang));
+  bottom: calc(-1 * var(--pace-tick-overhang));
+  width: var(--border-width-strong);
+  transform: translateX(-50%);
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+}
+/* Forecast: striped span to the projected figure at reset. */
+.pace-forecast {
+  --pace-stripe: 3px;
+  --pace-stripe-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: repeating-linear-gradient(90deg, var(--pace-stripe-color) 0 var(--pace-stripe), transparent var(--pace-stripe) calc(2 * var(--pace-stripe)));
+  transition: left var(--duration-bar) ease, width var(--duration-bar) ease;
+}
+.pace-forecast.runs-out {
+  --pace-stripe-color: var(--color-red);
+}
+/* Right of the reset caption, same row; truncates before the reset does. */
+.limit-forecast {
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.limit-forecast.runs-out {
+  color: var(--color-red-light);
 }
 .limit-bar > div {
   height: 100%;
@@ -253,6 +300,9 @@
   transition: width var(--duration-bar) ease, background-color var(--duration-bar) ease;
 }
 .limit-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-2);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }

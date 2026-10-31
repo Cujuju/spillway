@@ -25,7 +25,7 @@ await runReleaseCli({
   version: () => appVersion(ROOT),
   archs: { win32: ['x64'], darwin: MAC_ARCHS },
   // electron-builder.ts artifact names.
-  updateFile: (platform, arch, v) => (platform === 'win32' ? `${APP_NAME}-Setup-${v}.exe` : `${APP_NAME}-${v}-${arch}-mac.zip`),
+  updateSource: (platform, arch, v) => (platform === 'win32' ? `${APP_NAME}-Setup-${v}.exe` : `${arch === 'arm64' ? 'mac-arm64' : 'mac'}/${APP_NAME}.app`),
   // Disk images: the first install on a Mac.
   extraFiles: (platform, v) => (platform === 'darwin' ? MAC_ARCHS.map((arch) => `${APP_NAME}-${v}-${arch}.dmg`) : []),
 });

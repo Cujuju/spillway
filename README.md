@@ -104,7 +104,7 @@ $env:ANTHROPIC_CUSTOM_HEADERS = "X-Api-Key: <client key from the Proxy page>"
 
 ## Updates
 
-Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`src/shared/updateFeed.ts`), which holds only release files. Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
+Settings → Updates checks the public [Cujuju/spillway-updates](https://github.com/Cujuju/spillway-updates) repo (`src/shared/updateFeed.ts`), which holds only release files. Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS, downloading only chunks missing from the installed version. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
 
 - **Channel**: Nightly takes every published build (GitHub prereleases); Stable takes only promoted ones (the latest release). Switching to Stable never downgrades.
 - Each update file is listed in the release's `update-<platform>.json`, with an Ed25519 signature over the app, version, platform, arch, file name, size and SHA-512. The app checks the listing against the public key built into it (`resources/update-public-key.pem`) before offering the update, and checks the download's hash before installing.

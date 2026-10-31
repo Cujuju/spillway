@@ -1,3 +1,4 @@
+import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { clientLogKey } from './clientLogPaths';
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
@@ -65,6 +66,7 @@ export class ActivityLog {
   /** Mirror of `activity_totals`; null until first read. */
   private totals: Map<string, ActivityTotal> | null = null;
   private prunedOn = '';
+  private importing = false;
   /** This worker is the sole checkpoint writer; retain reads until the connection closes. */
   private checkpoints = new Map<string, string | undefined>();
   /** Latest account per conversation and model (conversationKey), filled from the database on first sight. */
@@ -84,6 +86,7 @@ export class ActivityLog {
           this.conn!.prepare("INSERT INTO meta VALUES ('usage-ledger-seeded', '1')").run();
         })();
       }
+      backfillLegacyUsage(this.conn);
     }
     return this.conn;
   }
@@ -101,12 +104,17 @@ export class ActivityLog {
       const changed = this.db.transaction(() => {
         const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
         const before = events.length ? changes() : 0;
-        for (const e of events) this.append(e);
+        this.importing = true;
+        try { for (const e of events) this.append(e); }
+        finally { this.importing = false; }
+        if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
+        this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldestKeptDay(Date.now(), this.config.retentionDays));
         const changed = events.length > 0 && changes() !== before;
         this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(file, state);
         return changed;
       })();
       this.checkpoints.set(file, state);
+      this.db.pragma('incremental_vacuum');
       return changed;
     } catch (e) {
       this.totals = null;
@@ -151,6 +159,10 @@ export class ActivityLog {
         const id = Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
         rememberUsage(this.db, e, id);
         this.db.prepare('UPDATE usage_identities SET row_id = ? WHERE key = ?').run(id, identityKey(e));
+        if (!this.importing && matchLegacyUsage(this.db, [identityKey(e)])) {
+          this.totals = null; this.revision += 1;
+          return (this.db.prepare('SELECT row_id FROM usage_identities WHERE key = ?').get(identityKey(e)) as { row_id: number }).row_id;
+        }
         return id;
       })();
     } catch (err) {
@@ -231,8 +243,7 @@ export class ActivityLog {
   }
 
   /**
-   * Matched client-log identities went through the proxy; unmatched ones bypassed it. Counted only from the first
-   * proxy record carrying a session or response ID: earlier ones can never match.
+   * Coverage starts at the first proxy record carrying a session or response ID; earlier client-log rows are excluded.
    */
   coverage(): ProxyCoverage {
     const first = (this.db.prepare("SELECT value FROM meta WHERE key = 'first-matchable-proxy'").get() as { value: string } | undefined)?.value ?? null;
@@ -262,6 +273,7 @@ export class ActivityLog {
     this.prunedOn = localDay(Date.now());
     const oldest = oldestKeptDay(Date.now(), this.config.retentionDays);
     this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldest);
+    this.db.pragma('incremental_vacuum');
   }
 
   clear(): void {

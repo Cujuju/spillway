@@ -25,6 +25,8 @@ const LEGACY_TOTALS_FILE = 'daily-totals.json';
 const LEGACY_IMPORTED = 'legacy-files-imported';
 /** Set once whole-day baselines with retained requests have become hourly totals. */
 const RETAINED_HOURS_REBUILT = 'retained-hours-rebuilt';
+const COMPACT_IDENTITIES = 'compact-usage-identities';
+const INCREMENTAL_VACUUM = 'incremental-vacuum-enabled';
 
 /** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
 export const CONVERSATION_KEY_SQL = `json_extract(event, '$.sessionId'), json_extract(event, '$.model')`;
@@ -108,6 +110,21 @@ export function openActivityDb(file: string, hexKey: string): Db {
         db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(RETAINED_HOURS_REBUILT, new Date().toISOString());
       }
     })();
+    if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(COMPACT_IDENTITIES)) {
+      db.transaction(() => {
+        db.exec("UPDATE usage_identities SET event = json_remove(event, '$.source', '$.upstreamId', '$.at', '$.provider', '$.client')");
+        db.prepare('INSERT INTO meta VALUES (?, ?)').run(COMPACT_IDENTITIES, '1');
+      })();
+    }
+    if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(INCREMENTAL_VACUUM)) {
+      try {
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec('VACUUM');
+        db.prepare('INSERT INTO meta VALUES (?, ?)').run(INCREMENTAL_VACUUM, '1');
+      } catch (err) {
+        console.error('[activity] vacuum maintenance failed; retrying next launch:', err);
+      }
+    }
   } catch (err) {
     db.close();
     throw err;

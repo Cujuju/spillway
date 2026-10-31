@@ -27,9 +27,78 @@ Clearing Activity removes both kinds.
 The retention cutoff is a local calendar date, and pruning deletes only rows
 with `day < oldestKeptDay`. Every row filed on the cutoff day survives, including
 both repeated hours on a fall-back day; pruning cannot split that day. A later
-client-log import can repopulate an older, pruned day only partially, so the
+Earlier client-log imports could repopulate pruned days only partially, so the
 migration proves completeness by comparing all usage counts and dimensions,
 rather than treating the earliest surviving request date as proof.
+
+Client-log imports delete expired request details in each batch transaction,
+even after today's ordinary prune has run. Totals, identities and checkpoints
+still commit; replay cannot resurrect expired details or count usage twice.
+
+Usage identities store source, response ID, timestamp, provider and client in
+columns only, rather than duplicating them in their accounting JSON. Existing
+identities migrate transactionally. A one-time VACUUM enables incremental
+auto-vacuum and compacts existing fragmentation. It runs in the activity worker,
+so activity RPCs wait during migration while the main/UI thread remains available.
+If VACUUM fails, the database stays usable, the failure is logged, and the
+maintenance marker stays unset so the next launch retries.
+Pruning and completed import batches then reclaim free pages incrementally.
+
+Legacy matching applies to every provider. Eligible proxy identities have no
+response ID or session ID and precede meta `first-matchable-proxy`; client-log
+identities must be unmatched. Provider, model and all four token counts must
+agree, with timestamps within `USAGE_MATCH_TOLERANCE_MS` (five minutes).
+Only pairs with exactly one candidate on each side match. The client timestamp
+may cross the boundary; only the proxy timestamp determines legacy eligibility.
+Sessionful or response-ID proxy rows and post-boundary rows never use this rule.
+Aggregate totals never establish a match.
+
+Import batches judge ambiguity against all stored eligible identities after storing
+the entire batch. A one-time transactional worker backfill (`legacy-usage-matched`)
+selects all pairs before marking either side, keeps the proxy request and subtracts
+the client's recorded accounting exactly once. Failure rolls back the marker and
+accounting, leaves the database usable and retries next launch. An expression
+index puts source, provider and token/model equality before the timestamp range;
+coverage indexes alone would scan every identity in that provider's time window.
+
+The October 31 disposable-copy audit for October 25–27 (local days) found
+8,843 unique Claude matches among 10,027 eligible proxy identities, with zero
+ambiguous matches (timestamp delta median 4.4 seconds, maximum 76 seconds).
+Codex had zero unique matches among 1,250 eligible proxy identities, with 202
+ambiguous proxy and 404 ambiguous client-log identities. Overall, 8,843 of 11,277
+legacy proxy rows matched (78%), exceeding the overall 50% gate.
+Residual: unmatched or ambiguous legacy rows, including Codex history, may still
+double count in All usage.
+
+The implementation verification on a fresh disposable copy reduced October 25–27
+All-usage requests from 24,363 to 15,521 for Claude; Codex stayed at 1,742.
+The whole-history backfill took 5.865 seconds, matching 8,971 Claude pairs
+(including 8,843 proxy rows dated October 25–27). Re-running left totals unchanged;
+`integrity_check` passed. The candidate query plan searched `usage_legacy_match`
+by source, provider, signature and timestamp range.
+
+Storage audit (2026-10-31, disposable encrypted snapshot):
+
+- 159,983 client-log requests averaged 563.40 JSON bytes; 27,767 proxy requests
+  averaged 503.62. Largest client-log strings: request ID 81.73 bytes, session
+  ID 42.73, response ID 34.95; error and User-Agent were null.
+- The ledger held 236,628 client-log and 27,361 proxy identities, averaging
+  527.79 and 444.04 JSON bytes before compaction. Its table occupied
+  261,603,328 bytes; request details occupied 128,978,944 bytes.
+- Largest indexes: identity primary key 31,145,984 bytes, session match
+  28,594,176, coverage indexes 16,379,904 and 16,363,520, response match
+  15,642,624, request conversation 15,265,792.
+- No requests preceded the October 2 retention cutoff. Free pages were
+  1,379 of 132,010 (4,096 bytes/page): 5,648,384 bytes, so free pages alone
+  did not explain the growth. Imported accounting history starts November 2025.
+- VACUUM alone reduced 540,712,960 bytes to 502,423,552. Removing duplicate
+  identity JSON fields and compacting reduced it to 449,925,120 bytes:
+  109,845 pages, zero free pages, identity table 193,863,680 bytes.
+- Compacted identity JSON averaged 384.55 bytes for client logs and 328.14
+  for proxy rows. The resulting encrypted copy passed `integrity_check`.
+
+The audit used copies of the database, WAL, secrets and Chromium Local State;
+no live SQLite connection was opened. The copies were deleted after measurement.
 
 Rebuilt requests receive explicit hourly ownership. Ledger seeding leaves other
 requests attached to baselines, even if a matching hourly row exists.

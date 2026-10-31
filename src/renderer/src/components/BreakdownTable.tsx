@@ -1,7 +1,8 @@
 import { For, Show } from 'solid-js';
 import { metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { pct } from '../lib/format';
-import { costText, hitRate } from './activityFormat';
+import { costText, formatMetric, hitRate, metricLabel } from './activityFormat';
+import { HoverTip } from './ChartTip';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
 
@@ -43,7 +44,15 @@ export function BreakdownTable(props: { heading: string; rows: BreakdownRow[]; t
               <TokenCell v={r.summary.cacheWriteTokens} provider={r.provider} />
               <td class="tabular num">{hitRate(r.summary)}</td>
               <td class="tabular num">{costText(r.summary)}</td>
-              <td class="share-cell"><div class="share-bar" title={pct(share(r.summary) * 100, 1)}><span style={{ width: `${share(r.summary) * 100}%` }} /></div></td>
+              <td class="share-cell">
+                <HoverTip title={r.name || 'Share'} rows={[
+                  { label: 'Share', value: pct(share(r.summary) * 100, 1) },
+                  { label: metricLabel(props.metric), value: formatMetric(props.metric)(r.summary) },
+                  { label: 'Total', value: formatMetric(props.metric)(props.total) },
+                ]} layout="block">
+                  <div class="share-bar"><span style={{ width: `${share(r.summary) * 100}%` }} /></div>
+                </HoverTip>
+              </td>
             </tr>
           )}
         </For>

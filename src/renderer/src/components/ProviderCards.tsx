@@ -6,7 +6,7 @@ import { compactDuration, dateTime, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
 import { providerVar } from '../lib/providers';
-import { now, settings } from '../store';
+import { now, settings, snapshot } from '../store';
 import type { PoolLine, ProviderPool } from './poolModel';
 import { HoverTip } from './ChartTip';
 import { ProviderGlyph } from './ui';
@@ -14,6 +14,7 @@ import { ProviderGlyph } from './ui';
 /** Selection id for every provider at once. */
 export const ALL_PROVIDERS = 'all';
 const ICON_PX = 14;
+const HOUR_MS = 3_600_000;
 /** An account's segment fills to what it has left. */
 const FULL = 100;
 
@@ -57,17 +58,28 @@ export function ProviderCards(props: CardsProps) {
             <div class="pool-card card-wash" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
               <div class="pool-card-top">
                 {/* The card's keyboard target; its click bubbles to the card. */}
-                <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>
-                  <ProviderGlyph provider={p.id} />
-                  <span class="pool-card-name">{providerLabel(p.id)}</span>
-                  <span class="count">{p.count()}</span>
-                  <span class="pool-card-plans truncate" title="Accounts count by plan size">{p.lines()[0]?.model.plans()}</span>
-                  <span class="spacer" />
-                  <Show when={stuck()}>{(s) => <StuckBadge stuck={s()} />}</Show>
-                  <Show when={rate() != null}>
-                    <span class="pool-card-rate" title="Drain rate of the highlighted window">~{rate()!.toFixed(1)}%/h</span>
-                  </Show>
-                </button>
+                <HoverTip title={providerLabel(p.id)} layout="contents" rows={[
+                  { label: 'Accounts', value: p.count().toLocaleString() },
+                  ...(p.lines()[0]?.model.plans() ? [{ label: 'Plans', value: p.lines()[0]!.model.plans() }] : []),
+                  ...(rate() != null ? [
+                    ...(chosen() ? [{ label: 'Window', value: chosen()!.label() }] : []),
+                    { label: 'Rate', value: `~${rate()!.toFixed(1)}%/h` },
+                    { label: 'Lookback', value: compactDuration(settings().dashboard.drainLookbackHours * HOUR_MS) },
+                  ] : []),
+                  ...(stuck() ? stuckRows(stuck()!) : []),
+                ]}>
+                  <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>
+                    <ProviderGlyph provider={p.id} />
+                    <span class="pool-card-name">{providerLabel(p.id)}</span>
+                    <span class="count">{p.count()}</span>
+                    <span class="pool-card-plans truncate">{p.lines()[0]?.model.plans()}</span>
+                    <span class="spacer" />
+                    <Show when={stuck()}>{(s) => <StuckBadge stuck={s()} />}</Show>
+                    <Show when={rate() != null}>
+                      <span class="pool-card-rate">~{rate()!.toFixed(1)}%/h</span>
+                    </Show>
+                  </button>
+                </HoverTip>
                 <Show when={folded()}>
                   <button
                     type="button"
@@ -98,61 +110,71 @@ export function ProviderCards(props: CardsProps) {
 }
 
 /** When every account is forecast to be out at once, and for how long; "now" when already out. */
+function stuckRows(stuck: PoolStuck) {
+  return [
+    { label: 'Every account out', value: stuck.at <= now() ? 'Now' : dateTime(stuck.at) },
+    ...(stuck.until === null ? [] : [{ label: 'Until', value: dateTime(stuck.until) }]),
+  ];
+}
+
 function StuckBadge(props: { stuck: PoolStuck }) {
   const start = () => compactDuration(props.stuck.at - now());
   const length = () => (props.stuck.until === null ? null : compactDuration(props.stuck.until - Math.max(now(), props.stuck.at)));
   const when = () => (start() === 'now' ? 'Stuck now' : `Stuck in ${start()}`);
-  const rows = () => [
-    { label: 'From', value: start() === 'now' ? 'Now' : dateTime(props.stuck.at) },
-    ...(props.stuck.until === null ? [] : [{ label: 'Until', value: dateTime(props.stuck.until) }]),
-  ];
   return (
-    // Inside the card's button, so the tooltip wrapper takes no tab stop of its own.
-    <HoverTip title="Every account out of quota" rows={rows()} focusable={false}>
-      <span class="badge compact red">
-        {when()}
-        <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
-      </span>
-    </HoverTip>
+    <span class="badge compact red">
+      {when()}
+      <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
+    </span>
   );
 }
 
 /** One window: a segment per account, the pool's percent left, and the time to its next reset. */
 function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void }) {
   const m = () => props.line.model;
+  const account = (id: string) => snapshot()?.credentials.find((c) => c.id === id)?.label ?? id;
   return (
-    <button
-      type="button"
-      class="pool-line"
-      classList={{ chosen: props.chosen }}
-      aria-pressed={props.chosen}
-      title={`Chart the ${props.line.label()} window`}
-      onClick={(e) => {
-        // Picks the window only; the provider filter stays.
-        e.stopPropagation();
-        props.onPick();
-      }}
-    >
-      <span class="pool-line-label">{props.line.label()}</span>
-      <span class="pool-segments">
-        <For each={m().segments()}>
-          {(s) => (
-            <span style={{ 'flex-grow': s.share }}>
-              <span class="fill" style={{ width: `${Math.max(0, FULL - s.usedPercent)}%`, background: quotaColor(s.usedPercent, s.rejected) }} />
-            </span>
-          )}
-        </For>
-      </span>
-      <span class="pool-line-pct">{quotaPercent(m().summary()?.remaining ?? 0)}</span>
-      <span class="pool-line-reset">
-        <Show when={m().resetAt()}>
-          {(at) => (
-            <span title={new Date(at()).toLocaleString()}>
-              <RotateCcw size="1em" role="img" aria-label="Resets in" /> {compactDuration(at() - now())}
-            </span>
-          )}
-        </Show>
-      </span>
-    </button>
+    <HoverTip title={props.line.label()} layout="contents" rows={[
+      { label: 'Left', value: quotaPercent(m().summary()?.remaining ?? 0) },
+      ...m().segments().map((s) => ({ label: account(s.id), value: quotaPercent(Math.max(0, FULL - s.usedPercent)) })),
+      ...(m().resetAt() ? [
+        { label: 'Next reset', value: dateTime(m().resetAt()!) },
+        { label: 'In', value: compactDuration(m().resetAt()! - now()) },
+      ] : []),
+    ]}>
+      <button
+        type="button"
+        class="pool-line"
+        classList={{ chosen: props.chosen }}
+        aria-pressed={props.chosen}
+        aria-label={`Chart the ${props.line.label()} window`}
+        onClick={(e) => {
+          // Picks the window only; the provider filter stays.
+          e.stopPropagation();
+          props.onPick();
+        }}
+      >
+        <span class="pool-line-label">{props.line.label()}</span>
+        <span class="pool-segments">
+          <For each={m().segments()}>
+            {(s) => (
+              <span style={{ 'flex-grow': s.share }}>
+                <span class="fill" style={{ width: `${Math.max(0, FULL - s.usedPercent)}%`, background: quotaColor(s.usedPercent, s.rejected) }} />
+              </span>
+            )}
+          </For>
+        </span>
+        <span class="pool-line-pct">{quotaPercent(m().summary()?.remaining ?? 0)}</span>
+        <span class="pool-line-reset">
+          <Show when={m().resetAt()}>
+            {(at) => (
+              <span>
+                <RotateCcw size="1em" role="img" aria-label="Resets in" /> {compactDuration(at() - now())}
+              </span>
+            )}
+          </Show>
+        </span>
+      </button>
+    </HoverTip>
   );
 }

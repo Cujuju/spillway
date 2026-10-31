@@ -1,3 +1,5 @@
+import { HoverTip, type TipRow } from './ChartTip';
+import { dateTime } from '../lib/format';
 import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from 'lucide-solid';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -23,16 +25,21 @@ export function Toggle(props: { value: boolean; onChange: (v: boolean) => void; 
   );
 }
 
-export function Seg<T extends string | number>(props: { label?: string; compact?: boolean; value: T; options: readonly { value: T; label: string; title?: string }[]; onChange: (v: T) => void }) {
+export function Seg<T extends string | number>(props: { label?: string; compact?: boolean; value: T; options: readonly { value: T; label: string; title?: string; tipRows?: TipRow[] }[]; onChange: (v: T) => void }) {
   return (
     <Show when={props.compact} fallback={
       <div class="seg" role="radiogroup" aria-label={props.label}>
         <For each={props.options}>
-          {(o) => (
-            <button type="button" role="radio" aria-checked={props.value === o.value} title={o.title} classList={{ active: props.value === o.value }} onClick={() => props.onChange(o.value)}>
-              {o.label}
-            </button>
-          )}
+          {(o) => {
+            const button = () => (
+              <button type="button" role="radio" aria-checked={props.value === o.value} title={o.tipRows ? undefined : o.title} classList={{ active: props.value === o.value }} onClick={() => props.onChange(o.value)}>
+                {o.label}
+              </button>
+            );
+            return <Show when={o.tipRows} fallback={button()}>{(rows) => (
+              <HoverTip title={o.label} rows={rows()} layout="contents">{button()}</HoverTip>
+            )}</Show>;
+          }}
         </For>
       </div>
     }>
@@ -162,10 +169,13 @@ export function ProviderGlyph(props: { provider: string; size?: keyof typeof GLY
 /** Reset countdown: icon and time left; the local reset date and time show on hover. */
 export function ResetTime(props: { at: string | number; now: number }) {
   return (
-    <span class="reset-time" title={new Date(props.at).toLocaleString()}>
+    <HoverTip title="Resets" rows={[
+      { label: 'At', value: dateTime(props.at) },
+      { label: 'In', value: resetParts(props.at, props.now).left },
+    ]}><span class="reset-time">
       <RotateCcw size="1em" role="img" aria-label="Resets in" />
       {resetParts(props.at, props.now).left}
-    </span>
+    </span></HoverTip>
   );
 }
 

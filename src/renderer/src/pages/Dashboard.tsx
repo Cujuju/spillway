@@ -82,12 +82,12 @@ export function Dashboard() {
     return longest ? lengthLineId(longest) : null;
   };
   const chartModels = () => visibleLines().filter((v) => v.line.id === lineId()).map((v) => v.line.model);
-  // Chart window picker: each length in view, plus a charted scoped line; the title names the providers it charts.
+  // Chart window picker: each length in view, plus a charted scoped line; the tooltip names the providers it charts.
   const chartWindows = createMemo(() => {
-    const charted = (id: string) => `Charts ${visibleLines().filter((v) => v.line.id === id).map((v) => providerLabel(v.provider)).join(', ')}`;
-    const options = visibleLengths().map((l) => ({ value: lengthLineId(l.value), label: l.label, title: charted(lengthLineId(l.value)) }));
+    const charted = (id: string) => visibleLines().filter((v) => v.line.id === id).map((v) => providerLabel(v.provider)).join(', ');
+    const options = visibleLengths().map((l) => ({ value: lengthLineId(l.value), label: l.label, tipRows: [{ label: 'Charts', value: charted(lengthLineId(l.value)) }] }));
     const scoped = visibleLines().find((v) => v.line.scoped && v.line.id === lineId());
-    if (scoped) options.push({ value: scoped.line.id, label: scoped.line.label(), title: charted(scoped.line.id) });
+    if (scoped) options.push({ value: scoped.line.id, label: scoped.line.label(), tipRows: [{ label: 'Charts', value: charted(scoped.line.id) }] });
     return options;
   });
   // Each provider sorts by its own widest window; keys differ between providers.

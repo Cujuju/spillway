@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { importLabel } from './ActivityImport';
 import { Activity as ActivityIcon, ChevronLeft, ChevronRight, CircleHelp, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
@@ -54,11 +55,13 @@ export function Sidebar() {
   onMount(() => window.addEventListener('keydown', onKey));
   onCleanup(() => window.removeEventListener('keydown', onKey));
   const toggleLabel = () => `${collapsed() ? 'Expand' : 'Collapse'} sidebar (${TOGGLE_SHORTCUT})`;
-  const tooltip = (item: { id: Page; label: string }) => {
-    const status = item.id === 'activity' && activityImport().state === 'importing' ? importLabel() : item.id === 'proxy' ? proxyStatusText() : undefined;
-    if (!collapsed()) return status;
-    return status ? `${item.label} · ${status}` : item.label;
-  };
+  const rows = (item: NavItem) => item.id === 'proxy'
+    ? [{ label: 'Status', value: proxyStatusText() }]
+    : item.id === 'activity' && activityImport().state === 'importing'
+      ? [
+        { label: 'Completed files', value: activityImport().filesDone.toLocaleString() },
+        { label: 'Total files', value: activityImport().filesTotal.toLocaleString() },
+      ] : [];
   return (
     <nav class="sidebar" classList={{ collapsed: collapsed() }}>
       <For each={NAV}>
@@ -66,15 +69,12 @@ export function Sidebar() {
           <>
             <div class="sidebar-group">{collapsed() ? '' : group.group}</div>
             <For each={group.items}>
-              {(item) => (
-                <>
-                <Show when={item.dividerBefore}>
-                  <div class="sidebar-divider" role="separator" />
-                </Show>
+              {(item) => {
+                const button = () => (
                 <button
                   class="nav-btn"
                   classList={{ active: page() === item.id }}
-                  title={tooltip(item)}
+                  title={rows(item).length ? undefined : collapsed() ? item.label : undefined}
                   aria-label={item.label}
                   onClick={() => setPage(item.id)}
                   onDblClick={toggle}
@@ -89,8 +89,17 @@ export function Sidebar() {
                     <span class="badge">{accountCount()}</span>
                   </Show>
                 </button>
-                </>
-              )}
+                );
+                return <>
+
+                <Show when={item.dividerBefore}>
+                  <div class="sidebar-divider" role="separator" />
+                </Show>
+                <Show when={rows(item).length} fallback={button()}>
+                  <HoverTip title={item.label} rows={rows(item)} layout="contents">{button()}</HoverTip>
+                </Show>
+                </>;
+              }}
             </For>
           </>
         )}

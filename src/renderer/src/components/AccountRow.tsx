@@ -7,6 +7,7 @@ import { compactDuration } from '../lib/format';
 import { isExhausted } from '../lib/quotaColor';
 import { now, setPage } from '../store';
 import { LimitBar } from './LimitBar';
+import { HoverTip } from './ChartTip';
 import { ProviderGlyph, ResetTime } from './ui';
 
 const ICON_PX = 13;
@@ -75,7 +76,7 @@ export function AccountRow(props: { credential: Credential; selected?: boolean; 
         </div>
         <div class="account-meta">
           <Show when={c().apiKey}>
-            {(key) => <div title="Requests since the proxy started">{key().success} succeeded · {key().failed} failed</div>}
+            {(key) => <HoverTip title="Requests since proxy start" rows={[{ label: 'Succeeded', value: key().success.toLocaleString() }, { label: 'Failed', value: key().failed.toLocaleString() }]}><div>{key().success} succeeded · {key().failed} failed</div></HoverTip>}
           </Show>
           <Show when={c().email && c().email !== c().label}>
             <div class="truncate">{c().email}</div>

@@ -5,7 +5,7 @@ import { hourOfDay } from '../lib/activityHeat';
 import { calendarDays, spanDays, type Span } from '../lib/activityRange';
 import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { moonPath, moonPhase, phaseName, skyBody, sunArc, skyGeometry } from '../lib/sky';
-import { ChartTip, type TipRow } from './ChartTip';
+import { ChartTip, HoverTip, type TipRow } from './ChartTip';
 import '../styles/rhythm.css';
 import { zipCoordinates } from '../lib/zipCoordinates';
 import { FALLBACK_SUN_TIMES, solarTimes } from '../lib/solarTimes';
@@ -94,7 +94,7 @@ export function ActivityRhythm(props: {
       <div class="rhythm-footer">
         <span>Busiest hour: <strong>{stats().peak === null ? '—' : hourLabel(stats().peak!)}</strong></span>
         <Show when={stats().undetailedDays > 0}>
-          <span title="Older days kept only as daily totals have no hour detail">{stats().undetailedDays}d without hours</span>
+          <HoverTip title="Missing hourly detail" rows={[{ label: 'Days', value: stats().undetailedDays.toLocaleString() }, { label: 'Reason', value: 'Older days keep daily totals only' }]}><span>{stats().undetailedDays}d without hours</span></HoverTip>
         </Show>
         <span>{days()}d · {props.format(stats().total)} total</span>
       </div>

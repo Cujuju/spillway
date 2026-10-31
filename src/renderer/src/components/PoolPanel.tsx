@@ -5,6 +5,7 @@ import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
+import type { TipRow } from './ChartTip';
 import { Seg } from './ui';
 
 const HOURS_PER_DAY = 24;
@@ -26,7 +27,7 @@ export interface ChartWindow {
   /** Card line id (`lengthLineId` or `scopedLineId`). */
   value: string;
   label: string;
-  title: string;
+  tipRows: TipRow[];
 }
 
 /**

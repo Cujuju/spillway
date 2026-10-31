@@ -60,6 +60,7 @@
   color: var(--color-text-secondary);
 }
 .past-window-bar {
+  display: block;
   height: var(--bar-height);
   border-radius: var(--radius-pill);
   background: var(--color-surface-input);

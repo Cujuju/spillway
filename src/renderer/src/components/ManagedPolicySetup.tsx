@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { createResource, createSignal, Show } from 'solid-js';
 import type { ManagedPolicyStatus } from '@shared/types';
 import { SETUP_STATE } from './ClientSetup';
@@ -37,7 +38,11 @@ export function ManagedPolicySetup(props: { endpoint: string; clientKey: string 
             <div class="list-row-text">
               <div class="list-row-label">
                 Claude Code, every app
-                <span class={`badge ${state().tone}`} title={state().title}>{state().label}</span>
+                <HoverTip title="Managed Claude Code setup" rows={[
+                    { label: 'Status', value: state().label },
+                    { label: 'Meaning', value: state().title.replace(/\.$/, '') },
+                    ...(s().path ? [{ label: 'Config', value: s()!.path }] : []),
+                  ]}><span class={`badge ${state().tone}`}>{state().label}</span></HoverTip>
               </div>
               <div class="list-row-help">{HELP}</div>
               <div class="list-row-help path">{s().path}</div>

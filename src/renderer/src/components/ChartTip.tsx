@@ -30,14 +30,15 @@ export function ChartTip(props: { title: string; rows: TipRow[]; x?: number; y?:
   );
 }
 
-/** The same readout on hover or focus of `children`, in place of a one-line `title`. `focusable={false}` inside another control. */
-export function HoverTip(props: { title: string; rows: TipRow[]; focusable?: boolean; children: JSX.Element }) {
+/** The same readout on hover or focus of `children`. Use `contents` around a focusable control to preserve its layout. */
+export function HoverTip(props: { title: string; rows: TipRow[]; class?: string; focusable?: boolean; layout?: 'control' | 'block' | 'contents'; children: JSX.Element }) {
   return (
     <KvTooltip
       entries={{}}
       maxWidth={TIP_MAX_WIDTH}
       panelClass="chart-tip"
-      wrapperLayout="control"
+      class={props.class}
+      wrapperLayout={props.layout ?? 'control'}
       focusable={props.focusable}
       description={[props.title, ...props.rows.map((r) => `${r.label}: ${r.value}`)].join('. ')}
       extraContent={<TipBody title={props.title} rows={props.rows} />}

@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { Show } from 'solid-js';
 import { tokenCost } from '@shared/modelPrices';
 import { maskEmails } from '@shared/privacy';
@@ -27,34 +28,44 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
     const text = props.e.error ?? '';
     return settings().dashboard.showEmails ? text : maskEmails(text);
   };
-  /** The title (when known) and the full ID the proxy keys the conversation by. */
-  const conversationTitle = () => {
-    const id = props.e.sessionId;
-    return id ? [conversationName(id), id].filter(Boolean).join('\n') : undefined;
-  };
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>
         <td class="tabular">{new Date(props.e.at).toLocaleTimeString()}</td>
-        <td class="fill" title={`${props.account(props.e.authIndex)} · ${props.e.model || 'no model'}`}>
+        <td class="fill">
+          <HoverTip title="Request account" layout="block" rows={[
+            { label: 'Account', value: props.account(props.e.authIndex) },
+            ...(props.e.model ? [{ label: 'Model', value: props.e.model }] : []),
+          ]}>
           <div class="cell-name">
             <ProviderGlyph provider={props.e.provider} size="sm" />
             <span>{props.account(props.e.authIndex)} <span class="muted">· {props.e.model || '—'}</span></span>
-          </div>
+          </div></HoverTip>
         </td>
-        <td class="fill conversation-cell" title={conversationTitle()}>
+        <td class="fill conversation-cell">
           <Show when={props.e.sessionId} fallback={<span class="muted">—</span>}>
             <div class="cell-name">
-              <span>{conversationLabel(props.e.sessionId)}</span>
+              <HoverTip title="Conversation" class="conversation-name-tip" rows={[
+                ...(conversationName(props.e.sessionId!) ? [{ label: 'Name', value: conversationName(props.e.sessionId!)! }] : []),
+                { label: 'ID', value: props.e.sessionId! },
+              ]}><span class="conversation-name">{conversationLabel(props.e.sessionId)}</span></HoverTip>
               <Show when={props.e.movedFrom}>
-                {(from) => <span class="badge amber" title={`Moved from ${props.account(from())}; the prompt cache started over`}>moved</span>}
+                {(from) => <HoverTip title="Conversation moved" class="conversation-moved-tip" rows={[
+                  { label: 'From', value: props.account(from()) },
+                  { label: 'To', value: props.account(props.e.authIndex) },
+                  { label: 'Prompt cache', value: 'Started over' },
+                ]}><span class="badge amber">moved</span></HoverTip>}
               </Show>
               <MoveConversation e={props.e} account={props.account} />
             </div>
           </Show>
         </td>
-        <td class="fill client-cell" title={props.e.userAgent ?? undefined}>
-          <Show when={props.e.client} fallback={<span class="muted">—</span>}>{(name) => name()}</Show>
+        <td class="fill client-cell">
+          <HoverTip title="Request client" rows={[
+            ...(props.e.client ? [{ label: 'Client', value: props.e.client }] : []),
+            ...(props.e.userAgent ? [{ label: 'User-Agent', value: props.e.userAgent }] : []),
+          ]}>
+          <Show when={props.e.client} fallback={<span class="muted">—</span>}>{(name) => name()}</Show></HoverTip>
         </td>
         <td>
           <Show when={props.e.failed} fallback={<span class="badge green">OK</span>}>

@@ -228,6 +228,15 @@
 .cell-name > .badge {
   flex-shrink: 0;
 }
+.conversation-moved-tip {
+  flex-shrink: 0;
+}
+.conversation-name-tip,
+.conversation-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Shares the leftover width with the account column. */
 .table td.fill.conversation-cell {
   --fill-col-share: 25%;

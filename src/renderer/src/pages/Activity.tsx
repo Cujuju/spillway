@@ -1,3 +1,4 @@
+import { HoverTip } from '../components/ChartTip';
 import { ActivityImport } from '../components/ActivityImport';
 import { createMemo, createResource, createSignal, For, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
@@ -9,7 +10,7 @@ import { ClientFilter } from '../components/ClientFilter';
 import { Notice, Seg } from '../components/ui';
 import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
-import { pct } from '../lib/format';
+import { dateTime, pct } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
 
@@ -65,12 +66,22 @@ export function Activity() {
       </Show>
 
       <Show when={view() === 'overview' && covered().length > 0}>
-        <p class="muted chart-note" title="Requests in Claude Code and Codex logs since the proxy began recording session or response IDs, and how many of them the proxy also recorded">
-          Proxy coverage since {new Date(coverage()!.since!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}:{' '}
+        <p class="muted chart-note">
+          <HoverTip title="Proxy coverage" rows={[
+            ...(coverage()?.since ? [{ label: 'Since', value: dateTime(coverage()!.since!) }] : []),
+            { label: 'Source', value: 'Claude Code and Codex logs' },
+            { label: 'Comparison', value: 'Requests also recorded by the proxy, matched by session or response ID' },
+          ]}>
+          Proxy coverage since {new Date(coverage()!.since!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}:</HoverTip>{' '}
           <For each={covered()}>{(c, i) => (
             <>
               {i() > 0 ? ' · ' : ''}
-              <span title={c.provider}>{c.client ?? c.provider}</span>{' '}
+              <HoverTip title={c.client ?? c.provider} rows={[
+                { label: 'Provider', value: c.provider },
+                { label: 'Requests', value: c.requests.toLocaleString() },
+                { label: 'Via proxy', value: c.viaProxy.toLocaleString() },
+                { label: 'Bypassed', value: (c.requests - c.viaProxy).toLocaleString() },
+              ]}><span>{c.client ?? c.provider}</span></HoverTip>{' '}
               {pct((c.viaProxy / c.requests) * 100)} via proxy ({(c.requests - c.viaProxy).toLocaleString()} bypassed)
             </>
           )}</For>

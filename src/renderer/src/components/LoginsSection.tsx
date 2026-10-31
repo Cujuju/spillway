@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { KeyRound, Plus, Trash2, Upload } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
@@ -20,7 +21,10 @@ function statusBadge(c: Credential, at: number) {
     case 'disabled': return <span class="badge">Disabled</span>;
     case 'limited': return <span class="badge red">Limited</span>;
     case 'next-pick': return <span class="badge green">Next pick</span>;
-    case 'error': return <span class="badge red" title={c.statusMessage ?? undefined}>Error</span>;
+    case 'error': return <HoverTip title="Account error" rows={[
+      { label: 'Account', value: c.label },
+      ...(c.statusMessage ? [{ label: 'Error', value: c.statusMessage }] : []),
+    ]}><span class="badge red">Error</span></HoverTip>;
     case 'ready': return <span class="badge">Ready</span>;
   }
 }
@@ -134,13 +138,20 @@ export function LoginsSection() {
                             if (v !== (c.note ?? '')) void act(() => window.api.setCredentialNote(c.id, v));
                           }}
                         />
-                        <div class="muted truncate" title={`Auth file: ${c.name}`}>{c.email ?? c.name}</div>
+                        <HoverTip title="Account login" layout="block" rows={[
+                          ...(c.email ? [{ label: 'Email', value: c.email }] : []),
+                          { label: 'Auth file', value: c.name },
+                        ]}><div class="muted truncate">{c.email ?? c.name}</div></HoverTip>
                       </div>
                     </div>
                   </td>
                   <td>
                     <div class="row tight">
-                      <span title={c.plan?.tier}>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span>
+                      <HoverTip title="Subscription" rows={[
+                        { label: 'Provider', value: providerLabel(c.provider) },
+                        ...(c.plan?.label ? [{ label: 'Plan', value: c.plan.label }] : []),
+                        ...(c.plan?.tier ? [{ label: 'Tier', value: c.plan.tier }] : []),
+                      ]}><span>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span></HoverTip>
                       <Show when={c.resetCredits?.available}>
                         <ResetCreditButton
                           credential={c}

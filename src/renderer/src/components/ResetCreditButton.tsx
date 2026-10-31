@@ -1,7 +1,9 @@
+import { HoverTip } from './ChartTip';
 import { createSignal, Show } from 'solid-js';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
 import { clockText, resetParts } from '@shared/resetTime';
 import type { Credential, ResetCreditOutcome, ResetCredits } from '@shared/types';
+import { dateTime } from '../lib/format';
 import { now } from '../store';
 
 /** Spending a credit cannot be undone, so it takes a deliberate four-second hold. */
@@ -17,14 +19,6 @@ const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
 
 /** Expiries still ahead; a passed one stays listed only until the next lookup drops it. */
 const upcoming = (r: ResetCredits, at: number) => r.expiries.filter((t) => Date.parse(t) > at);
-
-function heldText(r: ResetCredits, at: number): string {
-  return [
-    `${r.available} rate-limit ${r.available === 1 ? 'reset' : 'resets'} held, ${r.applicable} usable now.`,
-    ...upcoming(r, at).map((t) => `Expires ${new Date(t).toLocaleString()} (in ${resetParts(t, at).left}).`),
-    `Checked ${new Date(r.checkedAt).toLocaleString()}.`,
-  ].join(' ');
-}
 
 /**
  * The account's reset-credit count, as a badge, and when the soonest credit expires. While a credit
@@ -59,27 +53,37 @@ export function ResetCreditButton(props: { credential: Credential; disabled: boo
 
   return (
     <>
-      <button
-        type="button"
-        class="badge hold-badge"
-        classList={{ accent: usable() }}
-        disabled={!enabled()}
-        title={`${heldText(credits(), now())} ${action()}`}
-        {...hold.handlers}
-        onClick={(e) => hold.shouldSuppressClick() && e.preventDefault()}
-      >
-        <Show when={hold.holding()}>
-          <HoldIndicator progress={hold.progress} shape="bar" stroke="var(--color-accent-border)" />
-        </Show>
-        <span class="hold-label">
-          {busy() ? 'Resetting…' : `${credits().available} ${credits().available === 1 ? 'reset' : 'resets'}`}
-        </span>
-      </button>
+      <HoverTip title="Rate-limit reset credits" focusable={false} rows={[
+        { label: 'Held', value: credits().available.toLocaleString() },
+        { label: 'Usable now', value: credits().applicable.toLocaleString() },
+        ...upcoming(credits(), now()).map((t) => ({ label: 'Expires', value: `${dateTime(t)} · ${resetParts(t, now()).left}` })),
+        { label: 'Checked', value: dateTime(credits().checkedAt) },
+        { label: 'Action', value: action().replace(/\.$/, '') },
+      ]}>
+        <button
+          type="button"
+          class="badge hold-badge"
+          classList={{ accent: usable() }}
+          disabled={!enabled()}
+          {...hold.handlers}
+          onClick={(e) => hold.shouldSuppressClick() && e.preventDefault()}
+        >
+          <Show when={hold.holding()}>
+            <HoldIndicator progress={hold.progress} shape="bar" stroke="var(--color-accent-border)" />
+          </Show>
+          <span class="hold-label">
+            {busy() ? 'Resetting…' : `${credits().available} ${credits().available === 1 ? 'reset' : 'resets'}`}
+          </span>
+        </button>
+      </HoverTip>
       <Show when={soonest()}>
         {(t) => (
-          <span class="muted" title={`${new Date(t()).toLocaleString()} · in ${resetParts(t(), now()).left}`}>
+          <HoverTip title="Reset credit expiry" rows={[
+            { label: 'At', value: dateTime(t()) },
+            { label: 'In', value: resetParts(t(), now()).left },
+          ]}><span class="muted">
             expires {clockText(Date.parse(t()), now())}
-          </span>
+          </span></HoverTip>
         )}
       </Show>
     </>

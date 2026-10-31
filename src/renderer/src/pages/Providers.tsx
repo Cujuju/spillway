@@ -1,3 +1,4 @@
+import { HoverTip } from '../components/ChartTip';
 import { Pencil, Plus, Trash2 } from 'lucide-solid';
 import { createResource, createSignal, For, Show } from 'solid-js';
 import { FAMILY_INFO, type ApiProviderGroup, type ApiProviderTarget } from '@shared/apiProviders';
@@ -121,8 +122,13 @@ export function Providers() {
                         </For>
                       </div>
                     </td>
-                    <td title={g.models.map((m) => (m.alias ? `${m.alias} → ${m.name}` : m.name)).join('\n') || undefined}>
-                      {g.models.length || <span class="muted">All</span>}
+                    <td>
+                      <Show when={g.models.length} fallback={<span class="muted">All</span>}>
+                        <HoverTip title="Provider models" rows={[
+                          { label: 'Count', value: g.models.length.toLocaleString() },
+                          ...g.models.map((m) => ({ label: m.alias || m.name, value: m.name })),
+                        ]}>{g.models.length}</HoverTip>
+                      </Show>
                     </td>
                     <td class="col-enabled">
                       <div class="key-list">

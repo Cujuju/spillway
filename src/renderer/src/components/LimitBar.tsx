@@ -27,8 +27,17 @@ export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast
   const rejected = () => props.window.status === 'rejected';
   const pace = () => windowPace(props.window, now());
   const runsOut = () => props.forecast?.runsOutAt != null;
+  const rows = () => {
+    const p = pace();
+    return [
+      { label: 'Used', value: quotaPercent(used()) },
+      { label: 'Left', value: quotaPercent(shownPercent(used(), 'remaining')) },
+      { label: 'Resets', value: props.window.resetsAt ? dateTime(props.window.resetsAt) : 'No reset pending' },
+      ...(p ? [{ label: 'Pace', value: p.state === 'on' ? 'On pace' : `${Math.round(Math.abs(p.deltaPercent))} ${p.state}` }] : []),
+    ];
+  };
   return (
-    <div class="limit" classList={{ empty: used() === null }} title={props.window.resetsAt ? new Date(props.window.resetsAt).toLocaleString() : undefined}>
+    <div class="limit" classList={{ empty: used() === null }}>
       <div class="limit-head">
         <span class="truncate secondary">{props.window.label}</span>
         <span class="limit-figures">
@@ -36,17 +45,19 @@ export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast
           <span class="value">{quotaPercent(shown())}</span>
         </span>
       </div>
-      <div class="limit-bar">
-        <div style={{ width: `${Math.min(BAR_FULL, shown() ?? 0)}%`, background: quotaColor(used(), rejected()) }} />
-        <Show when={used() !== null && props.forecast}>
-          {(f) => {
-            const from = () => Math.min(at(used()!), at(f().endsAtPercent));
-            const to = () => Math.max(at(used()!), at(f().endsAtPercent));
-            return <span class="pace-forecast" classList={{ 'runs-out': runsOut() }} style={{ left: `${from()}%`, width: `${to() - from()}%` }} />;
-          }}
-        </Show>
-        <Show when={pace()}>{(p) => <span class="pace-tick" style={{ left: `${at(p().elapsedPercent)}%` }} />}</Show>
-      </div>
+      <HoverTip title={props.window.label} rows={rows()} layout="block">
+        <div class="limit-bar">
+          <div style={{ width: `${Math.min(BAR_FULL, shown() ?? 0)}%`, background: quotaColor(used(), rejected()) }} />
+          <Show when={used() !== null && props.forecast}>
+            {(f) => {
+              const from = () => Math.min(at(used()!), at(f().endsAtPercent));
+              const to = () => Math.max(at(used()!), at(f().endsAtPercent));
+              return <span class="pace-forecast" classList={{ 'runs-out': runsOut() }} style={{ left: `${from()}%`, width: `${to() - from()}%` }} />;
+            }}
+          </Show>
+          <Show when={pace()}>{(p) => <span class="pace-tick" style={{ left: `${at(p().elapsedPercent)}%` }} />}</Show>
+        </div>
+      </HoverTip>
       <div class="limit-foot" classList={{ exhausted: isExhausted(used(), rejected()) }}>
         <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
         <Show when={!isExhausted(used(), rejected()) && props.forecast}>{(f) => <Forecast forecast={f()} resetsAt={props.window.resetsAt} />}</Show>
@@ -66,8 +77,7 @@ function PaceChip(props: { pace: WindowPace; runsOut: boolean }) {
   ];
   return (
     <HoverTip title={title()} rows={rows()}>
-      {/* Empty title keeps the cell's reset-date title from also showing. */}
-      <span class={`badge compact ${tone()}`} title="">
+      <span class={`badge compact ${tone()}`}>
         {props.pace.state === 'over' ? `▲ ${gap()}` : props.pace.state === 'under' ? `▼ ${gap()}` : 'On pace'}
       </span>
     </HoverTip>
@@ -93,8 +103,7 @@ function Forecast(props: { forecast: AccountForecast; resetsAt: string | null })
   };
   return (
     <HoverTip title={title()} rows={rows()}>
-      {/* Empty title keeps the cell's reset-date title from also showing. */}
-      <div class="limit-forecast" classList={{ 'runs-out': props.forecast.runsOutAt !== null }} title="">
+      <div class="limit-forecast" classList={{ 'runs-out': props.forecast.runsOutAt !== null }}>
         <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>
           {(out) => (
             <span class="reset-time">

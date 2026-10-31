@@ -4,6 +4,7 @@ import { missedReadingGapMs, windowEnd } from '@shared/usageWindows';
 import { compactDuration, dateTime, dayTime, quotaPercent } from '../lib/format';
 import { pastTimeline, windowStart } from '../lib/pastTimeline';
 import { now, observedSpans, settings, windowSummaries } from '../store';
+import { HoverTip } from './ChartTip';
 
 const FULL = 100;
 const NO_USE = 0;
@@ -44,9 +45,16 @@ export function PastWindows(props: { credentialId: string; window: LimitWindow }
               {(s) => (
                 <div class="past-window" classList={{ exhausted: s().exhaustedAt !== null }}>
                   <span class="past-window-span">{dateTime(windowStart(s(), props.window.durationMs))} – {dateTime(windowEnd(s()))}</span>
-                  <span class="past-window-bar">
-                    <span class="fill" style={{ width: `${Math.min(FULL, s().peak)}%` }} />
-                  </span>
+                  <HoverTip title={props.window.label} rows={[
+                    { label: 'Peak used', value: quotaPercent(s().peak) },
+                    { label: 'From', value: dateTime(windowStart(s(), props.window.durationMs)) },
+                    { label: 'Until', value: dateTime(windowEnd(s())) },
+                    { label: 'Outcome', value: [outcome(s()), ...coverage(s())].join(' · ') },
+                  ]} layout="block">
+                    <span class="past-window-bar">
+                      <span class="fill" style={{ width: `${Math.min(FULL, s().peak)}%` }} />
+                    </span>
+                  </HoverTip>
                   <span class="past-window-peak" title="Most used in the window">{quotaPercent(s().peak)}</span>
                   <span class="past-window-note">{[outcome(s()), ...coverage(s())].join(' · ')}</span>
                 </div>
@@ -56,7 +64,14 @@ export function PastWindows(props: { credentialId: string; window: LimitWindow }
               {(gap) => (
                 <div class="past-window idle">
                   <span class="past-window-span">{dateTime(gap().from)} – {dateTime(gap().to)}</span>
-                  <span class="past-window-bar" />
+                  <HoverTip title="Between windows" rows={[
+                    { label: 'Peak used', value: missed(gap().to - gap().from - gap().trackedMs) ? quotaPercent(null) : quotaPercent(NO_USE) },
+                    { label: 'From', value: dateTime(gap().from) },
+                    { label: 'Until', value: dateTime(gap().to) },
+                    { label: 'Tracking', value: idleNote(gap().from, gap().to, gap().trackedMs) },
+                  ]} layout="block">
+                    <span class="past-window-bar" />
+                  </HoverTip>
                   <span class="past-window-peak" title="Most used in the stretch">{missed(gap().to - gap().from - gap().trackedMs) ? quotaPercent(null) : quotaPercent(NO_USE)}</span>
                   <span class="past-window-note">{idleNote(gap().from, gap().to, gap().trackedMs)}</span>
                 </div>

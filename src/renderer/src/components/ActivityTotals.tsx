@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js';
 import { addCounts, emptyCounts } from '@shared/activityCounts';
 import { inScope, type ActivityScope } from '@shared/activityScope';
@@ -28,8 +29,12 @@ function CountCells(props: { c: ActivityCounts; provider?: string }) {
       <TokenCell v={props.c.outputTokens} />
       <TokenCell v={props.c.cachedTokens} />
       <TokenCell v={props.c.cacheWriteTokens} provider={props.provider} />
-      <td class="tabular num" title={props.c.unpricedRequests ? `${n(props.c.unpricedRequests)} requests on models without a price are left out` : undefined}>
-        {costText(props.c)}
+      <td class="tabular num">
+        <HoverTip title="API cost" rows={[
+          { label: 'Estimate', value: costText(props.c) },
+          { label: 'Requests excluded', value: n(props.c.unpricedRequests) },
+          { label: 'Reason', value: 'Models without a price' },
+        ]}>{costText(props.c)}</HoverTip>
       </td>
     </>
   );

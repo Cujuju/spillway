@@ -1,3 +1,4 @@
+import { HoverTip } from './ChartTip';
 import { createResource, createSignal, For, Show } from 'solid-js';
 import type { ClientId, ClientProcess, ClientSetupResult, ClientSetupState } from '@shared/types';
 import { Notice } from './ui';
@@ -58,7 +59,11 @@ export function ClientSetup(props: { endpoint: string; clientKey: string }) {
               <div class="list-row-text">
                 <div class="list-row-label">
                   {c.label}
-                  <span class={`badge ${state().tone}`} title={state().title}>{state().label}</span>
+                  <HoverTip title={c.label} rows={[
+                    { label: 'Status', value: state().label },
+                    { label: 'Meaning', value: state().title.replace(/\.$/, '') },
+                    ...(s()?.path ? [{ label: 'Config', value: s()!.path }] : []),
+                  ]}><span class={`badge ${state().tone}`}>{state().label}</span></HoverTip>
                 </div>
                 <div class="list-row-help">{c.help} {BACKUP_NOTE}</div>
                 <div class="list-row-help path">{s()?.path ?? ''}</div>

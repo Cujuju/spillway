@@ -100,7 +100,8 @@
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.seg button:last-child {
+/* last-of-type: a tooltip's hidden description may follow the final button. */
+.seg button:last-of-type {
   border-right: 0;
 }
 .seg button.active {

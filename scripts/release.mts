@@ -3,6 +3,7 @@
  *   pnpm release keygen | nightly [--dry-run] | promote <version> [--dry-run]
  * The private key stays outside the repo: $SPILLWAY_UPDATE_KEY or ~/.config/spillway/update_key.
  */
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,20 @@ import { UPDATE_REPO, UPDATE_SIGNATURE_CONTEXT } from '../src/shared/updateFeed.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** The macOS architectures electron-builder.ts packages. */
 const MAC_ARCHS = ['arm64', 'x64'];
+
+/** Nightlies ship the proxy and toolkit from these siblings; they must match their latest pushed commit. */
+const SIBLINGS = ['solidjs-toolkit', 'CLIProxyAPI'];
+if (process.argv[2] === 'nightly') {
+  const git = (cwd: string, args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  for (const name of SIBLINGS) {
+    const dir = path.join(ROOT, '..', name);
+    git(dir, ['fetch', 'origin']);
+    if (git(dir, ['status', '--porcelain', '--untracked-files=no']) || git(dir, ['rev-parse', 'HEAD']) !== git(dir, ['rev-parse', 'origin/HEAD'])) {
+      console.error(`${dir} is not clean at its latest pushed commit; build from it, then release. (node scripts/nightly.mts run does this for you.)`);
+      process.exit(1);
+    }
+  }
+}
 
 await runReleaseCli({
   appName: APP_NAME,

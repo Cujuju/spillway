@@ -128,7 +128,7 @@ Writes the private key to `~/.config/spillway/update_key` (or `$SPILLWAY_UPDATE_
 Releases are built and published from your own machines; there is no CI release.
 
 1. Commit and push. The version comes from git history (`appVersion.ts`).
-2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
+2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. `release nightly` refuses unless `../solidjs-toolkit` and `../CLIProxyAPI` are clean at their latest pushed commit. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
 3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures).
 
 #### Scheduled nightly
@@ -139,7 +139,7 @@ Releases are built and published from your own machines; there is no CI release.
 2. Otherwise, if `main` moved past the newest release, publishes `main` as a new nightly.
 3. Otherwise does nothing.
 
-It builds in a clean worktree (`../spillway-nightly`), so uncommitted edits never ship, and publishes update files only; macOS disk images wait for a manual `pnpm release nightly`. The CI installer build runs on a stable release (promote) or a manual run.
+It builds clean worktrees of this repo and of `../solidjs-toolkit` and `../CLIProxyAPI` at their latest pushed commits (`../.spillway-nightly/`), so stale or uncommitted sibling code never ships, and publishes update files only; macOS disk images wait for a manual `pnpm release nightly`. The CI installer build runs on a stable release (promote) or a manual run.
 
 - Log: `.git/spillway-nightly.log`. `node scripts/nightly.mts uninstall` removes the schedule.
 - Each machine needs the signing key and `gh` with push access.

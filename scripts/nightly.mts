@@ -9,8 +9,11 @@ import { UPDATE_REPO } from '../src/shared/updateFeed.ts';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SCRIPT), '..');
-/** Sibling of the repo, so `link:../solidjs-toolkit` and ../CLIProxyAPI resolve as in the main checkout. */
-const WORKTREE = path.join(ROOT, '..', 'spillway-nightly');
+/** Clean worktrees of all three repos side by side, so `link:../solidjs-toolkit` and ../CLIProxyAPI resolve to them. */
+const NIGHTLY = path.join(ROOT, '..', '.spillway-nightly');
+const WORKTREE = path.join(NIGHTLY, 'spillway');
+/** Built from their latest pushed default branch, never from the shared sibling checkouts. */
+const SIBLINGS = ['solidjs-toolkit', 'CLIProxyAPI'];
 const INTERVAL_HOURS = 6;
 const SECONDS_PER_HOUR = 3600;
 const TASK_NAME = 'Spillway nightly';
@@ -36,10 +39,10 @@ function lockHeld(): boolean {
   try { process.kill(Number(readFileSync(LOCK, 'utf8')), 0); return true; } catch { rmSync(LOCK, { force: true }); return false; }
 }
 
-function sh(cmd: string, args: string[], env: NodeJS.ProcessEnv = {}): void {
-  log(`$ ${cmd} ${args.join(' ')}`);
+function sh(cmd: string, args: string[], env: NodeJS.ProcessEnv = {}, cwd = WORKTREE): void {
+  log(`$ ${cmd} ${args.join(' ')} (${path.basename(cwd)})`);
   // Windows resolves pnpm through its .cmd shim, which needs a shell; the arguments are fixed literals.
-  execFileSync([cmd, ...args].join(' '), { cwd: WORKTREE, stdio: ['ignore', out, out], shell: true, env: { ...process.env, ...env } });
+  execFileSync([cmd, ...args].join(' '), { cwd, stdio: ['ignore', out, out], shell: true, env: { ...process.env, ...env } });
 }
 
 /** The commit to publish for this OS, or null when the newest release already has it and main has not moved. */
@@ -55,12 +58,25 @@ function target(): string | null {
   return main === released ? null : main;
 }
 
+/** Resets a worktree of `repo` at `dir` to `ref`, creating it on first use. */
+function checkout(repo: string, dir: string, ref: string): void {
+  if (!existsSync(dir)) git(['worktree', 'add', '--detach', dir, ref], repo);
+  git(['checkout', '--detach', '--force', ref], dir);
+  git(['clean', '-fdx', '-e', 'node_modules'], dir);
+}
+
 function publish(sha: string): void {
-  if (!existsSync(WORKTREE)) git(['worktree', 'add', '--detach', WORKTREE, sha]);
-  git(['checkout', '--detach', '--force', sha], WORKTREE);
-  git(['clean', '-fdx', '-e', 'node_modules'], WORKTREE);
+  for (const name of SIBLINGS) {
+    const repo = path.join(ROOT, '..', name);
+    git(['fetch', 'origin'], repo);
+    checkout(repo, path.join(NIGHTLY, name), git(['rev-parse', 'origin/HEAD'], repo));
+  }
+  checkout(ROOT, WORKTREE, sha);
   delete process.env.ELECTRON_RUN_AS_NODE;
+  sh('pnpm', ['install', '--frozen-lockfile'], {}, path.join(NIGHTLY, 'solidjs-toolkit'));
   sh('pnpm', ['install', '--frozen-lockfile']);
+  // The release CLI and types come from the toolkit's gitignored dist/.
+  sh('node', ['scripts/build-linked.mjs']);
   sh('pnpm', ['proxy:build', ...(PROXY_TARGETS[process.platform] ?? [])]);
   sh('pnpm', ['package']);
   // Update files only; full installers (macOS disk images) wait for a manual release.

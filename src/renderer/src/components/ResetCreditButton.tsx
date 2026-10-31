@@ -24,7 +24,14 @@ const upcoming = (r: ResetCredits, at: number) => r.expiries.filter((t) => Date.
  * The account's reset-credit count, as a badge, and when the soonest credit expires. While a credit
  * is usable (the account has reached a limit), holding the badge spends one.
  */
-export function ResetCreditButton(props: { credential: Credential; disabled: boolean; onDone: (message: string) => void; onError: (message: string) => void }) {
+export function ResetCreditButton(props: {
+  credential: Credential;
+  disabled: boolean;
+  /** False hides the "expires …" text where width is tight; the tooltip still lists expiries. */
+  showExpiry?: boolean;
+  onDone: (message: string) => void;
+  onError: (message: string) => void;
+}) {
   const [busy, setBusy] = createSignal(false);
   const credits = () => props.credential.resetCredits!;
   const usable = () => credits().applicable > 0;
@@ -76,7 +83,7 @@ export function ResetCreditButton(props: { credential: Credential; disabled: boo
           </span>
         </button>
       </HoverTip>
-      <Show when={soonest()}>
+      <Show when={props.showExpiry !== false && soonest()}>
         {(t) => (
           <HoverTip title="Reset credit expiry" rows={[
             { label: 'At', value: dateTime(t()) },

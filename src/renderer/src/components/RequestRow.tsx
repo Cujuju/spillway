@@ -1,12 +1,11 @@
 import { HoverTip } from './ChartTip';
 import { Show } from 'solid-js';
 import { tokenCost } from '@shared/modelPrices';
-import { maskEmails } from '@shared/privacy';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
 import { conversationLabel, conversationName } from '../lib/conversationNames';
 import { usd } from '../lib/format';
 import { REQUEST_COLUMNS } from '../lib/requestSort';
-import { settings } from '../store';
+import { shownText } from '../store';
 import { MoveConversation } from './MoveConversation';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
@@ -24,10 +23,7 @@ const requestCost = (e: ActivityEvent) => {
 
 /** One attempt; cells follow REQUEST_COLUMNS. A failure's error gets its own line so it never widens the columns. */
 export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex: string | null) => string }) {
-  const errorText = () => {
-    const text = props.e.error ?? '';
-    return settings().dashboard.showEmails ? text : maskEmails(text);
-  };
+  const errorText = () => shownText(props.e.error ?? '');
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>

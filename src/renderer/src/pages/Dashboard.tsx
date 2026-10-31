@@ -12,7 +12,7 @@ import { Notice } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
 import { isString, isStringOrNull, persistedSignal } from '../lib/persisted';
 import { durationChoices, lengthLineId } from '../lib/poolWindows';
-import { proxyStatus, setPage, settings, snapshot, updateSettings, usageError } from '../store';
+import { proxyStatus, setPage, settings, shownText, snapshot, updateSettings, usageError } from '../store';
 
 const ICON_PX = 14;
 /** Claude first: it is the provider this app was built around; the rest by account count. */
@@ -34,6 +34,8 @@ export function Dashboard() {
   // Picking an account swaps the pool chart for that account's; a gone account falls back to the pool.
   const [chosenAccount, setChosenAccount] = persistedSignal<string | null>('dashboard.account', null, isStringOrNull);
   const [refreshing, setRefreshing] = createSignal(false);
+  /** Last reset-credit outcome from a row, until dismissed or replaced. */
+  const [rowNotice, setRowNotice] = createSignal<{ tone: 'info' | 'error'; text: string } | null>(null);
 
   const creds = () => snapshot()?.credentials ?? [];
   const providers = createMemo(() => {
@@ -155,6 +157,14 @@ export function Dashboard() {
           <Notice tone="error">Usage lookup failed: {usageError()}</Notice>
         </Match>
       </Switch>
+      <Show when={rowNotice()}>
+        {(n) => (
+          <Notice tone={n().tone}>
+            <span class="spacer">{shownText(n().text)}</span>
+            <button class="btn" onClick={() => setRowNotice(null)}>Dismiss</button>
+          </Notice>
+        )}
+      </Show>
 
       <Show
         when={creds().length > 0}
@@ -207,7 +217,7 @@ export function Dashboard() {
         {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
         <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>
           <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
-            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} forecastOf={(key) => forecastOf(c, key)} />}
+            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} forecastOf={(key) => forecastOf(c, key)} onNotice={(tone, text) => setRowNotice({ tone, text })} />}
           </For>
         </div>
       </Show>

@@ -10,7 +10,7 @@ import { ResetCreditButton } from './ResetCreditButton';
 import { ShowEmailsButton } from './ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from './ui';
 import { providerVar } from '../lib/providers';
-import { now, proxyStatus, snapshot } from '../store';
+import { now, proxyStatus, shownText, snapshot } from '../store';
 
 const ICON_PX = 14;
 /** Proxy rule (selector.go): only the highest available priority tier is picked from. */
@@ -101,10 +101,10 @@ export function LoginsSection() {
         </Notice>
       </Show>
       <Show when={error()}>
-        <Notice tone="error">{error()}</Notice>
+        <Notice tone="error">{shownText(error()!)}</Notice>
       </Show>
       <Show when={info()}>
-        <Notice tone="info">{info()}</Notice>
+        <Notice tone="info">{shownText(info()!)}</Notice>
       </Show>
 
       <div class="card flush">

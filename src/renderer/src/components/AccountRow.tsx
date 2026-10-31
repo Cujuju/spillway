@@ -5,9 +5,10 @@ import type { Credential } from '@shared/types';
 import type { AccountForecast } from '../lib/forecast';
 import { compactDuration } from '../lib/format';
 import { isExhausted } from '../lib/quotaColor';
-import { now, setPage } from '../store';
+import { now, proxyStatus, setPage } from '../store';
 import { LimitBar } from './LimitBar';
 import { HoverTip } from './ChartTip';
+import { ResetCreditButton } from './ResetCreditButton';
 import { ProviderGlyph, ResetTime } from './ui';
 
 const ICON_PX = 13;
@@ -17,9 +18,17 @@ const LIVE_LOOKUP_PROVIDERS = new Set(['claude', 'codex']);
 /** Controls inside the row keep their own clicks; the rest of the row picks the account. */
 const ROW_CONTROLS = 'button, a, input, select';
 
-/** One account in Theo's list: name, refresh and state, then limit bars. `onSelect` makes the row pick the account; `forecastOf` gives a window's pool forecast. */
-export function AccountRow(props: { credential: Credential; selected?: boolean; onSelect?: () => void; forecastOf?: (key: string) => AccountForecast | null }) {
+/** One account in Theo's list: name, refresh and state, then limit bars. `forecastOf` gives a window's pool forecast; `onNotice` reports reset-credit outcomes. */
+export function AccountRow(props: {
+  credential: Credential;
+  selected?: boolean;
+  onSelect?: () => void;
+  forecastOf?: (key: string) => AccountForecast | null;
+  onNotice?: (tone: 'info' | 'error', text: string) => void;
+}) {
   const c = () => props.credential;
+  /** The email line is hidden when it repeats the label. */
+  const shownEmail = () => (c().email && c().email !== c().label ? c().email : null);
   const [busy, setBusy] = createSignal(false);
   const state = () => accountState(c(), now());
   /** Limited with no spent window to show it (e.g. a cooldown after errors): the reset goes in the meta lines. */
@@ -78,8 +87,19 @@ export function AccountRow(props: { credential: Credential; selected?: boolean; 
           <Show when={c().apiKey}>
             {(key) => <HoverTip title="Requests since proxy start" rows={[{ label: 'Succeeded', value: key().success.toLocaleString() }, { label: 'Failed', value: key().failed.toLocaleString() }]}><div>{key().success} succeeded · {key().failed} failed</div></HoverTip>}
           </Show>
-          <Show when={c().email && c().email !== c().label}>
-            <div class="truncate">{c().email}</div>
+          <Show when={shownEmail() || c().resetCredits?.available}>
+            <div class="account-meta-line">
+              <Show when={shownEmail()}>{(email) => <span class="truncate">{email()}</span>}</Show>
+              <Show when={c().resetCredits?.available}>
+                <ResetCreditButton
+                  credential={c()}
+                  disabled={proxyStatus()?.state !== 'running'}
+                  showExpiry={false}
+                  onDone={(m) => props.onNotice?.('info', m)}
+                  onError={(m) => props.onNotice?.('error', m)}
+                />
+              </Show>
+            </div>
           </Show>
           <Show when={state() === 'disabled'}>
             <div>Disabled</div>

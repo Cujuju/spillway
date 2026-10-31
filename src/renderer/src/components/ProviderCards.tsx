@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
+import { ChevronDown, ChevronUp, Layers, Lock, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import type { PoolStuck } from '../lib/forecast';
@@ -117,13 +117,14 @@ function stuckRows(stuck: PoolStuck) {
   ];
 }
 
+/** Matches the rows' forecast: lock, time until every account is out, then how long it lasts. */
 function StuckBadge(props: { stuck: PoolStuck }) {
   const start = () => compactDuration(props.stuck.at - now());
   const length = () => (props.stuck.until === null ? null : compactDuration(props.stuck.until - Math.max(now(), props.stuck.at)));
-  const when = () => (start() === 'now' ? 'Stuck now' : `Stuck in ${start()}`);
   return (
-    <span class="badge compact red">
-      {when()}
+    <span class="reset-time pool-card-stuck">
+      <Lock size="1em" role="img" aria-label="Every account out in" />
+      {start()}
       <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
     </span>
   );

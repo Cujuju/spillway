@@ -2,7 +2,7 @@ import type { ActivityImportState } from '@shared/ipc';
 import { createComputed, createRoot, createSignal } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
-import { maskSnapshot } from '@shared/privacy';
+import { maskEmails, maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, themeTokens } from '@shared/themes';
@@ -48,6 +48,8 @@ createRoot(() =>
     setShownSnapshot(s && !settings().dashboard.showEmails ? maskSnapshot(s) : s);
   }),
 );
+/** Free text that may hold an email (errors, stored notices), masked on read so toggling "Show emails" applies. */
+export const shownText = (text: string): string => (settings().dashboard.showEmails ? text : maskEmails(text));
 /**
  * What the UI shows: the latest snapshot with windows past their reset rolled to zero, emails masked
  * unless "Show emails" is on.

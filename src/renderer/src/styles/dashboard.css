@@ -219,6 +219,14 @@
   color: var(--color-text-secondary);
   line-height: var(--leading-loose);
 }
+/* Email with the account's reset credits beside it; the email truncates first. */
+.account-meta-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  min-width: 0;
+  white-space: nowrap;
+}
 .account-meta .back {
   color: var(--color-red-light);
 }

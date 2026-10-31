@@ -16,8 +16,7 @@
     "package": "electron-vite build && electron-builder --publish never",
     "package:dir": "electron-vite build && electron-builder --dir --publish never",
     "package:dev": "node scripts/package-dev.mjs",
-    "release": "node scripts/release.mts",
-    "prepare": "node scripts/install-hooks.mjs"
+    "release": "node scripts/release.mts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

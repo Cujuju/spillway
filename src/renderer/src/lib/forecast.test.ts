@@ -181,12 +181,13 @@ describe('project: account forecasts and stuck', () => {
   it.each(['fill-first', 'soonest-reset', 'round-robin', 'weighted-round-robin'])('one account agrees with stuck under %s', (strategy) => {
     const p = run([account('a', [win('five_hour', 60, 4 * H, FIVE_H)])], 'five_hour', 40, strategy);
     expect(p.accounts.get('a')).toEqual({ runsOutAt: NOW + H, endsAtPercent: 100 });
-    expect(p.stuck).toEqual({ at: NOW + H, until: NOW + 4 * H });
+    expect(p.stuck?.blockers[0]?.until).toBe(p.stuck?.until);
+    expect(p.stuck).toEqual({ at: NOW + H, until: NOW + 4 * H, blockers: [{ credentialId: 'a', windowKey: 'five_hour', until: NOW + 4 * H }] });
   });
   it.each(['fill-first', 'soonest-reset', 'round-robin', 'weighted-round-robin'])('keeps exhaustion before an intra-step reset under %s', (strategy) => {
     const p = run([account('a', [win('five_hour', 99, H / 6, FIVE_H)])], 'five_hour', 12, strategy);
     expect(p.accounts.get('a')).toEqual({ runsOutAt: NOW + H / 12, endsAtPercent: 100 });
-    expect(p.stuck).toEqual({ at: NOW + H / 12, until: NOW + H / 6 });
+    expect(p.stuck).toEqual({ at: NOW + H / 12, until: NOW + H / 6, blockers: [{ credentialId: 'a', windowKey: 'five_hour', until: NOW + H / 6 }] });
     expect(p.points[1]).toEqual({ t: NOW + STEP, remaining: 99 });
   });
   it.each(['fill-first', 'soonest-reset', 'round-robin', 'weighted-round-robin'])('keeps forecast scope independent of chart hours under %s', (strategy) => {
@@ -206,7 +207,10 @@ describe('project: account forecasts and stuck', () => {
     const p = run(creds, 'five_hour', 6, strategy);
     expect(Math.max(...[...p.accounts.values()].map((a) => a.runsOutAt!))).toBe(NOW + H / 6);
     expect([...p.accounts.values()].map((a) => a.endsAtPercent)).toEqual([100, 100]);
-    expect(p.stuck).toEqual({ at: NOW + H / 6, until: NOW + H / 5 });
+    expect(p.stuck).toEqual({ at: NOW + H / 6, until: NOW + H / 5, blockers: [
+      { credentialId: 'a', windowKey: 'five_hour', until: NOW + H / 5 },
+      { credentialId: 'b', windowKey: 'five_hour', until: NOW + H / 3 },
+    ] });
   });
   it.each(['fill-first', 'soonest-reset', 'round-robin', 'weighted-round-robin'])('keeps multiple account scopes independent of chart hours under %s', (strategy) => {
     const creds = ['a', 'b'].map((id, i) => account(id, [win('seven_day', 0, (i + 1) * H, WEEK), win('five_hour', 0, null, FIVE_H, { resetCadence: 'on_use' })]));
@@ -221,7 +225,7 @@ describe('project: account forecasts and stuck', () => {
     const p = run([account('a', [win('five_hour', 0, H, FIVE_H)], { cooldownUntil: iso(NOW + 7 * 60_000) })], 'five_hour', 60, 'fill-first');
     expect(p.accounts.get('a')).toEqual({ runsOutAt: null, endsAtPercent: 53 });
     expect(p.points[1]).toEqual({ t: NOW + STEP, remaining: 92 });
-    expect(p.stuck).toEqual({ at: NOW, until: NOW + 7 * 60_000 });
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + 7 * 60_000, blockers: [{ credentialId: 'a', windowKey: null, until: NOW + 7 * 60_000 }] });
   });
   it('does not report an empty pool as stuck', () => {
     expect(run([], 'five_hour', 0, 'fill-first').stuck).toBeNull();
@@ -229,7 +233,7 @@ describe('project: account forecasts and stuck', () => {
   it('reports an already exhausted pool without recent drain', () => {
     const p = run([account('a', [win('five_hour', 100, H, FIVE_H)])], 'five_hour', 0, 'fill-first');
     expect(p.accounts.get('a')?.runsOutAt).toBe(NOW);
-    expect(p.stuck).toEqual({ at: NOW, until: NOW + H });
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + H, blockers: [{ credentialId: 'a', windowKey: 'five_hour', until: NOW + H }] });
   });
   it.each([
     ['only a weekly window', [win('seven_day', 0, WEEK, WEEK)]],
@@ -250,7 +254,7 @@ describe('project: account forecasts and stuck', () => {
   it('reports stuck despite an unprojected disabled credential', () => {
     const p = run([account('a', [win('five_hour', 100, H, FIVE_H)]), account('b', [], { disabled: true })], 'five_hour', 0, 'fill-first');
     expect(p.accounts.has('b')).toBe(false);
-    expect(p.stuck).toEqual({ at: NOW, until: NOW + H });
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + H, blockers: [{ credentialId: 'a', windowKey: 'five_hour', until: NOW + H }] });
   });
   it('fill-first fills one account before the pool becomes stuck', () => {
     const p = run([account('a', [win('five_hour', 80, 4 * H, FIVE_H)]), account('b', [win('five_hour', 0, 4 * H, FIVE_H)])], 'five_hour', 10, 'fill-first');
@@ -268,7 +272,7 @@ describe('project: account forecasts and stuck', () => {
     const creds = [account('a', [win('five_hour', 0, 4 * H, FIVE_H), win('seven_day', 99, 96 * H + 7 * 60_000, WEEK)])];
     const shares = new Map([['a', { share: 1, cost: { five_hour: 1, seven_day: 1 } }]]);
     const p = project(creds, 'five_hour', 4, NOW, 1, 'fill-first', shares);
-    expect(p.stuck).toEqual({ at: NOW + STEP, until: NOW + 96 * H + 7 * 60_000 });
+    expect(p.stuck).toEqual({ at: NOW + STEP, until: NOW + 96 * H + 7 * 60_000, blockers: [{ credentialId: 'a', windowKey: 'seven_day', until: NOW + 96 * H + 7 * 60_000 }] });
     expect(p.accounts.get('a')).toEqual({ runsOutAt: null, endsAtPercent: 1 });
     expect(p.points).toHaveLength(5);
   });
@@ -283,12 +287,61 @@ describe('project: account forecasts and stuck', () => {
     const creds = [account('a', [win('five_hour', 100, H, FIVE_H), win('seven_day', 100, 2 * H, WEEK)], { cooldownUntil: iso(NOW + 3 * H + 7 * 60_000) })];
     const shares = new Map([['a', { share: 1, cost: { five_hour: 1, seven_day: 1 } }]]);
     const p = project(creds, 'five_hour', 1, NOW, 1, 'fill-first', shares);
-    expect(p.stuck).toEqual({ at: NOW, until: NOW + 3 * H + 7 * 60_000 });
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + 3 * H + 7 * 60_000, blockers: [{ credentialId: 'a', windowKey: null, until: NOW + 3 * H + 7 * 60_000 }] });
   });
   it('leaves recovery unknown when no account can regain room', () => {
     const p = run([account('a', [win('five_hour', 100, null, FIVE_H)])], 'five_hour', 1, 'fill-first');
     expect(p.accounts.get('a')?.runsOutAt).toBe(NOW);
-    expect(p.stuck).toEqual({ at: NOW, until: null });
+    expect(p.stuck).toEqual({ at: NOW, until: null, blockers: [{ credentialId: 'a', windowKey: 'five_hour', until: null }] });
+  });
+  it('traces weekly exhaustion followed by another account filling a later 5-hour window', () => {
+    const creds = [
+      account('a', [win('seven_day', 80, 20 * H, WEEK), win('five_hour', 0, H, FIVE_H, { resetCadence: 'on_use' })]),
+      account('b', [win('seven_day', 0, 24 * H, WEEK), win('five_hour', 0, H, FIVE_H, { resetCadence: 'on_use' })]),
+    ];
+    const shares = new Map([
+      ['a', { share: 0.5, cost: { seven_day: 2, five_hour: 1 } }],
+      ['b', { share: 0.5, cost: { seven_day: 2, five_hour: 10 } }],
+    ]);
+    const p = project(creds, 'seven_day', 5, NOW, 24, 'fill-first', shares);
+    expect(p.accounts.get('a')?.runsOutAt).toBe(NOW + 2 * H);
+    expect(p.accounts.get('b')?.runsOutAt).toBeNull();
+    expect(p.stuck).toEqual({ at: NOW + 4 * H, until: NOW + 7 * H, blockers: [
+      { credentialId: 'a', windowKey: 'seven_day', until: NOW + 20 * H },
+      { credentialId: 'b', windowKey: 'five_hour', until: NOW + 7 * H },
+    ] });
+  });
+  it('records a cooldown still benching an account when another account exhausts', () => {
+    const creds = [
+      account('b', [win('five_hour', 0, 4 * H, FIVE_H)], { cooldownUntil: iso(NOW + 2 * H) }),
+      account('a', [win('five_hour', 80, 4 * H, FIVE_H)]),
+    ];
+    expect(run(creds, 'five_hour', 10, 'fill-first').stuck).toEqual({ at: NOW + H, until: NOW + 2 * H, blockers: [
+      { credentialId: 'b', windowKey: null, until: NOW + 2 * H },
+      { credentialId: 'a', windowKey: 'five_hour', until: NOW + 4 * H },
+    ] });
+  });
+  it('uses the last lifting full window at now, including an unknown reset', () => {
+    const creds = [account('a', [win('five_hour', 100, H, FIVE_H), win('seven_day', 100, 2 * H, WEEK)])];
+    const shares = new Map([['a', { share: 1, cost: { five_hour: 1, seven_day: 1 } }]]);
+    const p = project(creds, 'five_hour', 0, NOW, 1, 'fill-first', shares);
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + 2 * H, blockers: [
+      { credentialId: 'a', windowKey: 'seven_day', until: NOW + 2 * H },
+    ] });
+    expect(p.stuck?.blockers[0]?.until).toBe(p.stuck?.until);
+    creds[0]!.windows[1]!.resetsAt = null;
+    expect(project(creds, 'five_hour', 0, NOW, 1, 'fill-first', shares).stuck).toEqual({ at: NOW, until: null, blockers: [
+      { credentialId: 'a', windowKey: 'seven_day', until: null },
+    ] });
+  });
+  it('omits weight-zero non-preferred accounts from weighted blockers', () => {
+    const creds = [
+      account('b', [win('five_hour', 0, H, FIVE_H)], { weight: 0 }),
+      account('a', [win('five_hour', 100, 2 * H, FIVE_H)], { weight: 0, preferred: true }),
+    ];
+    expect(run(creds, 'five_hour', 0, 'weighted-round-robin').stuck).toEqual({ at: NOW, until: NOW + 2 * H, blockers: [
+      { credentialId: 'a', windowKey: 'five_hour', until: NOW + 2 * H },
+    ] });
   });
   it('does not mistake rounding residue for a stuck pool', () => {
     const creds = ['a', 'b', 'c'].map((id, i) => account(id, [win('five_hour', 0, 4 * H, FIVE_H)], { weight: i + 1 }));

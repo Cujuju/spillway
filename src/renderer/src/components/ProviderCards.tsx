@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Layers, Lock, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
-import type { PoolStuck } from '../lib/forecast';
+import type { PoolStuck, StuckBlocker } from '../lib/forecast';
 import { compactDuration, dateTime, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
@@ -109,11 +109,21 @@ export function ProviderCards(props: CardsProps) {
   );
 }
 
-/** When every account is forecast to be out at once, and for how long; "now" when already out. */
+/** An account's label from the masked snapshot. */
+const accountLabel = (id: string) => snapshot()?.credentials.find((c) => c.id === id)?.label ?? id;
+/** A window's label on that account, or "Cooldown" when errors bench it. */
+const blockLabel = (b: StuckBlocker) =>
+  b.windowKey === null ? 'Cooldown' : (snapshot()?.credentials.find((c) => c.id === b.credentialId)?.windows.find((w) => w.key === b.windowKey)?.label ?? b.windowKey);
+
+/** When every account is forecast to be out at once, for how long, and which limit holds each account. */
 function stuckRows(stuck: PoolStuck) {
   return [
     { label: 'Every account out', value: stuck.at <= now() ? 'Now' : dateTime(stuck.at) },
     ...(stuck.until === null ? [] : [{ label: 'Until', value: dateTime(stuck.until) }]),
+    ...stuck.blockers.map((b) => ({
+      label: accountLabel(b.credentialId),
+      value: b.until === null ? blockLabel(b) : `${blockLabel(b)} until ${dateTime(b.until)}`,
+    })),
   ];
 }
 
@@ -133,11 +143,10 @@ function StuckBadge(props: { stuck: PoolStuck }) {
 /** One window: a segment per account, the pool's percent left, and the time to its next reset. */
 function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void }) {
   const m = () => props.line.model;
-  const account = (id: string) => snapshot()?.credentials.find((c) => c.id === id)?.label ?? id;
   return (
     <HoverTip title={props.line.label()} layout="contents" rows={[
       { label: 'Left', value: quotaPercent(m().summary()?.remaining ?? 0) },
-      ...m().segments().map((s) => ({ label: account(s.id), value: quotaPercent(Math.max(0, FULL - s.usedPercent)) })),
+      ...m().segments().map((s) => ({ label: accountLabel(s.id), value: quotaPercent(Math.max(0, FULL - s.usedPercent)) })),
       ...(m().resetAt() ? [
         { label: 'Next reset', value: dateTime(m().resetAt()!) },
         { label: 'In', value: compactDuration(m().resetAt()! - now()) },

@@ -1,7 +1,8 @@
-import type { Credential, LimitWindow } from '@shared/types';
+import type { Credential } from '@shared/types';
 import { nextResetAfter } from '@shared/usageWindows';
 import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
+import { accountsFor, remainingOf, roomIn, roomOf, stuckBlockers, type Account, type Win } from './forecastState';
 
 /** Pool forecast for one provider and one limit window, in percent of the whole pool (see poolCapacity). */
 
@@ -30,58 +31,6 @@ export function poolWindowKey(credentials: Credential[]): string | null {
   return best?.key ?? null;
 }
 
-interface Win {
-  used: number;
-  resetAt: number | null;
-  durationMs: number | null;
-  resetCadence: LimitWindow['resetCadence'];
-  scoped: boolean;
-  /** Account percent of this window used per 1% of the pool; 0 leaves it out of the cap. */
-  cost: number;
-}
-
-interface Account {
-  id: string;
-  priority: number;
-  weight: number;
-  preferred: boolean;
-  cooldownUntil: number | null;
-  /** Fraction of the pool's capacity this account holds. */
-  share: number;
-  /** The projected window first, then the account-wide windows that also cap it. */
-  windows: Win[];
-}
-
-const ms = (iso: string | null) => (iso ? Date.parse(iso) : null);
-const toWin = (w: LimitWindow, cost: number): Win => ({
-  used: Math.min(FULL, Math.max(0, w.usedPercent ?? 0)),
-  resetAt: ms(w.resetsAt),
-  durationMs: w.durationMs,
-  resetCadence: w.resetCadence,
-  scoped: w.scoped,
-  cost: w.usedPercent === null ? 0 : cost,
-});
-
-function accountsFor(credentials: Credential[], key: string, shares: Map<string, AccountShare>): Account[] {
-  return credentials.flatMap((c) => {
-    const s = shares.get(c.id);
-    const w = c.windows.find((x) => x.key === key);
-    if (!s || !w || w.usedPercent === null) return [];
-    const others = c.windows.filter((x) => x.key !== key && !x.scoped).map((x) => toWin(x, s.cost[x.key] ?? 0));
-    return [{
-      id: c.id,
-      priority: c.priority,
-      weight: c.weight,
-      preferred: c.preferred,
-      cooldownUntil: ms(c.cooldownUntil),
-      share: s.share,
-      windows: [toWin(w, s.cost[key]!), ...others],
-    }];
-  });
-}
-
-const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + a.share * (FULL - a.windows[0]!.used), 0);
-
 export interface PoolSummary {
   /** Percent of the whole pool left. */
   remaining: number;
@@ -93,10 +42,6 @@ export function poolSummary(credentials: Credential[], key: string, shares: Map<
   const accounts = accountsFor(credentials, key, shares);
   return { remaining: remainingOf(accounts), accounts: accounts.length };
 }
-
-/** Pool percent `w` can still take before it caps. */
-const roomIn = (w: Win) => (w.cost > 0 ? (FULL - w.used) / w.cost : Infinity);
-const roomOf = (a: Account) => Math.min(...a.windows.map(roomIn));
 
 /** The proxy's soonest-reset rank: the longest account-wide window's reset, then the shortest's; unknown or past last. */
 function resetRank(a: Account, t: number): [number, number] {
@@ -213,12 +158,22 @@ export interface AccountForecast {
   endsAtPercent: number;
 }
 
+export interface StuckBlocker {
+  credentialId: string;
+  /** Window key capping the account at `at` (the window with no room); null when a cooldown benches it. */
+  windowKey: string | null;
+  /** When that block lifts: the window's reset or the cooldown's end, as simulated; null if unknown. */
+  until: number | null;
+}
+
 /** Provider-wide outage; project returns null unless every enabled credential is included in the projected accounts. */
 export interface PoolStuck {
   /** First time routing cannot place all use. */
   at: number;
   /** First time an account can take use again, within the simulated span. */
   until: number | null;
+  /** One per projected account, in credential order. */
+  blockers: StuckBlocker[];
 }
 
 export interface Projection {
@@ -245,7 +200,7 @@ export function project(
   let stuck: PoolStuck | null = null;
   const canUse = (t: number) => accounts.some((a) => roomOf(a) > 0 && (a.cooldownUntil === null || a.cooldownUntil <= t)
     && (strategy !== WEIGHTED_ROUND_ROBIN || a.weight > 0 || a.preferred));
-  if (accounts.length && !canUse(now)) stuck = { at: now, until: null };
+  if (accounts.length && !canUse(now)) stuck = { at: now, until: null, blockers: stuckBlockers(accounts, now, strategy === WEIGHTED_ROUND_ROBIN) };
   let t = now;
   while (t < Math.max(end, horizon()) || (stuck && stuck.until === null && t < limit)) {
     const chartStep = now + (Math.floor((t - now) / STEP_MS) + 1) * STEP_MS;
@@ -268,7 +223,7 @@ export function project(
     const exhausted = !canUse(t);
     const { restored, firstAt } = applyResets(accounts, next);
     if (next <= end && restored > 0 && !nextReset) nextReset = { at: firstAt, restores: restored };
-    if (!stuck && next < horizon() && perHour > 0 && exhausted && !canUse(next)) stuck = { at: next, until: null };
+    if (!stuck && next < horizon() && perHour > 0 && exhausted && !canUse(next)) stuck = { at: next, until: null, blockers: stuckBlockers(accounts, next, strategy === WEIGHTED_ROUND_ROBIN) };
     if (stuck && stuck.until === null && next <= limit && canUse(next)) stuck.until = next;
     if (next === chartStep && next <= end) points.push({ t: next, remaining: remainingOf(accounts) });
     t = next;

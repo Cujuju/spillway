@@ -1,4 +1,4 @@
-import { TimerOff } from 'lucide-solid';
+import { Lock } from 'lucide-solid';
 import { Show } from 'solid-js';
 import { windowPace, type WindowPace } from '@shared/pace';
 import type { LimitWindow } from '@shared/types';
@@ -82,9 +82,9 @@ function Forecast(props: { forecast: AccountForecast; resetsAt: string | null })
       <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>
         {(out) => (
           <span class="reset-time">
-            <TimerOff size="1em" role="img" aria-label="Out of quota before reset for" />
+            <Lock size="1em" role="img" aria-label="Locked out before reset for" />
             {/* A window not yet started has no reset to measure against; show when it runs out instead. */}
-            {deficit(out()) ? `−${deficit(out())}` : compactDuration(out() - now())}
+            {deficit(out()) ?? `in ${compactDuration(out() - now())}`}
           </span>
         )}
       </Show>

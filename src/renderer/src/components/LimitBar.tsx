@@ -3,10 +3,11 @@ import { Show } from 'solid-js';
 import { windowPace, type WindowPace } from '@shared/pace';
 import type { LimitWindow } from '@shared/types';
 import { shownPercent } from '@shared/trayValues';
-import { compactDuration, pct, quotaPercent } from '../lib/format';
+import { compactDuration, dateTime, pct, quotaPercent } from '../lib/format';
 import type { AccountForecast } from '../lib/forecast';
 import { isExhausted, quotaColor } from '../lib/quotaColor';
 import { now, settings } from '../store';
+import { HoverTip } from './ChartTip';
 import { ResetTime } from './ui';
 
 /** Bar width at 100% shown. */
@@ -58,11 +59,18 @@ export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast
 function PaceChip(props: { pace: WindowPace; runsOut: boolean }) {
   const gap = () => Math.round(Math.abs(props.pace.deltaPercent));
   const tone = () => (props.runsOut ? RUNS_OUT_BADGE : PACE_BADGE[props.pace.state]);
-  const title = () => `${props.pace.state === 'on' ? 'On even pace' : `${gap()} points ${props.pace.state} even pace`}: ${Math.round(props.pace.elapsedPercent)}% of the window has passed`;
+  const title = () => (props.pace.state === 'on' ? 'On pace' : `${gap()} points ${props.pace.state} pace`);
+  const rows = () => [
+    { label: 'Used', value: `${Math.round(props.pace.elapsedPercent + props.pace.deltaPercent)}%` },
+    { label: 'Time passed', value: `${Math.round(props.pace.elapsedPercent)}%` },
+  ];
   return (
-    <span class={`badge compact ${tone()}`} title={title()}>
-      {props.pace.state === 'over' ? `▲ ${gap()}` : props.pace.state === 'under' ? `▼ ${gap()}` : 'On pace'}
-    </span>
+    <HoverTip title={title()} rows={rows()}>
+      {/* Empty title keeps the cell's reset-date title from also showing. */}
+      <span class={`badge compact ${tone()}`} title="">
+        {props.pace.state === 'over' ? `▲ ${gap()}` : props.pace.state === 'under' ? `▼ ${gap()}` : 'On pace'}
+      </span>
+    </HoverTip>
   );
 }
 
@@ -74,20 +82,29 @@ function Forecast(props: { forecast: AccountForecast; resetsAt: string | null })
   const deficit = (out: number) => (props.resetsAt ? compactDuration(Date.parse(props.resetsAt) - out) : null);
   const title = () => {
     const out = props.forecast.runsOutAt;
-    if (out === null) return `Forecast: ends near ${endsAt()} at reset`;
-    return `Forecast: runs out ${new Date(out).toLocaleString()} (in ${compactDuration(out - now())})${deficit(out) ? `, ${deficit(out)} before reset` : ''}`;
+    if (out === null) return `Ends near ${endsAt()}`;
+    return deficit(out) ? `Locked out ${deficit(out)} before reset` : 'Runs out';
+  };
+  const rows = () => {
+    const out = props.forecast.runsOutAt;
+    const reset = props.resetsAt ? [{ label: 'Resets', value: dateTime(props.resetsAt) }] : [];
+    if (out === null) return reset;
+    return [{ label: 'Runs out', value: dateTime(out) }, { label: 'Runs out in', value: compactDuration(out - now()) }, ...reset];
   };
   return (
-    <div class="limit-forecast" classList={{ 'runs-out': props.forecast.runsOutAt !== null }} title={title()}>
-      <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>
-        {(out) => (
-          <span class="reset-time">
-            <Lock size="1em" role="img" aria-label="Locked out before reset for" />
-            {/* A window not yet started has no reset to measure against; show when it runs out instead. */}
-            {deficit(out()) ?? `in ${compactDuration(out() - now())}`}
-          </span>
-        )}
-      </Show>
-    </div>
+    <HoverTip title={title()} rows={rows()}>
+      {/* Empty title keeps the cell's reset-date title from also showing. */}
+      <div class="limit-forecast" classList={{ 'runs-out': props.forecast.runsOutAt !== null }} title="">
+        <Show when={props.forecast.runsOutAt} fallback={`Ends ~${endsAt()}`}>
+          {(out) => (
+            <span class="reset-time">
+              <Lock size="1em" role="img" aria-label="Locked out before reset for" />
+              {/* A window not yet started has no reset to measure against; show when it runs out instead. */}
+              {deficit(out()) ?? `in ${compactDuration(out() - now())}`}
+            </span>
+          )}
+        </Show>
+      </div>
+    </HoverTip>
   );
 }

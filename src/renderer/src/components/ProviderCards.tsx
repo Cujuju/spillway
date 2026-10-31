@@ -2,12 +2,13 @@ import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import type { PoolStuck } from '../lib/forecast';
-import { compactDuration, quotaPercent } from '../lib/format';
+import { compactDuration, dateTime, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
 import { providerVar } from '../lib/providers';
 import { now, settings } from '../store';
 import type { PoolLine, ProviderPool } from './poolModel';
+import { HoverTip } from './ChartTip';
 import { ProviderGlyph } from './ui';
 
 /** Selection id for every provider at once. */
@@ -101,11 +102,18 @@ function StuckBadge(props: { stuck: PoolStuck }) {
   const start = () => compactDuration(props.stuck.at - now());
   const length = () => (props.stuck.until === null ? null : compactDuration(props.stuck.until - Math.max(now(), props.stuck.at)));
   const when = () => (start() === 'now' ? 'Stuck now' : `Stuck in ${start()}`);
+  const rows = () => [
+    { label: 'From', value: start() === 'now' ? 'Now' : dateTime(props.stuck.at) },
+    ...(props.stuck.until === null ? [] : [{ label: 'Until', value: dateTime(props.stuck.until) }]),
+  ];
   return (
-    <span class="badge compact red" title="Every account forecast to be out of quota at once, at the current rate">
-      {when()}
-      <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
-    </span>
+    // Inside the card's button, so the tooltip wrapper takes no tab stop of its own.
+    <HoverTip title="Every account out of quota" rows={rows()} focusable={false}>
+      <span class="badge compact red">
+        {when()}
+        <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
+      </span>
+    </HoverTip>
   );
 }
 

@@ -1,5 +1,5 @@
-import { For, Show } from 'solid-js';
-import { KvTooltipPanel, type KvTooltipAnchor } from '@cujuju/solidjs-kv-tooltip';
+import { For, Show, type JSX } from 'solid-js';
+import { KvTooltip, KvTooltipPanel, type KvTooltipAnchor } from '@cujuju/solidjs-kv-tooltip';
 
 export interface TipRow {
   label: string;
@@ -25,22 +25,43 @@ export function ChartTip(props: { title: string; rows: TipRow[]; x?: number; y?:
       placement={props.anchor ? 'below-start' : 'cursor'}
       maxWidth={TIP_MAX_WIDTH}
       panelClass="chart-tip"
-      extraContent={
-        <>
-          <div class="tip-title">{props.title}</div>
-          <For each={props.rows}>
-            {(r) => (
-              <div class="tip-row">
-                <span>
-                  <Show when={r.color}><i class="tip-swatch" style={{ background: r.color }} /></Show>
-                  {r.label}
-                </span>
-                <strong>{r.value}</strong>
-              </div>
-            )}
-          </For>
-        </>
-      }
+      extraContent={<TipBody title={props.title} rows={props.rows} />}
     />
+  );
+}
+
+/** The same readout on hover or focus of `children`, in place of a one-line `title`. `focusable={false}` inside another control. */
+export function HoverTip(props: { title: string; rows: TipRow[]; focusable?: boolean; children: JSX.Element }) {
+  return (
+    <KvTooltip
+      entries={{}}
+      maxWidth={TIP_MAX_WIDTH}
+      panelClass="chart-tip"
+      wrapperLayout="control"
+      focusable={props.focusable}
+      description={[props.title, ...props.rows.map((r) => `${r.label}: ${r.value}`)].join('. ')}
+      extraContent={<TipBody title={props.title} rows={props.rows} />}
+    >
+      {props.children}
+    </KvTooltip>
+  );
+}
+
+function TipBody(props: { title: string; rows: TipRow[] }) {
+  return (
+    <>
+      <div class="tip-title">{props.title}</div>
+      <For each={props.rows}>
+        {(r) => (
+          <div class="tip-row">
+            <span>
+              <Show when={r.color}><i class="tip-swatch" style={{ background: r.color }} /></Show>
+              {r.label}
+            </span>
+            <strong>{r.value}</strong>
+          </div>
+        )}
+      </For>
+    </>
   );
 }

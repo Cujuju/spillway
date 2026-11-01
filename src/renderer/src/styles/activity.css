@@ -99,8 +99,6 @@
 .heat-card {
   --heat-label-col: 34px;
   --heat-gap: 3px;
-  /* Smallest readable cell; a narrower tile scrolls sideways. */
-  --heat-cell-min: 10px;
   --heat-legend-cell: 12px;
   --heat-l1: 30%;
   --heat-l2: 55%;
@@ -110,18 +108,19 @@
   height: 100%;
   min-height: 0;
 }
-.heat-scroll {
+.heat-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  /* Cells shrink with the tile instead of scrolling; the tile's minimum size keeps them readable. */
+  overflow: hidden;
   padding: 1px;
 }
 /* 7 weekday rows by 24 hour columns; cells stretch to fill the tile. */
 .heat {
   display: grid;
   height: 100%;
-  grid-template-columns: var(--heat-label-col) repeat(24, minmax(var(--heat-cell-min), 1fr));
-  grid-template-rows: auto repeat(7, minmax(var(--heat-cell-min), 1fr));
+  grid-template-columns: var(--heat-label-col) repeat(24, minmax(0, 1fr));
+  grid-template-rows: auto repeat(7, minmax(0, 1fr));
   gap: var(--heat-gap);
   font-size: var(--text-xxs);
   color: var(--color-text-muted);
@@ -132,10 +131,6 @@
 }
 .heat-day {
   grid-column: 1;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--color-surface);
   display: flex;
   align-items: center;
 }

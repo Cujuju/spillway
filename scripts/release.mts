@@ -11,7 +11,7 @@ import { runReleaseCli } from '@cujuju/electron-updates/node';
 import { appVersion } from '../appVersion.ts';
 import { APP_NAME } from '../src/shared/app.ts';
 import { UPDATE_REPO, UPDATE_SIGNATURE_CONTEXT } from '../src/shared/updateFeed.ts';
-import { capture, IMAGES_DIR } from './screenshots.mts';
+import { capture, IMAGES_DIR } from './demo/screenshots.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** The macOS architectures electron-builder.ts packages. */

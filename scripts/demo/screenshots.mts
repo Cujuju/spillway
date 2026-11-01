@@ -1,20 +1,18 @@
-/** `pnpm screenshots`: captures the app on fake data (scripts/demo) into docs/images/<page>-<scheme>.png over the DevTools Protocol. See docs/setup.md. */
+/** `pnpm demo --screenshots`: captures the demo app into docs/images/<page>-<scheme>.png over the DevTools Protocol. See docs/setup.md. */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchDemo } from './demo/launch.mts';
+import { DEMO_WINDOW, launchDemo } from './launch.mts';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const IMAGES_DIR = path.join(ROOT, 'docs', 'images');
-/** The app's default window size (window.ts), at 1x so images stay small in git history. Height then grows to fit FIT_PAGE. */
-const VIEWPORT = { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false };
+/** The demo window's size at 1x, whatever the display scaling, so images stay small in git history. */
+const VIEWPORT = { ...DEMO_WINDOW, deviceScaleFactor: 1, mobile: false };
 const PAGES = ['Dashboard', 'Activity', 'Providers'];
-/** Every demo account must show here, so all shots take its full height. */
+/** Every demo account must show here without scrolling. */
 const FIT_PAGE = 'Dashboard';
-/** Layout settles after one resize; more passes only guard against content that reflows. */
-const MAX_FIT_PASSES = 3;
 /** Pixels hidden below the fold in the page's scroll areas. */
 const OVERFLOW_JS = `Math.max(0, ...[...document.querySelectorAll('*')].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => e.scrollHeight - e.clientHeight))`;
 const THEMES = [{ scheme: 'dark', theme: 'dracula' }, { scheme: 'light', theme: 'light' }];
@@ -107,14 +105,9 @@ async function capture(): Promise<string[]> {
     await until('stored requests', () =>
       cdp.eval<number>('window.api.activityTotals().then((t) => t.reduce((n, r) => n + r.requests, 0))').then((n) => (n >= app.proxy.eventCount ? n : null)));
     await open(cdp, FIT_PAGE);
-    let height = VIEWPORT.height;
-    for (let pass = 0; pass < MAX_FIT_PASSES; pass++) {
-      await sleep(SETTLE_MS);
-      const overflow = await cdp.eval<number>(OVERFLOW_JS);
-      if (overflow <= 0) break;
-      height += overflow;
-      await cdp.send('Emulation.setDeviceMetricsOverride', { ...VIEWPORT, height });
-    }
+    await sleep(SETTLE_MS);
+    const overflow = await cdp.eval<number>(OVERFLOW_JS);
+    if (overflow > 0) throw new Error(`${FIT_PAGE} overflows the demo window by ${overflow}px; raise DEMO_WINDOW.height in scripts/demo/launch.mts`);
     mkdirSync(IMAGES_DIR, { recursive: true });
     for (const { scheme, theme } of THEMES) {
       await cdp.eval(`window.api.getSettings().then((s) => window.api.setSettings({ ...s, general: { ...s.general, theme: ${JSON.stringify(theme)} } }))`);
@@ -132,10 +125,6 @@ async function capture(): Promise<string[]> {
     await app.close();
   }
   return written;
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  for (const file of await capture()) console.log(path.relative(ROOT, file));
 }
 
 export { capture };

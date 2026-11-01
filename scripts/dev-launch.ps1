@@ -20,7 +20,8 @@ try {
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     Set-Location -LiteralPath $repo
     # The headless console has no window; the log is the only place errors show.
-    pnpm dev *> $log
+    # Through cmd: Windows PowerShell treats pnpm's stderr lines as errors and stops the script.
+    cmd.exe /d /c "pnpm dev > `"$log`" 2>&1"
 } finally {
     $lock.ReleaseMutex()
 }

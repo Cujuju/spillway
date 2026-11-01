@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from 'node
 import { connect, createServer } from 'node:net';
 import { appPaths, USER_CONFIG_NAME } from './paths';
 import { buildProxyConfig } from './proxyConfig';
-import { getSecrets, getSettings, writeFileAtomic } from './settingsStore';
+import { proxyIdentity } from './proxyIdentity';
+import { getSettings, writeFileAtomic } from './settingsStore';
 
 /** Environment variable the proxy reads its supervisor password from (cleared by the proxy after reading). */
 export const SUPERVISOR_PASSWORD_ENV = 'MANAGEMENT_SUPERVISOR_PASSWORD';
@@ -36,12 +37,13 @@ export function writeUserConfig(text: string): void {
 
 /** Regenerates config.yaml from settings and config.user.yaml; returns the user file's error, if any. */
 export function writeProxyConfig(): string | null {
-  mkdirSync(appPaths.authDir, { recursive: true });
+  const identity = proxyIdentity();
+  mkdirSync(identity.authDir, { recursive: true });
   const { yaml, userConfigError } = buildProxyConfig({
     settings: getSettings().proxy,
-    clientApiKey: getSecrets().clientApiKey,
-    managementKey: getSecrets().managementKey,
-    authDir: appPaths.authDir,
+    clientApiKeys: identity.clientApiKeys,
+    managementKey: identity.managementSecret,
+    authDir: identity.authDir,
     userConfig: readUserConfig(),
   });
   writeFileAtomic(appPaths.proxyConfigFile, yaml);

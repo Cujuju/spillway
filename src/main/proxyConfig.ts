@@ -4,8 +4,8 @@ import type { ApiKeyOrder, AppSettings, ServerErrorAction } from '@shared/settin
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
-  clientApiKey: string;
-  /** Stable management key for outside tools; the proxy stores it bcrypt-hashed. */
+  clientApiKeys: string[];
+  /** Management secret: plaintext or a bcrypt hash. */
   managementKey: string;
   authDir: string;
   /** Text of config.user.yaml; empty when the file does not exist. */
@@ -77,15 +77,19 @@ function parseUserConfig(text: string): { doc: Document; error: string | null } 
   return { doc, error: null };
 }
 
-/** The app's client keys are always accepted; keys the user added in config.user.yaml stay. */
+/** App keys come first, followed by the user's other keys without duplicates. */
 function ensureClientKeys(doc: Document, required: string[]): void {
   const keys = doc.getIn(['access', 'api-keys']);
   if (!isSeq(keys)) {
-    doc.setIn(['access', 'api-keys'], required);
+    doc.setIn(['access', 'api-keys'], [...new Set(required)]);
     return;
   }
   const present = keys.toJSON() as unknown[];
-  for (const key of required) if (!present.includes(key)) keys.add(key);
+  const items = [...keys.items];
+  keys.items = [...new Set([...required, ...present])].map((key) => {
+    const index = present.indexOf(key);
+    return index < 0 ? doc.createNode(key) : items[index];
+  });
 }
 
 /** Builds config.yaml: config.user.yaml with the app-owned keys applied on top. Comments in the user file are kept. */
@@ -93,7 +97,7 @@ export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
   const { doc, error } = parseUserConfig(input.userConfig);
   if (doc.contents === null) doc.contents = doc.createNode({});
   for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
-  ensureClientKeys(doc, [input.clientApiKey]);
+  ensureClientKeys(doc, input.clientApiKeys);
   doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
   return { yaml: doc.toString(), userConfigError: error };
 }

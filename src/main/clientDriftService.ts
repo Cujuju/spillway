@@ -7,12 +7,13 @@ import { applyClient, BACKUP_SUFFIX, CLIENT_IDS, clientConfigFiles, clientStatus
 import { managedPolicyFile, managedPolicyStatus } from './managedPolicy';
 import { appIconPath, appPaths } from './paths';
 import { proxy } from './proxySupervisor';
-import { getSecrets, getSettings, onSettingsChange } from './settingsStore';
+import { proxyIdentity } from './proxyIdentity';
+import { getSettings, onSettingsChange } from './settingsStore';
 import { mainWindow, showMainWindow } from './window';
 
 export const clientTarget = () => ({
   endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}`,
-  key: getSecrets().clientApiKey,
+  key: proxyIdentity().clientApiKeys[0]!,
 });
 
 let monitor: ClientDrift | undefined;

@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from '@shared/settings';
 import { buildProxyConfig, TLS_HANDSHAKE_TIMEOUT_SECONDS } from './proxyConfig';
 
 const base = {
-  clientApiKey: 'client"key',
+  clientApiKeys: ['client"key'],
   managementKey: 'mk',
   authDir: 'C:\\data\\proxy\\auths',
   settings: DEFAULT_SETTINGS.proxy,
@@ -69,8 +69,14 @@ describe('buildProxyConfig', () => {
     expect(cfg.routing.strategy).toBe('soonest-reset');
     expect(cfg.routing.retry).toEqual({ 'request-retry': 3 });
     expect(cfg.debug).toBe(true);
-    expect(cfg.access['api-keys']).toEqual(['lan-key', ...appKeys]);
+    expect(cfg.access['api-keys']).toEqual([...appKeys, 'lan-key']);
     expect(yaml).toContain('# my tweaks');
+  });
+
+  it('puts app keys first in order and deduplicates user keys', () => {
+    const cfg = parsed({ clientApiKeys: ['app-key', 'second-key'],
+      userConfig: 'access:\n  api-keys: [user-key, second-key, app-key, user-key]' });
+    expect(cfg.access['api-keys']).toEqual(['app-key', 'second-key', 'user-key']);
   });
 
   it('ignores an unusable user file and reports why', () => {

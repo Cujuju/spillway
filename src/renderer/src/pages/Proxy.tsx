@@ -25,7 +25,8 @@ export function Proxy() {
   const key = () => keys()?.clientApiKey ?? '';
   const maskOf = (value: string) => (revealed() ? value : `${value.slice(0, KEY_PREFIX_SHOWN)}${'•'.repeat(Math.max(0, value.length - KEY_PREFIX_SHOWN))}`);
   const masked = () => maskOf(key());
-  const managementKey = () => keys()?.managementKey ?? '';
+  const managementKey = () => keys()?.managementKey ?? null;
+  const sharedFrom = () => keys()?.sharedFrom ?? null;
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -92,14 +93,23 @@ export function Proxy() {
               </Show>
             </button>
             <CopyButton chip value={key()} what="client key" />
-            <button class="chip-btn" title="Regenerate client key" aria-label="Regenerate client key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
-              <RefreshCw size={ICON_PX} />
-            </button>
+            <Show when={!sharedFrom()}>
+              <button class="chip-btn" title="Regenerate client key" aria-label="Regenerate client key" disabled={busy()} onClick={() => setConfirmingRegenerate(true)}>
+                <RefreshCw size={ICON_PX} />
+              </button>
+            </Show>
           </span>
         </div>
+        <Show when={sharedFrom()}>
+          {(from) => (
+            <div class="list-row-help">
+              Uses {from()}'s client key, management key and accounts, so clients set up for either build keep working. Regenerate the key in {from()}.
+            </div>
+          )}
+        </Show>
         <ClientSetup endpoint={endpoint()} clientKey={key()} />
         <ManagedPolicySetup endpoint={endpoint()} clientKey={key()} />
-        <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} managementKey={managementKey()} maskedManagementKey={maskOf(managementKey())} />
+        <T3CodeSetup endpoint={endpoint()} clientKey={key()} masked={masked()} managementKey={managementKey()} maskedManagementKey={maskOf(managementKey() ?? '')} sharedFrom={sharedFrom()} />
         <ShellEnvSetup endpoint={endpoint()} clientKey={key()} masked={masked()} />
         <ManagementLockouts />
       </section>

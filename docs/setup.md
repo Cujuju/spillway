@@ -13,7 +13,9 @@
 
 CI (`.github/workflows/build.yml`) builds the Windows and macOS installers on each push to `main` and uploads them as artifacts. It checks out the private fork with the repository secret `CLIPROXY_SRC_TOKEN` (a fine-grained token with read access to `Cujuju/CLIProxyAPI` contents); Go comes from the fork's `go.mod`, Node from `engines.node`, pnpm from `packageManager`.
 
-Spillway Dev (`pnpm package:dev` and `pnpm dev`) has its own app id, name and data folder (`%APPDATA%\Spillway Dev`, `~/Library/Application Support/Spillway Dev`), so it never replaces or reads the production install. It starts with no accounts, and it never updates itself. It uses the same default proxy port, so run one copy at a time.
+Spillway Dev (`pnpm package:dev` and `pnpm dev`) has its own app id, name and data folder (`%APPDATA%\Spillway Dev`, `~/Library/Application Support/Spillway Dev`), so it never replaces the production install, and it never updates itself. It uses the same default proxy port, so run one copy at a time.
+
+When production Spillway is installed, Spillway Dev's proxy uses production's client key, management key and accounts, read from production's `proxy/config.yaml`. Claude Code, Codex and T3 Code's usage hub then keep working whichever copy runs, with nothing to re-apply. Regenerate the client key in production. Without production, Spillway Dev uses its own keys and starts with no accounts.
 
 `pnpm dev` breaks if the environment has `ELECTRON_RUN_AS_NODE` set: Electron then runs as plain Node. Unset it first.
 

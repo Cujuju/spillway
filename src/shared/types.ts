@@ -175,9 +175,11 @@ export interface CredentialRenewResult {
 
 export interface ProxyKeys {
   clientApiKey: string;
-  /** For outside tools that read the proxy's management API (T3 Code's usage provider). */
-  managementKey: string;
+  /** Null when the dev build uses production's management key, which it holds only hashed. */
+  managementKey: string | null;
   endpoint: string;
+  /** Production's app name when this dev build uses its keys and accounts. */
+  sharedFrom: string | null;
 }
 
 export interface LogLine {

@@ -18,8 +18,9 @@ import { management } from './managementClient';
 import { appPaths, PROXY_EXE_NAME } from './paths';
 import { ensureUserConfigFile, readUserConfig, writeUserConfig } from './proxyLaunch';
 import { proxy } from './proxySupervisor';
+import { proxyIdentity } from './proxyIdentity';
 import { requestQuit } from './quit';
-import { getSecrets, getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
+import { getSettings, regenerateClientApiKey, setSettings } from './settingsStore';
 import { setAppTrayTooltip, syncLimitTrays, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
@@ -38,7 +39,11 @@ function credentialName(id: string): string {
   return c.name;
 }
 
-const keys = () => ({ clientApiKey: getSecrets().clientApiKey, managementKey: getSecrets().managementKey, endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}` });
+const keys = () => {
+  const id = proxyIdentity();
+  return { clientApiKey: id.clientApiKeys[0]!, managementKey: id.managementKey,
+    endpoint: proxy.getStatus().endpoint || `http://127.0.0.1:${getSettings().proxy.port}`, sharedFrom: id.sharedFrom };
+};
 
 const clientStatuses = () => {
   const files = clientConfigFiles();
@@ -92,7 +97,7 @@ function listApiProviders(): ApiProviderList {
 const OPEN_PATHS = {
   data: () => appPaths.root,
   config: () => appPaths.proxyDir,
-  auths: () => appPaths.authDir,
+  auths: () => proxyIdentity().authDir,
   logs: () => appPaths.proxyDir,
   userConfig: () => ensureUserConfigFile(),
 } as const;
@@ -107,6 +112,8 @@ const handlers: Handlers = {
   proxyRestart: () => proxy.restart(),
   proxyKeys: () => keys(),
   regenerateClientKey: async () => {
+    const { sharedFrom } = proxyIdentity();
+    if (sharedFrom) throw new Error(`This build uses ${sharedFrom}'s client key; regenerate it in ${sharedFrom}`);
     await regenerateClientApiKey();
     checkClientDrift();
     if (proxy.isRunning()) await proxy.restart();

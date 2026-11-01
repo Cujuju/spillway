@@ -25,6 +25,7 @@ describe('buildProxyConfig', () => {
     expect(cfg.routing).toEqual({ strategy: 'soonest-reset', 'prefer-auth-kind': 'oauth', 'session-affinity': true, 'session-affinity-ttl': '60m',
       'session-affinity-hold': '0m', 'server-errors': 'return', 'session-affinity-rebind-on': 'quota', 'session-affinity-persist': true, cooldown: { 'save-cooldown-status': true } });
     expect(cfg.requests.streaming['first-byte-timeout-seconds']).toBe(90);
+    expect(cfg['usage-lookups']['settle-seconds']).toBe(60);
     expect(cfg.requests['tls-handshake-timeout-seconds']).toBe(TLS_HANDSHAKE_TIMEOUT_SECONDS);
     expect(cfg.observability.logs['request-log']).toBe(false);
     expect(cfg.oauth['auth-dir']).toBe('C:\\data\\proxy\\auths');
@@ -37,6 +38,10 @@ describe('buildProxyConfig', () => {
 
   it('switches accounts on server errors only when the setting says so', () => {
     expect(parsed({ settings: { ...DEFAULT_SETTINGS.proxy, serverErrors: 'switch' } }).routing['server-errors']).toBe('failover');
+  });
+
+  it('writes the configured usage lookup settle delay', () => {
+    expect(parsed({ settings: { ...DEFAULT_SETTINGS.proxy, usageLookupSettleSeconds: 0 } })['usage-lookups']['settle-seconds']).toBe(0);
   });
 
   it('routes to API keys first only when the setting says so', () => {

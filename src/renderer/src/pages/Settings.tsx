@@ -154,6 +154,9 @@ function DashboardSection() {
       <SettingRow label="Refresh interval" help="How often the app reads limits from the proxy. The proxy looks up live usage on its own schedule.">
         <NumberField value={db().refreshIntervalSeconds} unit="s" onCommit={(v) => set((d) => void (d.dashboard.refreshIntervalSeconds = v))} />
       </SettingRow>
+      <SettingRow label="Look up usage after a pause" help="Once a Claude account gets no responses for this long, the proxy looks up its exact usage, so Refresh rarely changes it. Steady use sends no extra lookups. 0 turns it off: usage is then looked up every 15 minutes and on Refresh.">
+        <NumberField value={settings().proxy.usageLookupSettleSeconds} unit="s" onCommit={(v) => set((d) => void (d.proxy.usageLookupSettleSeconds = v))} />
+      </SettingRow>
       <SettingRow label="Show emails" help="Off masks account emails, for screenshots and streams.">
         <Toggle value={db().showEmails} onChange={(v) => set((d) => void (d.dashboard.showEmails = v))} />
       </SettingRow>

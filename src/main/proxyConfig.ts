@@ -60,6 +60,7 @@ export function appOwnedValues(input: Omit<ProxyConfigInput, 'userConfig'>): [pa
     [['routing', 'session-affinity-persist'], true],
     [['routing', 'cooldown', 'save-cooldown-status'], true],
     [['requests', 'streaming', 'first-byte-timeout-seconds'], p.firstByteTimeoutSeconds],
+    [['usage-lookups', 'settle-seconds'], p.usageLookupSettleSeconds],
     [['requests', 'tls-handshake-timeout-seconds'], TLS_HANDSHAKE_TIMEOUT_SECONDS],
     [['observability', 'logs', 'request-log'], p.requestLog],
     [['oauth', 'auth-dir'], input.authDir],

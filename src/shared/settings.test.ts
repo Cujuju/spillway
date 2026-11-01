@@ -21,6 +21,12 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({}).proxy.firstByteTimeoutSeconds).toBe(DEFAULT_SETTINGS.proxy.firstByteTimeoutSeconds);
   });
 
+  it('clamps the usage lookup settle delay and allows 0 (off)', () => {
+    expect(normalizeSettings({ proxy: { usageLookupSettleSeconds: 0 } }).proxy.usageLookupSettleSeconds).toBe(0);
+    expect(normalizeSettings({ proxy: { usageLookupSettleSeconds: 99_999 } }).proxy.usageLookupSettleSeconds).toBe(900);
+    expect(normalizeSettings({}).proxy.usageLookupSettleSeconds).toBe(60);
+  });
+
   it('keeps a valid tray icon look and resets invalid parts to the default', () => {
     const item = (look: unknown) => normalizeSettings({ trayIcons: { items: [{ provider: 'claude', windowKey: 'five_hour', look }] } }).trayIcons.items[0]!.look;
     expect(item({ shape: 'circle', fill: 'filled', color: '#AABBCC' })).toEqual({ shape: 'circle', fill: 'filled', color: '#aabbcc' });
@@ -76,6 +82,7 @@ describe('proxyConfigChanged', () => {
   it('is true for settings written to config.yaml', () => {
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ strategy: 'round-robin' }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ firstByteTimeoutSeconds: 30 }))).toBe(true);
+    expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ usageLookupSettleSeconds: 30 }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ apiKeyOrder: 'first' }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ serverErrors: 'switch' }))).toBe(true);
     expect(proxyConfigChanged(DEFAULT_SETTINGS, withProxy({ requestLog: true }))).toBe(true);

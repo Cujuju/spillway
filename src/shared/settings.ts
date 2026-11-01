@@ -65,6 +65,8 @@ export interface AppSettings {
     serverErrors: ServerErrorAction;
     /** Cancel an upstream stream that sends nothing for this long, then treat it as a server error; 0 = never. */
     firstByteTimeoutSeconds: number;
+    /** A Claude account's usage is looked up once its traffic pauses this long; 0 = only on the proxy's 15-minute schedule and Refresh. */
+    usageLookupSettleSeconds: number;
     /** Proxy writes every request and response, prompts included, to its logs folder. */
     requestLog: boolean;
     clientDrift: 'warn' | 'reapply';
@@ -125,6 +127,10 @@ const MAX_AFFINITY_MINUTES = 24 * 60;
 /** Claude streams begin with message_start within seconds; 90 s also covers very long prompts. */
 const DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS = 90;
 const MAX_FIRST_BYTE_TIMEOUT_SECONDS = 600;
+/** The chosen pause marks a finished turn; longer gaps within a turn cost one extra lookup. */
+export const DEFAULT_USAGE_LOOKUP_SETTLE_SECONDS = 60;
+/** Beyond the proxy's 15-minute lookup age, the scheduled lookup comes first, so a longer delay never fires. */
+const MAX_USAGE_LOOKUP_SETTLE_SECONDS = 900;
 /** A month of requests is a few MB per busy day; a year bounds disk use. */
 const DEFAULT_ACTIVITY_RETENTION_DAYS = 30;
 const MAX_ACTIVITY_RETENTION_DAYS = 365;
@@ -157,6 +163,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     executablePath: '',
     restartOnCrash: true,
     firstByteTimeoutSeconds: DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS,
+    usageLookupSettleSeconds: DEFAULT_USAGE_LOOKUP_SETTLE_SECONDS,
     // Off: full request logs hold prompts and grow quickly. Failed requests are logged regardless.
     requestLog: false,
     clientDrift: 'warn',
@@ -265,6 +272,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       executablePath: str(p.executablePath, d.proxy.executablePath),
       restartOnCrash: bool(p.restartOnCrash, d.proxy.restartOnCrash),
       firstByteTimeoutSeconds: int(p.firstByteTimeoutSeconds, d.proxy.firstByteTimeoutSeconds, 0, MAX_FIRST_BYTE_TIMEOUT_SECONDS),
+      usageLookupSettleSeconds: int(p.usageLookupSettleSeconds, d.proxy.usageLookupSettleSeconds, 0, MAX_USAGE_LOOKUP_SETTLE_SECONDS),
       requestLog: bool(p.requestLog, d.proxy.requestLog),
       clientDrift: pick(p.clientDrift, ['warn', 'reapply'] as const, d.proxy.clientDrift),
       preferredAccounts: stringRecord(p.preferredAccounts),
@@ -311,7 +319,7 @@ export function proxyConfigChanged(a: AppSettings, b: AppSettings): boolean {
   return a.proxy.strategy !== b.proxy.strategy || a.proxy.apiKeyOrder !== b.proxy.apiKeyOrder || a.proxy.sessionAffinity !== b.proxy.sessionAffinity ||
     a.proxy.sessionAffinityTtlMinutes !== b.proxy.sessionAffinityTtlMinutes || a.proxy.firstByteTimeoutSeconds !== b.proxy.firstByteTimeoutSeconds ||
     a.proxy.serverErrors !== b.proxy.serverErrors || a.proxy.requestLog !== b.proxy.requestLog ||
-    a.proxy.sessionHoldMinutes !== b.proxy.sessionHoldMinutes;
+    a.proxy.sessionHoldMinutes !== b.proxy.sessionHoldMinutes || a.proxy.usageLookupSettleSeconds !== b.proxy.usageLookupSettleSeconds;
 }
 
 /** Settings whose change requires the proxy to be restarted to take effect. */

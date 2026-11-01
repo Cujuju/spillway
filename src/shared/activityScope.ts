@@ -23,9 +23,14 @@ export const NO_CLIENT_KEY = '';
 export const accountKey = (authIndex: string | null): string => authIndex ?? NO_ACCOUNT_KEY;
 export const clientKey = (client: string | null): string => client ?? NO_CLIENT_KEY;
 
-/** A User-Agent's first product name ("claude-cli/2.1 (…)" → "claude-cli"); null when the client sent none. */
+// Claude Agent SDK apps tag their CLI's User-Agent: "claude-cli/2.1.316 (external, sdk-ts, agent-sdk/0.3.276, client-app/stockapp/0.9.1)".
+const CLIENT_APP = /[(\s,]client-app\/([^\s/,;)]+)/;
+
+/** The embedding app's client-app name, else the User-Agent's first product name ("claude-cli/2.1 (…)" → "claude-cli"); null when none was sent. */
 export function clientName(userAgent: string | null): string | null {
-  return userAgent?.trim().split(/[\s/]/, 1)[0] || null;
+  const agent = userAgent?.trim();
+  if (!agent) return null;
+  return CLIENT_APP.exec(agent)?.[1] ?? (agent.split(/[\s/]/, 1)[0] || null);
 }
 
 const inKeys = (keys: KeyScope, key: string) => keys === null || keys.includes(key);

@@ -1,8 +1,7 @@
 import { CheckCircle2, ExternalLink, LoaderCircle } from 'lucide-solid';
-import { createSignal, For, Match, onCleanup, Show, Switch } from 'solid-js';
+import { createSignal, For, Match, onCleanup, Switch } from 'solid-js';
 import type { OAuthStart } from '@shared/types';
 import { OAUTH_PROVIDERS } from '../lib/providers';
-import { snapshot } from '../store';
 import { CopyButton, Dialog, Notice, ProviderGlyph } from './ui';
 
 /** Matches the dashboard's own "is it done yet" cadence without hammering the proxy. */
@@ -14,16 +13,12 @@ const ICON_PX = 16;
 type Step =
   | { kind: 'pick' }
   | { kind: 'starting'; provider: string }
-  /** opened: false when the provider already has an account, so the link isn't sent to the browser signed in to it. */
-  | { kind: 'waiting'; provider: string; session: OAuthStart; opened: boolean }
+  | { kind: 'waiting'; provider: string; session: OAuthStart }
   | { kind: 'done'; provider: string }
   | { kind: 'error'; provider: string | null; message: string };
 
 const labelOf = (id: string | null) => OAUTH_PROVIDERS.find((p) => p.id === id)?.label ?? id ?? '';
-/** A subscription login the proxy already holds for this provider. */
-const hasAccount = (provider: string) => (snapshot()?.credentials ?? []).some((c) => !c.apiKey && c.provider === provider);
-
-/** Provider picker → browser sign-in → poll until the proxy saves the credential. */
+/** Provider picker → sign-in link (copy or open) → poll until the proxy saves the credential. */
 export function AddAccountDialog(props: { onClose: () => void }) {
   const [step, setStep] = createSignal<Step>({ kind: 'pick' });
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -66,9 +61,7 @@ export function AddAccountDialog(props: { onClose: () => void }) {
     setStep({ kind: 'starting', provider });
     try {
       const session = await window.api.oauthStart(provider);
-      const opened = !hasAccount(provider);
-      if (opened) await window.api.openExternal(session.url);
-      setStep({ kind: 'waiting', provider, session, opened });
+      setStep({ kind: 'waiting', provider, session });
       deadline = Date.now() + SESSION_TIMEOUT_MS;
       timer = setInterval(() => void poll(provider, session), POLL_MS);
     } catch (e) {
@@ -104,7 +97,7 @@ export function AddAccountDialog(props: { onClose: () => void }) {
     >
       <Switch>
         <Match when={step().kind === 'pick'}>
-          <p class="secondary">Pick a provider. Its sign-in page opens in your browser; the proxy stores the login.</p>
+          <p class="secondary">Pick a provider, then sign in with its link; the proxy stores the login.</p>
           <div class="provider-grid">
             <For each={OAUTH_PROVIDERS}>
               {(p) => (
@@ -121,30 +114,20 @@ export function AddAccountDialog(props: { onClose: () => void }) {
         </Match>
         <Match when={step().kind === 'starting'}>
           <div class="oauth-wait">
-            <LoaderCircle size={ICON_PX} class="spin" /> Opening {labelOf((step() as { provider: string }).provider)} sign-in…
+            <LoaderCircle size={ICON_PX} class="spin" /> Starting {labelOf((step() as { provider: string }).provider)} sign-in…
           </div>
         </Match>
         <Match when={waiting()}>
           {(w) => (
             <>
-              <Show
-                when={w().opened}
-                fallback={
-                  <p>
-                    You already have a {labelOf(w().provider)} account here. A browser signed in to it signs in as that account again, so copy
-                    the link into a private window, or sign out of {labelOf(w().provider)} in your browser first.
-                  </p>
-                }
-              >
-                <p class="muted">
-                  Signed in to another {labelOf(w().provider)} account in this browser? The page signs in as that one. Copy the link into a
-                  private window, or sign out first.
-                </p>
-              </Show>
+              <p>
+                Open the {labelOf(w().provider)} sign-in link in your browser. Adding another account? A browser signed in to {labelOf(w().provider)}{' '}
+                signs in as that account again, so copy the link into a private window, or sign out first.
+              </p>
               <div class="row">
-                <CopyButton ghost={w().opened} primary={!w().opened} value={w().session.url} what="link" label="Copy link" />
-                <button class="btn" onClick={() => void window.api.openExternal(w().session.url)}>
-                  <ExternalLink size={14} /> {w().opened ? 'Open again' : 'Open in browser'}
+                <CopyButton value={w().session.url} what="link" label="Copy link" />
+                <button class="btn primary" onClick={() => void window.api.openExternal(w().session.url)}>
+                  <ExternalLink size={14} /> Open in browser
                 </button>
               </div>
               <div class="oauth-wait">

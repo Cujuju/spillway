@@ -230,7 +230,7 @@ export function createCopier() {
  * Copies `value` and confirms with a check for a moment.
  * `chip` renders the icon-only chip button; otherwise a button labelled `label`.
  */
-export function CopyButton(props: { value: string; what: string; label?: string; chip?: boolean; ghost?: boolean; primary?: boolean; disabled?: boolean }) {
+export function CopyButton(props: { value: string; what: string; label?: string; chip?: boolean; ghost?: boolean; disabled?: boolean }) {
   const copier = createCopier();
   const copied = () => copier.copied() === props.value;
   const title = () => (copied() ? 'Copied' : `Copy ${props.what}`);
@@ -238,7 +238,7 @@ export function CopyButton(props: { value: string; what: string; label?: string;
     <button
       type="button"
       class={props.chip ? 'chip-btn' : 'btn'}
-      classList={{ ghost: !props.chip && props.ghost, primary: !props.chip && props.primary, copied: copied() }}
+      classList={{ ghost: !props.chip && props.ghost, copied: copied() }}
       title={title()}
       aria-label={title()}
       disabled={props.disabled}

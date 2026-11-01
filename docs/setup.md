@@ -25,7 +25,7 @@ Launch at login only applies to installed builds.
 
 `pnpm demo` opens the built app on fake data: a throwaway profile and home folder, and a fake proxy (`scripts/demo/`) that serves generated accounts, 2 weeks of usage history and 4 weeks of requests. Nothing from your own profile, logins or client logs loads. The data is seeded, so every run draws the same numbers relative to the current time.
 
-`pnpm screenshots` captures the Dashboard, Activity and Providers pages from that demo in a dark and a light theme into `docs/images/`. `pnpm release promote` runs it and commits changed images. 5-hour windows follow the local clock, so run it during the day to show live ones.
+`pnpm screenshots` captures the Dashboard, Activity and Providers pages from that demo in a dark and a light theme into `docs/images/`. `pnpm release promote` runs it, commits changed images and pushes `main`. 5-hour windows follow the local clock, so run it during the day to show live ones.
 
 The app's `--proxy-endpoint=<url>` switch makes it use a proxy already running at that address instead of starting the bundled one; the demo uses it.
 

@@ -24,7 +24,7 @@ Releases are built and published from your own machines; there is no CI release.
 
 1. Commit and push. The version comes from git history (`appVersion.ts`).
 2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. `release nightly` refuses unless `../solidjs-toolkit` and `../CLIProxyAPI` are clean at their latest pushed commit. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
-3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures). It first refreshes the screenshots in `docs/images/` and commits any that changed; push `main` to publish them.
+3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures). Run it from `main`: it first refreshes the screenshots in `docs/images/`, commits any that changed and pushes `main`.
 
 ### Scheduled nightly
 

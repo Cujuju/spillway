@@ -31,16 +31,22 @@ if (process.argv[2] === 'nightly') {
   }
 }
 
-/** A stable release refreshes the README screenshots from fake data and commits them; push main to publish them. */
+/** A stable release refreshes the README screenshots from fake data, then commits and pushes them to main. */
+const README_BRANCH = 'main';
 if (process.argv[2] === 'promote' && !process.argv.includes('--dry-run')) {
+  const git = (args: string[]) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+  if (git(['branch', '--show-current']) !== README_BRANCH) {
+    console.error(`Promote from ${README_BRANCH}: it commits and pushes the refreshed screenshots there.`);
+    process.exit(1);
+  }
   execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
   await capture();
-  const git = (args: string[]) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
   if (git(['status', '--porcelain', '--', IMAGES_DIR])) {
     git(['add', '--', IMAGES_DIR]);
     git(['commit', '-m', `docs: refresh screenshots for ${process.argv[3] ?? 'release'}`, '--', IMAGES_DIR]);
-    console.log('Committed refreshed screenshots; push main to publish them.');
   }
+  // A rejected push (main behind origin) stops the promote before anything is published.
+  execFileSync('git', ['push', 'origin', README_BRANCH], { cwd: ROOT, stdio: 'inherit' });
 }
 
 await runReleaseCli({

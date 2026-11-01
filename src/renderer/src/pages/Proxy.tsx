@@ -7,6 +7,7 @@ import { ShellEnvSetup } from '../components/ShellEnvSetup';
 import { T3CodeSetup } from '../components/T3CodeSetup';
 import { CopyButton, Dialog, Notice } from '../components/ui';
 import { proxyStatus } from '../store';
+import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
 /** Key characters left visible when masked; the rest become bullets so the masked key keeps its length. */
@@ -41,7 +42,7 @@ export function Proxy() {
 
   return (
     <>
-      <header class="dash-header">
+      <PageHeader>
         <div>
           <h1 class="dash-title">Proxy</h1>
         </div>
@@ -62,7 +63,7 @@ export function Proxy() {
             </button>
           </Show>
         </div>
-      </header>
+      </PageHeader>
 
       <Show when={state() === 'port-busy'} fallback={<Show when={proxyStatus()?.lastError}><Notice tone="error">{proxyStatus()!.lastError}</Notice></Show>}>
         <Notice tone="error">Port {proxyStatus()?.port} is in use by another program. Quit it, or choose another port under Settings → Routing & server, then start again.</Notice>

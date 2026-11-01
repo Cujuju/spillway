@@ -222,6 +222,13 @@
 .notice.save-error {
   margin-bottom: var(--page-gap);
 }
+/* App-wide notices sit under the page header and own the gap below, whatever block follows. */
+.notice.app-notice {
+  margin-bottom: var(--page-gap);
+}
+.page-inner .notice.app-notice + * {
+  margin-top: 0;
+}
 /* Text sets fractional heights. Page-level blocks round theirs up, so each block starts on a whole pixel, where borders and text don't drift apart. */
 .page-inner > *,
 .page-section > * {

@@ -13,6 +13,7 @@ import { createDaySummaries } from '../lib/daySummaries';
 import { dateTime, pct } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
+import { PageHeader } from '../components/PageHeader';
 
 /** Coverage changes slowly; a minute keeps it current without re-querying every request burst. */
 const COVERAGE_REFRESH_MS = 60_000;
@@ -47,7 +48,7 @@ export function Activity() {
 
   return (
     <>
-      <header class="dash-header title-row">
+      <PageHeader class="title-row">
         <h1 class="dash-title">Activity</h1>
         <ActivityImport />
         <div class="dash-actions card-spaced">
@@ -59,7 +60,7 @@ export function Activity() {
           </Show>
           <Seg value={view()} options={VIEWS} onChange={setView} />
         </div>
-      </header>
+      </PageHeader>
 
       <Show when={proxyStatus()?.state !== 'running'}>
         <Notice>Proxy activity appears while the proxy is running. Local usage syncs automatically.</Notice>

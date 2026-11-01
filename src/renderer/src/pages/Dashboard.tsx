@@ -13,6 +13,7 @@ import { poolWindowKey } from '../lib/forecast';
 import { isString, isStringOrNull, persistedSignal } from '../lib/persisted';
 import { durationChoices, lengthLineId } from '../lib/poolWindows';
 import { proxyStatus, setPage, settings, shownText, snapshot, updateSettings, usageError } from '../store';
+import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
 /** Claude first: it is the provider this app was built around; the rest by account count. */
@@ -125,7 +126,7 @@ export function Dashboard() {
 
   return (
     <>
-      <header class="dash-header">
+      <PageHeader>
         <div>
           <h1 class="dash-title">Quota Management</h1>
           <div class="dash-sub">
@@ -138,7 +139,7 @@ export function Dashboard() {
             <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} /> Refresh all credentials
           </button>
         </div>
-      </header>
+      </PageHeader>
 
       <Switch>
         <Match when={proxyState() === 'missing-binary'}>

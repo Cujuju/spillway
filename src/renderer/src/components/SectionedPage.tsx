@@ -1,4 +1,5 @@
 import { For, Show, type JSX } from 'solid-js';
+import { PageHeader } from './PageHeader';
 
 /** A nav entry. `title` heads the body when the short nav `label` is not enough. */
 export interface NavItem<T extends string> {
@@ -39,9 +40,9 @@ export function SectionedPage<T extends string>(props: { nav: readonly NavGroup<
         </For>
       </nav>
       <section class="sectioned-body">
-        <header class="dash-header">
+        <PageHeader>
           <h1 class="dash-title">{current()?.title ?? current()?.label ?? ''}</h1>
-        </header>
+        </PageHeader>
         {props.children}
       </section>
     </div>

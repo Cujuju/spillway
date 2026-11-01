@@ -6,6 +6,7 @@ import { LoginsSection } from '../components/LoginsSection';
 import { ProviderDialog } from '../components/ProviderDialog';
 import { Dialog, Notice, ProviderGlyph, Toggle } from '../components/ui';
 import { providerVar } from '../lib/providers';
+import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
 
@@ -45,12 +46,12 @@ export function Providers() {
 
   return (
     <>
-      <header class="dash-header">
+      <PageHeader>
         <div>
           <h1 class="dash-title">AI Providers</h1>
           <div class="dash-sub">Signed-in accounts and API keys the proxy routes requests to</div>
         </div>
-      </header>
+      </PageHeader>
 
       <LoginsSection />
 

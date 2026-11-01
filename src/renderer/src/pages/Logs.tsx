@@ -2,6 +2,7 @@ import { FolderOpen } from 'lucide-solid';
 import { createEffect, For, on } from 'solid-js';
 import { Toggle } from '../components/ui';
 import { logs, setLogs, settings, updateSettings } from '../store';
+import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
 /** Within this share of a screen from the bottom counts as following the tail. */
@@ -20,7 +21,7 @@ export function Logs() {
 
   return (
     <>
-      <header class="dash-header">
+      <PageHeader>
         <div>
           <h1 class="dash-title">Logs</h1>
           <div class="dash-sub">Proxy output and supervisor events · {logs().length} lines</div>
@@ -37,7 +38,7 @@ export function Logs() {
           <button class="btn ghost" onClick={() => void window.api.openPath('logs')}><FolderOpen size={ICON_PX} /> Open folder</button>
           <button class="btn ghost" onClick={() => void window.api.clearProxyLogs().then(() => setLogs([]))}>Clear</button>
         </div>
-      </header>
+      </PageHeader>
       <div class="log-view selectable" ref={logBox}>
         <For each={logs()} fallback={<div class="muted">No output yet.</div>}>
           {(l) => (

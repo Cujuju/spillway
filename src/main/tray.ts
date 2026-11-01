@@ -78,6 +78,7 @@ function contextMenu(): Menu {
     { label: 'Refresh usage', enabled: running, click: () => void usage.refresh().catch(() => undefined) },
     ...(accounts.length ? [{ type: 'separator' } as const, ...accounts] : []),
     { type: 'separator' },
+    { label: `Restart ${APP_NAME}`, click: () => void requestQuit({ relaunch: true }) },
     { label: 'Quit', click: () => void requestQuit() },
   ]);
 }

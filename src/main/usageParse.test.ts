@@ -6,7 +6,7 @@ const parseOne = (fields: Record<string, unknown>) =>
 const labelOf = (fields: Record<string, unknown>) => parseOne(fields).label;
 
 describe('emailDomain', () => {
-  it('returns the part after the @', () => expect(emailDomain('someone@pm.me')).toBe('pm.me'));
+  it('returns the part after the @', () => expect(emailDomain('someone@example.com')).toBe('example.com'));
   it('is null without an email or domain', () => {
     expect(emailDomain(null)).toBeNull();
     expect(emailDomain('someone@')).toBeNull();
@@ -29,19 +29,19 @@ describe('errorText', () => {
 });
 
 describe('credential label', () => {
-  it('defaults to the email domain', () => expect(labelOf({ email: 'someone@pm.me', label: 'someone@pm.me' })).toBe('pm.me'));
-  it('prefers the note', () => expect(labelOf({ email: 'someone@pm.me', note: 'Work' })).toBe('Work'));
+  it('defaults to the email domain', () => expect(labelOf({ email: 'someone@example.com', label: 'someone@example.com' })).toBe('example.com'));
+  it('prefers the note', () => expect(labelOf({ email: 'someone@example.com', note: 'Work' })).toBe('Work'));
   it('falls back to the proxy label without an email', () => expect(labelOf({ label: 'API key' })).toBe('API key'));
   it('numbers labels shared within a provider, in id order', () => {
     const labels = parseUsageSnapshot({
       credentials: [
-        { id: 'b', provider: 'claude', email: 'two@gmail.com' },
-        { id: 'a', provider: 'claude', email: 'one@gmail.com' },
-        { id: 'c', provider: 'codex', email: 'three@gmail.com' },
-        { id: 'd', provider: 'claude', email: 'four@pm.me' },
+        { id: 'b', provider: 'claude', email: 'two@example.org' },
+        { id: 'a', provider: 'claude', email: 'one@example.org' },
+        { id: 'c', provider: 'codex', email: 'three@example.org' },
+        { id: 'd', provider: 'claude', email: 'four@example.com' },
       ],
     }).credentials.map((c) => c.label);
-    expect(labels).toEqual(['gmail.com 2', 'gmail.com 1','gmail.com', 'pm.me']);
+    expect(labels).toEqual(['example.org 2', 'example.org 1','example.org', 'example.com']);
   });
 });
 

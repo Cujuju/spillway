@@ -41,7 +41,7 @@ function parseWindow(raw: unknown): LimitWindow | null {
   };
 }
 
-/** Default account name: the part after the last "@", e.g. "pm.me". */
+/** Default account name: the part after the last "@", e.g. "example.com". */
 export function emailDomain(email: string | null): string | null {
   const at = email?.lastIndexOf('@') ?? -1;
   return email && at >= 0 ? s(email.slice(at + 1)) : null;

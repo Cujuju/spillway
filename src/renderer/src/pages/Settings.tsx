@@ -160,7 +160,7 @@ function DashboardSection() {
       <SettingRow label="Show emails" help="Off masks account emails, for screenshots and streams.">
         <Toggle value={db().showEmails} onChange={(v) => set((d) => void (d.dashboard.showEmails = v))} />
       </SettingRow>
-      <SettingRow label="Forecast length">
+      <SettingRow label="Forecast length" help="How far ahead the chart projects usage. The chart's Next menu sets it too.">
         <NumberField value={db().forecastHours} unit="h" onCommit={(v) => set((d) => void (d.dashboard.forecastHours = v))} />
       </SettingRow>
       <SettingRow label="Drain-rate lookback" help="History behind the %/hour rate and the chart's default range.">

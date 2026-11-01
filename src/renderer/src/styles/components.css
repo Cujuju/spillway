@@ -435,7 +435,6 @@
 .list-row.nested .list-row-text {
   margin-left: var(--spacing-1);
   padding-left: var(--spacing-3_5);
-  border-left: var(--border-width-strong) solid var(--color-border);
 }
 .list-row-actions .main-action {
   min-width: var(--list-action-min-width);

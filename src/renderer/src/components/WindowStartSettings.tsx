@@ -47,7 +47,7 @@ function TimeField(props: { value: number; onCommit: (minute: number) => void })
   );
 }
 
-/** Settings → Window starts: start each account's 5-hour window as soon as it resets. */
+/** Settings → Rolling windows: start each account's 5-hour window as soon as it resets. */
 export function WindowStartSettings() {
   const ws = () => settings().windowStart;
   const [status] = createResource(() => window.api.windowStartStatus());

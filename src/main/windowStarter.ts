@@ -11,7 +11,7 @@ const RETRY_AFTER_FAILURE_MS = 15 * 60_000;
 /** The proxy found the window already running; the next snapshot shows it. */
 const HTTP_CONFLICT = 409;
 
-/** Starts each account's 5-hour window when the usage poller sees it idle (Settings → Window starts). */
+/** Starts each account's 5-hour window when the usage poller sees it idle (Settings → Rolling windows). */
 class WindowStarter {
   private busy = false;
   /** Credential id → when the app started its window. */
@@ -48,7 +48,7 @@ class WindowStarter {
   private async start(c: Credential, configured: string): Promise<void> {
     try {
       const model = configured || (await this.cheapest(c));
-      if (!model) throw new Error('The account offers no model with a known price; pick one in Settings → Window starts.');
+      if (!model) throw new Error('The account offers no model with a known price; pick one in Settings → Rolling windows.');
       const at = Date.now();
       await usage.startWindow(c.authIndex, model);
       this.started.set(c.id, at);

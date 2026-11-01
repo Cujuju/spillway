@@ -36,7 +36,7 @@ Logins: Claude (Pro/Max), Codex (ChatGPT Plus/Pro), Antigravity (Google), xAI (G
 | **Providers** | Add, import, export, renew, disable or remove logins; set priority and a note. Add API-key upstreams. |
 | **Proxy** | Endpoint and client key, **Apply**/**Undo** per client, custom proxy settings (`config.user.yaml`), management lockouts. |
 | **Logs** | The proxy's output. **Record all requests** saves full requests and responses, prompts included, until you turn it off. |
-| **Settings** | Startup, theme, tray icons, notifications, routing, window starts, updates, data folders and history. |
+| **Settings** | Startup, theme, tray icons, notifications, routing, rolling windows, updates, data folders and history. |
 | **Help** | The routing how-tos below. |
 
 <picture>
@@ -59,7 +59,7 @@ The proxy uses the account whose limit resets **soonest** (Settings → Routing 
 | Move one conversation | Activity → Requests → **Move…** | It and its subagents move; its cache starts over |
 | Stop using an account | Providers: turn off **Enabled** | Its conversations move at their next request |
 
-Also under Routing & server: **Wait for a near reset** (off by default) holds a conversation when its account resets soon, instead of moving it; **On server errors** retries on the same account (keeps the cache) or switches. **Window starts** (Settings, off by default) starts an account's next 5-hour window as soon as the last one resets, so it resets sooner.
+Also under Routing & server: **Wait for a near reset** (off by default) holds a conversation when its account resets soon, instead of moving it; **On server errors** retries on the same account (keeps the cache) or switches. **Rolling windows** (Settings, off by default) starts an account's next 5-hour window as soon as the last one resets, so it resets sooner.
 
 ## Connect clients
 

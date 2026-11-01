@@ -45,13 +45,16 @@ function writeProfile(dir: string, theme: string, data: DemoData): void {
 
 /** The client-home variables the app honours (clientHomes.ts); unset so the fake home applies. */
 const CLIENT_HOME_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME'];
+/** Electron's appData folder relative to the home folder, per platform. */
+const APP_DATA_UNDER_HOME: Partial<Record<NodeJS.Platform, string[]>> = { win32: ['AppData', 'Roaming'], darwin: ['Library', 'Application Support'] };
 
 export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOptions = {}): Promise<DemoApp> {
   const data = generate(Date.now());
   const scratch = mkdtempSync(path.join(tmpdir(), 'spillway-demo-'));
   const profile = path.join(scratch, 'profile');
   const home = path.join(scratch, 'home');
-  mkdirSync(home);
+  // Electron resolves appData under the home folder; without it a dev build fails at load. It also keeps production's config unreachable.
+  mkdirSync(path.join(home, ...APP_DATA_UNDER_HOME[process.platform] ?? []), { recursive: true });
   writeProfile(profile, theme, data);
   const proxy = await startDemoProxy(data);
 

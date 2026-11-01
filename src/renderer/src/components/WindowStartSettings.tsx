@@ -9,8 +9,8 @@ import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 const set = (fn: (d: AppSettings) => void) => void updateSettings(fn);
 
 const SPACING = [
-  { value: false, label: 'All at once', help: 'Every idle account starts its window as soon as it resets.' },
-  { value: true, label: 'Spaced out', help: 'Space each provider’s account starts evenly across a window, so one always resets soon.' },
+  { value: false, label: 'All at once', help: 'Each account’s next window starts as soon as the last one resets.' },
+  { value: true, label: 'Spaced out', help: 'Stagger each provider’s accounts evenly across a window, so one always resets soon.' },
 ] as const;
 
 /** Model ids any of the provider's subscription logins offers. */
@@ -56,8 +56,8 @@ export function WindowStartSettings() {
     <>
       <SettingsGroup>
         <SettingRow
-          label="Start windows at reset"
-          help="A 5-hour window starts at an account's first request. On reset, send a one-word request so the next window starts at once and resets sooner. Weekly limits are unaffected."
+          label="Keep windows rolling"
+          help="A 5-hour window only starts with an account's first request. When one resets, the app sends a one-word request so the next starts right away and resets sooner. Weekly limits are unaffected."
         >
           <Toggle value={ws().enabled} onChange={(v) => set((d) => void (d.windowStart.enabled = v))} />
         </SettingRow>
@@ -65,38 +65,40 @@ export function WindowStartSettings() {
           {(e) => <p class="list-row-help error">{label(e().credentialId)}: {e().message}</p>}
         </Show>
         <Show when={status()?.lastStart}>
-          {(s) => <p class="list-row-help muted">Last started {label(s().credentialId)} with {s().model} at {new Date(s().at).toLocaleTimeString()}.</p>}
+          {(s) => <p class="list-row-help muted">Last rolled {label(s().credentialId)} at {new Date(s().at).toLocaleTimeString()}, using {s().model}.</p>}
         </Show>
       </SettingsGroup>
-      <SettingsGroup title="Model">
-        <For each={WINDOW_START_PROVIDERS}>
-          {(provider) => (
-            <SettingRow label={providerLabel(provider)} help="Cheapest picks the lowest-priced model each account offers.">
-              <ModelPicker provider={provider} />
+      <Show when={ws().enabled}>
+        <SettingsGroup title="Model">
+          <For each={WINDOW_START_PROVIDERS}>
+            {(provider) => (
+              <SettingRow label={providerLabel(provider)} help="Sends the one-word request. Cheapest picks the lowest-priced model each account offers.">
+                <ModelPicker provider={provider} />
+              </SettingRow>
+            )}
+          </For>
+        </SettingsGroup>
+        <SettingsGroup title="Timing">
+          <SettingRow label="Across accounts" help={SPACING.find((s) => s.value === ws().stagger)?.help}>
+            <Seg
+              value={ws().stagger ? 'spaced' : 'together'}
+              options={[{ value: 'together', label: SPACING[0].label }, { value: 'spaced', label: SPACING[1].label }] as const}
+              onChange={(v) => set((d) => void (d.windowStart.stagger = v === 'spaced'))}
+            />
+          </SettingRow>
+          <SettingRow label="Active hours" help="Outside these local hours, windows wait to roll until the hours begin. An end before the start runs past midnight.">
+            <Toggle value={ws().activeHours.enabled} onChange={(v) => set((d) => void (d.windowStart.activeHours.enabled = v))} />
+          </SettingRow>
+          <Show when={ws().activeHours.enabled}>
+            <SettingRow nested label="From">
+              <TimeField value={ws().activeHours.startMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.startMinute = m))} />
             </SettingRow>
-          )}
-        </For>
-      </SettingsGroup>
-      <SettingsGroup title="Timing">
-        <SettingRow label="Several accounts" help={SPACING.find((s) => s.value === ws().stagger)?.help}>
-          <Seg
-            value={ws().stagger ? 'spaced' : 'together'}
-            options={[{ value: 'together', label: SPACING[0].label }, { value: 'spaced', label: SPACING[1].label }] as const}
-            onChange={(v) => set((d) => void (d.windowStart.stagger = v === 'spaced'))}
-          />
-        </SettingRow>
-        <SettingRow label="Only during set hours" help="Outside these local hours, starts wait until they begin. An end before the start runs past midnight.">
-          <Toggle value={ws().activeHours.enabled} onChange={(v) => set((d) => void (d.windowStart.activeHours.enabled = v))} />
-        </SettingRow>
-        <Show when={ws().activeHours.enabled}>
-          <SettingRow nested label="From">
-            <TimeField value={ws().activeHours.startMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.startMinute = m))} />
-          </SettingRow>
-          <SettingRow nested label="Until">
-            <TimeField value={ws().activeHours.endMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.endMinute = m))} />
-          </SettingRow>
-        </Show>
-      </SettingsGroup>
+            <SettingRow nested label="Until">
+              <TimeField value={ws().activeHours.endMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.endMinute = m))} />
+            </SettingRow>
+          </Show>
+        </SettingsGroup>
+      </Show>
     </>
   );
 }

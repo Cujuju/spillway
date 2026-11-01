@@ -4,7 +4,7 @@
   display: flex;
   flex: 1 0 0;
   flex-direction: column;
-  margin-top: var(--page-gap);
+  margin-top: var(--card-gap);
 }
 .activity-board {
   flex: 1 0 0;

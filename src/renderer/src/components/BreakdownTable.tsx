@@ -36,7 +36,7 @@ export function BreakdownTable(props: { heading: string; rows: BreakdownRow[]; t
         <For each={props.rows} fallback={<tr><td colSpan={COLUMN_COUNT} class="muted">No requests in this range.</td></tr>}>
           {(r) => (
             <tr>
-              <td class="fill" title={r.name}><div class="cell-name"><Show when={r.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show><span class="tabular">{r.name || '—'}</span></div></td>
+              <td><div class="cell-name"><Show when={r.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show><span class="tabular">{r.name || '—'}</span></div></td>
               <td class="tabular num">{r.summary.requests.toLocaleString()}</td>
               <TokenCell v={r.summary.inputTokens} />
               <TokenCell v={r.summary.outputTokens} />

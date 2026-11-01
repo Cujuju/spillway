@@ -79,6 +79,8 @@
 .board-tile-body {
   /* Square corners inside the tile's padding: no inherited scrollbar inset. */
   --corner-radius: 0px;
+  /* Containing block for its content's absolute elements (tooltip screen-reader text), so rows scrolled out of view can't stretch the page. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -98,9 +100,9 @@
   border: var(--border-width) dashed var(--color-border);
   border-radius: var(--radius-card);
 }
+/* Share takes every pixel the other columns don't need; they shrink to their content. */
 .share-cell {
-  --share-col-share: 12%;
-  width: var(--share-col-share);
+  width: 100%;
 }
 
 .board-place-below {

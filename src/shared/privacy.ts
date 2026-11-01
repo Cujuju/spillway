@@ -4,13 +4,14 @@ import type { Credential, UsageSnapshot } from './types';
 
 /** An email-like run, also inside auth file names such as "claude-name@example.com.json". */
 const EMAIL_RUN = /[^\s@/\\]+@[^\s@/\\]+\.[^\s@/\\]+/g;
-const VISIBLE_LOCAL_CHARS = 2;
+/** Fixed width, so the mask reveals neither the username nor its length. */
+const MASKED_USERNAME = '•••';
 
-/** "someone@example.com" → "so…@example.com". */
+/** "someone@example.com" → "•••@example.com". */
 export function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at <= 0) return email;
-  return `${email.slice(0, Math.min(VISIBLE_LOCAL_CHARS, at))}…${email.slice(at)}`;
+  return `${MASKED_USERNAME}${email.slice(at)}`;
 }
 
 export const maskEmails = (text: string): string => text.replace(EMAIL_RUN, maskEmail);

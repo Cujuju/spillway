@@ -107,9 +107,16 @@ async function startNormalApp(): Promise<void> {
   } else {
     // Windows groups notifications and taskbar entries by this id.
     if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
-    app.on('second-instance', () => showMainWindow());
+    // A window made before startup creates one has no IPC yet (startup can wait on a Keychain prompt), so early requests wait for it.
+    let windowCreated = false;
+    let showRequested = false;
+    const reveal = () => {
+      if (windowCreated) showMainWindow();
+      else showRequested = true;
+    };
+    app.on('second-instance', reveal);
     // macOS: clicking the Dock icon reopens the window.
-    app.on('activate', () => showMainWindow());
+    app.on('activate', reveal);
 
     void app.whenReady().then(async () => {
       await loadSecrets();
@@ -120,9 +127,10 @@ async function startNormalApp(): Promise<void> {
       applyLoginItem();
       // The tray is always present: it hosts the limit icons and the hidden-start entry point.
       ensureAppTray();
-      const hidden = launchedHidden();
+      const hidden = launchedHidden() && !showRequested;
       if (hidden) app.dock?.hide();
       createMainWindow(!hidden);
+      windowCreated = true;
       startClientDrift();
       updates.setAutoCheck(getSettings().updates.autoCheck);
       if (getSettings().proxy.autoStart) await proxy.start();

@@ -1,9 +1,9 @@
 /**
- * Signs and publishes updates from this machine (README → Updates):
+ * Signs and publishes updates from this machine (docs/releasing.md):
  *   pnpm release keygen | nightly [--dry-run] | promote <version> [--dry-run]
  * The private key stays outside the repo: $SPILLWAY_UPDATE_KEY or ~/.config/spillway/update_key.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,7 @@ import { runReleaseCli } from '@cujuju/electron-updates/node';
 import { appVersion } from '../appVersion.ts';
 import { APP_NAME } from '../src/shared/app.ts';
 import { UPDATE_REPO, UPDATE_SIGNATURE_CONTEXT } from '../src/shared/updateFeed.ts';
+import { capture, IMAGES_DIR } from './screenshots.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** The macOS architectures electron-builder.ts packages. */
@@ -27,6 +28,18 @@ if (process.argv[2] === 'nightly') {
       console.error(`${dir} is not clean at its latest pushed commit; build from it, then release. (node scripts/nightly.mts run does this for you.)`);
       process.exit(1);
     }
+  }
+}
+
+/** A stable release refreshes the README screenshots from fake data and commits them; push main to publish them. */
+if (process.argv[2] === 'promote' && !process.argv.includes('--dry-run')) {
+  execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
+  await capture();
+  const git = (args: string[]) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+  if (git(['status', '--porcelain', '--', IMAGES_DIR])) {
+    git(['add', '--', IMAGES_DIR]);
+    git(['commit', '-m', `docs: refresh screenshots for ${process.argv[3] ?? 'release'}`, '--', IMAGES_DIR]);
+    console.log('Committed refreshed screenshots; push main to publish them.');
   }
 }
 

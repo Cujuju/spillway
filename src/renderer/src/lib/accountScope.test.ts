@@ -58,6 +58,12 @@ describe('clientName', () => {
     expect(clientName('  ')).toBeNull();
     expect(clientName(null)).toBeNull();
   });
+
+  it("names an Agent SDK app by its client-app tag, not the CLI it embeds", () => {
+    expect(clientName('claude-cli/2.1.316 (external, sdk-ts, agent-sdk/0.3.276, client-app/stockapp/0.9.1)')).toBe('stockapp');
+    expect(clientName('claude-cli/2.1.316 (external, sdk-ts, client-app/chattypop)')).toBe('chattypop');
+    expect(clientName('claude-cli/2.1.316 (external, sdk-ts, agent-sdk/0.3.276)')).toBe('claude-cli');
+  });
 });
 
 describe('clientOptions', () => {

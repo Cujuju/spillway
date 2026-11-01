@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { app } from 'electron';
 import { createWriteStream, existsSync, renameSync, type FSWatcher, type WriteStream } from 'node:fs';
 import type { BuildInfo } from '@shared/buildInfo';
 import type { LogLine, ProxyStatus } from '@shared/types';
 import { appPaths, resolveProxyExecutable } from './paths';
 import { newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
-import { getSettings } from './settingsStore';
+import { getSecrets, getSettings } from './settingsStore';
 import { management } from './managementClient';
 import { LogBuffer } from './logBuffer';
 
@@ -20,6 +21,10 @@ const CRASH_WINDOW_MS = 10 * 60_000;
 const RESTART_BACKOFF_BASE_MS = 1_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Launch switch: use the proxy already at this endpoint (e.g. `scripts/demo`). The app never starts or stops it; it authenticates with the stable management key. */
+const ATTACH_SWITCH = 'proxy-endpoint';
+const attachEndpoint = app.commandLine.getSwitchValue(ATTACH_SWITCH) || null;
 
 class ProxySupervisor extends EventEmitter {
   private proc: ChildProcess | null = null;
@@ -77,6 +82,7 @@ class ProxySupervisor extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    if (attachEndpoint) return this.attach(attachEndpoint);
     if (this.proc) return;
     const settings = getSettings();
     const exe = resolveProxyExecutable(settings.proxy.executablePath);
@@ -122,18 +128,31 @@ class ProxySupervisor extends EventEmitter {
     child.on('exit', (code, signal) => this.onExit(child, code, signal));
     this.setStatus({ pid: child.pid ?? null });
 
-    const build = await this.waitReady(child);
-    if (build) {
-      this.setStatus({ state: 'running', startedAt: new Date().toISOString(), build });
-      this.emit('ready');
-    }
+    const build = await this.waitReady(() => this.proc === child);
+    if (build) this.markReady(build);
   }
 
-  /** The proxy's build once it answers; null if it exits or times out first. */
-  private async waitReady(child: ChildProcess): Promise<BuildInfo | null> {
+  private async attach(endpoint: string): Promise<void> {
+    if (this.status.state === 'starting' || this.isRunning()) return;
+    const port = Number(new URL(endpoint).port);
+    management.configure(endpoint, getSecrets().managementKey);
+    this.setStatus({ state: 'starting', executablePath: null, port, endpoint, lastError: null, pid: null, startedAt: null, build: null });
+    this.log('app', `using the proxy at ${endpoint}`);
+    const build = await this.waitReady(() => this.status.state === 'starting');
+    if (build) this.markReady(build);
+    else this.setStatus({ state: 'stopped', startedAt: null, build: null });
+  }
+
+  private markReady(build: BuildInfo): void {
+    this.setStatus({ state: 'running', startedAt: new Date().toISOString(), build });
+    this.emit('ready');
+  }
+
+  /** The proxy's build once it answers; null if `current()` turns false or it times out first. */
+  private async waitReady(current: () => boolean): Promise<BuildInfo | null> {
     const deadline = Date.now() + READY_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (this.proc !== child) return null;
+      if (!current()) return null;
       const build = await management.ping();
       if (build) return build;
       await sleep(READY_POLL_MS);

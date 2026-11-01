@@ -1,5 +1,6 @@
 import { Sunrise, Sunset } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { darkTheme, themeTokens } from '@shared/themes';
 import type { ActivityBucket } from '@shared/types';
 import { hourOfDay } from '../lib/activityHeat';
 import { calendarDays, spanDays, type Span } from '../lib/activityRange';
@@ -7,6 +8,7 @@ import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activi
 import { rhythmScene } from '../lib/rhythmScene';
 import { dayWeight, HORIZON_Y, moonPhase, skyGeometry } from '../lib/sky';
 import { createZipCoordinates, fallbackCoordinates, solarTimes } from '../lib/solarTimes';
+import { activeTheme } from '../store';
 import { ChartTip, HoverTip, type TipRow } from './ChartTip';
 import { RhythmSkyBack, RhythmSkyFront } from './RhythmSky';
 import '../styles/rhythm.css';
@@ -57,7 +59,7 @@ export function ActivityRhythm(props: {
   return (
     <div class="rhythm">
       <div ref={skyEl} class="rhythm-sky" classList={{ 'polar-day': times().sunset - times().sunrise === HOURS_PER_DAY, 'polar-night': times().sunset === times().sunrise }}
-        data-up={upBody() ?? 'none'} style={{ '--sky-gradient': sky().gradient, '--horizon': pct(HORIZON_Y) }} onPointerLeave={() => setTip(null)}>
+        data-up={upBody() ?? 'none'} style={{ ...themeTokens(darkTheme(activeTheme())), '--sky-gradient': sky().gradient, '--horizon': pct(HORIZON_Y) }} onPointerLeave={() => setTip(null)}>
         <div class="rhythm-depth" aria-hidden="true" />
         <div class="rhythm-water" aria-hidden="true">
           <div class="night" />

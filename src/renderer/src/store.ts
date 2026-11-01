@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskEmails, maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
-import { resolveTheme, themeTokens } from '@shared/themes';
+import { resolveTheme, THEMES, themeTokens, type Theme } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
 import { RHYTHM_LOOKBACK_DAYS } from './lib/rhythmProfile';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
@@ -113,6 +113,8 @@ export async function updateSettings(fn: (draft: AppSettings) => void): Promise<
 }
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+/** The applied theme, resolved from the setting and the OS preference. */
+export const [activeTheme, setActiveTheme] = createSignal<Theme>(THEMES[0]!);
 
 function applyTheme(choice: string): void {
   const theme = resolveTheme(choice, prefersDark.matches);
@@ -120,6 +122,7 @@ function applyTheme(choice: string): void {
   for (const [name, value] of Object.entries(themeTokens(theme))) root.style.setProperty(name, value);
   root.style.colorScheme = theme.scheme;
   root.dataset.theme = theme.id;
+  setActiveTheme(theme);
 }
 
 export async function initStore(): Promise<void> {

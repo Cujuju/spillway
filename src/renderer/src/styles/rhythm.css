@@ -1,11 +1,5 @@
 /* Rhythm: 24 hourly bars standing on a horizon, under a day/night sky with the sun and moon paths, over logo-style water. */
 .rhythm {
-  --rhythm-bar-gap: 3px;
-  --rhythm-cool: var(--color-accent-light);
-  /* Light schemes mix toward the surface: their text is dark and would turn warm bars brown. */
-  --rhythm-warm: light-dark(color-mix(in srgb, var(--color-amber) 75%, var(--color-surface)), color-mix(in srgb, var(--color-amber) 45%, var(--color-text)));
-  --rhythm-moon: color-mix(in srgb, var(--color-accent-light) 20%, var(--color-text));
-  --rhythm-twinkle-period: 2.8s;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -14,7 +8,14 @@
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
+/* Always a dark scene: the component sets the dark sibling's palette here in light themes. */
 .rhythm-sky {
+  --rhythm-bar-gap: 3px;
+  --rhythm-cool: var(--color-accent-light);
+  --rhythm-warm: color-mix(in srgb, var(--color-amber) 45%, var(--color-text));
+  --rhythm-moon: color-mix(in srgb, var(--color-accent-light) 20%, var(--color-text));
+  --rhythm-twinkle-period: 2.8s;
+  color-scheme: dark;
   --sky-night: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface-sunken));
   --sky-day: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface));
   --sky-glow: color-mix(in srgb, var(--color-amber) 38%, var(--color-surface-sunken));
@@ -53,8 +54,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  /* Dark schemes dim the water; light ones wash it toward the night sky so it matches the paler theme. */
-  background: light-dark(color-mix(in srgb, var(--sky-night) 55%, transparent), color-mix(in srgb, var(--color-background) 35%, transparent));
+  background: color-mix(in srgb, var(--color-background) 35%, transparent);
 }
 .rhythm-star {
   position: absolute;

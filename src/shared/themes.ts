@@ -175,6 +175,13 @@ export function resolveTheme(choice: string, prefersDark: boolean): Theme {
   return byId(id) ?? byId(SYSTEM_DARK_ID)!;
 }
 
+/** Each light theme's dark sibling, for scenes drawn dark in every theme (the rhythm sky). */
+const DARK_COUNTERPART: Record<string, string> = { light: 'dark', latte: 'mocha', 'solarized-light': 'solarized-dark' };
+
+/** The theme itself when dark, else its dark sibling (Midnight if it has none). */
+export const darkTheme = (theme: Theme): Theme =>
+  theme.scheme === 'dark' ? theme : byId(DARK_COUNTERPART[theme.id] ?? SYSTEM_DARK_ID) ?? byId(SYSTEM_DARK_ID)!;
+
 /** Palette as CSS custom properties, for document or preview-scope inline styles. */
 export function themeTokens(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};

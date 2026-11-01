@@ -130,17 +130,30 @@
   outline: var(--border-width) solid var(--color-accent-border);
 }
 /* A number with its unit inside the box: the label is the visible input, the inner input is bare. */
-/* Fits a setting's number and unit; narrow fits a table's priority. */
+/* Fits a setting's short value (number and unit, or a ZIP code); narrow fits a table's priority. */
+.number-field,
+.short-field {
+  --short-field-width: 90px;
+  width: var(--short-field-width);
+}
+/* Short text values line up with the numbers in the rows around them. */
+.short-field {
+  text-align: right;
+}
+/* A field with its error underneath; a wider error keeps the field right-aligned. */
+.field-with-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
 .number-field {
-  --number-field-width: 90px;
-  width: var(--number-field-width);
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
   cursor: text;
 }
 .number-field.narrow {
-  --number-field-width: 70px;
+  --short-field-width: 70px;
 }
 .number-field:focus-within {
   outline: var(--border-width) solid var(--color-accent-border);

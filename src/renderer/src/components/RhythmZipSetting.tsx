@@ -10,8 +10,8 @@ export function RhythmZipSetting() {
   );
   return (
     <SettingRow label="Rhythm ZIP code" help="Optional US ZIP code for sunrise and sunset. Leaving it blank keeps Rhythm at 6 AM and 6 PM.">
-      <div>
-        <input class="input" aria-label="Rhythm ZIP code" inputmode="numeric" autocomplete="postal-code"
+      <div class="field-with-error">
+        <input class="input short-field tabular" aria-label="Rhythm ZIP code" inputmode="numeric" autocomplete="postal-code"
           aria-invalid={!!error()} aria-describedby="rhythm-zip-error" value={draft()}
           onInput={(e) => edit(e.currentTarget.value)}
           onBlur={() => void save()} onKeyDown={(e) => { if (e.key === 'Enter') void save(); }} />

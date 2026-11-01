@@ -46,6 +46,11 @@ const config: Configuration = {
   win: {
     target: [{ target: 'nsis', arch: 'x64' }],
     icon: 'resources/icon.ico',
+    // Beside Spillway.exe, where Start reads the large tile logo; scripts/dev-shortcut.ps1 points Spillway Dev at the same files.
+    extraFiles: [
+      { from: 'resources/Spillway.VisualElementsManifest.xml', to: 'Spillway.VisualElementsManifest.xml' },
+      { from: 'resources/tiles', to: 'tiles' },
+    ],
   },
   nsis: {
     // No spaces: GitHub renames spaced uploads, and the update manifest names the file as built.

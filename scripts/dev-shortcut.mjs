@@ -1,8 +1,7 @@
 // `pnpm dev:shortcut`: adds a "Spillway Dev" launcher that runs `pnpm dev` from this repo.
-// Windows: Start Menu shortcut carrying the dev app ID. macOS: ~/Applications/Spillway Dev.app.
+// Windows: Start Menu shortcut with the dev app ID and the large tile logo. macOS: ~/Applications/Spillway Dev.app.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,10 +16,10 @@ function windowsShortcut() {
   // conhost --headless runs PowerShell without a console window.
   const target = path.join(process.env.SystemRoot, 'System32', 'conhost.exe');
   const args = `--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${path.join(root, 'scripts', 'dev-launch.ps1')}"`;
-  const electron = createRequire(import.meta.url)('electron');
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  execFileSync(electron, [path.join(root, 'scripts', 'dev-shortcut-win.cjs'), file, target, args, root, path.join(root, 'resources', 'icon.ico'), id], { env, stdio: 'inherit' });
+  // Windows PowerShell 5 ships with Windows, so no extra runtime is needed.
+  execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'scripts', 'dev-shortcut.ps1'),
+    '-Path', file, '-Target', target, '-Arguments', args, '-WorkingDirectory', root, '-Icon', path.join(root, 'resources', 'icon.ico'),
+    '-AppId', id, '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml')], { stdio: 'inherit' });
   return file;
 }
 

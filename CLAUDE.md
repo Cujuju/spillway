@@ -35,7 +35,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - About (Settings → About; macOS app menu opens it): credits live in `src/renderer/src/lib/credits.ts`, one entry per contributor. Logo sizes come from `scripts/make-icon.ps1`.
 - License notices ship in `licenses/` (`electron-builder.ts`; `beforePack` fails without them): npm packages per bundle from `rollup-plugin-license` (`electron.vite.config.ts`), Go modules from `go-licenses` (`scripts/build-proxy.mjs`). A Go module released without a LICENSE gets one in `scripts/go-license-overrides/<module>/`.
 
-- Demo and screenshots (`docs/setup.md`): `pnpm demo` runs the app on fake data from `scripts/demo/` (fake proxy, attached with `--proxy-endpoint`); `pnpm screenshots` writes `docs/images/`, and `release promote` refreshes, commits and pushes them. New management calls the app makes need a fake answer in `scripts/demo/server.mts`.
+- Demo and screenshots (`docs/setup.md`): `pnpm demo` runs the app on fake data from `scripts/demo/` (fake proxy, attached with `--proxy-endpoint`); `pnpm demo --screenshots` writes `docs/images/`, and `release promote` refreshes, commits and pushes them. New management calls the app makes need a fake answer in `scripts/demo/server.mts`.
 
 - Platforms: Windows and macOS. Proxy binaries live in `resources/bin/<platform>-<arch>/` (Node names); `scripts/build-proxy.mjs`, `electron-builder.yml` (`${platform}-${arch}`) and `src/main/paths.ts` must agree. UI wording for tray/taskbar comes from `src/renderer/src/lib/platform.ts`.
 

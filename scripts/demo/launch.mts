@@ -1,4 +1,4 @@
-/** `pnpm demo`: the built app on a throwaway profile, an empty home (no client logs or T3 Code state) and the fake proxy. */
+/** The built app on a throwaway profile, an empty home (no client logs or T3 Code state) and the fake proxy. */
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,6 +11,8 @@ import { startDemoProxy, type DemoProxy } from './server.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DARK_THEME = 'dracula';
+/** The app's default width (window.ts); tall enough for the Dashboard to show all five demo accounts. */
+export const DEMO_WINDOW = { width: 1280, height: 970 };
 
 export interface DemoApp {
   child: ChildProcess;
@@ -37,6 +39,7 @@ function writeProfile(dir: string, theme: string, data: DemoData): void {
   };
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(settings, null, 2));
+  writeFileSync(path.join(dir, 'window-state.json'), JSON.stringify({ ...DEMO_WINDOW, maximized: false }));
   // The app rebuilds window summaries and observed spans from these samples (historyStore.ts).
   writeFileSync(path.join(dir, 'usage-history.json'), JSON.stringify(data.history));
   mkdirSync(path.join(dir, 'proxy'), { recursive: true });
@@ -79,11 +82,4 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOpti
       rmSync(scratch, { recursive: true, force: true });
     },
   };
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const app = await launchDemo({ theme: process.argv[2] });
-  console.log(`demo: fake proxy at ${app.proxy.endpoint}, ${app.proxy.eventCount} requests`);
-  await app.exited;
-  await app.close();
 }

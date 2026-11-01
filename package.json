@@ -18,8 +18,7 @@
     "dev:shortcut": "node scripts/dev-shortcut.mjs",
     "release": "node scripts/release.mts",
     "data:merge": "node scripts/merge-data.mts",
-    "demo": "electron-vite build && node scripts/demo/launch.mts",
-    "screenshots": "electron-vite build && node scripts/screenshots.mts"
+    "demo": "electron-vite build && node scripts/demo/main.mts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

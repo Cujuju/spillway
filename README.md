@@ -98,4 +98,4 @@ Settings → Updates: **Stable** or **Nightly**, checked a minute after launch a
 - [Updates and releases](docs/releasing.md): update signing, nightly and stable releases.
 - [Data](docs/data.md): files, folders and the management key.
 
-Provider logos: [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT). Screenshots show fake data (`pnpm screenshots`).
+Provider logos: [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT). Screenshots show fake data (`pnpm demo --screenshots`).

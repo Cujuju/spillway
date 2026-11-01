@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { app, dialog } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { getSettings } from './settingsStore';
@@ -21,7 +23,21 @@ export async function requestQuit({ relaunch = false } = {}): Promise<void> {
     });
     if (r.response !== CONFIRM_BUTTON) return;
   }
-  // Electron starts the new instance once this one has exited, after the proxy stops (before-quit).
-  if (relaunch) app.relaunch();
+  if (relaunch) {
+    // Electron starts the new instance once this one has exited, after the proxy stops (before-quit).
+    if (app.isPackaged) app.relaunch();
+    else relaunchDev();
+  }
   app.quit();
+}
+
+/** `pnpm dev` exits with the dev app, so a detached launcher reruns it once this app exits; that also rebuilds the proxy. */
+function relaunchDev(): void {
+  const root = app.getAppPath();
+  const child = process.platform === 'win32'
+    // The Start Menu launcher, told to wait for this app and its `pnpm dev` to exit first.
+    ? spawn('conhost.exe', ['--headless', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'scripts', 'dev-launch.ps1'), '-AfterExit'], { cwd: root, detached: true, stdio: 'ignore' })
+    // Same command as the macOS launcher (scripts/dev-shortcut.mjs), after this process exits.
+    : spawn('/bin/zsh', ['-l', '-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; unset ELECTRON_RUN_AS_NODE; exec pnpm dev >"\${TMPDIR:-/tmp}/spillway-dev.log" 2>&1`], { cwd: root, detached: true, stdio: 'ignore' });
+  child.unref();
 }

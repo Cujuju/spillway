@@ -35,7 +35,7 @@
   cursor: grab;
   user-select: none;
 }
-/* A narrow tile truncates its title and note; the controls keep their size. */
+/* A narrow tile truncates its title and note; the remove button keeps its size. */
 .board-tile-head > .section-label,
 .board-tile-head > .chart-head-note {
   min-width: 0;
@@ -43,18 +43,36 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.board-tile-head > .seg,
-.board-tile-head > .seg-select,
-.board-tile-head > .icon-btn {
-  flex-shrink: 0;
+/* The title doubles as the metric menu: plain title text, sized to the chosen option. */
+.board-tile-head > .title-switch {
+  field-sizing: content;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
 }
-.board-tile-head .seg button {
-  white-space: nowrap;
+/* The open list reads as a menu, not as the faint uppercase title. */
+.board-tile-head > .title-switch option {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.board-tile-head > .title-switch:hover,
+.board-tile-head > .title-switch:focus-visible {
+  color: var(--color-text-muted);
+}
+/* A small remove button, so the header is only as tall as its title. */
+.board-tile-head > .icon-btn {
+  --icon-btn-size: var(--spacing-5);
+  flex-shrink: 0;
 }
 .twm[data-dragging] .board-tile-head {
   cursor: grabbing;
 }
-/* Title and note on the left; a spacer pushes the metric switch and remove button right. */
+/* Title and note on the left; a spacer pushes the remove button right. */
 .board-tile-head > .chart-head-note {
   margin-left: 0;
 }

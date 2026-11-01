@@ -29,7 +29,7 @@ export function BreakdownTable(props: { heading: string; rows: BreakdownRow[]; t
     <table class="table dense">
       <thead>
         <tr>
-          <th>{props.heading}</th><For each={NUMERIC_COLUMNS}>{(c) => <th class="num">{c}</th>}</For><th>Share</th>
+          <th>{props.heading}</th><For each={NUMERIC_COLUMNS}>{(c) => <th class="num">{c}</th>}</For><th title={`Share of ${metricLabel(props.metric)}`}>Share</th>
         </tr>
       </thead>
       <tbody>

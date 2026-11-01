@@ -41,8 +41,8 @@ export interface ActivityData {
 interface PanelDef {
   title: (spec: ActivityPanelSpec) => string;
   note?: (data: ActivityData) => string;
-  /** Shows the tile's API cost / Tokens / Requests switch. */
-  hasMetric: boolean;
+  /** The title is a menu switching the tile's metric; each option is the title for that metric. Tables show every metric as a column, so they have none. */
+  switchesMetric: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
   minSize: TileSize;
   body: (spec: () => ActivityPanelSpec, data: ActivityData) => JSX.Element;
@@ -52,7 +52,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   trend: {
     title: (spec) => metricLabel(spec.metric),
     note: (data) => data.bucketNote(),
-    hasMetric: true,
+    switchesMetric: true,
     minSize: { width: 360, height: 170 },
     body: (spec, data) => (
       <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)}
@@ -63,7 +63,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   cache: {
     title: () => 'Cache hit',
     note: () => 'Share of prompt tokens read from cache',
-    hasMetric: false,
+    switchesMetric: false,
     minSize: { width: 320, height: 150 },
     body: (_spec, data) => (
       <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS}
@@ -72,8 +72,8 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     ),
   },
   heatmap: {
-    title: () => 'Heatmap',
-    hasMetric: true,
+    title: (spec) => `Heatmap · ${metricLabel(spec.metric)}`,
+    switchesMetric: true,
     // 34px labels + 24 × (10px cell + 3px gap) + 32px padding; 60px header + 18px hours + 7 × 13px rows + 26px legend.
     minSize: { width: 380, height: 200 },
     body: (spec, data) => (
@@ -81,9 +81,9 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     ),
   },
   rhythm: {
-    title: () => 'Rhythm',
+    title: (spec) => `Rhythm · ${metricLabel(spec.metric)}`,
     note: () => 'Each hour of the day, summed',
-    hasMetric: true,
+    switchesMetric: true,
     minSize: { width: 380, height: 220 },
     body: (spec, data) => (
       <ActivityRhythm zipCode={settings().activity.zipCode} rows={data.rows()} span={data.span()} now={data.now()} metric={spec().metric}
@@ -92,7 +92,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   },
   models: {
     title: () => 'Models',
-    hasMetric: true,
+    switchesMetric: false,
     minSize: { width: 420, height: 170 },
     body: (spec, data) => (
       <BreakdownTable heading="Model" metric={spec().metric} total={data.total()}
@@ -101,7 +101,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   },
   accounts: {
     title: () => 'Accounts',
-    hasMetric: true,
+    switchesMetric: false,
     minSize: { width: 420, height: 170 },
     body: (spec, data) => (
       <BreakdownTable heading="Account" metric={spec().metric} total={data.total()}
@@ -110,7 +110,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   },
   clients: {
     title: () => 'Clients',
-    hasMetric: true,
+    switchesMetric: false,
     minSize: { width: 420, height: 170 },
     body: (spec, data) => (
       <BreakdownTable heading="Client" metric={spec().metric} total={data.total()}

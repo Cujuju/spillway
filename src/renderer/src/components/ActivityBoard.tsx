@@ -1,18 +1,15 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
-import { createMemo, createSignal, For, onCleanup, Show, untrack } from 'solid-js';
-import type { ActivityPanelSpec } from '@shared/activityBoard';
+import { createMemo, createSignal, For, Show, untrack } from 'solid-js';
+import { ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
 import { appendRow } from '../lib/boardGrow';
 import { settings, updateSettings } from '../store';
-import { METRIC_OPTIONS } from './activityFormat';
 import { ADD_CHOICES, PANELS, type ActivityData } from './activityPanels';
-import { Seg } from './ui';
 
 /** CSS token for the gap between tiles (also the divider's grab area), shared with every other card gap. */
 const TILE_GAP_TOKEN = '--card-gap';
-const ICON_PX = 14;
-/** Room for title, note, the full metric switch, gaps and remove button. */
-const FULL_HEADER_CONTROLS_PX = 560;
+/** Matches the header's title text, so the remove button doesn't set the header's height. */
+const ICON_PX = 12;
 /** Height asked for a chart added below the board: a header plus a readable chart. */
 const NEW_ROW_PX = 320;
 /** Select value meaning "nothing picked", so the menu reads as a button. */
@@ -78,7 +75,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     const addPx = Math.max(NEW_ROW_PX, PANELS[chart.spec.kind].minSize.height);
     void save(appendRow(layout(), chart.id, size, addPx, geometryOptions()), { id: chart.id, spec: chart.spec });
   };
-  const setMetric = (id: string, metric: ActivityPanelSpec['metric']) =>
+  const setMetric = (id: string, metric: ActivityMetric) =>
     updateSettings((d) => {
       const panel = d.activity.board.panels[id];
       if (panel) panel.metric = metric;
@@ -109,22 +106,23 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
           // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
           const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
           const body = def.body(spec, props.data);
-          const [compact, setCompact] = createSignal(false);
-          const measureHeader = (header: HTMLElement) => {
-            const observer = new ResizeObserver(([entry]) => setCompact(entry!.contentRect.width < FULL_HEADER_CONTROLS_PX));
-            observer.observe(header);
-            onCleanup(() => observer.disconnect());
-          };
           return (
             <Show when={specFor(tile.id)}>
               <section class="card board-tile">
-                <header ref={measureHeader} class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
-                  <div class="section-label">{def.title(spec())}</div>
+                <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
+                  <Show when={def.switchesMetric} fallback={<div class="section-label">{def.title(spec())}</div>}>
+                    <select class="section-label title-switch" aria-label="Chart metric" title="Change metric"
+                      onChange={(e) => {
+                        const metric = ACTIVITY_METRICS.find((m) => m === e.currentTarget.value);
+                        if (metric) void setMetric(tile.id, metric);
+                      }}>
+                      <For each={ACTIVITY_METRICS}>
+                        {(m) => <option value={m} selected={m === spec().metric}>{def.title({ ...spec(), metric: m })}</option>}
+                      </For>
+                    </select>
+                  </Show>
                   <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
                   <span class="spacer" />
-                  <Show when={def.hasMetric}>
-                    <Seg label="Chart metric" compact={compact()} value={spec().metric} options={METRIC_OPTIONS} onChange={(m) => void setMetric(tile.id, m)} />
-                  </Show>
                   <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>
                     <X size={ICON_PX} />
                   </button>

@@ -10,7 +10,7 @@ const set = (fn: (d: AppSettings) => void) => void updateSettings(fn);
 
 const SPACING = [
   { value: false, label: 'All at once', help: 'Every idle account starts its window as soon as it resets.' },
-  { value: true, label: 'Spaced out', help: 'Starts are spread across each provider’s accounts, a window length divided by their count apart, so one account always resets soon.' },
+  { value: true, label: 'Spaced out', help: 'Space each provider’s account starts evenly across a window, so one always resets soon.' },
 ] as const;
 
 /** Model ids any of the provider's subscription logins offers. */
@@ -57,7 +57,7 @@ export function WindowStartSettings() {
       <SettingsGroup>
         <SettingRow
           label="Start windows at reset"
-          help="A 5-hour window starts with an account's first request. When one resets, the app sends a one-word request through that account so the next window starts at once and resets sooner. Weekly limits are unaffected."
+          help="A 5-hour window starts at an account's first request. On reset, send a one-word request so the next window starts at once and resets sooner. Weekly limits are unaffected."
         >
           <Toggle value={ws().enabled} onChange={(v) => set((d) => void (d.windowStart.enabled = v))} />
         </SettingRow>
@@ -85,7 +85,7 @@ export function WindowStartSettings() {
             onChange={(v) => set((d) => void (d.windowStart.stagger = v === 'spaced'))}
           />
         </SettingRow>
-        <SettingRow label="Only during set hours" help="Outside these local hours, a reset window waits until they begin. An end before the start runs past midnight.">
+        <SettingRow label="Only during set hours" help="Outside these local hours, starts wait until they begin. An end before the start runs past midnight.">
           <Toggle value={ws().activeHours.enabled} onChange={(v) => set((d) => void (d.windowStart.activeHours.enabled = v))} />
         </SettingRow>
         <Show when={ws().activeHours.enabled}>

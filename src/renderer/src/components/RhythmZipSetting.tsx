@@ -5,8 +5,7 @@ import { createZipSunTimes, type SunTimes } from '../lib/solarTimes';
 
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
-const HELP = 'Optional US ZIP code for sunrise and sunset, looked up on this machine; it is never sent anywhere. '
-  + 'Leaving it blank keeps Rhythm at 6 AM and 6 PM.';
+const HELP = 'US ZIP code for Rhythm’s sunrise and sunset; blank uses 6 AM and 6 PM. It never leaves this machine.';
 
 const clockLabel = (hour: number) =>
   new Date(2000, 0, 1, 0, Math.round(hour * MINUTES_PER_HOUR)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

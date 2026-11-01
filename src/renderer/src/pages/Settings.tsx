@@ -21,26 +21,26 @@ const NAV: NavGroup<SettingsSection>[] = [
 ];
 
 const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
-  { value: 'soonest-reset', label: 'Soonest reset', help: 'Use the account whose weekly (then 5-hour) limit resets first, so quota that would expire unused gets spent.' },
-  { value: 'fill-first', label: 'Fill first', help: 'Stay on one account until it is limited, then move to the next.' },
-  { value: 'round-robin', label: 'Round robin', help: 'Rotate through accounts on each request.' },
+  { value: 'soonest-reset', label: 'Soonest reset', help: 'Use the account whose weekly (then 5-hour) limit resets first, spending quota before it expires.' },
+  { value: 'fill-first', label: 'Fill first', help: 'Use one account until it is limited, then the next.' },
+  { value: 'round-robin', label: 'Round robin', help: 'Rotate accounts on each request.' },
   { value: 'weighted-round-robin', label: 'Weighted round robin', help: 'Rotate, favouring accounts by weight.' },
 ];
 
 const API_KEY_ORDERS: readonly { value: ApiKeyOrder; label: string; help: string }[] = [
-  { value: 'last', label: 'Use last', help: 'Subscriptions first. API keys take over while every subscription is limited, until one recovers.' },
-  { value: 'first', label: 'Use first', help: 'API keys first. Subscriptions take over while every API key is limited or off, until one recovers.' },
+  { value: 'last', label: 'Use last', help: 'Subscriptions first; API keys only while every subscription is limited.' },
+  { value: 'first', label: 'Use first', help: 'API keys first; subscriptions only while every API key is limited or off.' },
 ];
 
 const SERVER_ERROR_ACTIONS: readonly { value: ServerErrorAction; label: string; help: string }[] = [
-  { value: 'stay', label: 'Stay', help: 'Overloads, 5xx errors and dropped connections go back to the client, which retries on the same account. The conversation keeps its prompt cache.' },
-  { value: 'switch', label: 'Switch account', help: 'Retry on another account. The conversation moves there and its prompt cache starts over; the failed account rests for a minute.' },
+  { value: 'stay', label: 'Stay', help: 'Overloads, 5xx errors and dropped connections return to the client, which retries on the same account and keeps its prompt cache.' },
+  { value: 'switch', label: 'Switch account', help: 'Retry on another account; the prompt cache starts over and the failed account rests for a minute.' },
 ];
 
 type ClientDrift = AppSettings['proxy']['clientDrift'];
 const CLIENT_DRIFT_ACTIONS: readonly { value: ClientDrift; label: string; help: string }[] = [
-  { value: 'warn', label: 'Warn', help: 'When something removes or overrides the settings applied on the Proxy page, show a notification. Re-apply from the Proxy page.' },
-  { value: 'reapply', label: 'Re-apply', help: 'When something removes or overrides the settings applied on the Proxy page, put them back. Claude Code’s managed settings need administrator approval, so they only warn.' },
+  { value: 'warn', label: 'Warn', help: 'Notify when something removes or overrides client settings applied on the Proxy page.' },
+  { value: 'reapply', label: 'Re-apply', help: 'Put back client settings that something removes or overrides. Claude Code’s managed settings need administrator approval, so they only warn.' },
 ];
 
 type Draft = AppSettings;
@@ -51,15 +51,15 @@ function General() {
   return (
     <>
       <SettingsGroup title="Startup">
-        <SettingRow label="Launch at login" help={`Opens when you sign in to ${OS_NAME}; with Start minimized it stays in the ${TRAY_NAME}. Installed builds only.`}>
+        <SettingRow label="Launch at login" help={`Open when you sign in to ${OS_NAME}. Installed builds only.`}>
           <Toggle value={g().launchAtLogin} onChange={(v) => set((d) => void (d.general.launchAtLogin = v))} />
         </SettingRow>
-        <SettingRow label="Start minimized" help={`Open to the ${TRAY_NAME} instead of showing the window.`}>
+        <SettingRow label="Start minimized" help={`Open to the ${TRAY_NAME}, without the window.`}>
           <Toggle value={g().startMinimized} onChange={(v) => set((d) => void (d.general.startMinimized = v))} />
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title="Window">
-        <SettingRow label={`Close to ${TRAY_NAME}`} help={`The close button hides the window; the proxy keeps running. Quit from the ${TRAY_NAME} menu.`}>
+        <SettingRow label={`Close to ${TRAY_NAME}`} help={`Closing hides the window and the proxy keeps running. Quit from the ${TRAY_NAME} menu.`}>
           <Toggle value={g().closeToTray} onChange={(v) => set((d) => void (d.general.closeToTray = v))} />
         </SettingRow>
         <SettingRow label={`Minimize to ${TRAY_NAME}`} help={`Minimizing hides the window from the ${TASKBAR_NAME}.`}>
@@ -76,7 +76,7 @@ function General() {
 function Appearance() {
   return (
     <SettingsGroup>
-      <SettingRow stacked label="Theme" help={`System follows the ${OS_NAME} light or dark mode setting.`}>
+      <SettingRow stacked label="Theme" help={`System follows ${OS_NAME}'s light or dark mode.`}>
         <ThemePicker value={settings().general.theme} onChange={(v) => set((d) => void (d.general.theme = v))} />
       </SettingRow>
     </SettingsGroup>
@@ -104,32 +104,32 @@ function ProxySection() {
         <SettingRow label="API keys" help={API_KEY_ORDERS.find((o) => o.value === p().apiKeyOrder)?.help}>
           <Seg value={p().apiKeyOrder} options={API_KEY_ORDERS} onChange={(v) => set((d) => void (d.proxy.apiKeyOrder = v))} />
         </SettingRow>
-        <SettingRow label="Session affinity" help="Keep a conversation on the account it started on, so prompt caches stay warm. New conversations follow the strategy.">
+        <SettingRow label="Session affinity" help="Keep each conversation on its first account, so its prompt cache stays warm.">
           <Toggle value={p().sessionAffinity} onChange={(v) => set((d) => void (d.proxy.sessionAffinity = v))} />
         </SettingRow>
         <Show when={p().sessionAffinity}>
           <SettingRow nested label="Affinity lifetime" help="An idle conversation is re-routed after this long.">
             <NumberField value={p().sessionAffinityTtlMinutes} unit="min" onCommit={(v) => set((d) => void (d.proxy.sessionAffinityTtlMinutes = v))} />
           </SettingRow>
-          <SettingRow nested label="Wait for a near reset" help="When a conversation's account runs out and resets within this long, the conversation waits for it (T3 Code snoozes) instead of moving, which would re-send its whole context. It only waits while the prompt cache would still be alive at the reset (1 hour for Claude Code). 0 turns it off.">
+          <SettingRow nested label="Wait for a near reset" help="When a conversation's account runs out but resets within this long, wait (T3 Code snoozes) instead of moving and re-sending its whole context. Only if its prompt cache lasts until the reset (1 hour in Claude Code). 0 turns it off.">
             <NumberField value={p().sessionHoldMinutes} unit="min" onCommit={(v) => set((d) => void (d.proxy.sessionHoldMinutes = v))} />
           </SettingRow>
         </Show>
         <SettingRow label="On server errors" help={SERVER_ERROR_ACTIONS.find((o) => o.value === p().serverErrors)?.help}>
           <Seg value={p().serverErrors} options={SERVER_ERROR_ACTIONS} onChange={(v) => set((d) => void (d.proxy.serverErrors = v))} />
         </SettingRow>
-        <SettingRow label="First-byte timeout" help="A stream that sends nothing for this long is cancelled and handled as a server error. 0 turns it off.">
+        <SettingRow label="First-byte timeout" help="Cancel a stream silent for this long and treat it as a server error. 0 turns it off.">
           <NumberField value={p().firstByteTimeoutSeconds} unit="s" onCommit={(v) => set((d) => void (d.proxy.firstByteTimeoutSeconds = v))} />
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title="Server">
-        <SettingRow label="Port" help="Changing it restarts the proxy. Re-apply clients on the Proxy page afterwards.">
+        <SettingRow label="Port" help="Restarts the proxy; re-apply clients on the Proxy page afterwards.">
           <NumberField value={p().port} onCommit={(v) => set((d) => void (d.proxy.port = v))} />
         </SettingRow>
-        <SettingRow label="Allow LAN connections" help="Listen on all interfaces. Other devices still need the client key. Restarts the proxy.">
+        <SettingRow label="Allow LAN connections" help="Listen on all interfaces; other devices still need the client key. Restarts the proxy.">
           <Toggle value={p().allowLan} onChange={(v) => set((d) => void (d.proxy.allowLan = v))} />
         </SettingRow>
-        <SettingRow stacked label="Proxy executable" help="Leave empty to use the cli-proxy-api binary bundled with the app. A custom binary must be a build that supports MANAGEMENT_SUPERVISOR_PASSWORD, or the app cannot manage it.">
+        <SettingRow stacked label="Proxy executable" help="Empty uses the bundled cli-proxy-api. A custom build must support MANAGEMENT_SUPERVISOR_PASSWORD, or the app cannot manage it.">
           <input class="input wide tabular" readOnly value={p().executablePath} placeholder="Bundled" />
           <button class="btn" onClick={() => void window.api.pickProxyExecutable().then((path) => path && set((d) => void (d.proxy.executablePath = path)))}>Browse…</button>
           <Show when={p().executablePath}>
@@ -151,10 +151,10 @@ function DashboardSection() {
   return (
     <SettingsGroup>
       <RhythmZipSetting />
-      <SettingRow label="Refresh interval" help="How often the app reads limits from the proxy. The proxy looks up live usage on its own schedule.">
+      <SettingRow label="Refresh interval" help="How often the app reads limits from the proxy, which looks up live usage on its own schedule.">
         <NumberField value={db().refreshIntervalSeconds} unit="s" onCommit={(v) => set((d) => void (d.dashboard.refreshIntervalSeconds = v))} />
       </SettingRow>
-      <SettingRow label="Look up usage after a pause" help="Once a Claude account gets no responses for this long, the proxy looks up its exact usage, so Refresh rarely changes it. Steady use sends no extra lookups. 0 turns it off: usage is then looked up every 15 minutes and on Refresh.">
+      <SettingRow label="Look up usage after a pause" help="After a Claude account is idle this long, the proxy looks up its exact usage; steady use adds no lookups. 0 turns it off (lookups every 15 minutes and on Refresh).">
         <NumberField value={settings().proxy.usageLookupSettleSeconds} unit="s" onCommit={(v) => set((d) => void (d.proxy.usageLookupSettleSeconds = v))} />
       </SettingRow>
       <SettingRow label="Show emails" help="Off masks account emails, for screenshots and streams.">
@@ -163,7 +163,7 @@ function DashboardSection() {
       <SettingRow label="Forecast length">
         <NumberField value={db().forecastHours} unit="h" onCommit={(v) => set((d) => void (d.dashboard.forecastHours = v))} />
       </SettingRow>
-      <SettingRow label="Drain-rate lookback" help="Recent history used for the %/hour rate and the chart's default past range.">
+      <SettingRow label="Drain-rate lookback" help="History behind the %/hour rate and the chart's default range.">
         <NumberField value={db().drainLookbackHours} unit="h" onCommit={(v) => set((d) => void (d.dashboard.drainLookbackHours = v))} />
       </SettingRow>
       <SettingRow label="Sort accounts by">
@@ -176,9 +176,9 @@ function DashboardSection() {
 function Notifications() {
   const n = () => settings().notifications;
   const rows: { key: keyof AppSettings['notifications']; label: string; help: string }[] = [
-    { key: 'limitHit', label: 'Limit reached', help: 'An account hit a 5-hour, weekly or other limit.' },
+    { key: 'limitHit', label: 'Limit reached', help: 'An account hit a limit.' },
     { key: 'limitReset', label: 'Limit reset', help: 'A limited account is usable again.' },
-    { key: 'accountSwitched', label: 'Account switched', help: 'New conversations moved to a different account.' },
+    { key: 'accountSwitched', label: 'Account switched', help: 'New conversations moved to another account.' },
     { key: 'proxyCrashed', label: 'Proxy crashed', help: 'The proxy exited unexpectedly.' },
   ];
   return (
@@ -213,13 +213,13 @@ function Advanced() {
         </For>
       </SettingsGroup>
       <SettingsGroup title="History">
-        <SettingRow label="Usage history" help="Stored samples behind the chart and drain rate, and each account's past windows.">
+        <SettingRow label="Usage history" help="Samples behind the chart, drain rate and past windows.">
           <button class="btn danger" onClick={() => setConfirming('usage')}>Clear history</button>
         </SettingRow>
-        <SettingRow label="Keep requests for" help="Days of per-request activity stored on disk. Daily totals are kept until cleared.">
+        <SettingRow label="Keep requests for" help="Per-request activity; daily totals stay until cleared.">
           <NumberField value={settings().activity.retentionDays} unit="d" onCommit={(v) => set((d) => void (d.activity.retentionDays = v))} />
         </SettingRow>
-        <SettingRow label="Activity history" help="Stored requests and daily totals behind the Activity page.">
+        <SettingRow label="Activity history" help="Requests and daily totals behind the Activity page.">
           <button class="btn danger" onClick={() => setConfirming('activity')}>Clear history</button>
         </SettingRow>
       </SettingsGroup>

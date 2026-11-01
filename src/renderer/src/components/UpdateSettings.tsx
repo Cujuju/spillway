@@ -31,10 +31,10 @@ export function UpdateSettings() {
 
   return (
     <SettingsGroup>
-      <SettingRow label="Channel" help="Nightly gets a build of every pushed change; stable gets the ones promoted after testing. Switching to stable never downgrades: you stay on this version until stable passes it.">
+      <SettingRow label="Channel" help="Nightly gets the latest changes; stable gets tested ones. Switching to stable never downgrades: you stay on this version until stable passes it.">
         <Seg label="Update channel" value={settings().updates.channel} options={CHANNEL_OPTIONS} onChange={(v) => void updateSettings((d) => void (d.updates.channel = v))} />
       </SettingRow>
-      <SettingRow label="Check automatically" help="Checks shortly after launch and every few hours, and notifies you. Nothing downloads or installs until you choose to.">
+      <SettingRow label="Check automatically" help="Check after launch and every few hours, and notify. Nothing downloads or installs until you choose.">
         <Toggle value={settings().updates.autoCheck} onChange={(v) => void updateSettings((d) => void (d.updates.autoCheck = v))} />
       </SettingRow>
       <SettingRow label={`Version ${build()?.version ?? ''}`} help="Updates are verified against this app's signing key before they install.">

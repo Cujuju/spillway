@@ -8,9 +8,15 @@ import { launchDemo } from './demo/launch.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const IMAGES_DIR = path.join(ROOT, 'docs', 'images');
-/** The app's default window size (window.ts), at 1x so images stay small in git history. */
+/** The app's default window size (window.ts), at 1x so images stay small in git history. Height then grows to fit FIT_PAGE. */
 const VIEWPORT = { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false };
 const PAGES = ['Dashboard', 'Activity', 'Providers'];
+/** Every demo account must show here, so all shots take its full height. */
+const FIT_PAGE = 'Dashboard';
+/** Layout settles after one resize; more passes only guard against content that reflows. */
+const MAX_FIT_PASSES = 3;
+/** Pixels hidden below the fold in the page's scroll areas. */
+const OVERFLOW_JS = `Math.max(0, ...[...document.querySelectorAll('*')].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => e.scrollHeight - e.clientHeight))`;
 const THEMES = [{ scheme: 'dark', theme: 'dracula' }, { scheme: 'light', theme: 'light' }];
 /** Charts and lists finish drawing well inside this after a page or theme change. */
 const SETTLE_MS = 2_000;
@@ -19,6 +25,7 @@ const POLL_MS = 250;
 const READY_TIMEOUT_MS = 60_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const open = (cdp: Cdp, page: string) => cdp.eval(`document.querySelector('button.nav-btn[aria-label=${JSON.stringify(page)}]').click()`);
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -99,11 +106,20 @@ async function capture(): Promise<string[]> {
     await until('account usage', () => cdp.eval<boolean>('window.api.usageLatest().then((u) => u.snapshot !== null)').then((ok) => ok || null));
     await until('stored requests', () =>
       cdp.eval<number>('window.api.activityTotals().then((t) => t.reduce((n, r) => n + r.requests, 0))').then((n) => (n >= app.proxy.eventCount ? n : null)));
+    await open(cdp, FIT_PAGE);
+    let height = VIEWPORT.height;
+    for (let pass = 0; pass < MAX_FIT_PASSES; pass++) {
+      await sleep(SETTLE_MS);
+      const overflow = await cdp.eval<number>(OVERFLOW_JS);
+      if (overflow <= 0) break;
+      height += overflow;
+      await cdp.send('Emulation.setDeviceMetricsOverride', { ...VIEWPORT, height });
+    }
     mkdirSync(IMAGES_DIR, { recursive: true });
     for (const { scheme, theme } of THEMES) {
       await cdp.eval(`window.api.getSettings().then((s) => window.api.setSettings({ ...s, general: { ...s.general, theme: ${JSON.stringify(theme)} } }))`);
       for (const page of PAGES) {
-        await cdp.eval(`document.querySelector('button.nav-btn[aria-label=${JSON.stringify(page)}]').click()`);
+        await open(cdp, page);
         await sleep(SETTLE_MS);
         const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
         const file = path.join(IMAGES_DIR, `${page.toLowerCase()}-${scheme}.png`);

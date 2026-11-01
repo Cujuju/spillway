@@ -17,6 +17,7 @@
     "package:dir": "electron-vite build && electron-builder --dir --publish never",
     "package:dev": "node scripts/package-dev.mjs",
     "release": "node scripts/release.mts",
+    "data:merge": "node scripts/merge-data.mts",
     "demo": "electron-vite build && node scripts/demo/launch.mts",
     "screenshots": "electron-vite build && node scripts/screenshots.mts"
   },

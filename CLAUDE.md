@@ -15,6 +15,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - `src/shared/`: types, settings schema and normalizer, tray readings.
 
 ## Contracts
+- Data transfer: `--data-export=<file>` / `--data-import=<file>`, with a 64-hex `SPILLWAY_TRANSFER_KEY`; each app only ever opens its own database.
 - Proxy management API: `docs/desktop-api.md` in the fork.
 - v8 `PUT /config/<path>` replaces the node with the raw JSON body, so send the value unwrapped (no `{value}`).
 - The app authenticates with a per-launch supervisor password (`MANAGEMENT_SUPERVISOR_PASSWORD`), exempt from the loopback IP ban. Other wrong keys still lock 127.0.0.1 out (5 minutes after 5, then 30 minutes after 3); the Proxy page can reset it.

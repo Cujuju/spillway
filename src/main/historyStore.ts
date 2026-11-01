@@ -3,12 +3,11 @@ import type { HistorySample, ObservedSpan, UsageSnapshot, WindowSummary } from '
 import { HISTORY_SAMPLE_SPACING_MS, missedReadingGapMs, resetBetween } from '@shared/usageWindows';
 import { appPaths } from './paths';
 import { getSettings, writeFileAtomic } from './settingsStore';
+import { HISTORY_RETENTION_MS } from './historyMerge';
 import { foldObserved, foldSample, pruneObserved, pruneSummaries } from './windowSummaries';
 
 const MS_PER_SECOND = 1000;
 
-/** Longest forecast lookback plus the chart's past range. */
-const RETENTION_MS = 14 * 24 * 60 * 60_000;
 /** The newest point changes every poll; saving at the spacing bounds writes, and quit flushes it. */
 const SAVE_DELAY_MS = HISTORY_SAMPLE_SPACING_MS;
 
@@ -46,7 +45,7 @@ export function appendSample(samples: HistorySample[], next: HistorySample, now 
   const anchor = samples.at(-2);
   const provisional = last && anchor && Date.parse(last.at) - Date.parse(anchor.at) < HISTORY_SAMPLE_SPACING_MS;
   const out = provisional && !hasReset(last, next) ? [...samples.slice(0, -1), next] : [...samples, next];
-  const cutoff = now - RETENTION_MS;
+  const cutoff = now - HISTORY_RETENTION_MS;
   const firstKept = out.findIndex((s) => Date.parse(s.at) >= cutoff);
   return firstKept <= 0 ? out : out.slice(firstKept);
 }

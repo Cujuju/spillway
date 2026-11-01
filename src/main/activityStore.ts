@@ -1,4 +1,6 @@
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
+import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
+export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
@@ -8,18 +10,6 @@ import {
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
 import { accountedUsage, identityKey, reconcileUsage, rememberUsage } from './usageLedger';
-
-/** Oldest local day inside the newest `retentionDays` days ending today. */
-export function oldestKeptDay(today: number, retentionDays: number): string {
-  const d = new Date(today);
-  return localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (retentionDays - 1)).getTime());
-}
-
-/** Local days, YYYY-MM-DD, from `count - 1` days before `today` through today. */
-export function lastDays(today: number, count: number): string[] {
-  const d = new Date(today);
-  return Array.from({ length: count }, (_, i) => localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (count - 1 - i)).getTime()));
-}
 
 interface RequestRow {
   id: number;
@@ -99,7 +89,9 @@ export class ActivityLog {
   }
 
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean {
-    file = clientLogKey(file);
+    return this.importEvents(events, { file: clientLogKey(file), state });
+  }
+  importEvents(events: ActivityEvent[], checkpoint?: { file: string; state: string }): boolean {
     try {
       const changed = this.db.transaction(() => {
         const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
@@ -110,10 +102,10 @@ export class ActivityLog {
         if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
         this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldestKeptDay(Date.now(), this.config.retentionDays));
         const changed = events.length > 0 && changes() !== before;
-        this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(file, state);
+        if (checkpoint) this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(checkpoint.file, checkpoint.state);
         return changed;
       })();
-      this.checkpoints.set(file, state);
+      if (checkpoint) this.checkpoints.set(checkpoint.file, checkpoint.state);
       this.db.pragma('incremental_vacuum');
       return changed;
     } catch (e) {
@@ -123,6 +115,7 @@ export class ActivityLog {
       throw e;
     }
   }
+  exportEvents(): Generator<ActivityEvent> { return exportActivityEvents(this.db); }
 
   append(event: ActivityEvent): StoredActivityEvent | null {
     // A committed append can lose its reply in a worker crash; preserve its original movedFrom on replay.
@@ -155,6 +148,7 @@ export class ActivityLog {
         }
         if (merge.skip) return merge.id ?? 0;
         const row = addToTotals(totals, e);
+        if (this.importing) preserveImportedCost(row, e);
         this.db.prepare('INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)').run(storedTotalKey(row), JSON.stringify(row));
         const id = Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
         rememberUsage(this.db, e, id);

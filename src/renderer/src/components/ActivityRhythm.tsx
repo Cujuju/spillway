@@ -1,5 +1,5 @@
 import { Sun } from 'lucide-solid';
-import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import type { ActivityBucket } from '@shared/types';
 import { hourOfDay } from '../lib/activityHeat';
 import { calendarDays, spanDays, type Span } from '../lib/activityRange';
@@ -7,8 +7,7 @@ import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activi
 import { moonPath, moonPhase, phaseName, skyBody, sunArc, skyGeometry } from '../lib/sky';
 import { ChartTip, HoverTip, type TipRow } from './ChartTip';
 import '../styles/rhythm.css';
-import { zipCoordinates } from '../lib/zipCoordinates';
-import { FALLBACK_SUN_TIMES, solarTimes } from '../lib/solarTimes';
+import { createZipSunTimes, FALLBACK_SUN_TIMES } from '../lib/solarTimes';
 
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
@@ -34,11 +33,8 @@ export function ActivityRhythm(props: {
   format: (s: Summary) => string;
   tooltip: (s: Summary) => TipRow[];
 }) {
-  const [coordinates] = createResource(() => props.zipCode || null, (zip) => zipCoordinates(zip).catch(() => null));
-  const times = createMemo(() => {
-    const point = coordinates();
-    return point && props.zipCode ? solarTimes(new Date(props.now), point) : FALLBACK_SUN_TIMES;
-  });
+  const zipTimes = createZipSunTimes(() => props.zipCode ?? '', () => props.now);
+  const times = () => zipTimes() ?? FALLBACK_SUN_TIMES;
   const sky = createMemo(() => skyGeometry(times()));
   const stats = createMemo(() => hourOfDay(props.rows, props.span, props.metric));
   const clock = () => { const d = new Date(props.now); return d.getHours() + d.getMinutes() / MINUTES_PER_HOUR; };

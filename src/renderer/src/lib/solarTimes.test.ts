@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { solarTimes } from './solarTimes';
+import { createRoot, createSignal } from 'solid-js';
+import { createZipSunTimes, solarTimes } from './solarTimes';
 import { skyBody, sunArc } from './sky';
 import { zipCoordinates } from './zipCoordinates';
 
@@ -61,4 +62,18 @@ describe('bundled Census ZCTAs', () => {
     expect(await zipCoordinates('9021')).toBeNull();
     expect(await zipCoordinates('')).toBeNull();
   });
+});
+
+it('follows the clock and clears when the ZIP is blanked', async () => {
+  const [zip, setZip] = createSignal('90210');
+  const [clock, setClock] = createSignal(new Date('2026-06-21T12:00:00').getTime());
+  const { times, dispose } = createRoot((dispose) => ({ dispose, times: createZipSunTimes(zip, clock) }));
+  try {
+    await vi.waitFor(() => expect(times()).not.toBeNull());
+    const summer = times()!;
+    setClock(new Date('2026-12-21T12:00:00').getTime());
+    expect(times()!.sunset - times()!.sunrise).toBeLessThan(summer.sunset - summer.sunrise);
+    setZip('');
+    expect(times()).toBeNull();
+  } finally { dispose(); }
 });

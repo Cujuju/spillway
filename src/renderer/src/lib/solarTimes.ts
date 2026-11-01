@@ -1,4 +1,5 @@
-import type { Coordinates } from './zipCoordinates';
+import { createMemo, createResource, type Accessor } from 'solid-js';
+import { zipCoordinates, type Coordinates } from './zipCoordinates';
 
 export interface SunTimes { sunrise: number; sunset: number }
 export const FALLBACK_SUN_TIMES: SunTimes = { sunrise: 6, sunset: 18 };
@@ -60,4 +61,14 @@ export function solarTimes(date: Date, coordinates: Coordinates): SunTimes {
     return utcEvents(midnight, coordinates).kind === 'polar-day' ? { sunrise: 0, sunset: 24 } : { sunrise: 12, sunset: 12 };
   }
   return { sunrise: selected.sunrise ?? 0, sunset: selected.sunset ?? 24 };
+}
+
+/** Sun times on `now`'s local date for a ZIP; null while loading, or for a blank or unknown ZIP. */
+export function createZipSunTimes(zip: () => string, now: () => number): Accessor<SunTimes | null> {
+  const [coordinates] = createResource(() => zip() || null, (z) => zipCoordinates(z).catch(() => null));
+  // A blank ZIP stops the resource but keeps its last value, so the ZIP is checked again here.
+  return createMemo(() => {
+    const point = coordinates();
+    return point && zip() ? solarTimes(new Date(now()), point) : null;
+  });
 }

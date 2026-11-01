@@ -1,4 +1,4 @@
-// Scheduled nightly, every 6 hours per machine (README → Updates → Scheduled nightly).
+// Scheduled nightly, every 6 hours per machine (docs/releasing.md → Scheduled nightly).
 // Usage: node scripts/nightly.mts run [--log] | install | uninstall
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';

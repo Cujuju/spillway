@@ -341,11 +341,13 @@ th[aria-sort] .sort-btn {
   padding: var(--spacing-2_5);
   text-align: center;
 }
-.chart-note {
-  margin-top: var(--page-gap);
-  font-size: var(--text-xs);
-  line-height: var(--leading-body);
+/* Info icon beside the time frame; its tooltip explains API cost and proxy coverage. */
+.activity-info {
+  display: inline-flex;
+  color: var(--color-text-muted);
+  cursor: help;
 }
+.activity-info:hover { color: var(--color-text); }
 
 /* ── Account filter: a header button and the popover list under it ── */
 .account-filter-btn {

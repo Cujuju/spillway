@@ -8,12 +8,11 @@ import { compactNumber, usd } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, holdActivityDays, now } from '../store';
 import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
+import { ActivityInfo } from './ActivityInfo';
 import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
 import { Seg } from './ui';
 
-/** Date the price table in src/shared/modelPrices.ts was checked. */
-const PRICES_CHECKED = 'Oct 26, 2026';
 const RANGE_LABELS: Record<Range, string> = { '24h': '24h', '7d': '7d', '30d': '30d', '90d': '90d', '1y': '1y', all: 'All', custom: 'Custom' };
 const RANGE_OPTIONS = RANGES.map((value) => ({ value, label: RANGE_LABELS[value] }));
 /** Default custom span: the last 30 days. */
@@ -80,6 +79,7 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
     <>
       <div class="toolbar" ref={measureToolbar}>
         <Seg label="Time frame" compact={compact()} value={range()} options={RANGE_OPTIONS} onChange={setRange} />
+        <ActivityInfo unpriced={unpriced()} />
         <Show when={range() === 'custom'}>
           <input type="date" class="input" aria-label="From" value={custom().from} max={custom().to}
             onChange={(e) => e.currentTarget.value && setCustom({ ...custom(), from: e.currentTarget.value })} />
@@ -100,12 +100,6 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
       </div>
 
       <ActivityBoard data={data} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
-
-      <p class="muted chart-note">
-        API cost uses list prices checked {PRICES_CHECKED}, with cache writes at the 5-minute rate: what the same tokens would cost
-        on the pay-as-you-go API, not what a subscription charges.
-        <Show when={unpriced().length}> No price for {unpriced().join(', ')}; those requests are left out.</Show>
-      </p>
     </>
   );
 }

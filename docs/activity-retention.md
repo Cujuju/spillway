@@ -61,7 +61,7 @@ accounting, leaves the database usable and retries next launch. An expression
 index puts source, provider and token/model equality before the timestamp range;
 coverage indexes alone would scan every identity in that provider's time window.
 
-The October 31 disposable-copy audit for October 25–27 (local days) found
+The October 31 disposable-copy audit for October 25â€“27 (local days) found
 8,843 unique Claude matches among 10,027 eligible proxy identities, with zero
 ambiguous matches (timestamp delta median 4.4 seconds, maximum 76 seconds).
 Codex had zero unique matches among 1,250 eligible proxy identities, with 202
@@ -70,10 +70,10 @@ legacy proxy rows matched (78%), exceeding the overall 50% gate.
 Residual: unmatched or ambiguous legacy rows, including Codex history, may still
 double count in All usage.
 
-The implementation verification on a fresh disposable copy reduced October 25–27
+The implementation verification on a fresh disposable copy reduced October 25â€“27
 All-usage requests from 24,363 to 15,521 for Claude; Codex stayed at 1,742.
 The whole-history backfill took 5.865 seconds, matching 8,971 Claude pairs
-(including 8,843 proxy rows dated October 25–27). Re-running left totals unchanged;
+(including 8,843 proxy rows dated October 25â€“27). Re-running left totals unchanged;
 `integrity_check` passed. The candidate query plan searched `usage_legacy_match`
 by source, provider, signature and timestamp range.
 

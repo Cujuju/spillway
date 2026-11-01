@@ -36,7 +36,7 @@ export function ActivityHeatmap(props: {
 
   return (
     <div class="heat-card" onPointerLeave={() => setTip(null)}>
-      <div class="heat-scroll">
+      <div class="heat-body">
         <div class="heat" role="table" aria-label="Activity by weekday and hour (24-hour clock)">
           <div role="row" style={{ display: 'contents' }}>
             <div role="columnheader" class="heat-day" />

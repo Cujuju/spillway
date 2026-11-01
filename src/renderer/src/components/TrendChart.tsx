@@ -11,8 +11,10 @@ const BAR_FILL = 0.72;
 /** Bars round their top (data end) by this much, never wider than half the bar. */
 const BAR_RADIUS = 4;
 const POINT_RADIUS = 2.5;
-/** Smallest plot a fill-height chart draws: axis labels plus a few gridlines. */
-const MIN_FILL_HEIGHT_PX = 80;
+/** Smallest height a fill-height chart draws: x labels plus two gridlines. */
+export const TREND_MIN_HEIGHT_PX = 80;
+/** Closest two y gridlines sit: an 11px axis label plus room, so a short chart drops gridlines instead of overlapping labels. */
+const MIN_Y_TICK_GAP_PX = 20;
 
 export interface TrendPoint {
   start: number;
@@ -47,7 +49,7 @@ export function TrendChart(props: TrendChartProps) {
   const descriptionId = createUniqueId();
   let host!: HTMLDivElement;
   const [width, setWidth] = createSignal(800);
-  const [fillHeight, setFillHeight] = createSignal(MIN_FILL_HEIGHT_PX);
+  const [fillHeight, setFillHeight] = createSignal(TREND_MIN_HEIGHT_PX);
   const height = () => props.height ?? fillHeight();
   const [hover, setHover] = createSignal<number | null>(null);
   const [pointer, setPointer] = createSignal({ x: 0, y: 0 });
@@ -55,7 +57,7 @@ export function TrendChart(props: TrendChartProps) {
     const ro = new ResizeObserver(([e]) => {
       if (!e) return;
       setWidth(Math.max(200, e.contentRect.width));
-      setFillHeight(Math.max(MIN_FILL_HEIGHT_PX, e.contentRect.height));
+      setFillHeight(Math.max(TREND_MIN_HEIGHT_PX, e.contentRect.height));
     });
     ro.observe(host);
     onCleanup(() => ro.disconnect());
@@ -94,7 +96,7 @@ export function TrendChart(props: TrendChartProps) {
     return changes.filter((_, k) => k % step === 0);
   });
   const yTicks = createMemo(() => {
-    const count = props.yTicks ?? DEFAULT_Y_TICKS;
+    const count = Math.max(1, Math.min(props.yTicks ?? DEFAULT_Y_TICKS, Math.floor(plotH() / MIN_Y_TICK_GAP_PX)));
     const max = yMax();
     return Array.from({ length: count + 1 }, (_, i) => (max * i) / count);
   });

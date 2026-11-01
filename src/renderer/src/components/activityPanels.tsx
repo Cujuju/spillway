@@ -13,10 +13,14 @@ import { ActivityRhythm } from './ActivityRhythm';
 import { axisMetric, countRows, formatMetric, metricLabel } from './activityFormat';
 import type { TipRow } from './ChartTip';
 import { BreakdownTable } from './BreakdownTable';
-import { TrendChart } from './TrendChart';
+import { TREND_MIN_HEIGHT_PX, TrendChart } from './TrendChart';
 
 /** The hit rate sits near 100% most of the time; 0/50/100% lines are enough. */
 const CACHE_Y_TICKS = 2;
+/** A tile's height around its body: 2 × (12px padding + 1px border) + 20px header + 6px header gap. */
+const TILE_CHROME_PX = 52;
+/** A trend tile is as short as its chart allows. */
+const TREND_TILE_MIN_HEIGHT_PX = TILE_CHROME_PX + TREND_MIN_HEIGHT_PX;
 
 /** Everything the Overview's charts read, for the selected range. */
 export interface ActivityData {
@@ -53,7 +57,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: (spec) => metricLabel(spec.metric),
     note: (data) => data.bucketNote(),
     switchesMetric: true,
-    minSize: { width: 360, height: 170 },
+    minSize: { width: 360, height: TREND_TILE_MIN_HEIGHT_PX },
     body: (spec, data) => (
       <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)}
         points={data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) }))}
@@ -64,7 +68,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'Cache hit',
     note: () => 'Share of prompt tokens read from cache',
     switchesMetric: false,
-    minSize: { width: 320, height: 150 },
+    minSize: { width: 320, height: TREND_TILE_MIN_HEIGHT_PX },
     body: (_spec, data) => (
       <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS}
         points={data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate }))}

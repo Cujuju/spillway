@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRoot, createSignal } from 'solid-js';
-import { createZipSunTimes, solarTimes } from './solarTimes';
-import { skyBody, sunArc } from './sky';
+import { createZipSunTimes, fallbackCoordinates, solarTimes, sunAltitude } from './solarTimes';
 import { zipCoordinates } from './zipCoordinates';
 
 // Expected minutes: NOAA calculator main.js calcSunriseSetUTC, with its second-pass Julian date refinement.
@@ -37,20 +36,29 @@ describe('solar times', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('keeps polar day/night finite', () => {
-    for (const month of [5, 11]) {
-      const times = solarTimes(new Date(2026, month, 21), { latitude: 90, longitude: 0 });
-      expect(Number.isFinite(skyBody(12, times).height)).toBe(true);
-      expect(sunArc(48, times).every((p) => Number.isFinite(p.height))).toBe(true);
-      expect(skyBody(12, times).body).toBe(month === 5 ? 'sun' : 'moon');
-    }
+  it.each(cases)('puts the sun on the horizon at NOAA sunrise and sunset on %s', (day, zone, latitude, longitude, rise, set) => {
+    try {
+      vi.stubEnv('TZ', zone);
+      // Wall-clock minutes, so DST change days land on the right instant.
+      const at = (minutes: number) => { const d = new Date(`${day}T00:00:00`); d.setMinutes(minutes); return d.getTime(); };
+      for (const minutes of [rise, set]) {
+        // NOAA sunrise is the refracted upper limb: the centre sits 0.833 degrees below the horizon.
+        expect(sunAltitude(at(minutes), { latitude, longitude })).toBeCloseTo(-0.833, 0);
+      }
+      const noon = at((rise + set) / 2);
+      expect(sunAltitude(noon, { latitude, longitude })).toBeGreaterThan(0);
+      expect(sunAltitude(noon + 12 * 3_600_000, { latitude, longitude })).toBeLessThan(0);
+    } finally { vi.unstubAllEnvs(); }
   });
 
-  it('moves the bodies and arc with the supplied daylight interval', () => {
-    const times = { sunrise: 8, sunset: 16 };
-    expect(skyBody(7, times).body).toBe('moon');
-    expect(skyBody(12, times).height).toBeCloseTo(1);
-    expect(sunArc(2, times).map((p) => p.x)).toEqual([8 / 24, 12 / 24, 16 / 24]);
+  it('falls back to the equator on the local meridian: a 12-hour day around noon', () => {
+    try {
+      vi.stubEnv('TZ', 'America/New_York');
+      const day = new Date('2026-03-20T12:00:00');
+      const times = solarTimes(day, fallbackCoordinates(day.getTime()));
+      expect(times.sunset - times.sunrise).toBeCloseTo(12, 0);
+      expect(Math.abs((times.sunrise + times.sunset) / 2 - 12)).toBeLessThan(0.5);
+    } finally { vi.unstubAllEnvs(); }
   });
 });
 

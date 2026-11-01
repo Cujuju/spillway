@@ -3,7 +3,7 @@ import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
 import { hourOfDay, weekdayHours } from './activityHeat';
 import { rangeSpan } from './activityRange';
-import { moonPath, moonPhase, phaseName, skyBody, SUNRISE_HOUR, SUNSET_HOUR } from './sky';
+import { dayWeight, moonPath, moonPhase, phaseName } from './sky';
 
 // Thursday Oct 29 2026, 14:30 local.
 const NOW = new Date(2026, 9, 29, 14, 30).getTime();
@@ -55,11 +55,15 @@ describe('rhythm', () => {
 });
 
 describe('sky', () => {
-  it('puts the sun up between sunrise and sunset, highest at midday', () => {
-    expect(skyBody(SUNRISE_HOUR).body).toBe('sun');
-    expect(skyBody(SUNSET_HOUR).body).toBe('moon');
-    expect(skyBody((SUNRISE_HOUR + SUNSET_HOUR) / 2).height).toBeCloseTo(1);
-    expect(skyBody(0).height).toBeCloseTo(1);
+  it('weights bars by daylight: night 0, day 1, half at sunrise and sunset, across midnight too', () => {
+    const times = { sunrise: 7, sunset: 18 };
+    expect(dayWeight(2, times)).toBe(0);
+    expect(dayWeight(12, times)).toBe(1);
+    expect(dayWeight(7, times)).toBeCloseTo(0.5);
+    expect(dayWeight(18, times)).toBeCloseTo(0.5);
+    expect(dayWeight(1, { sunrise: 20, sunset: 4 })).toBe(1);
+    expect(dayWeight(12, { sunrise: 0, sunset: 24 })).toBe(1);
+    expect(dayWeight(12, { sunrise: 12, sunset: 12 })).toBe(0);
   });
 
   it('counts phase from the reference new moon over a mean synodic month', () => {

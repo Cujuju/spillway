@@ -1,11 +1,11 @@
-/* Rhythm: 24 hourly bars over a day/night sky. Sky colours derive from theme tokens. */
+/* Rhythm: 24 hourly bars standing on a horizon, under a day/night sky with the sun and moon paths, over logo-style water. */
 .rhythm {
-  --rhythm-bar-gap: 2px;
-  --rhythm-star-px: 2px;
-  --rhythm-star-alpha: 55%;
-  --rhythm-star-dim-alpha: 25%;
-  --rhythm-arc-alpha: 45%;
-  --rhythm-horizon-alpha: 12%;
+  --rhythm-bar-gap: 3px;
+  --rhythm-cool: var(--color-accent-light);
+  /* Light schemes mix toward the surface: their text is dark and would turn warm bars brown. */
+  --rhythm-warm: light-dark(color-mix(in srgb, var(--color-amber) 75%, var(--color-surface)), color-mix(in srgb, var(--color-amber) 45%, var(--color-text)));
+  --rhythm-moon: color-mix(in srgb, var(--color-accent-light) 20%, var(--color-text));
+  --rhythm-twinkle-period: 2.8s;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -27,72 +27,157 @@
 }
 .rhythm-sky.polar-day { background: var(--sky-day); }
 .rhythm-sky.polar-night { background: var(--sky-night); }
+/* Dark zenith fading to a warm haze at the horizon. */
+.rhythm-depth {
+  position: absolute;
+  inset: 0 0 calc(100% - var(--horizon));
+  background: linear-gradient(color-mix(in srgb, var(--color-background) 65%, transparent),
+    transparent 70%, color-mix(in srgb, var(--color-amber) 12%, transparent));
+  pointer-events: none;
+}
+.rhythm-water {
+  position: absolute;
+  inset: var(--horizon) 0 0;
+  pointer-events: none;
+}
+.rhythm-water > div {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+  /* The strip's top row is the far waterline, so it spans the band's full height. */
+  background-size: auto 100%;
+}
+.rhythm-water .night { background-image: url('../assets/rhythm/water-night.jpg'); }
+.rhythm-water .day { background-image: url('../assets/rhythm/water-day.jpg'); opacity: 0.55; }
+.rhythm-water::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Dark schemes dim the water; light ones wash it toward the night sky so it matches the paler theme. */
+  background: light-dark(color-mix(in srgb, var(--sky-night) 55%, transparent), color-mix(in srgb, var(--color-background) 35%, transparent));
+}
 .rhythm-star {
   position: absolute;
-  width: var(--rhythm-star-px);
-  height: var(--rhythm-star-px);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-text-soft) var(--rhythm-star-alpha), transparent);
+  background: var(--color-text-soft);
+  opacity: calc(var(--star-alpha) * var(--star-fade));
+  pointer-events: none;
 }
-.rhythm-star.dim { background: color-mix(in srgb, var(--color-text-soft) var(--rhythm-star-dim-alpha), transparent); }
-.rhythm-arc {
+.rhythm-star.size-0 { --star-alpha: 0.56; width: 1.4px; height: 1.4px; }
+.rhythm-star.size-1 { --star-alpha: 0.71; width: 2.2px; height: 2.2px; }
+.rhythm-star.size-2 { --star-alpha: 0.9; width: 3.2px; height: 3.2px; }
+.rhythm-star.twinkle { animation: rhythm-twinkle var(--rhythm-twinkle-period) ease-in-out infinite; }
+@keyframes rhythm-twinkle { 50% { opacity: calc(var(--star-alpha) * var(--star-fade) * 0.25); } }
+@media (prefers-reduced-motion: reduce) { .rhythm-star.twinkle { animation: none; } }
+.rhythm-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
-.rhythm-arc polyline {
+.rhythm-glow stop { stop-color: var(--glow); }
+.rhythm-glow.sun { --glow: var(--color-amber); }
+.rhythm-glow.moon { --glow: var(--rhythm-moon); }
+.rhythm-glow.sun stop:nth-child(1) { stop-opacity: 0.55; }
+.rhythm-glow.sun stop:nth-child(2) { stop-opacity: 0.18; }
+.rhythm-glow.moon stop:nth-child(1) { stop-opacity: 0.35; }
+.rhythm-glow.moon stop:nth-child(2) { stop-opacity: 0.12; }
+.rhythm-glow stop:nth-child(3) { stop-opacity: 0; }
+/* Travelled path solid, the rest dotted; fainter under the water. */
+.rhythm-path {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-text-soft) var(--rhythm-arc-alpha), transparent);
-  stroke-width: var(--border-width);
-  stroke-dasharray: 2 4;
-  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.rhythm-arc line {
-  stroke: color-mix(in srgb, var(--color-text-soft) var(--rhythm-horizon-alpha), transparent);
-  stroke-width: var(--border-width);
-  vector-effect: non-scaling-stroke;
-}
+.rhythm-path.sun { stroke: var(--color-amber); }
+.rhythm-path.moon { stroke: var(--rhythm-moon); }
+.rhythm-path.past.up { stroke-opacity: 0.8; stroke-width: 1.6px; }
+.rhythm-path.next.up { stroke-opacity: 0.6; stroke-width: 1.8px; stroke-dasharray: 0.01 5; }
+.rhythm-path.past.down { stroke-opacity: 0.3; stroke-width: 1.2px; }
+.rhythm-path.next.down { stroke-opacity: 0.25; stroke-width: 1.5px; stroke-dasharray: 0.01 5; }
+.rhythm-glint.sun { fill: var(--color-amber); }
+.rhythm-glint.moon { fill: var(--rhythm-moon); }
+.rhythm-glint:nth-of-type(1) { opacity: 0.4; }
+.rhythm-glint:nth-of-type(2) { opacity: 0.2; }
 .rhythm-bars {
   position: absolute;
-  inset: 0;
+  inset: 0 0 calc(100% - var(--horizon));
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
   align-items: end;
   gap: var(--rhythm-bar-gap);
-  padding: 0 var(--rhythm-bar-gap);
+  padding: 0 calc(var(--rhythm-bar-gap) / 2);
 }
+/* Glass bars tinted cool at night and warm by day (--day), with a lit top edge and a reflection in the water. */
 .rhythm-bar {
+  --bar: color-mix(in srgb, var(--rhythm-warm) var(--day), var(--rhythm-cool));
+  position: relative;
   min-height: 0;
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  background: color-mix(in srgb, var(--color-text) 30%, transparent);
+  background: linear-gradient(color-mix(in srgb, var(--bar) 85%, transparent), color-mix(in srgb, var(--bar) 8%, transparent));
+  box-shadow: inset 0 1.5px 0 color-mix(in srgb, var(--bar) 90%, transparent);
+  -webkit-box-reflect: below 1px linear-gradient(transparent 50%, rgb(0 0 0 / 22%));
 }
-.rhythm-bar.peak { background: var(--color-accent); }
+.rhythm-bar.peak {
+  --bar: var(--color-accent);
+  background: linear-gradient(var(--color-accent), color-mix(in srgb, var(--color-accent) 40%, transparent));
+  box-shadow: inset 0 1.5px 0 var(--color-accent-light);
+  -webkit-box-reflect: below 1px linear-gradient(transparent 50%, rgb(0 0 0 / 45%));
+}
+.rhythm-bar.empty {
+  height: 2px !important;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-text-soft) 25%, transparent);
+  box-shadow: none;
+  -webkit-box-reflect: unset;
+}
+.rhythm-sky[data-up='sun'] .rhythm-bar.current:not(.empty) { outline: 1.2px solid color-mix(in srgb, var(--color-amber) 85%, transparent); }
+.rhythm-sky[data-up='moon'] .rhythm-bar.current:not(.empty) { outline: 1.2px solid color-mix(in srgb, var(--rhythm-moon) 85%, transparent); }
 .rhythm-bar:hover,
 .rhythm-bar:focus-visible { outline: var(--border-width) solid var(--color-text-secondary); }
-.rhythm-now {
+.rhythm-peak-label {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  border-left: var(--border-width) dashed var(--color-amber-border);
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--color-accent-light);
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  white-space: nowrap;
   pointer-events: none;
 }
-.rhythm-body {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.rhythm-sun { color: var(--color-amber); }
-.rhythm-moon .lit { fill: var(--color-text-soft); }
+.rhythm-horizon { stroke: color-mix(in srgb, var(--color-text-soft) 28%, transparent); stroke-width: 1px; }
+.rhythm-tick { stroke-opacity: 0.55; stroke-dasharray: 2 3; }
+.rhythm-tick.sun { stroke: var(--color-amber); }
+.rhythm-tick.moon { stroke: var(--rhythm-moon); }
+.rhythm-event.sun { fill: var(--color-amber); }
+.rhythm-event.moon { fill: var(--rhythm-moon); opacity: 0.8; }
+.rhythm-sun { fill: none; stroke: var(--color-amber); stroke-width: 1.5px; stroke-linecap: round; }
+.rhythm-moon .lit { fill: var(--rhythm-moon); }
 .rhythm-moon .dark { fill: color-mix(in srgb, var(--color-text-soft) 15%, transparent); }
+.rhythm-sun.below,
+.rhythm-moon.below { opacity: 0.35; }
 .rhythm-axis {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
   flex-shrink: 0;
+  height: 1.4em;
   color: var(--color-text-muted);
   font-size: var(--text-xxs);
 }
+.rhythm-axis > span {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rhythm-axis > span.start { transform: none; }
+.rhythm-axis > span.end { transform: translateX(-100%); }
+.rhythm-axis > .sun-event { color: var(--color-amber); }
 .rhythm-footer {
   display: flex;
   justify-content: space-between;

@@ -16,11 +16,19 @@ it('bounds twilight near polar day with an exact 24-hour period and no stacked s
   } finally { vi.unstubAllEnvs(); }
 });
 
-it('places wrapped-night stars only in the dark interval', () => {
+it('places wrapped-night stars only in the dark interval, faded near its ends', () => {
   const sky = skyGeometry({ sunrise: 8, sunset: 2 });
   expect(sky.stops).toEqual([6.5, 8, 9.5, 24.5, 26, 27.5, 30.5]);
   expect(sky.stars).toHaveLength(22);
   expect(sky.stars.every((s) => s.x * 24 >= 3.5 && s.x * 24 < 6.5)).toBe(true);
+  expect(sky.stars.every((s) => s.fade >= 0 && s.fade <= 1)).toBe(true);
+  expect(sky.stars.some((s) => s.fade < 1)).toBe(true);
+});
+
+it('masks the day water to the same daylight span as the sky', () => {
+  expect(skyGeometry({ sunrise: 6, sunset: 18 }).daylightMask)
+    .toBe('repeating-linear-gradient(90deg, transparent 18.75%, #000 31.25%, #000 68.75%, transparent 81.25%, transparent 118.75%)');
+  expect(skyGeometry({ sunrise: 0, sunset: 24 }).daylightMask).toBe('linear-gradient(#000, #000)');
 });
 
 it('handles polar day and polar night', () => {
@@ -33,12 +41,9 @@ it('handles polar day and polar night', () => {
   expect(new Set(night.stars.map((s) => s.x)).size).toBe(22);
 });
 
-it('preserves all fallback 6/18 stops and star positions', () => {
+it('keeps the fallback 6/18 stops and spreads stars from dusk across the night', () => {
   const sky = skyGeometry();
   expect(sky.stops).toEqual([4.5, 6, 7.5, 16.5, 18, 19.5, 28.5]);
-  expect(sky.stars).toEqual(Array.from({ length: 22 }, (_, i) => {
-    const h = ((0.5 + i * 0.7548776662) % 1) * 9;
-    return { x: (h < 4.5 ? h : h + 19.5 - 4.5) / 24,
-      y: ((0.5 + i * 0.569840291) % 1) * 0.6 * 0.9, dim: i % 3 === 0 };
-  }));
+  expect(sky.stars.every((s) => { const h = s.x * 24; return h >= 19.5 || h < 4.5; })).toBe(true);
+  expect(new Set(sky.stars.map((s) => s.size))).toEqual(new Set([0, 1, 2]));
 });

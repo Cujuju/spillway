@@ -1,8 +1,8 @@
 // `pnpm dev:shortcut`: adds a "Spillway Dev" launcher that runs `pnpm dev` from this repo.
 // Windows: Start Menu shortcut with the dev app ID and the large tile logo. macOS: ~/Applications/Spillway Dev.app.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appIdentity } from '../src/shared/app.ts';
@@ -44,13 +44,35 @@ function macApp() {
 `);
   const quotedRoot = `'${root.replaceAll("'", `'\''`)}'`;
   // A login shell loads the PATH that finds pnpm; Finder starts apps without it.
+  // The launcher exits once \`pnpm dev\` is started: while it ran, macOS would only re-activate it on the next click.
   writeFileSync(path.join(contents, 'MacOS', executable), `#!/bin/zsh -l
-cd ${quotedRoot} || exit 1
+repo=${quotedRoot}
+pidfile="\${TMPDIR:-/tmp}/spillway-dev.pid"
+# A running app: opening its bundle again makes macOS send it a reopen, which shows the window.
+for exe in \${(f)"$(ps -axo comm=)"}; do
+  if [[ $exe == "$repo"/node_modules/*/Electron.app/Contents/MacOS/Electron ]]; then
+    exec open "\${exe%/Contents/MacOS/Electron}"
+  fi
+done
+# Still building: leave it alone.
+[[ -f $pidfile ]] && kill -0 "$(<$pidfile)" 2>/dev/null && exit 0
+cd "$repo" || exit 1
 unset ELECTRON_RUN_AS_NODE
-exec pnpm dev >"\${TMPDIR:-/tmp}/spillway-dev.log" 2>&1
+nohup pnpm dev >"\${TMPDIR:-/tmp}/spillway-dev.log" 2>&1 &
+echo $! >"$pidfile"
 `);
   chmodSync(path.join(contents, 'MacOS', executable), 0o755);
-  execFileSync('sips', ['-s', 'format', 'icns', path.join(root, 'resources', 'icon-1024.png'), '--out', path.join(contents, 'Resources', 'icon.icns')], { stdio: 'ignore' });
+  // sips can't write a 1024px .icns on macOS 26, so build an iconset and let iconutil pack it.
+  const iconset = path.join(mkdtempSync(path.join(tmpdir(), 'spillway-dev-')), 'icon.iconset');
+  mkdirSync(iconset);
+  for (const size of [16, 32, 128, 256, 512]) {
+    for (const [scale, suffix] of [[1, ''], [2, '@2x']]) {
+      const px = String(size * scale);
+      execFileSync('sips', ['-z', px, px, path.join(root, 'resources', 'icon-1024.png'), '--out', path.join(iconset, `icon_${size}x${size}${suffix}.png`)], { stdio: 'ignore' });
+    }
+  }
+  execFileSync('iconutil', ['-c', 'icns', iconset, '-o', path.join(contents, 'Resources', 'icon.icns')], { stdio: 'inherit' });
+  rmSync(path.dirname(iconset), { recursive: true, force: true });
   return bundle;
 }
 

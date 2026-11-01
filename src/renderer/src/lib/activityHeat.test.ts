@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
-import { calendarWeeks, heatShape, hourOfDay, hourRows } from './activityHeat';
+import { hourOfDay, weekdayHours } from './activityHeat';
 import { rangeSpan } from './activityRange';
 import { moonPath, moonPhase, phaseName, skyBody, SUNRISE_HOUR, SUNSET_HOUR } from './sky';
 
@@ -15,35 +15,27 @@ const span = (r: '24h' | '7d' | '90d') => rangeSpan(r, NOW, { from: '', to: '' }
 const sum = (cells: { requests: number }[]) => cells.reduce((n, c) => n + c.requests, 0);
 
 describe('heatmap', () => {
-  it('picks the shape from the span', () => {
-    expect(heatShape(span('24h'))).toBe('hours');
-    expect(heatShape(span('7d'))).toBe('days');
-    expect(heatShape(span('90d'))).toBe('calendar');
-    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-28', to: '2026-10-29' }, null))).toBe('days');
-    expect(heatShape(rangeSpan('all', NOW, { from: '', to: '' }, null))).toBe('hours');
-    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-16', to: '2026-10-29' }, null))).toBe('days');
-    expect(heatShape(rangeSpan('custom', NOW, { from: '2026-10-15', to: '2026-10-29' }, null))).toBe('calendar');
+  it('keeps 7 weekday rows of 24 hours for every time frame', () => {
+    for (const r of ['24h', '7d', '90d'] as const) {
+      const { days } = weekdayHours([], span(r));
+      expect(days).toHaveLength(7);
+      expect(days.every((d) => d.length === 24)).toBe(true);
+    }
   });
 
-  it('shows the last 24 hours as one row ending at the current hour', () => {
-    const [only] = hourRows([row(hour(28, 15)), row(hour(29, 0)), row(hour(29, 14)), row(hour(28, 14))], span('24h'));
-    expect(only!.hours.at(-1)).toBe(14);
-    expect(only!.cells).toHaveLength(24);
-    expect(sum(only!.cells)).toBe(3);
+  it('sums each weekday hour over the span, Monday first, leaving out daily totals', () => {
+    // Oct 22 and 29 2026 are Thursdays; Oct 26 is a Monday.
+    const rows = [row(hour(22, 9)), row(hour(29, 9)), row(hour(26, 23), { requests: 4 }), row(hour(25, 0), { wholeDay: true, requests: 100 })];
+    const { days, undetailedDays } = weekdayHours(rows, span('90d'));
+    expect(days[3]![9]!.requests).toBe(2);
+    expect(days[0]![23]!.requests).toBe(4);
+    expect(sum(days.flat())).toBe(6);
+    expect(undetailedDays).toBe(1);
   });
 
-  it('shows one row per day for 7 days, leaving out daily totals', () => {
-    const rows = Array.from({ length: 7 }, (_, i) => row(hour(23 + i), { requests: i + 1 }));
-    const grid = hourRows([...rows, row(hour(25, 0), { wholeDay: true, requests: 100 })], span('7d'));
-    expect(grid.map((r) => r.cells[12]!.requests)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-  });
-
-  it('lays a calendar out in Monday-first weeks, counting daily totals, blank outside the span', () => {
-    const weeks = calendarWeeks([row(hour(29)), row(hour(26, 0), { wholeDay: true, requests: 5 })], span('90d'));
-    const last = weeks.at(-1)!;
-    expect(new Date(last.start).getDay()).toBe(1);
-    expect(last.days.map((d) => d?.requests ?? null)).toEqual([5, 0, 0, 1, null, null, null]);
-    expect(weeks[0]!.days.some((d) => d === null)).toBe(true);
+  it('counts only rows inside the span', () => {
+    const { days } = weekdayHours([row(hour(29, 9)), row(hour(20, 9))], span('7d'));
+    expect(sum(days.flat())).toBe(1);
   });
 });
 

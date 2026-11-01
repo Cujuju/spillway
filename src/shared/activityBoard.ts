@@ -19,13 +19,7 @@ export interface ActivityBoard {
   tiles: unknown;
   /** Tile id → chart. Ids missing from the tree are dropped when the tree changes. */
   panels: Record<string, ActivityPanelSpec>;
-  /** Board height once the user sized it or added a row below; null fills the page. Tiles keep their pixel heights while it is set. */
-  heightPx: number | null;
 }
-
-/** Shortest board a stored height may set (one short chart row) and a sanity cap on a corrupt value. */
-export const BOARD_MIN_PX = 240;
-export const BOARD_MAX_PX = 20_000;
 
 const tile = (id: string) => ({ kind: 'tile', id });
 
@@ -43,7 +37,6 @@ export const DEFAULT_ACTIVITY_BOARD: ActivityBoard = {
     heatmap: { kind: 'heatmap', metric: 'cost' },
     models: { kind: 'models', metric: 'cost' },
   },
-  heightPx: null,
 };
 
 type Obj = Record<string, unknown>;
@@ -57,7 +50,5 @@ export function normalizeActivityBoard(raw: unknown): ActivityBoard {
     id && isObj(v) && oneOf(v.kind, ACTIVITY_PANEL_KINDS)
       ? [[id, { kind: v.kind, metric: oneOf(v.metric, ACTIVITY_METRICS) ? v.metric : 'cost' }]]
       : []));
-  const h = raw.heightPx;
-  const heightPx = raw.tiles !== null && typeof h === 'number' && Number.isFinite(h) ? Math.min(BOARD_MAX_PX, Math.max(BOARD_MIN_PX, Math.round(h))) : null;
-  return { tiles: raw.tiles, panels, heightPx };
+  return { tiles: raw.tiles, panels };
 }

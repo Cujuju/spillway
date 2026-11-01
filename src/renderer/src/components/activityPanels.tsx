@@ -74,8 +74,8 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   heatmap: {
     title: () => 'Heatmap',
     hasMetric: true,
-    // 230px grid + 16px scrollbar + 26px legend + 60px header/padding; rounded up.
-    minSize: { width: 380, height: 340 },
+    // 34px labels + 24 × (10px cell + 3px gap) + 32px padding; 60px header + 18px hours + 7 × 13px rows + 26px legend.
+    minSize: { width: 380, height: 200 },
     body: (spec, data) => (
       <ActivityHeatmap rows={data.rows()} span={data.span()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),

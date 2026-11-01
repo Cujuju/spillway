@@ -83,17 +83,14 @@ describe('hourlyBuckets / lastDays', () => {
       ]);
       expect(rows.map((r) => [r.start, r.requests])).toEqual([[first, 1], [second, 2]]);
       const { bucketStarts, rangeSpan } = await import('../renderer/src/lib/activityRange');
-      const { hourRows, hourOfDay } = await import('../renderer/src/lib/activityHeat');
+      const { hourOfDay, weekdayHours } = await import('../renderer/src/lib/activityHeat');
       const { series } = await import('../renderer/src/lib/activityStats');
       const day = rangeSpan('24h', now, { from: '', to: '' }, null);
-      const [grid] = hourRows(rows, day);
-      expect(grid!.hours.slice(-2)).toEqual([1, 1]);
-      expect(grid!.cells).toHaveLength(24);
-      expect(grid!.cells.map((c) => c.requests)).toEqual([...Array<number>(22).fill(0), 1, 2]);
       const starts = bucketStarts(day, 'hour');
       expect(starts.slice(-2)).toEqual([first, second]);
-      expect(series(rows, starts, now).map((p) => p.summary.requests)).toEqual(grid!.cells.map((c) => c.requests));
-      // Rhythm intentionally combines both occurrences of the local hour.
+      expect(series(rows, starts, now).map((p) => p.summary.requests).slice(-2)).toEqual([1, 2]);
+      // Heatmap and Rhythm intentionally combine both occurrences of the local hour (Sunday, 1 AM).
+      expect(weekdayHours(rows, day).days[6]![1]!.requests).toBe(3);
       expect(hourOfDay(rows, day, 'requests').hours[1]!.requests).toBe(3);
     } finally {
       vi.unstubAllEnvs();
@@ -126,13 +123,13 @@ describe('activityLog', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 9, 29, 14, 30).getTime());
     try {
       const { rangeSpan } = await import('../renderer/src/lib/activityRange');
-      const { hourRows, hourOfDay } = await import('../renderer/src/lib/activityHeat');
+      const { hourOfDay, weekdayHours } = await import('../renderer/src/lib/activityHeat');
       for (let day = 23; day <= 29; day++) activityLog.append(event(new Date(2026, 9, day, 12)));
       const rows = activityLog.buckets(31);
       expect(rows).toHaveLength(7);
       expect(rows.every((r) => !r.wholeDay)).toBe(true);
       const week = rangeSpan('7d', Date.now(), { from: '', to: '' }, null);
-      expect(hourRows(rows, week).map((r) => r.cells[12]!.requests)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+      expect(weekdayHours(rows, week).days.map((d) => d[12]!.requests)).toEqual([1, 1, 1, 1, 1, 1, 1]);
       expect(hourOfDay(rows, week, 'requests').hours[12]!.requests).toBe(7);
     } finally {
       clock.mockRestore();

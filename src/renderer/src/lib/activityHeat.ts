@@ -1,73 +1,26 @@
 import type { ActivityBucket } from '@shared/types';
-import { bucketStarts, calendarDays, floorTo, spanDays, type Span } from './activityRange';
-import { metricValue, series, summarize, type Metric, type Summary } from './activityStats';
+import type { Span } from './activityRange';
+import { metricValue, summarize, type Metric } from './activityStats';
 
 const HOURS_PER_DAY = 24;
 const DAYS_PER_WEEK = 7;
-const MAX_HOURLY_GRID_DAYS = 14;
 const HOURS = Array.from({ length: HOURS_PER_DAY }, (_, h) => h);
 
 const inSpan = (r: ActivityBucket, s: Span) => r.start >= s.from && r.start <= s.to;
 /** Daily totals carry no hour, so hour views leave them out. */
 const hourly = (rows: ActivityBucket[], s: Span) => rows.filter((r) => !r.wholeDay && inSpan(r, s));
 
-export interface HourRow {
-  label: string;
-  /** Local hour of each cell. */
-  hours: number[];
-  cells: Summary[];
-}
+/** Weekday index with Monday first, matching the heatmap's rows. */
+const mondayFirst = (t: number) => (new Date(t).getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
 
-/** A 24-hour span is one row of its hours; up to two weeks, one row per local day. Longer spans use the calendar. */
-export type HeatShape = 'hours' | 'days' | 'calendar';
-export function heatShape(s: Span): HeatShape {
-  if (spanDays(s) <= 1) return 'hours';
-  return calendarDays(s) <= MAX_HOURLY_GRID_DAYS ? 'days' : 'calendar';
-}
+/** Days in the span held only as daily totals, so hour views can say what they leave out. */
+const undetailedDays = (rows: ActivityBucket[], s: Span) => new Set(rows.filter((r) => r.wholeDay && inSpan(r, s)).map((r) => r.start)).size;
 
-export function hourRows(rows: ActivityBucket[], s: Span): HourRow[] {
-  const kept = hourly(rows, s);
-  if (heatShape(s) === 'hours') {
-    const points = series(kept, bucketStarts(s, 'hour'), s.to);
-    return [{ label: '', hours: points.map((p) => new Date(p.start).getHours()), cells: points.map((p) => p.summary) }];
-  }
-  const byDay = new Map<number, ActivityBucket[][]>();
-  for (const r of kept) {
-    const day = floorTo(r.start, 'day');
-    if (!byDay.has(day)) byDay.set(day, HOURS.map(() => []));
-    byDay.get(day)![new Date(r.start).getHours()]!.push(r);
-  }
-  return bucketStarts(s, 'day').map((day) => {
-    const byHour = byDay.get(day) ?? HOURS.map(() => []);
-    return { label: new Date(day).toLocaleDateString(undefined, { weekday: 'short' }), hours: HOURS, cells: byHour.map(summarize) };
-  });
-}
-
-export interface CalendarWeek {
-  start: number;
-  /** Monday first; null outside the span. */
-  days: (Summary | null)[];
-}
-
-/** One cell per local day, weeks as columns (GitHub style). Daily totals count: the day is known. */
-export function calendarWeeks(rows: ActivityBucket[], s: Span): CalendarWeek[] {
-  const byDay = new Map<string, ActivityBucket[]>();
-  for (const r of rows) {
-    if (!inSpan(r, s)) continue;
-    const key = new Date(r.start).toDateString();
-    const list = byDay.get(key);
-    if (list) list.push(r);
-    else byDay.set(key, [r]);
-  }
-  const first = floorTo(s.from, 'day');
-  return bucketStarts(s, 'week').map((start) => ({
-    start,
-    days: Array.from({ length: DAYS_PER_WEEK }, (_, i) => {
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
-      return d.getTime() < first || d.getTime() > s.to ? null : summarize(byDay.get(d.toDateString()) ?? []);
-    }),
-  }));
+/** Each weekday's local clock hours summed over the span: always 7 rows (Monday first) of 24 cells. */
+export function weekdayHours(rows: ActivityBucket[], s: Span) {
+  const byCell = Array.from({ length: DAYS_PER_WEEK }, () => HOURS.map(() => [] as ActivityBucket[]));
+  for (const r of hourly(rows, s)) byCell[mondayFirst(r.start)]![new Date(r.start).getHours()]!.push(r);
+  return { days: byCell.map((hours) => hours.map(summarize)), undetailedDays: undetailedDays(rows, s) };
 }
 
 /** Each local clock hour summed over the span; repeated DST hours both count. */
@@ -79,6 +32,5 @@ export function hourOfDay(rows: ActivityBucket[], s: Span, metric: Metric) {
   const max = Math.max(0, ...hours.map((c) => metricValue(c, metric)));
   // Earliest hour wins a tie; an empty or unpriced-only metric has no peak.
   const peak = max > 0 ? hours.findIndex((c) => metricValue(c, metric) === max) : null;
-  const undetailedDays = new Set(rows.filter((r) => r.wholeDay && inSpan(r, s)).map((r) => r.start)).size;
-  return { hours, max, peak, total: summarize(kept), undetailedDays };
+  return { hours, max, peak, total: summarize(kept), undetailedDays: undetailedDays(rows, s) };
 }

@@ -1,28 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD_MAX_PX, BOARD_MIN_PX, DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard } from './activityBoard';
+import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard } from './activityBoard';
 
 describe('normalizeActivityBoard', () => {
   it('keeps valid panels, defaults a bad metric and drops unknown kinds', () => {
     const tiles = { kind: 'tile', id: 'a' };
     expect(normalizeActivityBoard({ tiles, panels: { a: { kind: 'trend', metric: 'bytes' }, b: { kind: 'pie' } } }))
-      .toEqual({ tiles, panels: { a: { kind: 'trend', metric: 'cost' } }, heightPx: null });
+      .toEqual({ tiles, panels: { a: { kind: 'trend', metric: 'cost' } } });
   });
 
   it('keeps an emptied board instead of restoring the default', () => {
-    expect(normalizeActivityBoard({ tiles: null, panels: {} })).toEqual({ tiles: null, panels: {}, heightPx: null });
+    expect(normalizeActivityBoard({ tiles: null, panels: {} })).toEqual({ tiles: null, panels: {} });
   });
 
-  it('resets a stored height for an empty board', () => {
-    expect(normalizeActivityBoard({ tiles: null, panels: {}, heightPx: 900 }).heightPx).toBeNull();
-  });
-
-  it('keeps a stored board height within bounds and drops a non-number', () => {
-    const board = (heightPx: unknown) => normalizeActivityBoard({ tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx }).heightPx;
-    expect(board(812.4)).toBe(812);
-    expect(board(10)).toBe(BOARD_MIN_PX);
-    expect(board(1e9)).toBe(BOARD_MAX_PX);
-    expect(board('900')).toBeNull();
-    expect(board(Number.NaN)).toBeNull();
+  it('drops a height stored by older versions: the board always fills the page', () => {
+    expect(normalizeActivityBoard({ tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx: 900 })).not.toHaveProperty('heightPx');
   });
 
   it('falls back to the default for anything else', () => {

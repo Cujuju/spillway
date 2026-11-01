@@ -126,12 +126,6 @@
   color: var(--color-text-secondary);
 }
 /* Same size and colour as the rows' run-out forecast. */
-.pool-card-stuck {
-  flex-shrink: 0;
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-red-light);
-}
 .pool-card-rate {
   flex-shrink: 0;
   font-size: var(--text-xs);

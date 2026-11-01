@@ -48,10 +48,10 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));
   const resetAt = () => (key() ? nextResetAt(pool().credentials, key()!, now()) : null);
   const plans = () => [...new Set(pool().credentials.filter((c) => !c.disabled && !c.apiKey).map((c) => c.plan?.label ?? 'Plan unknown'))].join(' + ');
-  /** Account forecasts and stuck time for this window; null without a key. */
+  /** Account forecasts for this window; null without a key. */
   const forecast = () => {
     const p = projection();
-    return p ? { accounts: p.accounts, stuck: p.stuck } : null;
+    return p ? { accounts: p.accounts } : null;
   };
   return {
     /** Window key this model projects. */

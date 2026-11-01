@@ -1,7 +1,6 @@
-import { ChevronDown, ChevronUp, Layers, Lock, RotateCcw } from 'lucide-solid';
+import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
-import type { PoolStuck, StuckBlocker } from '../lib/forecast';
 import { compactDuration, dateTime, quotaPercent } from '../lib/format';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { quotaColor } from '../lib/quotaColor';
@@ -47,13 +46,6 @@ export function ProviderCards(props: CardsProps) {
           const folded = () => p.lines().filter((l) => l.scoped).length;
           // A charted scoped line stays visible while folded.
           const shown = () => p.lines().filter((l) => !l.scoped || expanded() || l.id === props.chosenLine);
-          // Only account-wide windows bench a whole account; a model or spend window leaves the rest usable.
-          const stuck = () =>
-            p.lines()
-              .filter((l) => !l.scoped)
-              .map((l) => l.model.forecast()?.stuck ?? null)
-              .filter((s): s is PoolStuck => s !== null)
-              .sort((a, b) => a.at - b.at)[0];
           return (
             <div class="pool-card card-wash" classList={{ active: props.selected === p.id }} style={{ '--pool-color': providerVar(p.id) }} onClick={() => props.onSelect(p.id)}>
               <div class="pool-card-top">
@@ -66,7 +58,6 @@ export function ProviderCards(props: CardsProps) {
                     { label: 'Rate', value: `~${rate()!.toFixed(1)}%/h` },
                     { label: 'Lookback', value: compactDuration(settings().dashboard.drainLookbackHours * HOUR_MS) },
                   ] : []),
-                  ...(stuck() ? stuckRows(stuck()!) : []),
                 ]}>
                   <button type="button" class="pool-card-head" aria-pressed={props.selected === p.id}>
                     <ProviderGlyph provider={p.id} />
@@ -74,7 +65,6 @@ export function ProviderCards(props: CardsProps) {
                     <span class="count">{p.count()}</span>
                     <span class="pool-card-plans truncate">{p.lines()[0]?.model.plans()}</span>
                     <span class="spacer" />
-                    <Show when={stuck()}>{(s) => <StuckBadge stuck={s()} />}</Show>
                     <Show when={rate() != null}>
                       <span class="pool-card-rate">~{rate()!.toFixed(1)}%/h</span>
                     </Show>
@@ -111,35 +101,6 @@ export function ProviderCards(props: CardsProps) {
 
 /** An account's label from the masked snapshot. */
 const accountLabel = (id: string) => snapshot()?.credentials.find((c) => c.id === id)?.label ?? id;
-/** A window's label on that account, or "Cooldown" when errors bench it. */
-const blockLabel = (b: StuckBlocker) =>
-  b.windowKey === null ? 'Cooldown' : (snapshot()?.credentials.find((c) => c.id === b.credentialId)?.windows.find((w) => w.key === b.windowKey)?.label ?? b.windowKey);
-
-/** When every account is forecast to be out at once, for how long, and which limit holds each account. */
-function stuckRows(stuck: PoolStuck) {
-  return [
-    { label: 'Every account out', value: stuck.at <= now() ? 'Now' : dateTime(stuck.at) },
-    ...(stuck.until === null ? [] : [{ label: 'Until', value: dateTime(stuck.until) }]),
-    ...stuck.blockers.map((b) => ({
-      label: accountLabel(b.credentialId),
-      value: b.until === null ? blockLabel(b) : `${blockLabel(b)} until ${dateTime(b.until)}`,
-    })),
-  ];
-}
-
-/** Matches the rows' forecast: lock, time until every account is out, then how long it lasts. */
-function StuckBadge(props: { stuck: PoolStuck }) {
-  const start = () => compactDuration(props.stuck.at - now());
-  const length = () => (props.stuck.until === null ? null : compactDuration(props.stuck.until - Math.max(now(), props.stuck.at)));
-  return (
-    <span class="reset-time pool-card-stuck">
-      <Lock size="1em" role="img" aria-label="Every account out in" />
-      {start()}
-      <Show when={length()}>{(l) => ` · for ${l()}`}</Show>
-    </span>
-  );
-}
-
 /** One window: a segment per account, the pool's percent left, and the time to its next reset. */
 function WindowLine(props: { line: PoolLine; chosen: boolean; onPick: () => void }) {
   const m = () => props.line.model;

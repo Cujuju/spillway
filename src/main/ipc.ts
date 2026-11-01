@@ -192,11 +192,8 @@ const handlers: Handlers = {
   clearActivity: () => activityLog.call('clear'),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
-  oauthStart: async (provider) => {
-    const start = await management.startOAuth(provider);
-    await shell.openExternal(start.url);
-    return start;
-  },
+  // The dialog opens the link: a second account for a provider needs a private window, not the signed-in browser.
+  oauthStart: (provider) => management.startOAuth(provider),
   oauthStatus: async (state) => {
     const status = await management.oauthStatus(state);
     if (status.status === 'ok') void usage.refresh().catch(() => usage.poll());

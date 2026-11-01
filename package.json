@@ -15,7 +15,7 @@
     "proxy:build": "node scripts/build-proxy.mjs",
     "package": "electron-vite build && electron-builder --publish never",
     "package:dir": "electron-vite build && electron-builder --dir --publish never",
-    "package:dev": "node scripts/package-dev.mjs",
+    "dev:shortcut": "node scripts/dev-shortcut.mjs",
     "release": "node scripts/release.mts",
     "data:merge": "node scripts/merge-data.mts",
     "demo": "electron-vite build && node scripts/demo/launch.mts",

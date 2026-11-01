@@ -25,7 +25,7 @@ const bundledLicenses = (bundle: 'main' | 'preload' | 'renderer') =>
     },
   });
 
-// The dev build (src/shared/app.ts): `pnpm dev`, and builds made by scripts/package-dev.mjs.
+// The dev build (src/shared/app.ts): `pnpm dev`, and the build `pnpm data:merge` runs for it.
 export default defineConfig(({ command }) => {
   const devBuild = command === 'serve' || process.env.SPILLWAY_DEV_BUILD === '1';
   const devDefine = { __DEV_BUILD__: JSON.stringify(devBuild) };

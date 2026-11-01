@@ -4,8 +4,8 @@
 declare const __DEV_BUILD__: boolean | undefined;
 
 /**
- * Production, or the dev build installed beside it (`pnpm package:dev`, `pnpm dev`).
- * Its own id and name give it its own install, Start Menu entry, data folder and single-instance lock.
+ * Production, or the dev build run from the repo (`pnpm dev`, `pnpm dev:shortcut`).
+ * Its own id and name give it its own data folder, single-instance lock and Windows app ID.
  */
 export function appIdentity(dev: boolean): { id: string; name: string } {
   return dev ? { id: 'dev.cujuju.spillway.dev', name: 'Spillway Dev' } : { id: 'dev.cujuju.spillway', name: 'Spillway' };

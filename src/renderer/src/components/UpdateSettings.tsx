@@ -46,7 +46,7 @@ export function UpdateSettings() {
             </>
           }
         >
-          <Match when={when('unavailable')}>{(u) => <span class="muted">{IS_DEV_BUILD ? 'The dev build does not update. Rebuild it with pnpm package:dev.' : u().reason}</span>}</Match>
+          <Match when={when('unavailable')}>{(u) => <span class="muted">{IS_DEV_BUILD ? "The dev build does not update; it runs the repo's code." : u().reason}</span>}</Match>
           <Match when={when('checking')}>
             <span class="muted">Checking…</span>
           </Match>

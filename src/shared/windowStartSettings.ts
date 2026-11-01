@@ -10,6 +10,12 @@ const DEFAULT_ACTIVE_END_MINUTE = 23 * MINUTES_PER_HOUR;
 export const WINDOW_START_PROVIDERS = ['claude', 'codex'] as const;
 export type WindowStartProvider = (typeof WINDOW_START_PROVIDERS)[number];
 
+/** What a window start sends, per provider. Mirrors the fork's `desktop_window_start.go`; update both together. */
+export const WINDOW_START_REQUEST: Record<WindowStartProvider, string> = {
+  claude: 'Sends “Reply with OK.” capped at 1 output token, with no thinking requested.',
+  codex: 'Sends “Reply with OK.” with no output cap (Codex rejects one) and no reasoning effort, so the model’s default applies.',
+};
+
 export interface ActiveHours {
   /** Off starts windows at any hour. */
   enabled: boolean;

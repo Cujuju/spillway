@@ -2,7 +2,7 @@ import { createResource, For, Show } from 'solid-js';
 import { cheapestModel } from '@shared/modelPrices';
 import type { AppSettings } from '@shared/settings';
 import { providerLabel } from '@shared/trayValues';
-import { minuteToTime, timeToMinute, WINDOW_START_PROVIDERS, type WindowStartProvider } from '@shared/windowStartSettings';
+import { minuteToTime, timeToMinute, WINDOW_START_PROVIDERS, WINDOW_START_REQUEST, type WindowStartProvider } from '@shared/windowStartSettings';
 import { settings, snapshot, updateSettings } from '../store';
 import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 
@@ -68,37 +68,35 @@ export function WindowStartSettings() {
           {(s) => <p class="list-row-help muted">Last rolled {label(s().credentialId)} at {new Date(s().at).toLocaleTimeString()}, using {s().model}.</p>}
         </Show>
       </SettingsGroup>
-      <Show when={ws().enabled}>
-        <SettingsGroup title="Model">
-          <For each={WINDOW_START_PROVIDERS}>
-            {(provider) => (
-              <SettingRow label={providerLabel(provider)} help="Sends the one-word request. Cheapest picks the lowest-priced model each account offers.">
-                <ModelPicker provider={provider} />
-              </SettingRow>
-            )}
-          </For>
-        </SettingsGroup>
-        <SettingsGroup title="Timing">
-          <SettingRow label="Across accounts" help={SPACING.find((s) => s.value === ws().stagger)?.help}>
-            <Seg
-              value={ws().stagger ? 'spaced' : 'together'}
-              options={[{ value: 'together', label: SPACING[0].label }, { value: 'spaced', label: SPACING[1].label }] as const}
-              onChange={(v) => set((d) => void (d.windowStart.stagger = v === 'spaced'))}
-            />
-          </SettingRow>
-          <SettingRow label="Active hours" help="Outside these local hours, windows wait to roll until the hours begin. An end before the start runs past midnight.">
-            <Toggle value={ws().activeHours.enabled} onChange={(v) => set((d) => void (d.windowStart.activeHours.enabled = v))} />
-          </SettingRow>
-          <Show when={ws().activeHours.enabled}>
-            <SettingRow nested label="From">
-              <TimeField value={ws().activeHours.startMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.startMinute = m))} />
+      <SettingsGroup title="Model">
+        <For each={WINDOW_START_PROVIDERS}>
+          {(provider) => (
+            <SettingRow label={providerLabel(provider)} help={`${WINDOW_START_REQUEST[provider]} Cheapest picks the lowest-priced model each account offers.`}>
+              <ModelPicker provider={provider} />
             </SettingRow>
-            <SettingRow nested label="Until">
-              <TimeField value={ws().activeHours.endMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.endMinute = m))} />
-            </SettingRow>
-          </Show>
-        </SettingsGroup>
-      </Show>
+          )}
+        </For>
+      </SettingsGroup>
+      <SettingsGroup title="Timing">
+        <SettingRow label="Across accounts" help={SPACING.find((s) => s.value === ws().stagger)?.help}>
+          <Seg
+            value={ws().stagger ? 'spaced' : 'together'}
+            options={[{ value: 'together', label: SPACING[0].label }, { value: 'spaced', label: SPACING[1].label }] as const}
+            onChange={(v) => set((d) => void (d.windowStart.stagger = v === 'spaced'))}
+          />
+        </SettingRow>
+        <SettingRow label="Active hours" help="Outside these local hours, windows wait to roll until the hours begin. An end before the start runs past midnight.">
+          <Toggle value={ws().activeHours.enabled} onChange={(v) => set((d) => void (d.windowStart.activeHours.enabled = v))} />
+        </SettingRow>
+        <Show when={ws().activeHours.enabled}>
+          <SettingRow nested label="From">
+            <TimeField value={ws().activeHours.startMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.startMinute = m))} />
+          </SettingRow>
+          <SettingRow nested label="Until">
+            <TimeField value={ws().activeHours.endMinute} onCommit={(m) => set((d) => void (d.windowStart.activeHours.endMinute = m))} />
+          </SettingRow>
+        </Show>
+      </SettingsGroup>
     </>
   );
 }

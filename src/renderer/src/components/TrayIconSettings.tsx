@@ -3,7 +3,7 @@ import { createMemo, For, Show } from 'solid-js';
 import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
 import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdInUnit, trayIconText, windowLabel } from '@shared/trayValues';
 import { isString, persistedSignal } from '../lib/persisted';
-import { isMac } from '../lib/platform';
+import { TRAY_ICONS_HELP } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { settings, snapshot, taskbarDark, updateSettings } from '../store';
 import { poolRemaining } from './poolModel';
@@ -15,9 +15,6 @@ const ICON_PX = 14;
 const PREVIEW_CSS_PX = 24;
 /** Offered before the proxy has reported any windows, so first-run setup still works. */
 const FALLBACK_WINDOWS: Record<string, string[]> = { claude: Object.keys(KNOWN_WINDOW_LABELS) };
-const SHOW_ICONS_HELP = isMac
-  ? 'One menu bar icon per entry below. Cmd-drag an icon to reorder it.'
-  : 'One notification-area icon per entry below. If Windows hides new ones under ^, drag them onto the taskbar.';
 
 const SCOPES: { value: TrayIconScope; label: string; title: string }[] = [
   { value: 'active', label: 'Active account', title: 'The account the proxy picks next' },
@@ -92,7 +89,7 @@ export function TrayIconSettings() {
   return (
     <>
       <SettingsGroup title="Display">
-        <SettingRow label="Show limit icons" help={SHOW_ICONS_HELP}>
+        <SettingRow label="Show limit icons" help={TRAY_ICONS_HELP}>
           <Toggle value={t().enabled} onChange={(v) => set((d) => void (d.enabled = v))} />
         </SettingRow>
         <SettingRow label="Number shown" help="What the digits on each icon mean.">

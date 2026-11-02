@@ -49,7 +49,7 @@ function writeProfile(dir: string, theme: string, data: DemoData): void {
 /** The client-home variables the app honours (clientHomes.ts); unset so the fake home applies. */
 const CLIENT_HOME_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME'];
 /** Electron's appData folder relative to the home folder, per platform. */
-const APP_DATA_UNDER_HOME: Partial<Record<NodeJS.Platform, string[]>> = { win32: ['AppData', 'Roaming'], darwin: ['Library', 'Application Support'] };
+const APP_DATA_UNDER_HOME: Partial<Record<NodeJS.Platform, string[]>> = { win32: ['AppData', 'Roaming'], darwin: ['Library', 'Application Support'], linux: ['.config'] };
 
 export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOptions = {}): Promise<DemoApp> {
   const data = generate(Date.now());
@@ -62,6 +62,7 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOpti
   const proxy = await startDemoProxy(data);
 
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home };
+  if (process.platform === 'linux') env.XDG_CONFIG_HOME = path.join(home, '.config');
   for (const name of [...CLIENT_HOME_VARS, 'ELECTRON_RUN_AS_NODE']) delete env[name];
   const electron = createRequire(import.meta.url)('electron') as string;
   const args = ['.', `--user-data-dir=${profile}`, `--proxy-endpoint=${proxy.endpoint}`];

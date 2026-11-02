@@ -1,6 +1,6 @@
 // Builds cli-proxy-api from the CLIProxyAPI fork into resources/bin/<platform>-<arch>/.
 // The folder uses Node's process.platform/arch names, matching electron-builder's ${platform}-${arch}
-// in electron-builder.yml and bundledProxyPath() in src/main/paths.ts.
+// in electron-builder.ts and bundledProxyPath() in src/main/paths.ts.
 // Source checkout: CLIPROXY_SRC env var, else ../CLIProxyAPI next to this repo.
 // Targets: host by default; or e.g. `pnpm proxy:build darwin-arm64 darwin-x64`, or `all`.
 // --keep-last-good (used by `pnpm dev`): a failed build keeps the existing binary instead of failing,
@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBuild } from '../appVersion.ts';
 
-const ALL_TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64'];
+const ALL_TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'];
 const GOOS = { win32: 'windows', darwin: 'darwin', linux: 'linux' };
 const GOARCH = { x64: 'amd64', arm64: 'arm64' };
 const KEEP_LAST_GOOD = '--keep-last-good';

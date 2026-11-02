@@ -2,12 +2,12 @@
 
 # Data
 
-Everything lives in `%APPDATA%\Spillway` (macOS: `~/Library/Application Support/Spillway`):
+Everything lives in `%APPDATA%\Spillway` (macOS: `~/Library/Application Support/Spillway`; Linux: `$XDG_CONFIG_HOME/Spillway`, default `~/.config/Spillway`):
 
 | Item | Path |
 |---|---|
 | Settings | `settings.json` |
-| Keys | `secrets.bin`, encrypted with DPAPI (Windows) or the Keychain (macOS) |
+| Keys | `secrets.bin`, using Electron safeStorage (DPAPI on Windows, Keychain on macOS, the desktop secret store on Linux when available) |
 | Usage history | `usage-history.json` |
 | Generated proxy config | `proxy/config.yaml` |
 | Your proxy settings | `proxy/config.user.yaml` |

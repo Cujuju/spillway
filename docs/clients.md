@@ -15,6 +15,7 @@ The Proxy page shows the endpoint and the client key. **Apply** writes them into
 - Codex login: Codex keeps its own ChatGPT login and sends it with every model call. The proxy accepts it when it is an unexpired auth.openai.com token for an account the proxy holds as a Codex credential, so Codex must be signed in to one of the pooled accounts. Account calls (usage, plan, plugins, apps) go to chatgpt.com directly. Apply and Undo remove the pool login earlier versions wrote to `auth.json`.
 - A Codex process started before Apply or Undo keeps its old URLs; the page names the apps running Codex (a dev Electron app by its project folder). Restart them (in T3 Code, start a new Codex session).
 - Changing the port or regenerating the key marks an applied client **Out of date**; Re-apply updates it. The app never rewrites these files on its own.
+- Claude Code's machine-wide policy uses Spillway's own `managed-settings.d/spillway.json` under `C:\Program Files\ClaudeCode` (Windows), `/Library/Application Support/ClaudeCode` (macOS), or `/etc/claude-code` (Linux). Apply and Undo elevate through UAC, the macOS password dialog, or Linux `pkexec`. Other policy files are preserved. [Claude Code's paths and drop-in rules](https://code.claude.com/docs/en/managed-settings).
 - Codex edits are text-level, not parsed TOML: a multi-line string containing a line that starts with `[` or one of those root keys can be misread.
 
 Or set environment variables for Claude Code (the page copies them):

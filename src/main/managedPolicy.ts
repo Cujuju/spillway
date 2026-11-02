@@ -13,10 +13,11 @@ import type { ClientTarget } from './clientConfigText';
 
 const run = promisify(execFile);
 
-/** Claude Code's managed-settings folders (its own hardcoded paths). Spillway ships Windows and macOS only. */
+/** Claude Code's system directories: https://code.claude.com/docs/en/managed-settings */
 const MANAGED_ROOTS: Partial<Record<NodeJS.Platform, string>> = {
   win32: 'C:\\Program Files\\ClaudeCode',
   darwin: '/Library/Application Support/ClaudeCode',
+  linux: '/etc/claude-code',
 };
 /** Claude Code merges every JSON file here over managed-settings.json, so Spillway never edits a file it doesn't own. */
 const DROP_IN_DIR = 'managed-settings.d';
@@ -28,7 +29,9 @@ const WIN_CANCELLED = 1223;
 /** AppleScript userCanceledErr: the user dismissed the password prompt. */
 const MAC_CANCELLED = '(-128)';
 /** Readable by every local user, as Claude Code requires; only the elevation can write it. */
-const MAC_FILE_MODE = '644';
+const UNIX_FILE_MODE = '644';
+/** pkexec exits 126 when the authentication dialog is dismissed. */
+const PKEXEC_CANCELLED = 126;
 
 export function managedPolicyFile(platform: NodeJS.Platform = process.platform): string | null {
   const root = MANAGED_ROOTS[platform];
@@ -85,10 +88,15 @@ export function windowsLauncher(inner: string): string {
 
 /** AppleScript that runs the copy or removal as root after the password prompt. */
 export function macElevatedScript(file: string, source: string | null): string {
-  const shell = source === null
-    ? `/bin/rm -f ${shQuote(file)}`
-    : `/bin/mkdir -p ${shQuote(path.posix.dirname(file))} && /bin/cp ${shQuote(source)} ${shQuote(file)} && /bin/chmod ${MAC_FILE_MODE} ${shQuote(file)}`;
+  const shell = unixElevatedScript(file, source);
   return `do shell script "${shell.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with administrator privileges`;
+}
+
+/** Shell commands shared by the macOS and Linux elevation launchers. */
+export function unixElevatedScript(file: string, source: string | null): string {
+  return source === null
+    ? `/bin/rm -f ${shQuote(file)}`
+    : `/bin/mkdir -p ${shQuote(path.posix.dirname(file))} && /bin/cp ${shQuote(source)} ${shQuote(file)} && /bin/chmod ${UNIX_FILE_MODE} ${shQuote(file)}`;
 }
 
 const DECLINED = 'Administrator approval was declined; nothing changed.';
@@ -97,19 +105,24 @@ async function elevated(file: string, source: string | null): Promise<void> {
   try {
     if (process.platform === 'win32') {
       await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', windowsLauncher(windowsElevatedScript(file, source))], { windowsHide: true });
-    } else {
+    } else if (process.platform === 'darwin') {
       await run('osascript', ['-e', macElevatedScript(file, source)]);
+    } else if (process.platform === 'linux') {
+      await run('pkexec', ['/bin/sh', '-c', unixElevatedScript(file, source)]);
+    } else {
+      throw new Error(`Unsupported platform: ${process.platform}`);
     }
   } catch (err) {
     const e = err as { code?: number | string; stderr?: string };
-    if (e.code === WIN_CANCELLED || e.stderr?.includes(MAC_CANCELLED)) throw new Error(DECLINED);
+    if (e.code === WIN_CANCELLED || e.code === PKEXEC_CANCELLED || e.stderr?.includes(MAC_CANCELLED)) throw new Error(DECLINED);
+    if (process.platform === 'linux' && e.code === 'ENOENT') throw new Error('Install polkit (pkexec) to update the managed policy.');
     throw new Error(`Couldn't update ${file}${e.stderr ? `: ${e.stderr.trim()}` : ''}`);
   }
 }
 
 const requireFile = () => {
   const file = managedPolicyFile();
-  if (!file) throw new Error('Managed policy is only supported on Windows and macOS');
+  if (!file) throw new Error('Managed policy is only supported on Windows, macOS and Linux');
   return file;
 };
 

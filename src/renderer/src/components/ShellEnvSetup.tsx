@@ -1,5 +1,6 @@
 import { CLAUDE_TOKEN_VAR, claudeEnvVars } from '@shared/claudeEnv';
 import { persistedSignal } from '../lib/persisted';
+import { DEFAULT_SHELL } from '../lib/platform';
 import { CopyButton, ExpandRow, Seg } from './ui';
 
 type Shell = 'powershell' | 'bash';
@@ -14,7 +15,7 @@ const envSnippet = (shell: Shell, endpoint: string, key: string) =>
 
 /** Points one shell session's Claude Code at the proxy, leaving its settings file alone. */
 export function ShellEnvSetup(props: { endpoint: string; clientKey: string; masked: string }) {
-  const [shell, setShell] = persistedSignal<Shell>('proxy.shell', 'powershell', SHELLS.map((s) => s.value));
+  const [shell, setShell] = persistedSignal<Shell>('proxy.shell', DEFAULT_SHELL, SHELLS.map((s) => s.value));
   return (
     <ExpandRow stateKey="proxy.shellSession" label="Shell session" help="Environment variables that point Claude Code at the proxy for one terminal session." action="Variables">
       <div class="row env-var">

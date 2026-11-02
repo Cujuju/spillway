@@ -63,9 +63,11 @@ const config: Configuration = {
   },
   // macOS builds must run on a Mac (dmg and code signing need macOS tools).
   mac: {
+    artifactName: '${productName}-${version}-${arch}-mac.${ext}',
     // Disk images serve first installs; updates rebuild the unpacked app bundle.
     target: [
       { target: 'dmg', arch: ['arm64', 'x64'] },
+      { target: 'zip', arch: ['arm64', 'x64'] },
     ],
     icon: 'resources/icon-1024.png',
     category: 'public.app-category.developer-tools',
@@ -77,6 +79,12 @@ const config: Configuration = {
     hardenedRuntime: false,
   },
   dmg: { artifactName: '${productName}-${version}-${arch}.${ext}' },
+  linux: {
+    target: [{ target: 'AppImage', arch: 'x64' }],
+    artifactName: '${productName}-${version}-${arch}.${ext}',
+    icon: 'resources/icon-1024.png',
+    category: 'Development',
+  },
 };
 
 export default config;

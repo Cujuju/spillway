@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { readlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { ClientProcess } from '@shared/types';
 
@@ -77,11 +78,23 @@ async function listWindows(): Promise<ProcessRow[]> {
 /** Unix re-parents orphans to pid 1, so parent ids are never stale and need no start time. */
 async function listUnix(): Promise<ProcessRow[]> {
   const { stdout } = await run('ps', ['-axo', 'pid=,ppid=,comm='], { timeout: LIST_TIMEOUT_MS, maxBuffer: LIST_MAX_BUFFER });
+  const rows = parseUnixProcesses(stdout);
+  if (process.platform !== 'linux') return rows;
+  return Promise.all(rows.map(async (row) => {
+    try {
+      const file = await readlink(`/proc/${row.pid}/exe`);
+      return { ...row, name: path.posix.basename(file), path: file };
+    } catch { return row; }
+  }));
+}
+
+/** Linux comm contains names; macOS comm contains executable paths, including spaces. */
+export function parseUnixProcesses(stdout: string): ProcessRow[] {
   return stdout.split('\n').flatMap((line) => {
     const m = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
     if (!m) return [];
     const [, pid = '', ppid = '', file = ''] = m;
-    return [{ pid: Number(pid), ppid: Number(ppid), name: path.basename(file), path: file, started: null }];
+    return [{ pid: Number(pid), ppid: Number(ppid), name: path.posix.basename(file), path: file.startsWith('/') ? file : null, started: null }];
   });
 }
 

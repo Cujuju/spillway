@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codexOwners, type ProcessRow } from './codexProcesses';
+import { codexOwners, parseUnixProcesses, type ProcessRow } from './codexProcesses';
 
 const CHATTYPOP_ELECTRON = 'E:\\Dev\\ChattyPop\\node_modules\\electron\\dist\\electron.exe';
 const CODEX_EXE = 'C:\\npm\\@openai\\codex-win32-x64\\vendor\\bin\\codex.exe';
@@ -9,6 +9,12 @@ const row = (pid: number, ppid: number, name: string, path: string | null, start
   ({ pid, ppid, name, path, started });
 
 describe('codexOwners', () => {
+  it('reads Linux ps names without treating equal names as a shared executable path', () => {
+    const rows = parseUnixProcesses(' 60 1 t3-code\n61 60 node\n62 61 codex\ninvalid\n');
+    expect(rows[0]?.path).toBeNull();
+    expect(codexOwners(rows)).toEqual([{ pid: 60, app: 't3-code' }]);
+    expect(parseUnixProcesses('40 1 /Applications/T3 Code.app/Contents/MacOS/T3 Code')[0]?.name).toBe('T3 Code');
+  });
   it('names a dev Electron app after its project, past the node shim and Electron child processes', () => {
     const rows = [
       row(10, 1, 'electron.exe', CHATTYPOP_ELECTRON),

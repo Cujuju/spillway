@@ -5,6 +5,7 @@ import { APP_ID, APP_NAME } from '@shared/app';
 import { history } from './historyStore';
 import { appIconPath } from './paths';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
+import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
 
 if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
@@ -25,8 +26,6 @@ async function startNormalApp(): Promise<void> {
   const { windowStarter } = await import('./windowStarter');
   const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } = await import('./window');
 
-  /** Windows: passed by the login item so a login launch can start hidden in the tray. */
-  const HIDDEN_ARG = '--hidden';
   const isMac = process.platform === 'darwin';
 
   // Dev loads package.json, which has no version; packaged builds carry it (electron-builder.ts).
@@ -46,6 +45,7 @@ async function startNormalApp(): Promise<void> {
   function applyLoginItem(): void {
     if (!app.isPackaged || app.commandLine.hasSwitch('user-data-dir')) return;
     const g = getSettings().general;
+    if (process.platform === 'linux') return setLinuxLoginItem(g.launchAtLogin, g.startMinimized);
     // Login-item args are Windows-only; macOS detects a login launch with wasOpenedAtLogin instead.
     app.setLoginItemSettings(isMac ? { openAtLogin: g.launchAtLogin } : { openAtLogin: g.launchAtLogin, args: g.startMinimized ? [HIDDEN_ARG] : [] });
   }

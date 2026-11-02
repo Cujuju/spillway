@@ -16,7 +16,7 @@ const isMac = process.platform === 'darwin';
 /** Centres the macOS traffic lights (about 14px tall) in the 36px --titlebar-height. */
 const TRAFFIC_LIGHTS = { x: 14, y: 11 };
 
-/** Windows draws its own title bar controls in the renderer; macOS keeps native traffic lights. */
+/** Windows and Linux draw title bar controls in the renderer; macOS keeps native traffic lights. */
 const chrome: Electron.BrowserWindowConstructorOptions = isMac
   ? { titleBarStyle: 'hiddenInset', trafficLightPosition: TRAFFIC_LIGHTS }
   : { frame: false };

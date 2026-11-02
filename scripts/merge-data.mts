@@ -17,7 +17,8 @@ let prodOverride: string | undefined;
 function installedProd(): string {
   if (prodOverride) return path.resolve(prodOverride);
   if (process.platform === 'darwin') return '/Applications/Spillway.app/Contents/MacOS/Spillway';
-  if (process.platform !== 'win32') throw new Error('Data merge supports Windows and macOS');
+  if (process.platform === 'linux') throw new Error('Pass --prod=<AppImage> to select the installed Linux app.');
+  if (process.platform !== 'win32') throw new Error(`Data merge does not support ${process.platform}`);
   if (!process.env.LOCALAPPDATA) throw new Error('LOCALAPPDATA is not set');
   return path.join(process.env.LOCALAPPDATA, 'Programs', 'Spillway', 'Spillway.exe');
 }

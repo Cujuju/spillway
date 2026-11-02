@@ -26,6 +26,13 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe('appVersion', () => {
+  it('computes a release commit version without changing the checkout', () => {
+    commit('feat: base');
+    const released = git('rev-parse', 'HEAD').trim();
+    commit('fix: next');
+    expect(appVersion(repo, released)).toBe('0.1.0');
+    expect(appVersion(repo)).toBe('0.1.1');
+  });
   it('bumps patch for non-feature commits', () => {
     commit('fix: a');
     commit('docs: b');

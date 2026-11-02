@@ -82,7 +82,7 @@ export function resolveProxyExecutable(override: string): string | null {
 const resourcePath = (file: string) =>
   app.isPackaged ? path.join(process.resourcesPath, file) : path.join(app.getAppPath(), 'resources', file);
 
-/** 256 px PNG: notifications and the macOS menu bar. */
+/** 256 px PNG: notifications, Linux tray and the macOS menu bar. */
 export const appIconPath = () => resourcePath('icon.png');
 
 /** Window and tray icon. Windows gets the .ico: its pre-resampled 16-32 px sizes are sharper than Electron scaling the 256 px PNG. */

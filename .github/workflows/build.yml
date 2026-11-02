@@ -1,86 +1,144 @@
-# Builds the installers on Windows and macOS, including the proxy from the private fork.
-# Needs the repository secret CLIPROXY_SRC_TOKEN: a token with read access to Cujuju/CLIProxyAPI.
-# Builds only; releases are signed and published locally (scripts/release.mts, docs/releasing.md).
-# Full installers wait for a stable release (promote) or a manual run; every commit on main
-# reaches a scheduled nightly update from the local machines (scripts/nightly.mts).
-name: build
+name: releases
 
 on:
+  schedule:
+    - cron: '0 */3 * * *'
   release:
     types: [released]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Release files to publish
+        type: choice
+        options: [nightly, installers]
+        default: nightly
+      tag:
+        description: Stable tag for installers (empty selects latest stable)
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: spillway-releases
+  cancel-in-progress: false
+
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            # Host target only: the Windows installer is x64.
-            proxy-targets: ''
-            artifacts: |
-              desktop/dist/*.exe
-          # Apple Silicon runner; electron-builder.ts packages arm64 and x64 dmgs and zips.
-          - os: macos-latest
-            proxy-targets: darwin-arm64 darwin-x64
-            artifacts: |
-              desktop/dist/*.dmg
-              desktop/dist/*-mac.zip
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: desktop
+  plan:
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      sha: ${{ steps.plan.outputs.sha }}
+      tag: ${{ steps.plan.outputs.tag }}
+      mode: ${{ steps.plan.outputs.mode }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
-          path: desktop
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Select source and prepare the release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ github.event_name == 'release' && 'installers' || inputs.mode || 'nightly' }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: node scripts/releasePlan.mts
 
-      # Same layout as a local checkout: ../CLIProxyAPI beside the desktop repo.
+  build:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          path: desktop
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/checkout@v7
         with:
           repository: Cujuju/CLIProxyAPI
-          ref: main
-          token: ${{ secrets.CLIPROXY_SRC_TOKEN }}
           path: CLIProxyAPI
+          fetch-depth: 0
           persist-credentials: false
-
+      - uses: actions/checkout@v7
+        with:
+          repository: Cujuju/solidjs-toolkit
+          path: solidjs-toolkit
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: CLIProxyAPI/go.mod
           cache-dependency-path: CLIProxyAPI/go.sum
-
-      # pnpm version from package.json packageManager; Node from package.json engines.node.
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: desktop/package.json
           cache: true
           cache_dependency_path: desktop/pnpm-lock.yaml
-
       - uses: actions/setup-node@v7
         with:
           node-version-file: desktop/package.json
           package-manager-cache: false
-
+      - name: Install toolkit dependencies
+        working-directory: solidjs-toolkit
+        run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
-
+      - run: node scripts/build-linked.mjs
       - name: Build the proxy
         shell: bash
         env:
-          CLIPROXY_SRC: ${{ github.workspace }}/CLIProxyAPI
-        run: pnpm proxy:build ${{ matrix.proxy-targets }}
-
+          PROXY_TARGETS: ${{ matrix.proxyTargets }}
+        run: |
+          read -ra targets <<< "$PROXY_TARGETS"
+          pnpm proxy:build "${targets[@]}"
+      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-
       - name: Package
         run: pnpm package
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: spillway-${{ matrix.os }}
-          path: ${{ matrix.artifacts }}
-          if-no-files-found: error
+      - name: Stage update signing key
+        if: needs.plan.outputs.mode == 'nightly' && !matrix.published
+        env:
+          UPDATE_KEY_CONTENTS: ${{ secrets.SPILLWAY_UPDATE_KEY }}
+        run: >-
+          node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path';
+          const key = path.join(process.env.RUNNER_TEMP, 'spillway-update-key');
+          if (!process.env.UPDATE_KEY_CONTENTS) throw new Error('SPILLWAY_UPDATE_KEY is required');
+          fs.writeFileSync(key, process.env.UPDATE_KEY_CONTENTS, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, 'SPILLWAY_UPDATE_KEY=' + key + '\n');"
+      - name: Publish signed nightly updates
+        if: needs.plan.outputs.mode == 'nightly' && !matrix.published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPILLWAY_UPDATE_ONLY: '1'
+        run: pnpm release nightly
+      - name: Attach stable installers
+        if: needs.plan.outputs.mode == 'installers'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/releaseInstallers.mts
+      - name: Remove update signing key
+        if: always()
+        run: >-
+          node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path';
+          fs.rmSync(path.join(process.env.RUNNER_TEMP, 'spillway-update-key'), { force: true });"

@@ -17,10 +17,10 @@ function git(repoDir: string, args: string[], input?: string): string {
  * `0.<feat commits>.<non-feat commits not reachable from any feat>`, merges excluded.
  * Every new commit raises it; a shallow clone undercounts.
  */
-export function appVersion(repoDir: string): string {
+export function appVersion(repoDir: string, ref = 'HEAD'): string {
   let log: string;
   try {
-    log = git(repoDir, ['log', '--no-merges', '--format=%H %s', 'HEAD']);
+    log = git(repoDir, ['log', '--no-merges', '--format=%H %s', ref]);
   } catch (err) {
     throw new Error(`Spillway's version comes from git history; build from a git checkout with at least one commit. ${String(err)}`, { cause: err });
   }
@@ -28,7 +28,7 @@ export function appVersion(repoDir: string): string {
     .split('\n')
     .map((line) => ({ hash: line.slice(0, line.indexOf(' ')), subject: line.slice(line.indexOf(' ') + 1) }))
     .filter((c) => FEATURE_SUBJECT.test(c.subject));
-  const revs = ['HEAD', ...features.map((c) => `^${c.hash}`)].join('\n');
+  const revs = [ref, ...features.map((c) => `^${c.hash}`)].join('\n');
   const patches = git(repoDir, ['rev-list', '--no-merges', '--count', '--stdin'], `${revs}\n`);
   return `${MAJOR}.${features.length}.${patches}`;
 }

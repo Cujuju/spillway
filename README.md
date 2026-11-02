@@ -1,6 +1,6 @@
 # Spillway
 
-Windows and macOS tray (menu bar) app that runs a local AI proxy (the CLIProxyAPI fork), pools your subscription accounts behind it, and shows how much of each account's limits is left.
+Windows, macOS and Linux tray (menu bar) app that runs a local AI proxy (the CLIProxyAPI fork), pools your subscription accounts behind it, and shows how much of each account's limits is left.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.png">
@@ -11,7 +11,7 @@ Windows and macOS tray (menu bar) app that runs a local AI proxy (the CLIProxyAP
 
 ## Install
 
-Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows. On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
+Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows, or `Spillway-<version>-x64.AppImage` on Linux (x64). Make the AppImage executable and open it; see [Linux](docs/linux.md). On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
 
 ## Quick start
 
@@ -75,6 +75,8 @@ Exactly what Apply changes: [Connect clients](docs/clients.md).
 ## Updates
 
 Settings → Updates: **Stable** or **Nightly**, checked a minute after launch and every 6 hours. Nothing downloads until you click **Download**, then **Restart and install**. Every update's signature is checked first.
+
+GitHub Actions checks `main` every 3 hours and publishes signed nightly updates when it changes, finishing missing platforms on an incomplete nightly first. Promoting a nightly builds full installers for all three platforms. [Release details](docs/releasing.md).
 
 ## Privacy
 

@@ -2,39 +2,41 @@
 
 # Updates and releases
 
-Settings → Updates checks this repo's [GitHub releases](https://github.com/Cujuju/spillway/releases) (`src/shared/updateFeed.ts`). Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), the same path on every OS, downloading only chunks missing from the installed version. With **Check automatically** on, the app checks a minute after launch and every 6 hours and shows a notification. Nothing downloads or installs until you click.
+Settings → Updates checks this repo's [GitHub releases](https://github.com/Cujuju/spillway/releases) (`src/shared/updateFeed.ts`). Updates run on [`@cujuju/electron-updates`](https://github.com/Cujuju/solidjs-toolkit/tree/main/packages/electron-updates), downloading only chunks missing from the installed version. With **Check automatically** on, the app checks a minute after launch and every 6 hours. Nothing downloads or installs until you click.
 
-- **Channel**: Nightly takes every published build (GitHub prereleases); Stable takes only promoted ones (the latest release). Switching to Stable never downgrades.
-- Each update file is listed in the release's `update-<platform>.json`, with an Ed25519 signature over the app, version, platform, arch, file name, size and SHA-512. The app checks the listing against the public key built into it (`resources/update-public-key.pem`) before offering the update, and checks the download's hash before installing.
-- **Download**, then **Restart and install**: the app quits (stopping the proxy) and applies the update, then reopens. Windows runs the installer silently. macOS swaps in the new app bundle, so ad-hoc signed builds update without Squirrel.Mac; the app must be in a folder you can write to, such as Applications.
-- A build made without `resources/update-public-key.pem` cannot verify updates and never offers one.
-- Someone with write access to this repo can withhold updates. They cannot get an unsigned file, an older version, or another app's file installed.
+- **Channel**: Nightly takes published prereleases; Stable takes promoted releases. Switching to Stable never downgrades.
+- `update-win32.json`, `update-darwin.json` and `update-linux.json` list signed indexes. Ed25519 signatures bind the app, version, platform, architecture, file name, size and SHA-512. The app checks the committed public key (`resources/update-public-key.pem`) before offering an update and checks downloaded hashes.
+- **Download**, then **Restart and install** stops the proxy and applies the update. Windows runs its installer silently; macOS swaps the unpacked app bundle; Linux replaces the original AppImage. macOS and Linux need a writable containing folder.
+- A build without the public key cannot verify updates and never offers one.
 
-## Signing key (once)
+## Signing key
 
-```sh
-pnpm release keygen
-```
+`pnpm release keygen` creates a private key outside the repo (`~/.config/spillway/update_key`, or the path in `SPILLWAY_UPDATE_KEY`) and writes its public half to `resources/update-public-key.pem`. Commit only the public key and back up the private key outside the repo. Installed copies keep trusting that key.
 
-Writes the private key to `~/.config/spillway/update_key` (or `$SPILLWAY_UPDATE_KEY`) and the public key to `resources/update-public-key.pem`. Commit the public key so every build embeds it. Back up the private key outside the repo: installed copies accept updates only from it. Copy it to each machine that publishes (the Mac too).
+GitHub Actions uses the repository secret **SPILLWAY_UPDATE_KEY**, containing the private key's PEM contents. The workflow writes it privately into runner temp storage, passes that path as `SPILLWAY_UPDATE_KEY`, and removes the file after publishing. It never logs the contents.
 
-## Release
+## Nightlies in GitHub Actions
 
-Releases are built and published from your own machines; there is no CI release.
+The **releases** workflow (`.github/workflows/build.yml`) runs every 3 hours and supports **Run workflow → nightly**. Scheduled runs:
 
-1. Commit and push. The version comes from git history (`appVersion.ts`).
-2. On Windows: `pnpm package && pnpm release nightly`. On the Mac: the same. `release nightly` refuses unless `../solidjs-toolkit` and `../CLIProxyAPI` are clean at their latest pushed commit. Each uploads its platform's signed files to the prerelease `v<version>`, creating it if needed. Add `--dry-run` to see the `gh` commands first. Needs `gh` with push access to this repo.
-3. Once a nightly has both platforms and you're happy with it: `pnpm release promote <version>` makes it the stable release (same files and signatures). Run it from `main`: it first refreshes the screenshots in `docs/images/`, commits any that changed and pushes `main`.
+1. Finish any missing platform manifests on the newest prerelease, building its original tagged commit even if main has advanced.
+2. Otherwise publish origin/main if it differs from the newest release's commit.
+3. Otherwise skip.
 
-### Scheduled nightly
+The plan job fetches complete git history, derives the deterministic version through `appVersion.ts`, and creates one prerelease at that exact SHA. `scripts/releaseShared.mts` supplies the same title, notes and target for CI and the local release CLI. Platform jobs then build Windows x64, macOS arm64/x64 and Linux x64, and run `SPILLWAY_UPDATE_ONLY=1 pnpm release nightly` to upload signed updates. Full installers wait for stable releases.
 
-`node scripts/nightly.mts install` on each machine (Windows Task Scheduler, macOS launchd) runs `node scripts/nightly.mts run` every 6 hours. Each run, in order:
+The public fork and toolkit are checked out from their default branches as siblings; no source-access secret is needed. The release guard requires clean siblings at their latest pushed default-branch commits and discovers `origin/HEAD` when CI checkouts omit it. Workflow concurrency serializes release runs.
 
-1. If the newest nightly lacks this OS, publishes this OS for that release's commit, so Windows and macOS share one version.
-2. Otherwise, if `main` moved past the newest release, publishes `main` as a new nightly.
-3. Otherwise does nothing.
+A manual nightly builds main even when it has not changed; completed platform uploads are preserved. An already-stable source has no new nightly to publish. The old machine-local scheduler has been retired; schedules are managed outside this repo.
 
-It builds clean worktrees of this repo and of `../solidjs-toolkit` and `../CLIProxyAPI` at their latest pushed commits (`../.spillway-nightly/`), so stale or uncommitted sibling code never ships, and publishes update files only; macOS disk images wait for a manual `pnpm release nightly`. The CI installer build runs on a stable release (promote) or a manual run.
+When introducing Linux support, run a manual nightly once from the updated main. Earlier prerelease commits cannot build Linux; the manual run starts the new version instead of resuming one of those commits.
 
-- Log: `.git/spillway-nightly.log`. `node scripts/nightly.mts uninstall` removes the schedule.
-- Each machine needs the signing key and `gh` with push access.
+## Stable releases
+
+Once a nightly has all three platform manifests, run `pnpm release promote <version>` from main. It builds the fake-data demo screenshots, commits changed images, pushes main, and only then promotes the existing nightly. A rejected push stops promotion. `--dry-run` skips the screenshot writes and publication.
+
+Promotion emits `release: released`, triggering the same workflow to build full Windows Setup exe, both macOS dmg/zip architectures, and Linux x64 AppImage installers from the release tag's source commit and attach them to that release. The screenshot commit does not change that source tag. Updates retain their existing signatures and files.
+
+For installer retries, choose **Run workflow → installers**, optionally naming a stable tag (otherwise the latest stable). This rebuilds installers and replaces matching installer assets; it does not replace update manifests or packs.
+
+For a local nightly, install and build the toolkit, build this platform's proxy, run `pnpm package`, then `pnpm release nightly` from a clean pushed commit with clean current siblings. Set `SPILLWAY_UPDATE_KEY` to the private key's path. Needs `gh` with write access; `--dry-run` previews publication commands.

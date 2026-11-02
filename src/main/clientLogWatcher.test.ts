@@ -119,8 +119,8 @@ function onPlatform(platform: NodeJS.Platform) {
   return () => Object.defineProperty(process, 'platform', original);
 }
 
-it('reconciles at five minutes on a Node watcher that hides drops', async () => {
-  const restore = onPlatform('darwin');
+it.each(['darwin', 'linux'] as const)('reconciles at five minutes on a %s Node watcher that hides drops', async (platform) => {
+  const restore = onPlatform(platform);
   try {
     await start(); await writeFile(file(), line('missed'));
     for (let n = 0; n < CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();

@@ -6,7 +6,7 @@ import { appIconPath, shellIconPath } from './paths';
 import { usePreferredAccount } from './preferredAccounts';
 import { proxy } from './proxySupervisor';
 import { requestQuit } from './quit';
-import { getSettings } from './settingsStore';
+import { getSettings, onSettingsChange } from './settingsStore';
 import { usage } from './usagePoller';
 import { showMainWindow } from './window';
 
@@ -26,6 +26,7 @@ export const taskbarDark = () => nativeTheme.shouldUseDarkColorsForSystemIntegra
 
 let appTray: Tray | null = null;
 const limitTrays = new Map<string, Tray>();
+let stopSettings: (() => void) | undefined;
 
 /**
  * Stable per-icon GUID so Windows keeps its "always show" choice and macOS its menu bar spot.
@@ -34,6 +35,10 @@ const limitTrays = new Map<string, Tray>();
 function guidFor(id: string): string {
   const h = createHash('sha1').update(`spillway:${process.execPath.toLowerCase()}:${id}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+function createTray(image: Electron.NativeImage, id: string): Tray {
+  return process.platform === 'linux' ? new Tray(image) : new Tray(image, guidFor(id));
 }
 
 const choose = (provider: string, authIndex: string) =>
@@ -85,7 +90,15 @@ function contextMenu(): Menu {
 
 function attach(tray: Tray): void {
   tray.on('click', showMainWindow);
-  tray.on('right-click', () => tray.popUpContextMenu(contextMenu()));
+  // Linux StatusNotifierItem hosts display the registered menu without emitting right-click.
+  if (process.platform === 'linux') tray.setContextMenu(contextMenu());
+  else tray.on('right-click', () => tray.popUpContextMenu(contextMenu()));
+}
+
+function refreshLinuxMenus(): void {
+  if (process.platform !== 'linux') return;
+  appTray?.setContextMenu(contextMenu());
+  for (const tray of limitTrays.values()) tray.setContextMenu(contextMenu());
 }
 
 function appTrayImage(): Electron.NativeImage {
@@ -101,9 +114,14 @@ function appTrayImage(): Electron.NativeImage {
 
 export function ensureAppTray(): void {
   if (appTray) return;
-  appTray = new Tray(appTrayImage(), guidFor('app'));
+  appTray = createTray(appTrayImage(), 'app');
   appTray.setToolTip(APP_NAME);
   attach(appTray);
+  if (process.platform === 'linux') {
+    usage.on('snapshot', refreshLinuxMenus);
+    proxy.on('status', refreshLinuxMenus);
+    stopSettings = onSettingsChange(refreshLinuxMenus);
+  }
 }
 
 export function setAppTrayTooltip(text: string): void {
@@ -128,7 +146,7 @@ export function syncLimitTrays(images: LimitTrayImage[]): void {
   for (const i of images) {
     let tray = limitTrays.get(i.id);
     if (!tray) {
-      tray = new Tray(imageOf(i), guidFor(i.id));
+      tray = createTray(imageOf(i), i.id);
       attach(tray);
       limitTrays.set(i.id, tray);
     } else {
@@ -139,6 +157,10 @@ export function syncLimitTrays(images: LimitTrayImage[]): void {
 }
 
 export function destroyTrays(): void {
+  usage.off('snapshot', refreshLinuxMenus);
+  proxy.off('status', refreshLinuxMenus);
+  stopSettings?.();
+  stopSettings = undefined;
   appTray?.destroy();
   appTray = null;
   syncLimitTrays([]);

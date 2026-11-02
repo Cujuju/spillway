@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  macElevatedScript, managedPolicyFile, managedPolicyStatus, policyState, policyText, undoManagedPolicy, windowsElevatedScript, windowsLauncher,
+  macElevatedScript, managedPolicyFile, managedPolicyStatus, policyState, policyText, undoManagedPolicy, unixElevatedScript, windowsElevatedScript, windowsLauncher,
 } from './managedPolicy';
 
 const TARGET = { endpoint: 'http://127.0.0.1:8317', key: 'client-key' };
@@ -13,7 +13,8 @@ describe('managed policy file', () => {
   it('uses a drop-in Spillway owns under Claude Code’s managed folder', () => {
     expect(managedPolicyFile('win32')).toBe('C:\\Program Files\\ClaudeCode\\managed-settings.d\\spillway.json');
     expect(managedPolicyFile('darwin')).toBe('/Library/Application Support/ClaudeCode/managed-settings.d/spillway.json');
-    expect(managedPolicyFile('linux')).toBeNull();
+    expect(managedPolicyFile('linux')).toBe('/etc/claude-code/managed-settings.d/spillway.json');
+    expect(managedPolicyFile('freebsd')).toBeNull();
   });
 
   it('sets the endpoint and the key header, nothing else', () => {
@@ -51,6 +52,13 @@ describe('managed policy status', () => {
 });
 
 describe('elevated scripts', () => {
+  it('quotes Linux shell paths and makes the installed policy readable', () => {
+    const file = "/etc/claude-code/managed-settings.d/it's.json";
+    expect(unixElevatedScript(file, '/tmp/source file.json')).toBe(
+      `/bin/mkdir -p '/etc/claude-code/managed-settings.d' && /bin/cp '/tmp/source file.json' '/etc/claude-code/managed-settings.d/it'\\''s.json' && /bin/chmod 644 '/etc/claude-code/managed-settings.d/it'\\''s.json'`,
+    );
+    expect(unixElevatedScript(file, null)).toBe(`/bin/rm -f '/etc/claude-code/managed-settings.d/it'\\''s.json'`);
+  });
   it('quotes paths for PowerShell and encodes the elevated part', () => {
     expect(windowsElevatedScript("C:\\a b\\it's.json", "C:\\t\\x.json")).toContain("-Destination 'C:\\a b\\it''s.json'");
     const encoded = /'-EncodedCommand','([^']+)'/.exec(windowsLauncher('Write-Output 1'))?.[1] ?? '';

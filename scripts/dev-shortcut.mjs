@@ -2,6 +2,7 @@
 // Windows: Start Menu shortcut with the dev app ID and the large tile logo. macOS: ~/Applications/Spillway Dev.app.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,9 @@ function windowsShortcut() {
   // Windows PowerShell 5 ships with Windows, so no extra runtime is needed.
   execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'scripts', 'dev-shortcut.ps1'),
     '-Path', file, '-Target', target, '-Arguments', args, '-WorkingDirectory', root, '-Icon', path.join(root, 'resources', 'icon.ico'),
-    '-AppId', id, '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml')], { stdio: 'inherit' });
+    '-AppId', id, '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml'),
+    // The `electron` package exports its exe's real path, the one `pnpm dev` runs.
+    '-ElectronExe', createRequire(import.meta.url)('electron')], { stdio: 'inherit' });
   return file;
 }
 

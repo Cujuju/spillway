@@ -8,7 +8,7 @@
 | Build the proxy into `resources/bin/<platform>-<arch>` | `pnpm proxy:build` for this machine, or `pnpm proxy:build darwin-arm64 darwin-x64`, or `all` (source: `CLIPROXY_SRC` or `../CLIProxyAPI`) |
 | Dev, with hot reload | `pnpm dev` (rebuilds the proxy first; if that fails, it keeps the last good binary and logs why) |
 | Installer | `pnpm package` → Windows: `dist/Spillway-Setup-<ver>.exe` (per-user install with Start Menu and desktop shortcuts); macOS: `dist/Spillway-<ver>-<arch>.dmg` |
-| Start Menu / Applications launcher for the dev build | `pnpm dev:shortcut` → **Spillway Dev**, which runs `pnpm dev` from this repo (Windows: Start Menu shortcut, log in `%TEMP%\spillway-dev-shortcut.log`; macOS: `~/Applications/Spillway Dev.app`, log in `$TMPDIR/spillway-dev.log`). A second click focuses the running app. |
+| Start Menu / Applications launcher for the dev build | `pnpm dev:shortcut` → **Spillway Dev**, which runs `pnpm dev` from this repo (Windows: Start Menu shortcut, log in `%TEMP%\spillway-dev-shortcut.log`; macOS: `~/Applications/Spillway Dev.app`, log in `$TMPDIR/spillway-dev.log`). A second click focuses the running app. On Windows it also hides `Electron.lnk`, the shortcut Electron writes for notifications, which would otherwise take Spillway Dev's place in Start. |
 | Checks | `pnpm typecheck`, `pnpm test` |
 
 CI (`.github/workflows/build.yml`) builds the Windows and macOS installers on each push to `main` and uploads them as artifacts. It checks out the private fork with the repository secret `CLIPROXY_SRC_TOKEN` (a fine-grained token with read access to `Cujuju/CLIProxyAPI` contents); Go comes from the fork's `go.mod`, Node from `engines.node`, pnpm from `packageManager`.

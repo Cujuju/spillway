@@ -8,6 +8,19 @@ $restartWaitSeconds = 60
 $restartPollMs = 200
 $log = Join-Path $env:TEMP 'spillway-dev-shortcut.log'
 
+# Electron recreates its notification shortcut visible if it was deleted; hidden, Start lists "Spillway Dev" (dev-shortcut.ps1).
+function Hide-ElectronShortcut {
+    $exe = Join-Path $repo 'node_modules\electron\dist\electron.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { return }
+    $name = (Get-Item -LiteralPath $exe).VersionInfo.ProductName
+    $file = Join-Path ([Environment]::GetFolderPath('Programs')) "$name.lnk"
+    $item = Get-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+    if (-not $item -or ($item.Attributes -band [IO.FileAttributes]::Hidden)) { return }
+    if ((New-Object -ComObject WScript.Shell).CreateShortcut($file).TargetPath -like "$repo\node_modules\*") {
+        $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
+    }
+}
+
 function Get-AppProcess {
     Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$repo\node_modules\*" }
 }
@@ -28,6 +41,7 @@ try {
     # Inherited from an Electron-hosted parent, it makes electron.exe run as plain Node.
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     Set-Location -LiteralPath $repo
+    Hide-ElectronShortcut
     # The headless console has no window; the log is the only place errors show.
     # Through cmd: Windows PowerShell treats pnpm's stderr lines as errors and stops the script.
     cmd.exe /d /c "pnpm dev > `"$log`" 2>&1"

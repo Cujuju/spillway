@@ -1,5 +1,6 @@
 # Called by scripts/dev-shortcut.mjs: writes a Start Menu shortcut with an app ID and a tile manifest.
 # Electron's shell.writeShortcutLink can't set the manifest hint, which gives the Start tile its large logo.
+# -ElectronExe: also writes Electron's notification shortcut, hidden (see Save-ElectronShortcut).
 param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Target,
@@ -7,7 +8,8 @@ param(
     [Parameter(Mandatory)][string]$WorkingDirectory,
     [Parameter(Mandatory)][string]$Icon,
     [Parameter(Mandatory)][string]$AppId,
-    [Parameter(Mandatory)][string]$TileManifest
+    [Parameter(Mandatory)][string]$TileManifest,
+    [string]$ElectronExe
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -77,16 +79,17 @@ namespace SpillwayShortcut {
             try { store.SetValue(ref key, ref value); } finally { Marshal.FreeCoTaskMem(value.Value); }
         }
 
-        public static void Save(string path, string target, string arguments, string workingDir, string icon, string appId, string tileManifest) {
+        // Null arguments, icon, description and tile manifest are left unset.
+        public static void Save(string path, string target, string arguments, string workingDir, string icon, string description, string appId, string tileManifest) {
             var link = (IShellLinkW)new ShellLinkCoClass();
             link.SetPath(target);
-            link.SetArguments(arguments);
+            if (arguments != null) link.SetArguments(arguments);
             link.SetWorkingDirectory(workingDir);
-            link.SetIconLocation(icon, 0);
-            link.SetDescription("Spillway Dev, run from the repo");
+            if (icon != null) link.SetIconLocation(icon, 0);
+            if (description != null) link.SetDescription(description);
             var store = (IPropertyStore)link;
             SetString(store, AppUserModelIdProperty, appId);
-            SetString(store, TileManifestHintProperty, tileManifest);
+            if (tileManifest != null) SetString(store, TileManifestHintProperty, tileManifest);
             store.Commit();
             ((IPersistFile)link).Save(path, true);
             // Start caches a shortcut's tile; this makes it read the shortcut again.
@@ -95,4 +98,19 @@ namespace SpillwayShortcut {
     }
 }
 '@
-[SpillwayShortcut.Link]::Save($Path, $Target, $Arguments, $WorkingDirectory, $Icon, $AppId, $TileManifest)
+[SpillwayShortcut.Link]::Save($Path, $Target, $Arguments, $WorkingDirectory, $Icon, 'Spillway Dev, run from the repo', $AppId, $TileManifest)
+
+# Unpackaged Electron keeps "Programs\<exe product name>.lnk" -> its exe, with the app's ID, for notifications,
+# rewriting it when its fields differ. Start lists one shortcut per app ID, so a visible one replaces "Spillway Dev".
+# A rewrite keeps the hidden attribute. An existing one is kept: it holds Electron's notification activator ID.
+function Save-ElectronShortcut {
+    $name = (Get-Item -LiteralPath $ElectronExe).VersionInfo.ProductName
+    $file = Join-Path (Split-Path -Parent $Path) "$name.lnk"
+    if (-not (Test-Path -LiteralPath $file)) {
+        $unset = [NullString]::Value
+        [SpillwayShortcut.Link]::Save($file, $ElectronExe, $unset, (Split-Path -Parent $ElectronExe), $unset, $unset, $AppId, $unset)
+    }
+    $item = Get-Item -LiteralPath $file -Force
+    $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
+}
+if ($ElectronExe) { Save-ElectronShortcut }

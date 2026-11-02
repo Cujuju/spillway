@@ -84,7 +84,7 @@ export function Dashboard() {
     const longest = visibleLengths().at(-1)?.value;
     return longest ? lengthLineId(longest) : null;
   };
-  const chartModels = () => visibleLines().filter((v) => v.line.id === lineId()).map((v) => v.line.model);
+  const modelsOf = (id: string) => visibleLines().filter((v) => v.line.id === id).map((v) => v.line.model);
   // Chart window picker: each length in view, plus a charted scoped line; the tooltip names the providers it charts.
   const chartWindows = createMemo(() => {
     const charted = (id: string) => visibleLines().filter((v) => v.line.id === id).map((v) => providerLabel(v.provider)).join(', ');
@@ -193,7 +193,7 @@ export function Dashboard() {
           when={focused()}
           fallback={
             <Show when={!providerCreds().every((c) => c.apiKey)}>
-              <PoolPanel models={chartModels()} providers={chartProviders()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
+              <PoolPanel modelsOf={modelsOf} providers={chartProviders()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
             </Show>
           }
         >

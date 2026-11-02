@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import { persistedSignal } from '../lib/persisted';
 import { providerVar } from '../lib/providers';
@@ -30,12 +30,16 @@ export interface ChartWindow {
   tipRows: TipRow[];
 }
 
+/** Pixel value of a CSS length property (custom or resolved). */
+const px = (style: CSSStyleDeclaration, prop: string) => parseFloat(style.getPropertyValue(prop)) || 0;
+
 /**
- * Remaining/drain chart and forecast, a line per pool. Cards pick pools; cards or picker pick the window.
- * The chart takes the panel's spare height; the wheel zooms its time span.
+ * Remaining/drain charts, a line per pool. If every window's chart fits the spare height they stack
+ * and the window picker hides; else one chart shows the picked window.
  */
 export function PoolPanel(props: {
-  models: PoolModel[];
+  /** Pool models charted for a window (card line id). */
+  modelsOf: (line: string) => PoolModel[];
   /** Providers in view, legend order; those without the charted window show disabled. */
   providers: string[];
   windows: ChartWindow[];
@@ -43,11 +47,28 @@ export function PoolPanel(props: {
   onLine: (id: string) => void;
 }) {
   const [tab, setTab] = persistedSignal('dashboard.poolTab', 'remaining', POOL_TABS);
-  const shown = createMemo(() => props.models.filter((m) => m.summary()));
-  const single = () => shown().length === 1;
+  /** How many labelled charts fit the chart area's height. */
+  const [room, setRoom] = createSignal(1);
+  const measure = (el: HTMLDivElement) => {
+    const ro = new ResizeObserver(([e]) => {
+      if (!e) return;
+      const style = getComputedStyle(el);
+      const item = px(style, '--chart-min-height') + px(style, '--pool-label-height');
+      const gap = px(style, 'row-gap');
+      setRoom(Math.floor((e.contentRect.height + gap) / (item + gap)));
+    });
+    ro.observe(el);
+    onCleanup(() => ro.disconnect());
+  };
+  const stacked = () => props.windows.length > 1 && room() >= props.windows.length;
+  const lines = () => (stacked() ? props.windows.map((w) => w.value) : props.line ? [props.line] : []);
+  const shownOf = (line: string) => props.modelsOf(line).filter((m) => m.summary());
+  const shown = createMemo(() => lines().flatMap(shownOf));
+  const charts = (id: string) => shown().some((m) => m.provider() === id);
+  const single = () => new Set(shown().map((m) => m.provider())).size === 1;
   const drainMax = (peak: number) => Math.max(MIN_DRAIN_AXIS, Math.ceil(peak * DRAIN_HEADROOM));
-  const series = (kind: 'remaining' | 'drain') =>
-    shown().map((m) => ({
+  const series = (line: string, kind: 'remaining' | 'drain') =>
+    shownOf(line).map((m) => ({
       id: m.provider(),
       label: providerLabel(m.provider()),
       color: providerVar(m.provider()),
@@ -55,8 +76,18 @@ export function PoolPanel(props: {
       future: kind === 'remaining' ? m.projection()?.points : undefined,
     }));
   const color = () => (single() ? providerVar(shown()[0]!.provider()) : undefined);
-  const charts = (id: string) => shown().some((m) => m.provider() === id);
-  const windowLabel = () => props.windows.find((w) => w.value === props.line)?.label ?? 'this';
+  const labelOf = (line: string) => props.windows.find((w) => w.value === line)?.label ?? 'this';
+  const windowLabel = () => lines().map(labelOf).join(' or ') || 'this';
+  const chart = (line: string) => (
+    <Show
+      when={tab() === 'remaining'}
+      fallback={
+        <QuotaChart series={series(line, 'drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel={`${labelOf(line)} drain rate chart`} />
+      }
+    >
+      <QuotaChart series={series(line, 'remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel={`${labelOf(line)} remaining quota chart`} />
+    </Show>
+  );
 
   return (
     <section class="summary" style={{ '--pool-color': color() }}>
@@ -81,7 +112,7 @@ export function PoolPanel(props: {
             <Show when={tab() === 'remaining'}>
               <span><span class="dash">- - -</span>Projected</span>
             </Show>
-            <Show when={props.windows.length}>
+            <Show when={props.windows.length && !stacked()}>
               <Seg label="Chart window" value={props.line ?? ''} options={props.windows} onChange={props.onLine} />
             </Show>
             <select class="select" value={hours()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastHours = Number(e.currentTarget.value); })}>
@@ -89,14 +120,20 @@ export function PoolPanel(props: {
             </select>
           </div>
         </div>
-        <Show
-          when={tab() === 'remaining'}
-          fallback={
-            <QuotaChart series={series('drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel="Drain rate chart" />
-          }
-        >
-          <QuotaChart series={series('remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Remaining quota chart" />
-        </Show>
+        <div class="pool-charts">
+          <div class="pool-stack" ref={measure}>
+            <Show when={stacked()} fallback={<For each={lines()}>{(line) => chart(line)}</For>}>
+              <For each={lines()}>
+                {(line) => (
+                  <div class="pool-stack-item">
+                    <div class="pool-chart-label">{labelOf(line)}</div>
+                    {chart(line)}
+                  </div>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
       </Show>
     </section>
   );

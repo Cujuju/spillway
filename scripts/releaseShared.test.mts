@@ -2,8 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Arch, archFromString, LinuxPackager, MacPackager, Packager, WinPackager } from 'electron-builder';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertReleaseSiblings, ensureNightlyRelease, installerFiles, nightlyTarget, RELEASE_ARCHS, releaseDetails, type ReleaseView } from './releaseShared.mts';
+import config from '../electron-builder.ts';
+import { assertReleaseSiblings, ensureNightlyRelease, installerFiles, nightlyTarget, RELEASE_ARCHS, releaseDetails, updateSource, type ReleaseView } from './releaseShared.mts';
 
 vi.mock('node:child_process', { spy: true });
 const GIT_TEST_TIMEOUT_MS = 30_000;
@@ -58,8 +60,33 @@ it('does not turn an authentication failure into a release creation', () => {
 
 it('names all full installers including both Mac zip archives and the Linux AppImage', () => {
   expect(installerFiles('win32', '0.1.0')).toEqual(['Spillway-Setup-0.1.0.exe']);
-  expect(installerFiles('linux', '0.1.0')).toEqual(['Spillway-0.1.0-x64.AppImage']);
+  expect(installerFiles('linux', '0.1.0')).toEqual(['Spillway-0.1.0-x86_64.AppImage']);
   expect(installerFiles('darwin', '0.1.0')).toEqual(['Spillway-0.1.0-arm64.dmg', 'Spillway-0.1.0-arm64-mac.zip', 'Spillway-0.1.0-x64.dmg', 'Spillway-0.1.0-x64-mac.zip']);
+});
+
+it('matches release sources and installers to electron-builder artifact expansion', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'spillway-artifacts-'));
+  const version = '0.1.0';
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'spillway', version, description: 'Spillway' }));
+  try {
+    const packager = new Packager({ projectDir: root, config: { ...config, extraMetadata: { version } } });
+    await packager.validateConfig();
+    const linux = new LinuxPackager(packager);
+    const appImage = linux.expandArtifactNamePattern(config.linux, 'AppImage', Arch.x64);
+    expect(appImage).toBe('Spillway-0.1.0-x86_64.AppImage');
+    expect(linux.expandArtifactNamePattern({ artifactName: '${productName}-${version}-${arch}.${ext}' }, 'AppImage', Arch.x64)).toBe(appImage);
+    expect(updateSource('linux', 'x64', version)).toBe(appImage);
+    expect(installerFiles('linux', version)).toEqual([appImage]);
+    const win = new WinPackager(packager);
+    const nsis = win.expandArtifactNamePattern(config.nsis, 'exe', Arch.x64);
+    expect(updateSource('win32', 'x64', version)).toBe(nsis);
+    expect(installerFiles('win32', version)).toEqual([nsis]);
+    const mac = new MacPackager(packager);
+    expect(installerFiles('darwin', version)).toEqual(RELEASE_ARCHS.darwin.flatMap((arch) => [
+      mac.expandArtifactNamePattern(config.dmg, 'dmg', archFromString(arch)),
+      mac.expandArtifactNamePattern(config.mac, 'zip', archFromString(arch)),
+    ]));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 it('restores missing origin/HEAD for clean CI siblings and still rejects dirty or stale siblings', () => {

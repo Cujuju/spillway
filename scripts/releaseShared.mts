@@ -40,9 +40,17 @@ export function releaseView(tag: string): ReleaseView | null {
   }
 }
 
+export const linuxAppImageName = (version: string): string => `${APP_NAME}-${version}-x86_64.AppImage`;
+
+export function updateSource(platform: string, arch: string, version: string): string {
+  if (platform === 'win32') return `${APP_NAME}-Setup-${version}.exe`;
+  if (platform === 'linux') return linuxAppImageName(version);
+  return `${arch === 'arm64' ? 'mac-arm64' : 'mac'}/${APP_NAME}.app`;
+}
+
 export function installerFiles(platform: ReleasePlatform, version: string): string[] {
   if (platform === 'win32') return [`${APP_NAME}-Setup-${version}.exe`];
-  if (platform === 'linux') return [`${APP_NAME}-${version}-x64.AppImage`];
+  if (platform === 'linux') return [linuxAppImageName(version)];
   return RELEASE_ARCHS.darwin.flatMap((arch) => [`${APP_NAME}-${version}-${arch}.dmg`, `${APP_NAME}-${version}-${arch}-mac.zip`]);
 }
 

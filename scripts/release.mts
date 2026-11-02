@@ -12,7 +12,7 @@ import { appVersion } from '../appVersion.ts';
 import { APP_NAME } from '../src/shared/app.ts';
 import { UPDATE_REPO, UPDATE_SIGNATURE_CONTEXT } from '../src/shared/updateFeed.ts';
 import { capture, IMAGES_DIR } from './demo/screenshots.mts';
-import { assertReleaseSiblings, ensureNightlyRelease, installerFiles, RELEASE_ARCHS, releaseDetails } from './releaseShared.mts';
+import { assertReleaseSiblings, ensureNightlyRelease, installerFiles, RELEASE_ARCHS, releaseDetails, updateSource } from './releaseShared.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Nightlies ship the proxy and toolkit from these siblings; they must match their latest pushed commit. */
@@ -52,12 +52,7 @@ await runReleaseCli({
   keyFile: process.env.SPILLWAY_UPDATE_KEY || path.join(os.homedir(), '.config', 'spillway', 'update_key'),
   version: () => appVersion(ROOT),
   archs: RELEASE_ARCHS,
-  // electron-builder.ts artifact names.
-  updateSource: (platform, arch, v) => {
-    if (platform === 'win32') return `${APP_NAME}-Setup-${v}.exe`;
-    if (platform === 'linux') return `${APP_NAME}-${v}-${arch}.AppImage`;
-    return `${arch === 'arm64' ? 'mac-arm64' : 'mac'}/${APP_NAME}.app`;
-  },
+  updateSource,
   // First-install files accompany manual Mac releases; scheduled CI nightlies publish update files only.
   extraFiles: (platform, v) => (platform === 'darwin' && !process.env.SPILLWAY_UPDATE_ONLY ? installerFiles(platform, v) : []),
 });

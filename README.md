@@ -11,7 +11,7 @@ Windows, macOS and Linux tray (menu bar) app that runs a local AI proxy (the CLI
 
 ## Install
 
-Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows, or `Spillway-<version>-x64.AppImage` on Linux (x64). Make the AppImage executable and open it; see [Linux](docs/linux.md). On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
+Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows, or `Spillway-<version>-x86_64.AppImage` on Linux (x64). Make the AppImage executable and open it; see [Linux](docs/linux.md). On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
 
 ## Quick start
 

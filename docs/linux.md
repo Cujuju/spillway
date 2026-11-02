@@ -2,7 +2,7 @@
 
 # Linux
 
-Linux x64 ships as `Spillway-<version>-x64.AppImage` in [stable releases](https://github.com/Cujuju/spillway/releases). Download it to a folder you can write to, mark it executable in your file manager, and open it. AppImage needs FUSE support from your distribution; see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
+Linux x64 ships as `Spillway-<version>-x86_64.AppImage` in [stable releases](https://github.com/Cujuju/spillway/releases). Download it to a folder you can write to, mark it executable in your file manager, and open it. AppImage needs FUSE support from your distribution; see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
 The tray uses Electron's StatusNotifierItem support, with a GtkStatusIcon fallback. Your desktop must provide a tray host; GNOME commonly needs an AppIndicator extension. The registered tray menu opens the window, controls the proxy, selects accounts and quits. Activation can be a click or double-click, depending on the desktop.
 

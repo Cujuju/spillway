@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Arch, type Configuration } from 'electron-builder';
 import { appVersion } from './appVersion.ts';
+import { linuxAppImageName } from './scripts/releaseShared.mts';
 import { appIdentity } from './src/shared/app.ts';
 
 /** Installers are production only; the dev build runs from the repo (`pnpm dev`). */
@@ -81,7 +82,7 @@ const config: Configuration = {
   dmg: { artifactName: '${productName}-${version}-${arch}.${ext}' },
   linux: {
     target: [{ target: 'AppImage', arch: 'x64' }],
-    artifactName: '${productName}-${version}-${arch}.${ext}',
+    artifactName: linuxAppImageName('${version}'),
     icon: 'resources/icon-1024.png',
     category: 'Development',
   },

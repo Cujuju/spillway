@@ -18,8 +18,7 @@ type Step =
   | { kind: 'error'; provider: string | null; message: string };
 
 const labelOf = (id: string | null) => OAUTH_PROVIDERS.find((p) => p.id === id)?.label ?? id ?? '';
-
-/** Provider picker → browser sign-in → poll until the proxy saves the credential. */
+/** Provider picker → sign-in link (copy or open) → poll until the proxy saves the credential. */
 export function AddAccountDialog(props: { onClose: () => void }) {
   const [step, setStep] = createSignal<Step>({ kind: 'pick' });
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -98,7 +97,7 @@ export function AddAccountDialog(props: { onClose: () => void }) {
     >
       <Switch>
         <Match when={step().kind === 'pick'}>
-          <p class="secondary">Pick a provider. Its sign-in page opens in your browser; the proxy stores the login.</p>
+          <p class="secondary">Pick a provider, then sign in with its link; the proxy stores the login.</p>
           <div class="provider-grid">
             <For each={OAUTH_PROVIDERS}>
               {(p) => (
@@ -115,21 +114,24 @@ export function AddAccountDialog(props: { onClose: () => void }) {
         </Match>
         <Match when={step().kind === 'starting'}>
           <div class="oauth-wait">
-            <LoaderCircle size={ICON_PX} class="spin" /> Opening {labelOf((step() as { provider: string }).provider)} sign-in…
+            <LoaderCircle size={ICON_PX} class="spin" /> Starting {labelOf((step() as { provider: string }).provider)} sign-in…
           </div>
         </Match>
         <Match when={waiting()}>
           {(w) => (
             <>
-              <div class="oauth-wait">
-                <LoaderCircle size={ICON_PX} class="spin" /> Waiting for you to finish signing in to {labelOf(w().provider)} in the browser…
-              </div>
-              <p class="muted">Browser didn't open, or opened the wrong profile? Open or copy the link:</p>
+              <p>
+                Open the {labelOf(w().provider)} sign-in link in your browser. Adding another account? A browser signed in to {labelOf(w().provider)}{' '}
+                signs in as that account again, so copy the link into a private window, or sign out first.
+              </p>
               <div class="row">
-                <button class="btn" onClick={() => void window.api.openExternal(w().session.url)}>
-                  <ExternalLink size={14} /> Open again
+                <CopyButton value={w().session.url} what="link" label="Copy link" />
+                <button class="btn primary" onClick={() => void window.api.openExternal(w().session.url)}>
+                  <ExternalLink size={14} /> Open in browser
                 </button>
-                <CopyButton ghost value={w().session.url} what="link" label="Copy link" />
+              </div>
+              <div class="oauth-wait">
+                <LoaderCircle size={ICON_PX} class="spin" /> Waiting for you to finish signing in to {labelOf(w().provider)}…
               </div>
             </>
           )}

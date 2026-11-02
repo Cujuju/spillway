@@ -86,6 +86,7 @@ it('builds stable installers from the selected tag instead of main without creat
   const output = await outputs();
   expect(releaseDetails).toHaveBeenCalledWith('v0.1.0');
   expect(output).toMatchObject({ sha: 'released', tag: 'v0.1.0', mode: 'installers' });
+  expect(JSON.parse(output.matrix!).include).toEqual([{ os: 'macos-latest', platform: 'darwin', proxyTargets: 'darwin-arm64 darwin-x64' }]);
   expect(ensureNightlyRelease).not.toHaveBeenCalled();
 });
 

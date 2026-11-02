@@ -54,6 +54,11 @@ export function installerFiles(platform: ReleasePlatform, version: string): stri
   return RELEASE_ARCHS.darwin.flatMap((arch) => [`${APP_NAME}-${version}-${arch}.dmg`, `${APP_NAME}-${version}-${arch}-mac.zip`]);
 }
 
+export function additionalInstallerFiles(platform: ReleasePlatform, version: string): string[] {
+  const sources = RELEASE_ARCHS[platform].map((arch) => updateSource(platform, arch, version));
+  return installerFiles(platform, version).filter((file) => !sources.includes(file));
+}
+
 /** Used by both the CLI and CI planner before any platform uploads. */
 export function ensureNightlyRelease(details: ReturnType<typeof releaseDetails>, dryRun = false): ReleaseView | null {
   const existing = releaseView(details.tag);

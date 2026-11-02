@@ -1,5 +1,5 @@
 import { appendFileSync } from 'node:fs';
-import { BUILD_MATRIX, ensureNightlyRelease, gh, git, nightlyTarget, releaseDetails, type ReleaseView } from './releaseShared.mts';
+import { additionalInstallerFiles, BUILD_MATRIX, ensureNightlyRelease, gh, git, nightlyTarget, releaseDetails, type ReleaseView } from './releaseShared.mts';
 
 function plan() {
   if (process.env.RELEASE_MODE === 'installers') {
@@ -8,7 +8,7 @@ function plan() {
     if (release.isPrerelease) throw new Error('Promote the release before publishing full installers.');
     const details = releaseDetails(release.tagName);
     if (details.tag !== release.tagName) throw new Error('The release tag does not match its source version.');
-    return { ...details, mode: 'installers', matrix: { include: BUILD_MATRIX } };
+    return { ...details, mode: 'installers', matrix: { include: BUILD_MATRIX.filter((b) => additionalInstallerFiles(b.platform, details.version).length) } };
   }
   git(['fetch', '--tags', 'origin', 'main']);
   const [latest] = JSON.parse(gh(['release', 'list', '--limit', '1', '--json', 'tagName'])) as { tagName: string }[];

@@ -55,6 +55,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The fork has no release tags; the proxy version comes from upstream's reachable v* tags.
+      - name: Fetch upstream proxy version tags
+        run: git -C ../CLIProxyAPI fetch --no-tags https://github.com/router-for-me/CLIProxyAPI.git "refs/tags/v*:refs/tags/v*"
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: CLIProxyAPI/go.mod

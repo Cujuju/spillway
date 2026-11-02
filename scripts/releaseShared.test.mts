@@ -16,8 +16,11 @@ describe('nightly selection', () => {
     expect(nightlyTarget('old', 'old', complete, false)).toBeNull();
     expect(nightlyTarget('new', 'old', complete, false)).toEqual({ sha: 'new', platforms: ['win32', 'darwin', 'linux'] });
   });
-  it('finishes a prerelease at its original source before moving to main', () => {
-    expect(nightlyTarget('new', 'old', { ...complete, assets: [{ name: 'update-win32.json' }] }, false)).toEqual({ sha: 'old', platforms: ['darwin', 'linux'] });
+  it('retries missing platforms while main matches the prerelease source', () => {
+    expect(nightlyTarget('old', 'old', { ...complete, assets: [{ name: 'update-darwin.json' }] }, false)).toEqual({ sha: 'old', platforms: ['win32', 'linux'] });
+  });
+  it.each([{ assets: [] }, { assets: [{ name: 'update-darwin.json' }] }])('builds advanced main for every platform despite an incomplete prerelease ($assets)', ({ assets }) => {
+    expect(nightlyTarget('new', 'old', { ...complete, assets }, false)).toEqual({ sha: 'new', platforms: ['win32', 'darwin', 'linux'] });
   });
   it('starts from main without a release and allows manual unchanged builds', () => {
     expect(nightlyTarget('main', null, null, false)?.sha).toBe('main');

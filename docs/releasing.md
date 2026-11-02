@@ -24,8 +24,8 @@ GitHub Actions uses the repository secret **SPILLWAY_UPDATE_KEY**, containing th
 
 The **releases** workflow (`.github/workflows/build.yml`) runs every 3 hours and supports **Run workflow → nightly**. Scheduled runs:
 
-1. Finish any missing platform manifests on the newest prerelease, building its original tagged commit even if main has advanced.
-2. Otherwise publish origin/main if it differs from the newest release's commit.
+1. Finish any missing platform manifests on the newest prerelease only while origin/main still equals its tagged commit.
+2. If origin/main differs from the newest release's commit, publish it for all platforms, even when the previous prerelease is incomplete.
 3. Otherwise skip.
 
 The plan job fetches complete git history, derives the deterministic version through `appVersion.ts`, and creates one prerelease at that exact SHA. `scripts/releaseShared.mts` supplies the same title, notes and target for CI and the local release CLI. Platform jobs then build Windows x64, macOS arm64/x64 and Linux x64, and run `SPILLWAY_UPDATE_ONLY=1 pnpm release nightly` to upload signed updates. Full installers wait for stable releases.
@@ -34,7 +34,7 @@ The public fork and toolkit are checked out from their default branches as sibli
 
 A manual nightly builds main even when it has not changed; completed platform uploads are preserved. An already-stable source has no new nightly to publish. The old machine-local scheduler has been retired; the workflow owns the nightly schedule.
 
-When introducing Linux support, run a manual nightly once from the updated main. Earlier prerelease commits cannot build Linux; the manual run starts the new version instead of resuming one of those commits.
+An incomplete prerelease remains published with its existing assets when main advances; it is not retagged, deleted or filled from a different commit. A broken tagged commit therefore cannot block fixes on main. Nightly updaters skip releases missing their platform manifest or architecture and select the highest newer compatible signed version among the latest 30 releases. During publication, platforms can temporarily see different versions; once every platform uploads the replacement release, they converge on that version. Stable continues to use GitHub's latest stable release, and promotion still requires all platform manifests.
 
 ## Stable releases
 

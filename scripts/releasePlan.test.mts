@@ -11,6 +11,7 @@ vi.mock('./releaseShared.mts', async (original) => ({
 let dir: string;
 let assets: { name: string }[];
 const details = { sha: 'released', version: '0.1.0', tag: 'v0.1.0', title: 'Spillway 0.1.0', notes: 'Spillway 0.1.0 nightly' };
+const mainDetails = { sha: 'main', version: '0.1.1', tag: 'v0.1.1', title: 'Spillway 0.1.1', notes: 'Spillway 0.1.1 nightly' };
 beforeEach(() => {
   vi.resetModules(); vi.resetAllMocks();
   dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-plan-'));
@@ -21,7 +22,7 @@ beforeEach(() => {
   vi.mocked(git).mockImplementation((args) => args[0] === 'rev-list' ? 'released' : 'main');
   vi.mocked(gh).mockImplementation((args) => JSON.stringify(args[1] === 'list' ? [{ tagName: 'v0.1.0' }]
     : { tagName: 'v0.1.0', isPrerelease: true, assets }));
-  vi.mocked(releaseDetails).mockImplementation((sha) => ({ ...details, sha: sha! }));
+  vi.mocked(releaseDetails).mockImplementation((sha) => sha === 'main' ? mainDetails : details);
   vi.mocked(ensureNightlyRelease).mockReturnValue(null);
 });
 afterEach(() => { vi.unstubAllEnvs(); rmSync(dir, { recursive: true, force: true }); });
@@ -38,14 +39,29 @@ it('emits the exact new source SHA and three build hosts after preparing one rel
   const output = await outputs();
   expect(output.sha).toBe('main');
   expect(JSON.parse(output.matrix!).include.map((b: { os: string }) => b.os)).toEqual(['windows-latest', 'macos-latest', 'ubuntu-latest']);
-  expect(ensureNightlyRelease).toHaveBeenCalledExactlyOnceWith({ ...details, sha: 'main' });
+  expect(ensureNightlyRelease).toHaveBeenCalledExactlyOnceWith(mainDetails);
 });
 
-it('resumes only missing platforms from the old release even when main has advanced', async () => {
+it('resumes only missing platforms while main matches the prerelease source', async () => {
   assets = assets.filter((a) => a.name !== 'update-linux.json');
+  vi.mocked(git).mockReturnValue('released');
   const output = await outputs();
   expect(output.sha).toBe('released');
   expect(JSON.parse(output.matrix!).include).toEqual([{ os: 'ubuntu-latest', platform: 'linux', proxyTargets: 'linux-x64', published: false }]);
+  expect(ensureNightlyRelease).toHaveBeenCalledExactlyOnceWith(details);
+});
+
+it('supersedes a partial prerelease with advanced main for every platform without changing the old release', async () => {
+  assets = [{ name: 'update-darwin.json' }];
+  const output = await outputs();
+  expect(output).toMatchObject({ run: 'true', sha: mainDetails.sha, tag: mainDetails.tag });
+  expect(JSON.parse(output.matrix!).include).toEqual([
+    { os: 'windows-latest', platform: 'win32', proxyTargets: 'win32-x64', published: false },
+    { os: 'macos-latest', platform: 'darwin', proxyTargets: 'darwin-arm64 darwin-x64', published: false },
+    { os: 'ubuntu-latest', platform: 'linux', proxyTargets: 'linux-x64', published: false },
+  ]);
+  expect(ensureNightlyRelease).toHaveBeenCalledExactlyOnceWith(mainDetails);
+  expect(vi.mocked(gh).mock.calls.every(([args]) => args[0] === 'release' && ['list', 'view'].includes(args[1]!))).toBe(true);
 });
 
 it('skips unchanged scheduled releases before any create call', async () => {

@@ -63,7 +63,7 @@ export function ensureNightlyRelease(details: ReturnType<typeof releaseDetails>,
 export function nightlyTarget(main: string, released: string | null, newest: ReleaseView | null, force: boolean) {
   const platforms = Object.keys(RELEASE_ARCHS) as ReleasePlatform[];
   const missing = platforms.filter((p) => !newest?.assets.some((a) => a.name === `update-${p}.json`));
-  if (!force && newest?.isPrerelease && missing.length) return { sha: released!, platforms: missing };
+  if (!force && main === released && newest?.isPrerelease && missing.length) return { sha: main, platforms: missing };
   if (!force && main === released) return null;
   return { sha: main, platforms };
 }

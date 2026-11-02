@@ -1,5 +1,4 @@
-# Builds the installers on Windows and macOS, including the proxy from the private fork.
-# Needs the repository secret CLIPROXY_SRC_TOKEN: a token with read access to Cujuju/CLIProxyAPI.
+# Builds the installers on Windows and macOS, including the public proxy fork and linked toolkit.
 # Builds only; releases are signed and published locally (scripts/release.mts, docs/releasing.md).
 # Full installers wait for a stable release (promote) or a manual run; every commit on main
 # reaches a scheduled nightly update from the local machines (scripts/nightly.mts).
@@ -24,12 +23,11 @@ jobs:
             proxy-targets: ''
             artifacts: |
               desktop/dist/*.exe
-          # Apple Silicon runner; electron-builder.ts packages arm64 and x64 dmgs and zips.
+          # Apple Silicon runner; electron-builder.ts packages arm64 and x64 disk images.
           - os: macos-latest
             proxy-targets: darwin-arm64 darwin-x64
             artifacts: |
               desktop/dist/*.dmg
-              desktop/dist/*-mac.zip
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -38,14 +36,23 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: desktop
+          # appVersion.ts derives the version from all feature and patch commits.
+          fetch-depth: 0
 
-      # Same layout as a local checkout: ../CLIProxyAPI beside the desktop repo.
+      # Same sibling layout as the local builds (package.json link: dependencies).
+      - uses: actions/checkout@v7
+        with:
+          repository: Cujuju/solidjs-toolkit
+          ref: main
+          path: solidjs-toolkit
+          persist-credentials: false
+
       - uses: actions/checkout@v7
         with:
           repository: Cujuju/CLIProxyAPI
           ref: main
-          token: ${{ secrets.CLIPROXY_SRC_TOKEN }}
           path: CLIProxyAPI
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-go@v7
@@ -64,6 +71,9 @@ jobs:
         with:
           node-version-file: desktop/package.json
           package-manager-cache: false
+
+      - name: Install toolkit dependencies
+        run: pnpm --dir ../solidjs-toolkit install --frozen-lockfile
 
       - run: pnpm install --frozen-lockfile
 

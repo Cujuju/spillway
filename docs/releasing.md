@@ -10,6 +10,11 @@ Settings → Updates checks this repo's [GitHub releases](https://github.com/Cuj
 - A build made without `resources/update-public-key.pem` cannot verify updates and never offers one.
 - Someone with write access to this repo can withhold updates. They cannot get an unsigned file, an older version, or another app's file installed.
 
+### Troubleshooting
+
+- **Invalid package …/app.asar during download**: older updater builds use Electron's virtual archive filesystem while rebuilding the app. The updater must use `original-fs` for the bundle's raw bytes. An affected installed copy needs a manual installer replacement to get that fix; changing the signing key will not repair it.
+- **GitHub build never starts**: check whether the workflow is enabled and read the run's annotations for billing or spending-limit blocks. Installer CI does not publish updates or use `SPILLWAY_UPDATE_KEY`; scheduled local publishers read the private key from disk.
+
 ## Signing key (once)
 
 ```sh

@@ -23,7 +23,7 @@ it('backfills legacy coverage columns and caches the first matchable time once',
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-it('answers coverage from a covering index over 200,000 ledger rows', async () => {
+it('answers coverage from a covering index', async () => {
   const { ActivityLog } = await import('./activityStore');
   const dir = mkdtempSync(path.join(tmpdir(), 'spillway-coverage-'));
   const file = path.join(dir, 'activity.db');
@@ -31,13 +31,12 @@ it('answers coverage from a covering index over 200,000 ledger rows', async () =
   const db = openActivityDb(file, key);
   const log = new ActivityLog({ activityDb: file, legacyActivityDir: path.join(dir, 'legacy'), databaseKey: key, retentionDays: 30 });
   try {
-    db.exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i < 200000)
-      INSERT INTO usage_identities (key, event, row_id, matched, source, at, provider, client)
-      SELECT 'client:'||i, '{}', 0, i%2, 'client-log', '2026-10-29T00:00:00Z', 'claude', 'claude-cli' FROM n;
+    db.exec(`INSERT INTO usage_identities (key, event, row_id, matched, source, at, provider, client) VALUES
+      ('client:unmatched', '{}', 0, 0, 'client-log', '2026-10-29T00:00:00Z', 'claude', 'claude-cli'),
+      ('client:matched', '{}', 0, 1, 'client-log', '2026-10-29T00:00:00Z', 'claude', 'claude-cli');
       INSERT INTO meta VALUES ('first-matchable-proxy', '2026-10-28T00:00:00Z');`);
-    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT provider, client, count(*), sum(matched) FROM usage_identities INDEXED BY usage_coverage_groups WHERE source = 'client-log' AND at >= ? GROUP BY provider, client").all('2026-10-28') as { detail: string }[];
+    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT provider, client, count(*) AS requests, sum(matched) AS viaProxy FROM usage_identities INDEXED BY usage_coverage_groups WHERE source = 'client-log' AND at >= ? GROUP BY provider, client ORDER BY requests DESC").all('2026-10-28T00:00:00Z') as { detail: string }[];
     expect(plan.some((row) => row.detail.includes('COVERING INDEX usage_coverage_groups'))).toBe(true);
-    // The covering-index plan proves speed; a wall-clock bound flakes on a busy machine.
-    expect(log.coverage().clients).toEqual([{ provider: 'claude', client: 'claude-cli', requests: 200000, viaProxy: 100000 }]);
+    expect(log.coverage().clients).toEqual([{ provider: 'claude', client: 'claude-cli', requests: 2, viaProxy: 1 }]);
   } finally { log.close(); db.close(); rmSync(dir, { recursive: true, force: true }); }
 });

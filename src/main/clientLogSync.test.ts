@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, appendFile, rm, open, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, open, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -72,7 +72,8 @@ it.each(['truncate', 'replace', 'backwards'])('restarts after %s even with a val
     if (mode === 'truncate') await writeFile(file, '{}\n');
     else if (mode === 'replace') {
       const info = await stat(file);
-      await rm(file);
+      // Retaining the old file prevents inode reuse in this identity-only case.
+      await rename(file, path.join(dir, 'rotated.jsonl'));
       await writeFile(file, '{}\n{}\n');
       await utimes(file, info.atimeMs / 1000, info.mtimeMs / 1000);
       expect((await stat(file)).mtimeMs).toBe(info.mtimeMs);
@@ -98,6 +99,27 @@ it.each(['truncate', 'replace', 'backwards'])('restarts after %s even with a val
     expect(parseClientLine).toHaveBeenCalledTimes(mode === 'backwards' ? 3 : mode === 'truncate' ? 1 : 2);
     // A restart parses every line, even when the old anchor is still present.
     expect(JSON.parse(state!).complete).toBe(true);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it('restarts on changed ctime even when file identity, birthtime, mtime and anchor are unchanged', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-reused-inode-'));
+  const file = path.join(dir, 'log.jsonl');
+  const NS_PER_SECOND = 1_000_000_000n;
+  let state: string | undefined;
+  const sink: ImportSink = { checkpoint: () => state, importBatch: (_, s) => { state = s; } };
+  try {
+    await writeFile(file, '{}\n{}\n');
+    await importClientFile(file, 'claude', sink);
+    const raw = await stat(file, { bigint: true });
+    vi.mocked(stat).mockResolvedValueOnce({ ...raw, isFile: () => true, isDirectory: () => false,
+      ctimeNs: raw.ctimeNs + NS_PER_SECOND } as never);
+    vi.mocked(open).mockClear();
+    vi.mocked(parseClientLine).mockClear();
+    await importClientFile(file, 'claude', sink);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(parseClientLine).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(state!)).toMatchObject({ offset: 6, complete: true });
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

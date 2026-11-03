@@ -145,7 +145,7 @@ export function LoginsSection() {
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td class="nowrap">
                     <div class="row tight">
                       <HoverTip title="Subscription" rows={[
                         { label: 'Provider', value: providerLabel(c.provider) },

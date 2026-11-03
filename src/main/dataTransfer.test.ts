@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { ActivityEvent } from '@shared/types';
 import { ActivityLog } from './activityStore';
 import { openActivityDb } from './activityDb';
+import { rebuildRetainedTotals } from './activityMigration';
+import { totalKey, type ActivityTotal } from './activityTotals';
 
 vi.mock('electron', () => ({ app: { requestSingleInstanceLock: vi.fn(), exit: vi.fn(), whenReady: vi.fn(), commandLine: { hasSwitch: vi.fn(), getSwitchValue: vi.fn() } } }));
 vi.mock('./paths', () => ({ appPaths: {} }));
@@ -63,6 +65,58 @@ it('transfers a pruned identity with its historically accounted cost', async () 
   importData(a.file, key, b.log, () => undefined);
   expect(b.log.totalsList()).toEqual(totals);
   expect(b.log.days()).toEqual([]);
+});
+it.each([false, true])('preserves retained historical costs across transfers, migrated: %s', async (migrated) => {
+  const a = fixture(); const b = fixture(); const c = fixture();
+  a.log.append(event());
+  a.log.close();
+  const db = openActivityDb(a.config.activityDb, a.config.databaseKey);
+  try {
+    const row = db.prepare('SELECT key, total FROM activity_totals').get() as { key: string; total: string };
+    const total = JSON.parse(row.total) as ActivityTotal;
+    total.costUsd *= 2;
+    total.uncachedCostUsd *= 2;
+    if (migrated) {
+      delete total.start;
+      db.prepare('DELETE FROM activity_totals WHERE key = ?').run(row.key);
+      db.prepare('INSERT INTO activity_totals VALUES (?, ?)').run(totalKey(total), JSON.stringify(total));
+      rebuildRetainedTotals(db);
+    } else {
+      db.prepare('UPDATE activity_totals SET total = ? WHERE key = ?').run(JSON.stringify(total), row.key);
+      db.exec("UPDATE usage_identities SET event = json_set(event, '$.costUsd', json_extract(event, '$.costUsd') * 2, '$.uncachedCostUsd', json_extract(event, '$.uncachedCostUsd') * 2)");
+    }
+  } finally { db.close(); }
+  const expected = a.log.totalsList();
+  await exportData(a.file, key, a.log, empty);
+  importData(a.file, key, b.log, () => undefined);
+  expect(b.log.totalsList()).toEqual(expected);
+  importData(a.file, key, b.log, () => undefined);
+  expect(b.log.totalsList()).toEqual(expected);
+  await exportData(b.file, key, b.log, empty);
+  importData(b.file, key, c.log, () => undefined);
+  expect(c.log.totalsList()).toEqual(expected);
+  b.log.close();
+  const imported = openActivityDb(b.config.activityDb, b.config.databaseKey);
+  try {
+    const row = imported.prepare('SELECT event FROM requests').get() as { event: string };
+    expect(JSON.parse(row.event)).not.toHaveProperty('costUsd');
+    expect(JSON.parse(row.event)).not.toHaveProperty('uncachedCostUsd');
+  } finally { imported.close(); }
+});
+
+it('does not attach a pruned identity cost to a reused request row id', () => {
+  const a = fixture();
+  a.log.append(event({ requestId: 'pruned', at: '2020-01-01T12:00:00Z' }));
+  a.log.append(event({ requestId: 'retained' }));
+  a.log.close();
+  const db = openActivityDb(a.config.activityDb, a.config.databaseKey);
+  try {
+    db.exec("UPDATE usage_identities SET event = json_set(event, '$.costUsd', 7, '$.uncachedCostUsd', 9) WHERE json_extract(event, '$.requestId') = 'pruned'");
+  } finally { db.close(); }
+  const exported = [...a.log.exportEvents()] as (ActivityEvent & { costUsd: number })[];
+  expect(exported).toHaveLength(2);
+  expect(exported.find((e) => e.requestId === 'pruned')?.costUsd).toBe(7);
+  expect(exported.find((e) => e.requestId === 'retained')?.costUsd).not.toBe(7);
 });
 it.each([false, true])('reconciles client and proxy usage across apps, client first: %s', async (clientFirst) => {
   const a = fixture(); const b = fixture();

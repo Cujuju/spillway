@@ -21,6 +21,7 @@ export const emptyCounts = (): ActivityCounts => ({
   requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
   costUsd: 0, uncachedCostUsd: 0, unpricedRequests: 0,
 });
+const COUNT_KEYS = Object.keys(emptyCounts()) as (keyof ActivityCounts)[];
 
 /** Adds one request, priced on its own so long-prompt rates apply. */
 export function addEvent(row: ActivityCounts, e: ActivityEvent): void {
@@ -38,7 +39,7 @@ export function addEvent(row: ActivityCounts, e: ActivityEvent): void {
 }
 
 export function addCounts(row: ActivityCounts, c: ActivityCounts): void {
-  for (const k of Object.keys(c) as (keyof ActivityCounts)[]) row[k] += c[k];
+  for (const k of COUNT_KEYS) row[k] += c[k];
 }
 
 /** Older saved rows lack cache writes and cost; prices them as one batch at standard rates. */

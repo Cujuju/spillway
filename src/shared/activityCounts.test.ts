@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addEvent, emptyCounts, withCountsFilled } from './activityCounts';
+import { addCounts, addEvent, emptyCounts, withCountsFilled } from './activityCounts';
 import type { ActivityEvent } from './types';
 
 const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
@@ -9,6 +9,17 @@ const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
 });
 
 describe('activity counts', () => {
+  it.each(['account-a', null])('sums metadata-bearing rows without changing their identities (%s)', (authIndex) => {
+    const metadata = { provider: 'claude', authIndex, model: 'claude-opus-5-5', day: '2026-10-26', source: 'proxy' };
+    const row = { ...metadata, ...emptyCounts() };
+    const counts = { ...metadata, ...emptyCounts(), requests: 2, costUsd: 3 };
+    addCounts(row, counts);
+    addCounts(row, counts);
+    expect(row).toEqual({ ...metadata, ...emptyCounts(), requests: 4, costUsd: 6 });
+    const total = emptyCounts();
+    addCounts(total, counts);
+    expect(total).toEqual({ ...emptyCounts(), requests: 2, costUsd: 3 });
+  });
   it('sums cost for priced models and counts the rest as unpriced', () => {
     const row = emptyCounts();
     addEvent(row, event({}));

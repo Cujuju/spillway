@@ -42,17 +42,17 @@ export function readTray(
   const label = withWindow.length ? windowOf(withWindow[0]!, spec.windowKey)!.label : windowLabel(spec.windowKey);
   const title = `${providerLabel(spec.provider)} ${label}`;
   const empty: TrayReading = { usedPercent: null, resetsAt: null, title, source: 'no data' };
+  if (spec.scope === 'active') {
+    const c = accounts.find((a) => a.nextPick) ?? withWindow[0];
+    const w = c && windowOf(c, spec.windowKey);
+    return c ? { usedPercent: w?.usedPercent ?? null, resetsAt: w?.resetsAt ?? null, title, source: c.label } : empty;
+  }
   if (!withWindow.length) return empty;
 
   if (spec.scope === 'account') {
     const c = withWindow.find((a) => a.id === spec.credentialId);
     const w = c && windowOf(c, spec.windowKey);
     return c && w ? { usedPercent: w.usedPercent, resetsAt: w.resetsAt, title, source: c.label } : empty;
-  }
-  if (spec.scope === 'active') {
-    const c = withWindow.find((a) => a.nextPick) ?? withWindow[0]!;
-    const w = windowOf(c, spec.windowKey)!;
-    return { usedPercent: w.usedPercent, resetsAt: w.resetsAt, title, source: c.label };
   }
   if (spec.scope === 'lowest') {
     const c = [...withWindow].sort((a, b) => windowOf(b, spec.windowKey)!.usedPercent! - windowOf(a, spec.windowKey)!.usedPercent!)[0]!;

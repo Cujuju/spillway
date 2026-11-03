@@ -87,4 +87,14 @@ describe('buildProxyConfig', () => {
       expect(parse(yaml).server.port).toBe(8317);
     }
   });
+
+  it.each([
+    'routing: fill-first', 'server: 8317', 'management: false', 'access: nope', 'requests: 1', 'oauth: false',
+    'observability: 1', 'usage-lookups: 1', 'routing: {cooldown: 1}', 'requests: {streaming: 1}',
+  ])('ignores scalar overlay parents and writes the complete app config: %s', (userConfig) => {
+    const { yaml, userConfigError } = build({ userConfig: `${userConfig}\ndebug: true` });
+    expect(userConfigError).toBeTruthy();
+    expect(userConfigError).not.toContain('\n');
+    expect(parse(yaml)).toEqual(parsed());
+  });
 });

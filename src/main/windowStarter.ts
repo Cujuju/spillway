@@ -37,8 +37,10 @@ class WindowStarter {
       const settings = getSettings().windowStart;
       const now = Date.now();
       for (const c of dueForWindowStart(snapshot, settings, new Date(now), this.started)) {
-        if (now - (this.failedAt.get(c.id) ?? -Infinity) < RETRY_AFTER_FAILURE_MS) continue;
-        await this.start(c, settings.models[c.provider as WindowStartProvider]);
+        const fresh = getSettings().windowStart;
+        const candidate = dueForWindowStart(usage.latest() ?? snapshot, fresh, new Date(), this.started).find((next) => next.id === c.id);
+        if (!candidate || Date.now() - (this.failedAt.get(c.id) ?? -Infinity) < RETRY_AFTER_FAILURE_MS) continue;
+        await this.start(candidate, fresh.models[candidate.provider as WindowStartProvider]);
       }
     } finally {
       this.busy = false;

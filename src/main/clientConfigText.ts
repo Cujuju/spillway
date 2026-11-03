@@ -122,7 +122,7 @@ const TABLE_HEADER = /^\s*\[/;
  * Root keys the apply sets, plus model_provider: any other provider bypasses the proxy.
  * Account calls (chatgpt_base_url) stay on chatgpt.com with Codex's own login.
  */
-const ROOT_OWNED_KEY = /^\s*(model_provider|openai_base_url)\s*=/;
+const ROOT_OWNED_KEY = /^\s*(?:model_provider|openai_base_url|"(?:model_provider|openai_base_url)"|'(?:model_provider|openai_base_url)')\s*=/;
 
 /** TOML basic strings accept JSON's string escapes. */
 const tomlString = (s: string) => JSON.stringify(s);

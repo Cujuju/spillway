@@ -94,10 +94,19 @@ function ensureClientKeys(doc: Document, required: string[]): void {
 
 /** Builds config.yaml: config.user.yaml with the app-owned keys applied on top. Comments in the user file are kept. */
 export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
-  const { doc, error } = parseUserConfig(input.userConfig);
-  if (doc.contents === null) doc.contents = doc.createNode({});
-  for (const [path, value] of appOwnedValues(input)) doc.setIn(path, value);
-  ensureClientKeys(doc, input.clientApiKeys);
+  let { doc, error } = parseUserConfig(input.userConfig);
+  const apply = (target: Document) => {
+    if (target.contents === null) target.contents = target.createNode({});
+    for (const [path, value] of appOwnedValues(input)) target.setIn(path, value);
+    ensureClientKeys(target, input.clientApiKeys);
+  };
+  try {
+    apply(doc);
+  } catch (err) {
+    error = (err instanceof Error ? err.message : String(err)).split('\n')[0]!;
+    doc = new Document({});
+    apply(doc);
+  }
   doc.commentBefore = doc.commentBefore ? `${HEADER}\n\n${doc.commentBefore}` : HEADER;
   return { yaml: doc.toString(), userConfigError: error };
 }

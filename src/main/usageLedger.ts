@@ -13,8 +13,9 @@ export function identityEvent(row: IdentityRow): ActivityEvent {
 }
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
 
+export type AccountedActivityEvent = ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd'>>;
 /** Uses the cost actually counted when available, including migration's historical price scaling. */
-export function accountedUsage(e: ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd'>>): ActivityCounts {
+export function accountedUsage(e: AccountedActivityEvent): ActivityCounts {
   const counts = emptyCounts();
   addEvent(counts, e);
   counts.costUsd = e.costUsd ?? counts.costUsd;

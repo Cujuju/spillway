@@ -8,6 +8,7 @@ import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, THEMES, themeTokens, type Theme } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
 import { RHYTHM_LOOKBACK_DAYS } from './lib/rhythmProfile';
+import { createActivityReload } from './lib/activityReload';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings', 'help'] as const;
@@ -89,9 +90,6 @@ export function holdActivityDays(days: number | null): void {
   setActivityDays(next);
   loadActivity();
 }
-/** A burst of requests reloads the hourly activity once, after it settles. */
-const ACTIVITY_RELOAD_DEBOUNCE_MS = 2_000;
-
 async function saveSettings(next: AppSettings): Promise<void> {
   // Edits can copy store-backed values into the draft; IPC cannot clone Solid proxies.
   setSettingsSignal(await api.setSettings(unwrap(next)));
@@ -145,8 +143,9 @@ export async function initStore(): Promise<void> {
   setWindowSummaries(summaries);
   setObservedSpans(spans);
   setLogs(logLines);
-  loadActivity();
-  api.onActivityReset(loadActivity);
+  const bucketsReload = createActivityReload(loadActivity);
+  bucketsReload.refresh();
+  api.onActivityReset(bucketsReload.refresh);
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -158,11 +157,7 @@ export async function initStore(): Promise<void> {
   api.onMaximized(setMaximized);
   api.onTaskbarDark(setTaskbarDark);
   api.onSettings(setSettingsSignal);
-  let bucketsReload: ReturnType<typeof setTimeout> | undefined;
-  api.onActivity(() => {
-    clearTimeout(bucketsReload);
-    bucketsReload = setTimeout(loadActivity, ACTIVITY_RELOAD_DEBOUNCE_MS);
-  });
+  api.onActivity(bucketsReload.schedule);
 
   tickEachMinute();
   setInterval(() => {

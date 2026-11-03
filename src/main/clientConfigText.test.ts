@@ -103,6 +103,18 @@ describe('Codex config.toml', () => {
     expect(undoCodex(applyCodex(original, target))).toBe(original);
   });
 
+  it.each(['"', "'"])('disables %s-quoted owned root keys and restores them on undo', (quote) => {
+    const own = `${quote}openai_base_url${quote} = "https://example.test/v1"\n${quote}model_provider${quote} = "other"\n`;
+    const table = `\n[model_providers.other]\n${quote}openai_base_url${quote} = "kept"\n`;
+    const out = applyCodex(own + table, target);
+    for (const line of own.trimEnd().split('\n')) expect(out).toContain(`${DISABLED_PREFIX}${line}\n`);
+    expect(out).toContain(table);
+    expect(codexState(out, target)).toBe('applied');
+    expect(codexState(out.replace(DISABLED_PREFIX, ''), target)).toBe('out-of-date');
+    expect(applyCodex(out, target)).toBe(out);
+    expect(undoCodex(out)).toBe(own + table);
+  });
+
   it("turns off the user's own values for the keys it sets, keeps the rest, and undo restores them", () => {
     const own = 'openai_base_url = "https://example.test/v1"\nchatgpt_base_url = "https://example.test/"\ncli_auth_credentials_store = "keyring"\n';
     const out = applyCodex(own, target);

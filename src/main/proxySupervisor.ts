@@ -30,6 +30,7 @@ class ProxySupervisor extends EventEmitter {
   private proc: ChildProcess | null = null;
   private stopping = false;
   private crashTimes: number[] = [];
+  private restartTimer: ReturnType<typeof setTimeout> | undefined;
   private logFile: WriteStream | null = null;
   private userConfigWatcher: FSWatcher | null = null;
   readonly logs = new LogBuffer();
@@ -82,6 +83,7 @@ class ProxySupervisor extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    this.cancelRestart();
     if (attachEndpoint) return this.attach(attachEndpoint);
     if (this.proc) return;
     const settings = getSettings();
@@ -122,8 +124,15 @@ class ProxySupervisor extends EventEmitter {
     child.stdout?.on('data', (d: Buffer) => this.log('stdout', d.toString('utf8')));
     child.stderr?.on('data', (d: Buffer) => this.log('stderr', d.toString('utf8')));
     child.on('error', (err) => {
-      this.log('app', `spawn failed: ${err.message}`);
-      this.setStatus({ state: 'crashed', lastError: err.message, pid: null });
+      if (this.proc !== child) return;
+      if (child.pid === undefined) {
+        this.proc = null;
+        this.log('app', `spawn failed: ${err.message}`);
+        this.setStatus({ state: 'crashed', lastError: err.message, pid: null, startedAt: null, build: null });
+      } else {
+        this.log('app', `proxy error: ${err.message}`);
+        this.setStatus({ lastError: err.message });
+      }
     });
     child.on('exit', (code, signal) => this.onExit(child, code, signal));
     this.setStatus({ pid: child.pid ?? null });
@@ -186,18 +195,25 @@ class ProxySupervisor extends EventEmitter {
     }
     const backoff = RESTART_BACKOFF_BASE_MS * 2 ** (this.crashTimes.length - 1);
     this.log('app', `restarting in ${backoff} ms`);
-    setTimeout(() => {
-      if (!this.proc && !this.stopping) void this.start();
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined;
+      if (!this.proc && !this.stopping && getSettings().proxy.restartOnCrash) void this.start();
     }, backoff);
   }
 
+  private cancelRestart(): void {
+    clearTimeout(this.restartTimer);
+    this.restartTimer = undefined;
+  }
+
   async stop(): Promise<void> {
+    this.cancelRestart();
+    this.stopping = true;
     const child = this.proc;
     if (!child) {
       if (this.status.state !== 'missing-binary') this.setStatus({ state: 'stopped', lastError: null });
       return;
     }
-    this.stopping = true;
     this.setStatus({ state: 'stopping' });
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
     const accepted = await management.shutdown();

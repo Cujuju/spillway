@@ -1,4 +1,5 @@
 import type { HistorySample, ObservedSpan, WindowSummary } from '@shared/types';
+import { sameReset } from '@shared/usageWindows';
 import { pruneObserved, pruneSummaries } from './windowSummaries';
 
 /** Sample retention: longest forecast lookback plus the chart's past range. */
@@ -23,13 +24,16 @@ export function mergeHistory(a: TransferHistory, b: TransferHistory, now = Date.
   }
   const samples = [...byTime.values()].filter((s) => Date.parse(s.at) >= now - HISTORY_RETENTION_MS)
     .sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
-  const summaries = new Map<string, WindowSummary>();
-  for (const s of [...a.summaries, ...b.summaries]) {
-    const key = JSON.stringify([s.credentialId, s.key, s.resetAt]);
-    const prev = summaries.get(key);
-    summaries.set(key, prev ? { ...s, firstSampleAt: Math.min(prev.firstSampleAt, s.firstSampleAt),
-      lastSampleAt: Math.max(prev.lastSampleAt, s.lastSampleAt), peak: Math.max(prev.peak, s.peak),
-      endedAt: earliest(prev.endedAt, s.endedAt), exhaustedAt: earliest(prev.exhaustedAt, s.exhaustedAt) } : { ...s });
+  const summaries: WindowSummary[] = [];
+  const windows = [...a.summaries, ...b.summaries].sort((x, y) => pairKey(x).localeCompare(pairKey(y)) || x.resetAt - y.resetAt);
+  for (const s of windows) {
+    const prev = summaries.at(-1);
+    // Keep the group's first reset as its anchor, so a chain of jitter cannot join distinct windows.
+    if (prev && pairKey(prev) === pairKey(s) && sameReset(prev.resetAt, s.resetAt)) {
+      summaries[summaries.length - 1] = { ...prev, firstSampleAt: Math.min(prev.firstSampleAt, s.firstSampleAt),
+        lastSampleAt: Math.max(prev.lastSampleAt, s.lastSampleAt), peak: Math.max(prev.peak, s.peak),
+        endedAt: earliest(prev.endedAt, s.endedAt), exhaustedAt: earliest(prev.exhaustedAt, s.exhaustedAt) };
+    } else summaries.push({ ...s });
   }
   const observed: ObservedSpan[] = [];
   const spans = [...a.observed, ...b.observed].sort((x, y) => pairKey(x).localeCompare(pairKey(y)) || x.from - y.from);
@@ -38,6 +42,6 @@ export function mergeHistory(a: TransferHistory, b: TransferHistory, now = Date.
     if (prev && pairKey(prev) === pairKey(s) && s.from <= prev.to) prev.to = Math.max(prev.to, s.to);
     else observed.push({ ...s });
   }
-  return { samples, summaries: pruneSummaries([...summaries.values()], now).sort((x, y) => x.firstSampleAt - y.firstSampleAt),
+  return { samples, summaries: pruneSummaries(summaries, now).sort((x, y) => x.firstSampleAt - y.firstSampleAt),
     observed: pruneObserved(observed, now) };
 }

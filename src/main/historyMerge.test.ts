@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { mergeHistory, type TransferHistory } from './historyMerge';
 import type { WindowSummary } from '@shared/types';
+import { RESET_READING_TOLERANCE_MS } from '@shared/usageWindows';
 
 const now = Date.parse('2026-10-31T12:00:00Z');
 const at = (offset: number) => new Date(now + offset).toISOString();
@@ -35,7 +36,27 @@ it('combines duplicate windows using extrema and earliest defined ending and exh
   expect(mergeHistory(result, result, now)).toEqual(result);
 });
 it('keeps separate resets and prunes summaries by the existing retention semantics', () => {
-  const a: TransferHistory = { ...empty, summaries: [summary, { ...summary, resetAt: 0 }, { ...summary, peak: 0, resetAt: now - 1 }] };
-  const b: TransferHistory = { ...empty, summaries: [{ ...summary, resetAt: now + 1 }] };
-  expect(mergeHistory(a, b, now).summaries.map((s) => s.resetAt)).toEqual([now, now + 1]);
+  const nextReset = now + RESET_READING_TOLERANCE_MS + 1;
+  const a: TransferHistory = { ...empty, summaries: [summary, { ...summary, resetAt: 0 }, { ...summary, peak: 0, resetAt: now - 3_600_000 }] };
+  const b: TransferHistory = { ...empty, summaries: [{ ...summary, resetAt: nextReset }] };
+  expect(mergeHistory(a, b, now).summaries.map((s) => s.resetAt)).toEqual([now, nextReset]);
+});
+
+it('merges reset jitter using the live window identity tolerance and keeps all extrema', () => {
+  const a: TransferHistory = { ...empty, summaries: [summary] };
+  const b: TransferHistory = { ...empty, summaries: [{ ...summary, resetAt: now + 3_000,
+    firstSampleAt: now - 20, lastSampleAt: now - 1, peak: 110, endedAt: now - 2, exhaustedAt: now - 3 }] };
+  const result = mergeHistory(a, b, now);
+  expect(result.summaries).toEqual([{ ...b.summaries[0], resetAt: now }]);
+  expect(mergeHistory(b, a, now)).toEqual(result);
+  expect(mergeHistory(result, result, now)).toEqual(result);
+});
+
+it('anchors jitter groups at their first reset and never merges accounts or window keys', () => {
+  const a: TransferHistory = { ...empty, summaries: [summary,
+    { ...summary, resetAt: now + RESET_READING_TOLERANCE_MS },
+    { ...summary, resetAt: now + RESET_READING_TOLERANCE_MS + 1 },
+    { ...summary, credentialId: 'b' }, { ...summary, key: 'daily' }] };
+  expect(mergeHistory(a, empty, now).summaries).toHaveLength(4);
+  expect(mergeHistory(empty, a, now)).toEqual(mergeHistory(a, empty, now));
 });

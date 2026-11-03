@@ -11,7 +11,7 @@ const api = {
   activityBuckets: vi.fn<(days: number | null) => Promise<ActivityBucket[]>>().mockResolvedValue([]),
 };
 vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
-const { activityBuckets, forecastBuckets, holdActivityDays, history, now, setHistory, setNow, setSnapshot, settings, settingsError, snapshot, updateSettings } = await import('./store');
+const { activityBuckets, forecastBuckets, holdActivityDays, history, logs, now, setHistory, setLogs, setNow, setSnapshot, settings, settingsError, shownText, snapshot, updateSettings } = await import('./store');
 const { createPoolModel, poolRemaining } = await import('./components/poolModel');
 
 const cred = (id: string, usedPercent: number): Credential => ({
@@ -51,6 +51,23 @@ describe('failed settings saves', () => {
     expect(settings().general.sidebarCollapsed).toBe(!before);
     expect(settingsError()).toBeNull();
   });
+});
+
+it('masks displayed log text according to Show emails while preserving the raw diagnostic line', async () => {
+  const previous = logs();
+  const showEmails = settings().dashboard.showEmails;
+  const text = 'auth file changed: claude-person@example.com.json';
+  setLogs([{ at: '2026-11-03T12:00:00Z', stream: 'stdout', text }]);
+  try {
+    await updateSettings((d) => { d.dashboard.showEmails = false; });
+    expect(shownText(logs()[0]!.text)).toBe('auth file changed: •••@example.com.json');
+    await updateSettings((d) => { d.dashboard.showEmails = true; });
+    expect(shownText(logs()[0]!.text)).toBe(text);
+    expect(logs()[0]!.text).toBe(text);
+  } finally {
+    setLogs(previous);
+    await updateSettings((d) => { d.dashboard.showEmails = showEmails; });
+  }
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', strategy: 'round-robin', credentials });
 

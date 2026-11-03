@@ -5,7 +5,7 @@ import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdIn
 import { isString, persistedSignal } from '../lib/persisted';
 import { TRAY_ICONS_HELP } from '../lib/platform';
 import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
-import { settings, snapshot, taskbarDark, updateSettings } from '../store';
+import { activeTheme, settings, snapshot, taskbarDark, updateSettings } from '../store';
 import { poolRemaining } from './poolModel';
 import { TrayIconLookEditor } from './TrayIconLookEditor';
 import { NumberField, Seg, SettingRow, SettingsGroup, Toggle } from './ui';
@@ -78,7 +78,7 @@ export function TrayIconSettings() {
   const preview = (spec: TrayIconSpec) => {
     const r = readTray(spec, snapshot(), poolRemaining);
     const text = trayIconText(shownPercent(r.usedPercent, t().value));
-    return { src: drawTrayIcon(TRAY_PX_2X, text, paintFor(spec, taskbarDark())), reading: r };
+    return { src: drawTrayIcon(TRAY_PX_2X, text, paintFor(spec, taskbarDark(), r.usedPercent, t(), activeTheme().palette)), reading: r };
   };
   const describe = (spec: TrayIconSpec) => {
     const scopeLabel = SCOPES.find((s) => s.value === spec.scope)?.label ?? spec.scope;

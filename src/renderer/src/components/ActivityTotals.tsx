@@ -7,9 +7,7 @@ import { dayLabel } from '../lib/format';
 import { costText } from './activityFormat';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
-
-/** A burst of requests reloads the totals once, after it settles. */
-const RELOAD_DEBOUNCE_MS = 2_000;
+import { createActivityReload } from '../lib/activityReload';
 
 const sum = (rows: ActivityCounts[]): ActivityCounts => {
   const total = emptyCounts();
@@ -56,14 +54,11 @@ function byAccountModel(rows: ActivityDayTotal[]): ActivityDayTotal[] {
 export function ActivityTotals(props: { account: (authIndex: string | null) => string; scope: ActivityScope }) {
   const [totals, setTotals] = createSignal<ActivityDayTotal[]>([]);
   const load = () => void window.api.activityTotals().then(setTotals);
-  onMount(load);
-  onCleanup(window.api.onActivityReset(load));
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(window.api.onActivity(() => {
-    clearTimeout(timer);
-    timer = setTimeout(load, RELOAD_DEBOUNCE_MS);
-  }));
-  onCleanup(() => clearTimeout(timer));
+  const reload = createActivityReload(load);
+  onMount(reload.refresh);
+  onCleanup(window.api.onActivityReset(reload.refresh));
+  onCleanup(window.api.onActivity(reload.schedule));
+  onCleanup(reload.cancel);
 
   const days = createMemo(() => {
     const groups = new Map<string, ActivityDayTotal[]>();

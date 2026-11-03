@@ -20,6 +20,23 @@ describe('readTray', () => {
   it('active follows the next-pick account', () => {
     expect(readTray(spec('active'), s, evenPool)).toMatchObject({ usedPercent: 80, source: 'b' });
   });
+  it('does not borrow another account reading when the explicit next pick has no window', () => {
+    const next = cred('api-key', 0, { nextPick: true, windows: [] });
+    expect(readTray(spec('active'), snap(next, cred('subscription', 40)), evenPool)).toMatchObject({ usedPercent: null, source: 'api-key' });
+    expect(readTray(spec('active'), snap(next), evenPool)).toMatchObject({ usedPercent: null, source: 'api-key' });
+  });
+  it('does not borrow another account reading when the selected window has unknown usage', () => {
+    const next = cred('unknown', 0, { nextPick: true });
+    next.windows[0]!.usedPercent = null;
+    expect(readTray(spec('active'), snap(next, cred('other', 40)), evenPool)).toMatchObject({ usedPercent: null, source: 'unknown' });
+  });
+  it('still falls back without an enabled next pick for this provider', () => {
+    const other = cred('other', 40);
+    for (const next of [cred('disabled', 10, { nextPick: true, disabled: true }), cred('codex', 10, { nextPick: true, provider: 'codex' })]) {
+      expect(readTray(spec('active'), snap(next, other), evenPool)).toMatchObject({ usedPercent: 40, source: 'other' });
+    }
+    expect(readTray(spec('active'), snap(other), evenPool)).toMatchObject({ usedPercent: 40, source: 'other' });
+  });
   it('pool reads the pool helper over enabled accounts only', () => {
     expect(readTray(spec('pool'), s, evenPool).usedPercent).toBe(50);
   });

@@ -1,4 +1,6 @@
-import type { TrayIconLook, TrayIconShape, TrayIconSpec } from '@shared/settings';
+import type { AppSettings, TrayIconLook, TrayIconShape, TrayIconSpec } from '@shared/settings';
+import type { Palette } from '@shared/themes';
+import { trayLevel } from '@shared/trayValues';
 import { providerColor } from './providers';
 
 /** Windows tray icons are 16 px at 100% scaling; the 2x image covers 200%. */
@@ -8,7 +10,7 @@ export const TRAY_PX_2X = 32;
 export interface TrayIconPaint {
   shape: TrayIconLook['shape'];
   fill: TrayIconLook['fill'];
-  /** Resolved #rrggbb: the icon's own colour or its provider's. */
+  /** Resolved CSS colour: a warning colour, the icon's own colour or its provider's. */
   color: string;
   /** Taskbar theme: digit colour for outlines, which have nothing behind the digits. */
   darkTaskbar: boolean;
@@ -69,13 +71,18 @@ function canvasColor(css: string): string {
   return String(ctx.fillStyle);
 }
 
-/** The icon's look with its colour resolved (own colour, else the provider's). */
-export const paintFor = (spec: TrayIconSpec, darkTaskbar: boolean): TrayIconPaint => ({
-  shape: spec.look.shape,
-  fill: spec.look.fill,
-  color: spec.look.color ?? canvasColor(providerColor(spec.provider)),
-  darkTaskbar,
-});
+/** Warning colours override the normal icon colour without changing its shape or fill. */
+export function paintFor(
+  spec: TrayIconSpec,
+  darkTaskbar: boolean,
+  usedPercent: number | null,
+  thresholds: Pick<AppSettings['trayIcons'], 'warnAtPercentUsed' | 'criticalAtPercentUsed'>,
+  palette: Pick<Palette, 'amber' | 'red'>,
+): TrayIconPaint {
+  const level = trayLevel(usedPercent, thresholds.warnAtPercentUsed, thresholds.criticalAtPercentUsed);
+  const color = level === 'critical' ? palette.red : level === 'warn' ? palette.amber : spec.look.color ?? canvasColor(providerColor(spec.provider));
+  return { shape: spec.look.shape, fill: spec.look.fill, color, darkTaskbar };
+}
 
 /** Draws one tray icon: a number in an optional outlined or filled shape, returned as a PNG data URL. */
 export function drawTrayIcon(size: number, text: string, p: TrayIconPaint): string {

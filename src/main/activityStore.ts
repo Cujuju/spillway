@@ -9,7 +9,7 @@ import {
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
-import { accountedUsage, identityKey, reconcileUsage, rememberUsage } from './usageLedger';
+import { accountedUsage, identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
 
 interface RequestRow {
   id: number;
@@ -91,7 +91,7 @@ export class ActivityLog {
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean {
     return this.importEvents(events, { file: clientLogKey(file), state });
   }
-  importEvents(events: ActivityEvent[], checkpoint?: { file: string; state: string }): boolean {
+  importEvents(events: AccountedActivityEvent[], checkpoint?: { file: string; state: string }): boolean {
     try {
       const changed = this.db.transaction(() => {
         const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
@@ -115,9 +115,9 @@ export class ActivityLog {
       throw e;
     }
   }
-  exportEvents(): Generator<ActivityEvent> { return exportActivityEvents(this.db); }
+  exportEvents(): Generator<AccountedActivityEvent> { return exportActivityEvents(this.db); }
 
-  append(event: ActivityEvent): StoredActivityEvent | null {
+  append(event: AccountedActivityEvent): StoredActivityEvent | null {
     // A committed append can lose its reply in a worker crash; preserve its original movedFrom on replay.
     if (event.source !== 'client-log') {
       const existing = this.db.prepare('SELECT id, event FROM requests WHERE id = (SELECT row_id FROM usage_identities WHERE key = ?)').get(identityKey(event)) as RequestRow | undefined;
@@ -128,13 +128,15 @@ export class ActivityLog {
       // Accounted events outlive their retained request rows; acknowledge without resurrecting details.
       if (this.db.prepare('SELECT 1 FROM usage_identities WHERE key = ?').get(identityKey(event))) return null;
     }
-    const e = { ...event, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
+    const { costUsd, uncachedCostUsd, ...details } = event;
+    const e = { ...details, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
+    const accounted = { ...e, costUsd, uncachedCostUsd };
     const day = localDay(Date.parse(e.at));
     const totals = this.loadTotals();
     let id: number;
     try {
       id = this.db.transaction(() => {
-        const merge = reconcileUsage(this.db, e);
+        const merge = reconcileUsage(this.db, accounted);
         if (merge.remove) {
           this.revision += 1;
           const old = merge.remove;
@@ -148,10 +150,10 @@ export class ActivityLog {
         }
         if (merge.skip) return merge.id ?? 0;
         const row = addToTotals(totals, e);
-        if (this.importing) preserveImportedCost(row, e);
+        if (this.importing) preserveImportedCost(row, accounted);
         this.db.prepare('INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)').run(storedTotalKey(row), JSON.stringify(row));
         const id = Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
-        rememberUsage(this.db, e, id);
+        rememberUsage(this.db, accounted, id);
         this.db.prepare('UPDATE usage_identities SET row_id = ? WHERE key = ?').run(id, identityKey(e));
         if (!this.importing && matchLegacyUsage(this.db, [identityKey(e)])) {
           this.totals = null; this.revision += 1;

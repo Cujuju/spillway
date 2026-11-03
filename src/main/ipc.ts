@@ -72,7 +72,7 @@ async function applySettings(next: AppSettings): Promise<AppSettings> {
     proxy.applyConfig();
   }
   if (prev.dashboard.refreshIntervalSeconds !== saved.dashboard.refreshIntervalSeconds) usage.start();
-  return saved;
+  return getSettings();
 }
 
 /** Edits config.user.yaml (kept comments and all), then applies it to a running proxy; returns the groups after. */

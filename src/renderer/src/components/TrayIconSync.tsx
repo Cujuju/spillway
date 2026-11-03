@@ -4,7 +4,7 @@ import { resetText } from '@shared/resetTime';
 import { percentText, providerLabel, readTray, shownPercent, trayIconText } from '@shared/trayValues';
 import { poolWindowKey } from '../lib/forecast';
 import { drawTrayIcon, paintFor, TRAY_PX_1X, TRAY_PX_2X } from '../lib/trayRender';
-import { now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
+import { activeTheme, now, proxyStatus, settings, snapshot, taskbarDark } from '../store';
 import { poolRemaining } from './poolModel';
 
 /** Windows truncates tray tooltips past 127 characters. */
@@ -26,7 +26,7 @@ export function TrayIconSync() {
       const reading = readTray(spec, snap, poolRemaining);
       const shown = shownPercent(reading.usedPercent, t.value);
       const text = trayIconText(shown);
-      const paint = paintFor(spec, darkTaskbar);
+      const paint = paintFor(spec, darkTaskbar, reading.usedPercent, t, activeTheme().palette);
       const valueText = shown === null ? 'no data' : `${percentText(shown)}% ${t.value}`;
       const reset = reading.resetsAt ? ` · ${resetText(reading.resetsAt, time)}` : '';
       return {

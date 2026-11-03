@@ -1,7 +1,7 @@
 import { FolderOpen } from 'lucide-solid';
 import { createEffect, For, on } from 'solid-js';
 import { Toggle } from '../components/ui';
-import { logs, setLogs, settings, updateSettings } from '../store';
+import { logs, setLogs, settings, shownText, updateSettings } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
@@ -43,7 +43,7 @@ export function Logs() {
         <For each={logs()} fallback={<div class="muted">No output yet.</div>}>
           {(l) => (
             <div classList={{ 'log-err': l.stream === 'stderr', 'log-app': l.stream === 'app' }}>
-              <span class="muted">{new Date(l.at).toLocaleTimeString()}</span> {l.text}
+              <span class="muted">{new Date(l.at).toLocaleTimeString()}</span> {shownText(l.text)}
             </div>
           )}
         </For>

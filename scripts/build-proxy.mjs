@@ -40,6 +40,24 @@ function installGoLicenses() {
   return path.join(bin, process.platform === 'win32' ? 'go-licenses.exe' : 'go-licenses');
 }
 const goLicenses = installGoLicenses();
+
+/**
+ * The fork's quota contract: credential cooldowns, usage lookups, and recovery once a lookup shows headroom.
+ * Not the whole suite: unrelated timing tests flake under its full parallel load.
+ */
+const CONTRACT_TEST_PACKAGES = ['./sdk/cliproxy/auth/', './internal/codexusage/', './internal/claudeusage/'];
+/** Runs once on this machine; no target builds when they fail. A missing checkout passes; each target reports it. */
+function contractTestsPass() {
+  if (!existsSync(path.join(src, 'go.mod'))) return true;
+  const { GOOS: _os, GOARCH: _arch, ...hostEnv } = process.env;
+  try {
+    execFileSync('go', ['test', ...CONTRACT_TEST_PACKAGES], { cwd: src, env: hostEnv, stdio: 'inherit' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const contractTestsPassed = contractTestsPass();
 const overriddenModules = readdirSync(overridesDir, { recursive: true, encoding: 'utf8' })
   .filter((f) => path.basename(f) === 'LICENSE')
   .map((f) => path.dirname(f).split(path.sep).join('/'));
@@ -75,6 +93,10 @@ for (const target of targets) {
   const dest = path.join(root, 'resources', 'bin', target, name);
   if (!existsSync(path.join(src, 'go.mod'))) {
     fail(`CLIProxyAPI source not found at ${src}. Set CLIPROXY_SRC to the checkout.`, dest);
+    continue;
+  }
+  if (!contractTestsPassed) {
+    fail(`CLIProxyAPI contract tests failed (${CONTRACT_TEST_PACKAGES.join(' ')}); the proxy is not built.`, dest);
     continue;
   }
   mkdirSync(path.dirname(built), { recursive: true });

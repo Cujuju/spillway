@@ -53,6 +53,6 @@ await runReleaseCli({
   version: () => appVersion(ROOT),
   archs: RELEASE_ARCHS,
   updateSource,
-  // First-install files accompany manual Mac releases; scheduled CI nightlies publish update files only.
+  // Mac DMG/ZIP files accompany local nightlies; CI attaches them after promotion.
   extraFiles: (platform, v) => (platform === 'darwin' && !process.env.SPILLWAY_UPDATE_ONLY ? installerFiles(platform, v) : []),
 });

@@ -21,7 +21,7 @@ const config: Configuration = {
     // Folders match scripts/build-proxy.mjs and src/main/paths.ts.
     // Only the binary: backup copies left beside it during proxy swaps must not ship.
     { from: 'resources/bin/${platform}-${arch}', to: 'bin', filter: ['cli-proxy-api', 'cli-proxy-api.exe'] },
-    // Notification and macOS tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.
+    // Notification and macOS/Linux tray icon (.png); Windows window and tray icon (.ico). Main reads them from process.resourcesPath.
     { from: 'resources/icon.png', to: 'icon.png' },
     { from: 'resources/icon.ico', to: 'icon.ico' },
     // License notices for Spillway and the third-party work it ships. The proxy's comes from its fork (scripts/build-proxy.mjs).
@@ -65,7 +65,7 @@ const config: Configuration = {
   // macOS builds must run on a Mac (dmg and code signing need macOS tools).
   mac: {
     artifactName: '${productName}-${version}-${arch}-mac.${ext}',
-    // Disk images serve first installs; updates rebuild the unpacked app bundle.
+    // DMG and ZIP files serve first installs; updates rebuild the unpacked app bundle.
     target: [
       { target: 'dmg', arch: ['arm64', 'x64'] },
       { target: 'zip', arch: ['arm64', 'x64'] },

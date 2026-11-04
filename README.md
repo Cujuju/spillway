@@ -11,7 +11,7 @@ Windows, macOS and Linux tray (menu bar) app that runs a local AI proxy (the CLI
 
 ## Install
 
-Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows, or `Spillway-<version>-x86_64.AppImage` on Linux (x64). Make the AppImage executable and open it; see [Linux](docs/linux.md). On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
+Download the installer from [Releases](https://github.com/Cujuju/spillway/releases): `Spillway-Setup-<version>.exe` on Windows, `Spillway-<version>-<arch>.dmg` or `Spillway-<version>-<arch>-mac.zip` on macOS (arm64/x64), or `Spillway-<version>-x86_64.AppImage` on Linux (x64). Make the AppImage executable and open it; see [Linux](docs/linux.md). On macOS the app is ad-hoc signed, so Gatekeeper blocks a downloaded copy; [build it on your Mac](docs/setup.md#macos).
 
 ## Quick start
 
@@ -76,7 +76,7 @@ Exactly what Apply changes: [Connect clients](docs/clients.md).
 
 Settings → Updates: **Stable** or **Nightly**, checked a minute after launch and every 6 hours. Nothing downloads until you click **Download**, then **Restart and install**. Every update's signature is checked first.
 
-GitHub Actions checks `main` every 3 hours and publishes signed nightly updates when it changes, finishing missing platforms on an incomplete nightly first. Promoting a nightly builds full installers for all three platforms. [Release details](docs/releasing.md).
+GitHub Actions checks `main` every 3 hours and publishes signed nightly updates when it changes, retrying missing platforms while `main` matches the nightly's source. Manual dispatch is also supported. Promotion adds macOS DMG/ZIP installers; Windows and Linux installers already ship with nightlies. [Release details](docs/releasing.md).
 
 ## Privacy
 

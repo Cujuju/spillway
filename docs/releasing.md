@@ -28,7 +28,7 @@ The **releases** workflow (`.github/workflows/build.yml`) runs every 3 hours and
 2. If origin/main differs from the newest release's commit, publish it for all platforms, even when the previous prerelease is incomplete.
 3. Otherwise skip.
 
-The plan job fetches complete git history, derives the deterministic version through `appVersion.ts`, and creates one prerelease at that exact SHA. `scripts/releaseShared.mts` supplies the same title, notes and target for CI and the local release CLI. Platform jobs then build Windows x64, macOS arm64/x64 and Linux x64, and run `SPILLWAY_UPDATE_ONLY=1 pnpm release nightly` to upload signed updates. Full installers wait for stable releases.
+The plan job fetches complete git history, derives the deterministic version through `appVersion.ts`, and creates one prerelease at that exact SHA. `scripts/releaseShared.mts` supplies the same title, notes and target for CI and the local release CLI. Platform jobs then build Windows x64, macOS arm64/x64 and Linux x64, and run `SPILLWAY_UPDATE_ONLY=1 pnpm release nightly` to upload signed updates. Windows Setup and Linux AppImage installers are also the update sources and ship with nightlies; macOS dmg/zip installers are added on promotion.
 
 The public fork and toolkit are checked out from their default branches as siblings; no source-access secret is needed. Every platform job fetches upstream's `v*` tags into the proxy fork before building, so the proxy can report its upstream version without adding release tags to the fork. The release guard requires clean siblings at their latest pushed default-branch commits and discovers `origin/HEAD` when CI checkouts omit it. Workflow concurrency serializes release runs.
 
@@ -40,10 +40,10 @@ An incomplete prerelease remains published with its existing assets when main ad
 
 Once a nightly has all three platform manifests, run `pnpm release promote <version>` from main. It builds the fake-data demo screenshots, commits changed images, pushes main, and only then promotes the existing nightly. A rejected push stops promotion. `--dry-run` skips the screenshot writes and publication.
 
-Promotion emits `release: released`, triggering the same workflow to build full Windows Setup exe, both macOS dmg/zip architectures, and Linux x64 AppImage installers from the release tag's source commit and attach them to that release. The screenshot commit does not change that source tag. Updates retain their existing signatures and files.
+Promotion emits `release: released`, triggering the same workflow to build and attach macOS dmg/zip installers for both architectures from the release tag's source commit. Windows Setup exe and Linux x64 AppImage installers already shipped with the nightly are preserved. The screenshot commit does not change that source tag. Updates retain their existing signatures and files.
 
 macOS keeps both DMG and ZIP downloads for manual installation. ZIP archives provide an alternative to mounting a disk image; macOS updates still rebuild the unpacked app bundle and do not use either installer format.
 
-For installer retries, choose **Run workflow → installers**, optionally naming a stable tag (otherwise the latest stable). This rebuilds installers and replaces matching installer assets; it does not replace update manifests or packs.
+For installer retries, choose **Run workflow → installers**, optionally naming a stable tag (otherwise the latest stable). This builds additional installers and uploads only missing assets; existing installers, update manifests and packs are preserved.
 
 For a local nightly, install and build the toolkit, build this platform's proxy, run `pnpm package`, then `pnpm release nightly` from a clean pushed commit with clean current siblings. Set `SPILLWAY_UPDATE_KEY` to the private key's path. Needs `gh` with write access; `--dry-run` previews publication commands.

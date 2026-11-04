@@ -42,6 +42,8 @@ export function AccountRow(props: {
     setBusy(true);
     try {
       await window.api.usageRefresh(c().id);
+    } catch (err) {
+      props.onNotice?.('error', err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }

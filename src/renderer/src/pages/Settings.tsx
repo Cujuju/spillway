@@ -154,7 +154,7 @@ function DashboardSection() {
       <SettingRow label="Refresh interval" help="How often the app reads limits from the proxy, which looks up live usage on its own schedule.">
         <NumberField value={db().refreshIntervalSeconds} unit="s" onCommit={(v) => set((d) => void (d.dashboard.refreshIntervalSeconds = v))} />
       </SettingRow>
-      <SettingRow label="Look up usage after a pause" help="After a Claude account is idle this long, the proxy looks up its exact usage; steady use adds no lookups. 0 turns it off (lookups every 15 minutes and on Refresh).">
+      <SettingRow label="Live usage lookup interval" help="When a Claude account has new traffic, look up usage this many seconds after its previous lookup, even during steady use. 0 turns this off (lookups every 15 minutes and on Refresh).">
         <NumberField value={settings().proxy.usageLookupSettleSeconds} unit="s" onCommit={(v) => set((d) => void (d.proxy.usageLookupSettleSeconds = v))} />
       </SettingRow>
       <SettingRow label="Show emails" help="Off masks account emails, for screenshots and streams.">

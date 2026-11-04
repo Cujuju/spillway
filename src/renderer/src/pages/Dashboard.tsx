@@ -118,6 +118,8 @@ export function Dashboard() {
     setRefreshing(true);
     try {
       await window.api.usageRefresh();
+    } catch (err) {
+      setRowNotice({ tone: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       setRefreshing(false);
     }
@@ -155,7 +157,7 @@ export function Dashboard() {
           </Notice>
         </Match>
         <Match when={usageError()}>
-          <Notice tone="error">Usage lookup failed: {usageError()}</Notice>
+          <Notice tone="error">Usage lookup failed: {shownText(usageError()!)}</Notice>
         </Match>
       </Switch>
       <Show when={rowNotice()}>

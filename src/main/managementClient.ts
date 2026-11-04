@@ -16,6 +16,13 @@ export class ManagementError extends Error {
   }
 }
 
+/** A refresh can update some accounts while others fail. Keep both results. */
+export class UsageRefreshError extends Error {
+  constructor(readonly snapshot: UsageSnapshot, failures: string[]) {
+    super(`Could not refresh ${failures.length} account(s): ${[...new Set(failures)].join('; ')}`);
+  }
+}
+
 class ManagementClient {
   private base = '';
   private key = '';
@@ -70,7 +77,14 @@ class ManagementClient {
   }
 
   async refreshUsage(authIndex?: string): Promise<UsageSnapshot> {
-    return parseUsageSnapshot(await this.request('POST', '/usage/refresh', authIndex ? { auth_index: authIndex } : {}, REFRESH_TIMEOUT_MS));
+    const raw = await this.request('POST', '/usage/refresh', authIndex ? { auth_index: authIndex } : {}, REFRESH_TIMEOUT_MS);
+    const snapshot = parseUsageSnapshot(raw);
+    const errors = (raw as { errors?: unknown } | null)?.errors;
+    const failures = errors && typeof errors === 'object' && !Array.isArray(errors)
+      ? Object.values(errors).filter((error): error is string => typeof error === 'string' && error.length > 0)
+      : [];
+    if (failures.length) throw new UsageRefreshError(snapshot, failures);
+    return snapshot;
   }
 
   /** Spends one reset credit; the proxy answers with ChatGPT's outcome and fresh usage. */

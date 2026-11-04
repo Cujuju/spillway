@@ -65,7 +65,7 @@ export interface AppSettings {
     serverErrors: ServerErrorAction;
     /** Cancel an upstream stream that sends nothing for this long, then treat it as a server error; 0 = never. */
     firstByteTimeoutSeconds: number;
-    /** A Claude account's usage is looked up once its traffic pauses this long; 0 = only on the proxy's 15-minute schedule and Refresh. */
+    /** Minimum lookup interval for a Claude account with new traffic; 0 = only the proxy's 15-minute schedule and Refresh. */
     usageLookupSettleSeconds: number;
     /** Proxy writes every request and response, prompts included, to its logs folder. */
     requestLog: boolean;

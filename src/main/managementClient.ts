@@ -24,6 +24,10 @@ export class UsageRefreshError extends Error {
 }
 
 class ManagementClient {
+  async captureLease(enabled: boolean): Promise<void> { await this.request('PUT', '/observability/captures/lease', { enabled }); }
+  async captures(after: number): Promise<import('@shared/archive').CapturePage> {
+    return await this.request('GET', `/observability/captures?after=${after}`) as import('@shared/archive').CapturePage;
+  }
   private base = '';
   private key = '';
 

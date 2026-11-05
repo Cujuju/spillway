@@ -1,4 +1,5 @@
 import { clientLogKey } from './clientLogPaths';
+import { ARCHIVE_SCHEMA } from './archiveStore';
 import Database from 'better-sqlite3-multiple-ciphers';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
@@ -82,6 +83,7 @@ export function openActivityDb(file: string, hexKey: string): Db {
     db.pragma('journal_mode = WAL');
     db.transaction(() => {
       db.exec(SCHEMA);
+      db.exec(ARCHIVE_SCHEMA);
       if (!db.prepare("SELECT 1 FROM meta WHERE key = 'checkpoint-paths-normalized'").get()) {
         const rows = db.prepare('SELECT path, state FROM client_log_checkpoints ORDER BY json_extract(state, \'$.mtime\'), json_extract(state, \'$.offset\'), path').all() as { path: string; state: string }[];
         db.exec('DELETE FROM client_log_checkpoints');

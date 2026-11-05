@@ -15,6 +15,7 @@ async function startNormalApp(): Promise<void> {
   const { activityLog } = await import('./activityService');
   const { installAppMenu } = await import('./appMenu');
   const { activity } = await import('./activityStream');
+  const { archiveSync } = await import('./archiveSync');
   const { drainActivity } = await import('./activityShutdown');
   const { registerIpc } = await import('./ipc');
   const { startClientDrift } = await import('./clientDriftService');
@@ -62,6 +63,7 @@ async function startNormalApp(): Promise<void> {
     windowStarter.attach();
     proxy.on('status', (s) => {
       send(EVENTS.onProxyStatus, s);
+      if (s.state !== 'running') archiveSync.stop();
       if (s.state !== 'running' && !isQuitting()) void activity.stop();
     });
     activityLog.on('reset', () => send(EVENTS.onActivityReset, undefined));
@@ -70,11 +72,13 @@ async function startNormalApp(): Promise<void> {
     activity.on('event', (e) => send(EVENTS.onActivity, e));
     proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
     proxy.on('ready', () => {
+      archiveSync.start();
       activity.start();
       void syncPreferredAccounts().finally(() => usage.start());
     });
     proxy.on('crashed', (code) => {
       usage.stop();
+      archiveSync.stop();
       if (getSettings().notifications.proxyCrashed && Notification.isSupported()) {
         new Notification({ title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, icon: appIconPath() }).show();
       }
@@ -145,6 +149,7 @@ async function startNormalApp(): Promise<void> {
       session.defaultSession.flushStorageData();
       usage.stop();
       history.flush();
+      archiveSync.stop();
       void drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog).catch(console.error).finally(() => {
         destroyTrays();
         app.quit();

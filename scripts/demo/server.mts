@@ -46,6 +46,17 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
   const preferred = new Map<string, string>();
   const usage = () => usageWindows(data, preferred);
   let replayed = false;
+  let captureEnabled = false;
+  const captureEpoch = 'demo-capture-epoch';
+  const demoTrace = (id: string) => `demo-inbound-${id}`;
+  const demoCapture = () => {
+    const e = data.events.at(-1)!;
+    return { id: 'demo-capture-1', traceId: demoTrace(e.request_id), epoch: captureEpoch, sequence: 1, startedAt: e.at,
+      method: 'POST', path: '/v1/responses', status: 200, state: 'complete', reason: 'synthetic-demo',
+      request: JSON.stringify({ model: e.model, input: 'Summarize the local request archive for alex@example.com.' }),
+      response: 'data: {"output":"The archive keeps encrypted request and response text when explicitly enabled."}\n\ndata: [DONE]\n\n',
+      requestType: 'application/json', responseType: 'text/event-stream', requestEncoding: '', responseEncoding: '' };
+  };
   const streams = new Set<ServerResponse>();
 
   function events(res: ServerResponse): void {
@@ -60,7 +71,7 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
 
   async function replay(res: ServerResponse): Promise<void> {
     for (let i = 0; i < data.events.length && streams.has(res); i += REPLAY_BATCH) {
-      res.write(data.events.slice(i, i + REPLAY_BATCH).map((e) => `event: request\ndata: ${JSON.stringify(e)}\n\n`).join(''));
+      res.write(data.events.slice(i, i + REPLAY_BATCH).map((e) => `event: request\ndata: ${JSON.stringify({ ...e, trace_id: demoTrace(e.request_id) })}\n\n`).join(''));
       await sleep(REPLAY_PAUSE_MS);
     }
   }
@@ -89,6 +100,11 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
       }
       case 'POST /routing/move-session': return json(res, { bound: 1 });
       case 'GET /server/lockouts': return json(res, { lockouts: [] });
+      case 'PUT /observability/captures/lease': {
+        captureEnabled = (await readBody(req)).enabled === true;
+        return json(res, { leaseSeconds: 60, bodyLimit: 262144 });
+      }
+      case 'GET /observability/captures': return json(res, { version: 1, epoch: captureEpoch, dropped: 0, records: captureEnabled && data.events.length && Number(url.searchParams.get('after') ?? 0) < 1 ? [demoCapture()] : [] });
       case 'DELETE /server/lockouts':
       case 'POST /server/shutdown':
       case 'PATCH /credentials/status':

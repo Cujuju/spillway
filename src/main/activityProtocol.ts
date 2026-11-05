@@ -1,7 +1,7 @@
 import type { ActivityLog, ActivityConfig } from './activityStore';
 import type { conversationNames } from './conversationNames';
 import type { ActivityImportState } from '@shared/ipc';
-export type ActivityMethods = Pick<ActivityLog, 'append' | 'page' | 'day' | 'days' | 'daySummaries' | 'totalsList' | 'buckets' | 'bucketSnapshot' | 'coverage' | 'clear' | 'prune' | 'setRetention'> & {
+export type ActivityMethods = Pick<ActivityLog, 'append' | 'page' | 'day' | 'days' | 'daySummaries' | 'totalsList' | 'buckets' | 'bucketSnapshot' | 'coverage' | 'clear' | 'prune' | 'setRetention' | 'archiveObserve' | 'archiveIngest' | 'archiveQuery' | 'archiveDetail' | 'archiveStatus' | 'archivePolicy' | 'archiveClear'> & {
   names: typeof conversationNames.names;
   close(): Promise<void>;
 };

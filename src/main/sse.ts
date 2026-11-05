@@ -57,6 +57,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,
+    traceId: s(r.trace_id),
     upstreamId: s(r.upstream_id),
     source: 'proxy',
     selectionId: s(r.selection_id),

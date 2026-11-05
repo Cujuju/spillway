@@ -1,4 +1,6 @@
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
+import { ArchiveStore } from './archiveStore';
+import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
@@ -66,6 +68,15 @@ function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | 
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
+  private archiveStore: ArchiveStore | null = null;
+  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db); }
+  archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
+  archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
+  archiveQuery(q: ArchiveQuery) { return this.archive.query(q); }
+  archiveDetail(traceId: string) { return this.archive.detail(traceId); }
+  archiveStatus() { this.archive.prune(); return this.archive.status(); }
+  archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
+  archiveClear(): void { this.archive.clear(); }
   constructor(private config: ActivityConfig) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;
@@ -317,6 +328,7 @@ export class ActivityLog {
       this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
     })();
     this.totals = new Map();
+    this.db.exec('DELETE FROM archive_fts; DELETE FROM archive_entries; DELETE FROM archive_attempts;');
     this.conversationAccounts.clear();
   }
 
@@ -324,6 +336,7 @@ export class ActivityLog {
   close(): void {
     this.conn?.close();
     this.conn = null;
+    this.archiveStore = null;
     this.totals = null;
     this.conversationAccounts.clear();
     this.checkpoints.clear();

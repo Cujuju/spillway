@@ -22,6 +22,10 @@ describe('parseActivityEvent', () => {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'bad', downstream_transport: 'sse', upstream_transport: 1, transport_fallback_reason: 'raw error body' })))
       .toMatchObject({ downstreamTransport: null, upstreamTransport: null, transportFallbackReason: null });
   });
+  it('preserves full inbound trace identity independently of execution ID', () => {
+    expect(parseActivityEvent('{"request_id":"execution","trace_id":"inbound-full-id"}')).toMatchObject({ requestId: 'execution', traceId: 'inbound-full-id' });
+    expect(parseActivityEvent('{"request_id":"historical"}')?.traceId).toBeNull();
+  });
   it('maps the proxy fields and prefers the client alias for the model', () => {
     const e = parseActivityEvent(JSON.stringify({
       at: '2026-10-25T12:00:00Z', request_id: 'r1', selection_id: 's1', provider: 'Claude', model: 'claude-x', alias: 'fable',

@@ -196,6 +196,8 @@ export const RHYTHM_LOOKBACK_DAYS = 21;
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent extends TransportMetadata {
+  /** Full inbound identity; absent on historical and metadata-only client imports. */
+  traceId?: string | null;
   at: string;
   requestId: string;
   upstreamId: string | null;

@@ -5,6 +5,7 @@ import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog, activityImportState } from './activityService';
+import { archiveSync } from './archiveSync';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
@@ -185,6 +186,11 @@ const handlers: Handlers = {
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
   activityTotals: () => activityLog.call('totalsList'),
   activityCoverage: () => activityLog.call('coverage'),
+  archiveQuery: (q) => activityLog.call('archiveQuery', q ?? {}),
+  archiveDetail: (id) => activityLog.call('archiveDetail', id),
+  archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
+  archivePolicy: async (p) => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; },
+  archiveClear: async () => { await activityLog.call('archivePolicy', { captureBodies: false, retentionDays: 7, maxBytes: 100 * 1024 * 1024 }); await archiveSync.refresh(); await activityLog.call('archiveClear'); },
   activityBucketSnapshot: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);

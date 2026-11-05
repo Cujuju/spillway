@@ -1,4 +1,5 @@
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
+import type { ArchiveDetail, ArchivePage, ArchivePolicy, ArchiveQuery, ArchiveStatus } from './archive';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
@@ -10,6 +11,11 @@ import type { ManagedPolicyStatus } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
+  archiveQuery(query: ArchiveQuery): Promise<ArchivePage>;
+  archiveDetail(traceId: string): Promise<ArchiveDetail | null>;
+  archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
+  archivePolicy(policy: ArchivePolicy): Promise<ArchiveStatus>;
+  archiveClear(): Promise<void>;
   platform: string;
 
   /** Spillway's own version and build. */
@@ -133,6 +139,7 @@ export interface DesktopApi {
 
 /** invoke channels: name → method on DesktopApi. */
 export const INVOKE = {
+  archiveQuery: 'archive:query', archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
   appBuild: 'app:build',
   getSettings: 'settings:get',
   setSettings: 'settings:set',

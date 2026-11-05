@@ -16,6 +16,7 @@ const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
   append: (e) => {
     const revision = log.revision;
     const stored = log.append(e);
+    log.archiveObserve(e);
     if (revision !== log.revision) port.postMessage({ event: 'reset' });
     return stored;
   },
@@ -24,6 +25,9 @@ const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
   buckets: (days) => log.buckets(days), bucketSnapshot: (days) => log.bucketSnapshot(days), coverage: () => log.coverage(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),
   names: (ids) => conversationNames.names(ids),
+  archiveObserve: (e) => log.archiveObserve(e), archiveIngest: (p) => log.archiveIngest(p),
+  archiveQuery: (q) => log.archiveQuery(q), archiveDetail: (id) => log.archiveDetail(id),
+  archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(),
   close: async () => { await stop(); log.close(); },
 };
 let queue = Promise.resolve();

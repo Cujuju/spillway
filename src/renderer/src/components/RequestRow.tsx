@@ -1,5 +1,6 @@
 import { HoverTip } from './ChartTip';
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
+import { RequestInspector } from './RequestInspector';
 import { tokenCost } from '@shared/modelPrices';
 import { transportRows } from '@shared/activityTransport';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
@@ -24,11 +25,12 @@ const requestCost = (e: ActivityEvent) => {
 
 /** One attempt; cells follow REQUEST_COLUMNS. A failure's error gets its own line so it never widens the columns. */
 export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex: string | null) => string }) {
+  const [inspect, setInspect] = createSignal(false);
   const errorText = () => shownText(props.e.error ?? '');
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>
-        <td class="tabular">{new Date(props.e.at).toLocaleTimeString()}</td>
+        <td class="tabular"><button class="sort-btn" type="button" title="Inspect request and response" aria-expanded={inspect()} onClick={() => setInspect((v) => !v)}>{new Date(props.e.at).toLocaleTimeString()}</button></td>
         <td class="fill">
           <HoverTip title="Request account" layout="block" rows={[
             { label: 'Account', value: props.account(props.e.authIndex) },
@@ -82,6 +84,7 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
         <td class="tabular num">{duration(props.e.ttftMs)}</td>
         <td class="tabular num">{duration(props.e.latencyMs)}</td>
       </tr>
+      <Show when={inspect()}><tr><td colSpan={REQUEST_COLUMN_COUNT}><RequestInspector traceId={props.e.traceId} /></td></tr></Show>
       <Show when={errorText()}>
         <tr class="error-row">
           <td colSpan={REQUEST_COLUMN_COUNT}><div class="truncate" title={errorText()}>{errorText()}</div></td>

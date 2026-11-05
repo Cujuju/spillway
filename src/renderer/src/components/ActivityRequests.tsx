@@ -141,7 +141,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
             const summary = () => props.days.byDay().get(day);
             // Same object until this day's section changes, so other days' updates don't re-sort it.
             const own = createMemo(() => section(day));
-            const ordered = createRequestOrder(() => own().rows, sort, { account: props.account, conversation: conversationLabel });
+            const ordered = createRequestOrder(() => own().rows, sort, { account: (id) => props.account(id), conversation: conversationLabel });
             const rows = createMemo(() => isRecordedOrder(sort()) ? ordered() : ordered().slice(0, own().shown));
             const hasMore = () => !own().loaded || (isRecordedOrder(sort()) ? own().more : own().shown < own().rows.length);
             return (

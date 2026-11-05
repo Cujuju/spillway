@@ -26,7 +26,7 @@ export interface ArchiveEntry {
 export interface ArchiveDetail extends ArchiveEntry {
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;
   format: 'http' | 'websocket'; requestDecoded: boolean; responseDecoded: boolean; frames: CaptureFrame[];
-  attempts: { requestId: string; selectionId: string | null; at: string }[];
+  attempts: { requestId: string; selectionId: string | null; at: string; provenance?: import('./archiveExport').ArchiveAttemptProvenance }[];
 }
 export interface ArchiveQuery {
   text?: string; sessionId?: string; provider?: string; model?: string; client?: string; state?: CaptureState;
@@ -34,6 +34,7 @@ export interface ArchiveQuery {
 }
 export interface ArchivePage { entries: ArchiveEntry[]; more: boolean }
 export interface ArchiveStatus {
+  exportWarning?: string | null;
   policy: ArchivePolicy; bytes: number; entries: number; epoch: string | null; sequence: number; dropped: number; gaps: number; restarts: number;
   rejected: number;
 }

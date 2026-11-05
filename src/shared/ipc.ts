@@ -1,5 +1,6 @@
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
 import type { ArchiveDetail, ArchivePage, ArchivePolicy, ArchiveQuery, ArchiveStatus } from './archive';
+import type { ArchiveExportJob, ArchiveExportOptions } from './archiveExport';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
@@ -11,6 +12,11 @@ import type { ManagedPolicyStatus } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
+  archiveExportPrepare(options: ArchiveExportOptions): Promise<ArchiveExportJob>;
+  archiveExportStatus(id: string): Promise<ArchiveExportJob>;
+  /** Native save dialog; the renderer cannot supply an output path. */
+  archiveExportSave(id: string): Promise<ArchiveExportJob>;
+  archiveExportCancel(id: string): Promise<ArchiveExportJob>;
   archiveQuery(query: ArchiveQuery): Promise<ArchivePage>;
   archiveDetail(traceId: string): Promise<ArchiveDetail | null>;
   archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
@@ -139,6 +145,7 @@ export interface DesktopApi {
 
 /** invoke channels: name → method on DesktopApi. */
 export const INVOKE = {
+  archiveExportPrepare: 'archive:export-prepare', archiveExportStatus: 'archive:export-status', archiveExportSave: 'archive:export-save', archiveExportCancel: 'archive:export-cancel',
   archiveQuery: 'archive:query', archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
   appBuild: 'app:build',
   getSettings: 'settings:get',

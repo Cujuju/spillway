@@ -2,6 +2,7 @@ import type { Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage } from '@shared/archive';
 import type { ActivityEvent } from '@shared/types';
 import { archiveSearchText } from '@shared/archiveContent';
+import { normalizeTransport } from '@shared/activityTransport';
 
 export const ARCHIVE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS archive_entries (
@@ -65,7 +66,12 @@ export class ArchiveStore {
         ON CONFLICT(trace_id) DO UPDATE SET session_id=coalesce(excluded.session_id,session_id),model=excluded.model,provider=excluded.provider,client=coalesce(excluded.client,client)`)
         .run(`trace:${e.traceId}`, e.traceId, e.at, this.policy.captureBodies ? 'pending' : 'missing', this.policy.captureBodies ? 'awaiting-finalization' : 'metadata-only', e.sessionId, e.model, e.provider, e.client);
       const identity = JSON.stringify([e.requestId, e.at, e.authIndex]);
-      this.db.prepare('INSERT OR IGNORE INTO archive_attempts SELECT ?,?,? WHERE (SELECT count(*) FROM archive_attempts WHERE trace_id=?) < 200').run(identity, e.traceId, JSON.stringify({ requestId: e.requestId, selectionId: e.selectionId, at: e.at }), e.traceId);
+      const text = (v: unknown) => typeof v === 'string' && v ? v.slice(0, 512) : null;
+      const measured = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+      const provenance = { source: 'proxy', model: text(e.model), effectiveModel: text(e.effectiveModel), reasoningEffort: text(e.reasoningEffort),
+        provider: text(e.provider), client: text(e.client), sessionId: text(e.sessionId), parentSessionId: text(e.parentSessionId),
+        failed: typeof e.failed === 'boolean' ? e.failed : null, statusCode: measured(e.statusCode), latencyMs: measured(e.latencyMs), ttftMs: measured(e.ttftMs), ...normalizeTransport(e) };
+      this.db.prepare('INSERT OR IGNORE INTO archive_attempts SELECT ?,?,? WHERE (SELECT count(*) FROM archive_attempts WHERE trace_id=?) < 200').run(identity, e.traceId, JSON.stringify({ requestId: e.requestId, selectionId: e.selectionId, at: e.at, provenance }), e.traceId);
     })();
   }
   ingest(page: CapturePage): void {
@@ -129,8 +135,8 @@ export class ArchiveStore {
     })();
     this.lastPruned = now;
   }
-  query(q: ArchiveQuery = {}): ArchivePage {
-    this.prune();
+  query(q: ArchiveQuery = {}, prune = true): ArchivePage {
+    if (prune) this.prune();
     const clauses: string[] = [], args: string[] = [];
     for (const [key, col] of [['sessionId', 'session_id'], ['model', 'model'], ['provider', 'provider'], ['client', 'client'], ['state', 'state']] as const) {
       if (typeof q[key] === 'string' && q[key]) { clauses.push(`${col}=?`); args.push(q[key]!.slice(0, 256)); }

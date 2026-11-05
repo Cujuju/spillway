@@ -6,6 +6,8 @@ import type { ActivityMethods, Request, WorkerConfig } from './activityProtocol'
 const port = parentPort!;
 const log = new ActivityLog(workerData as WorkerConfig);
 log.prune();
+try { log.archiveExportReset(); }
+catch (error) { log.archiveExportStartupError(`Portable export startup cleanup failed: ${String(error)}`); }
 port.postMessage({ event: 'reset' });
 const startSync = () => startClientLogSync(log, () => {
   log.prune();
@@ -28,7 +30,9 @@ const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
   archiveObserve: (e) => log.archiveObserve(e), archiveIngest: (p) => log.archiveIngest(p),
   archiveQuery: (q) => log.archiveQuery(q), archiveDetail: (id) => log.archiveDetail(id),
   archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(),
-  close: async () => { await stop(); log.close(); },
+  archiveExportPrepare: (o) => log.archiveExportPrepare(o), archiveExportStatus: (id) => log.archiveExportStatus(id),
+  archiveExportStart: (id, file) => log.archiveExportStart(id, file), archiveExportCancel: (id) => log.archiveExportCancel(id),
+  close: async () => { await stop(); await log.archiveExportDispose(); log.close(); },
 };
 let queue = Promise.resolve();
 port.on('message', (request: Request) => {

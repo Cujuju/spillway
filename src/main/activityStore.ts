@@ -1,6 +1,8 @@
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
+import type { ArchiveExportOptions } from '@shared/archiveExport';
+import { ArchiveExporter } from './archiveExport';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
@@ -68,15 +70,25 @@ function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | 
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
+  private exportStartupWarning: string | null = null;
+  archiveExportStartupError(message: string): void { this.exportStartupWarning = message; }
+  private exporter: ArchiveExporter | null = null;
+  private get exports() { return this.exporter ??= new ArchiveExporter(this.db, this.archive); }
+  archiveExportReset(): void { this.exports.cancelCurrent(); }
+  archiveExportPrepare(options: ArchiveExportOptions) { return this.exports.prepare(options); }
+  archiveExportStatus(id: string) { return this.exports.status(id); }
+  archiveExportStart(id: string, destination: string) { return this.exports.start(id, destination); }
+  archiveExportCancel(id: string) { return this.exports.cancel(id); }
+  async archiveExportDispose(): Promise<void> { await this.exporter?.dispose(); }
   private archiveStore: ArchiveStore | null = null;
   private get archive() { return this.archiveStore ??= new ArchiveStore(this.db); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveQuery(q: ArchiveQuery) { return this.archive.query(q); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
-  archiveStatus() { this.archive.prune(); return this.archive.status(); }
+  archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
-  archiveClear(): void { this.archive.clear(); }
+  archiveClear(): void { this.exporter?.cancelCurrent(); this.archive.clear(); }
   constructor(private config: ActivityConfig) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;
@@ -324,6 +336,7 @@ export class ActivityLog {
   }
 
   clear(): void {
+    this.exporter?.cancelCurrent();
     this.db.transaction(() => {
       this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
@@ -334,6 +347,8 @@ export class ActivityLog {
 
   /** Drops the caches too: the next open may find another file (set aside, or imported). */
   close(): void {
+    this.exporter?.cancelCurrent(); this.exporter = null;
+    this.exportStartupWarning = null;
     this.conn?.close();
     this.conn = null;
     this.archiveStore = null;

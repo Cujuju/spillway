@@ -104,6 +104,16 @@ const OPEN_PATHS = {
 } as const;
 
 const handlers: Handlers = {
+  archiveExportPrepare: (options) => activityLog.call('archiveExportPrepare', options),
+  archiveExportStatus: (id) => activityLog.call('archiveExportStatus', id),
+  archiveExportCancel: (id) => activityLog.call('archiveExportCancel', id),
+  archiveExportSave: async (id) => {
+    const job = await activityLog.call('archiveExportStatus', id);
+    if (job.state !== 'preview') throw new Error('Prepare a fresh export preview');
+    const opts: Electron.SaveDialogOptions = { title: 'Save portable request archive', defaultPath: 'spillway-archive.jsonl', filters: [{ name: 'Portable archive (JSON Lines)', extensions: ['jsonl'] }] };
+    const w = mainWindow(), result = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+    return result.canceled || !result.filePath ? activityLog.call('archiveExportCancel', id) : activityLog.call('archiveExportStart', id, result.filePath);
+  },
   appBuild: () => parseBuildInfo(app.getVersion(), __APP_BUILD__, null),
   getSettings: () => getSettings(),
   setSettings: (next) => applySettings(next),

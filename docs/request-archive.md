@@ -22,7 +22,7 @@ Types are in `src/shared/archive.ts`. `ArchiveEntry.schemaVersion` is `1`. `id` 
 - `archivePolicy(policy)` normalizes and persists captureBodies/retentionDays/maxBytes; main refreshes the proxy's operational lease.
 - `archiveClear()` deletes bodies/index/identities and resets diagnostic counters while retaining the replay cursor to prevent reimport. Renderer IPC first disables capture and clears the proxy spool; retention/budget choices are preserved. Activity clear deletes archive data and resets diagnostics in the same transaction as Activity data.
 
-These APIs are the integration surface for future export/bundle/trace implementations. Existing data-transfer v1 exports Activity metadata only; it does not yet export this archive. Use `schemaVersion`, stable IDs, explicit state, provenance and bounded detail in any future format; never silently label missing captures complete.
+These APIs are the integration surface for export/bundle/trace implementations. [Portable archive export v1](portable-archive.md) adds a worker-owned frozen selection and JSONL manifest/capture/trailer API. Existing data-transfer v1 exports Activity metadata only and remains independent. Use `schemaVersion`, stable IDs, explicit state, provenance and bounded detail in consumers; never silently label missing captures complete.
 
 ## Policy and completeness
 

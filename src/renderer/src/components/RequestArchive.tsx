@@ -2,6 +2,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid
 import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CaptureState } from '@shared/archive';
 import { shownText } from '../store';
 import { RequestInspector } from './RequestInspector';
+import { ArchiveExport } from './ArchiveExport';
 import '../styles/archive.css';
 
 const MiB = 1024 * 1024;
@@ -55,6 +56,7 @@ export function RequestArchive() {
       <p class="muted">The proxy uses a temporary bounded memory spool. Overflow, disconnection and proxy crashes can lose captures. Provider-hidden data and WebSocket control frames are outside this capture boundary. Capture is separate from proxy text-file logging.</p>
       <Show when={status()}>{(s) => <p class="muted">{s().entries.toLocaleString()} records · {(s().bytes / MiB).toFixed(1)} MiB · {s().dropped} proxy drops · {s().gaps} observed sequence gaps (overlap with drops; do not add) · {s().restarts} epoch changes · {s().rejected} rejected records</p>}</Show>
       <Show when={status()?.syncError}><p class="notice">Capture sync: {shownText(status()!.syncError!)}. Check the proxy version and connection.</p></Show>
+      <Show when={status()?.exportWarning}><p class="notice">Export cleanup: {shownText(status()!.exportWarning!)}</p></Show>
       <button class="btn ghost" type="button" disabled={busy()} onClick={() => void clear()}>Delete archive and turn capture off</button>
     </section>
     <section class="card request-inspector">
@@ -75,6 +77,7 @@ export function RequestArchive() {
       </button>}</For></div>
       <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Show more</button></Show>
     </section>
+    <ArchiveExport query={query()} traceId={selected()} />
     <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} /></section>}</Show>
   </div>;
 }

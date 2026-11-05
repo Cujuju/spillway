@@ -3,12 +3,26 @@ import type { Db } from './activityDb';
 import { accountedUsage, identityEvent, removalKey, type IdentityRow } from './usageLedger';
 import { USAGE_MATCH_TOLERANCE_MS } from './usageMerge';
 import type { ActivityTotal } from './activityTotals';
+import { connectionStatements } from './connectionStatements';
 
 const BACKFILL = 'legacy-usage-matched';
 const MS_PER_SECOND = 1000;
 const SIGNATURE = `json_array(json_extract(event, '$.model'), json_extract(event, '$.inputTokens'),
   json_extract(event, '$.outputTokens'), json_extract(event, '$.cachedTokens'), coalesce(json_extract(event, '$.cacheWriteTokens'), 0))`;
 const LEGACY = `source = 'proxy' AND upstream_id IS NULL AND json_extract(event, '$.sessionId') IS NULL AND at < ?`;
+const statementsFor = connectionStatements({
+  boundary: "SELECT value FROM meta WHERE key = 'first-matchable-proxy'",
+  identity: 'SELECT * FROM usage_identities WHERE key = ? AND matched = 0',
+  legacy: `SELECT * FROM usage_identities WHERE matched = 0 AND ${LEGACY}`,
+  candidates: `SELECT * FROM usage_identities WHERE matched = 0
+    AND source = ? AND provider = ? AND ${SIGNATURE} = ?
+    AND unixepoch(at, 'subsec') BETWEEN unixepoch(?, 'subsec') - ? AND unixepoch(?, 'subsec') + ?
+    AND (source = 'client-log' OR (${LEGACY})) LIMIT 2`,
+  matched: 'UPDATE usage_identities SET matched = 1, row_id = ? WHERE key IN (?, ?)',
+  remove: "DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?",
+  total: 'SELECT total FROM activity_totals WHERE key = ?',
+  save: 'UPDATE activity_totals SET total = ? WHERE key = ?',
+});
 
 /** Equality fields precede the timestamp range; coverage indexes cannot narrow by token signature. */
 function index(db: Db): void {
@@ -17,21 +31,17 @@ function index(db: Db): void {
 
 /** Select every pair before changing matched flags, preserving ambiguity across the entire batch. */
 export function matchLegacyUsage(db: Db, keys?: string[]): number {
-  const boundary = (db.prepare("SELECT value FROM meta WHERE key = 'first-matchable-proxy'").get() as { value: string } | undefined)?.value;
+  const statements = statementsFor(db);
+  const boundary = (statements.boundary.get() as { value: string } | undefined)?.value;
   if (!boundary) return 0;
   index(db);
-  const get = db.prepare('SELECT * FROM usage_identities WHERE key = ? AND matched = 0');
   const rows = keys ? keys.flatMap((key) => {
-    const row = get.get(key) as IdentityRow | undefined;
+    const row = statements.identity.get(key) as IdentityRow | undefined;
     return row ? [row] : [];
-  }) : db.prepare(`SELECT * FROM usage_identities WHERE matched = 0 AND ${LEGACY}`).all(boundary) as IdentityRow[];
-  const candidates = db.prepare(`SELECT * FROM usage_identities WHERE matched = 0
-    AND source = ? AND provider = ? AND ${SIGNATURE} = ?
-    AND unixepoch(at, 'subsec') BETWEEN unixepoch(?, 'subsec') - ? AND unixepoch(?, 'subsec') + ?
-    AND (source = 'client-log' OR (${LEGACY})) LIMIT 2`);
+  }) : statements.legacy.all(boundary) as IdentityRow[];
   const eligible = (e: ActivityEvent) => e.source === 'client-log'
     || (e.source === 'proxy' && !e.upstreamId && !e.sessionId && e.at < boundary);
-  const find = (e: ActivityEvent): IdentityRow[] => (candidates.all(e.source === 'proxy' ? 'client-log' : 'proxy', e.provider,
+  const find = (e: ActivityEvent): IdentityRow[] => (statements.candidates.all(e.source === 'proxy' ? 'client-log' : 'proxy', e.provider,
     JSON.stringify([e.model, e.inputTokens, e.outputTokens, e.cachedTokens, e.cacheWriteTokens ?? 0]),
     e.at, USAGE_MATCH_TOLERANCE_MS / MS_PER_SECOND, e.at, USAGE_MATCH_TOLERANCE_MS / MS_PER_SECOND, boundary) as IdentityRow[]);
   const pairs = new Map<string, [IdentityRow, IdentityRow]>();
@@ -46,22 +56,18 @@ export function matchLegacyUsage(db: Db, keys?: string[]): number {
     const [proxy, client] = e.source === 'proxy' ? [row, other] : [other, row];
     pairs.set(proxy.key, [proxy, client]);
   }
-  const update = db.prepare('UPDATE usage_identities SET matched = 1, row_id = ? WHERE key IN (?, ?)');
-  const remove = db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?");
-  const total = db.prepare('SELECT total FROM activity_totals WHERE key = ?');
-  const save = db.prepare('UPDATE activity_totals SET total = ? WHERE key = ?');
   for (const [proxy, client] of pairs.values()) {
     const e = identityEvent(client);
     const key = removalKey(client);
-    const stored = total.get(key) as { total: string } | undefined;
+    const stored = statements.total.get(key) as { total: string } | undefined;
     if (stored) {
       const row = JSON.parse(stored.total) as ActivityTotal;
       const counts = accountedUsage(e);
       for (const k of Object.keys(counts) as (keyof typeof counts)[]) row[k] -= counts[k];
-      save.run(JSON.stringify(row), key);
+      statements.save.run(JSON.stringify(row), key);
     }
-    remove.run(client.row_id, e.requestId);
-    update.run(proxy.row_id, proxy.key, client.key);
+    statements.remove.run(client.row_id, e.requestId);
+    statements.matched.run(proxy.row_id, proxy.key, client.key);
   }
   return pairs.size;
 }

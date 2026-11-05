@@ -21,7 +21,7 @@ const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
   },
   page: (q) => log.page(q), day: (...args) => log.day(...args), days: () => log.days(),
   daySummaries: (scope) => log.daySummaries(scope), totalsList: () => log.totalsList(),
-  buckets: (days) => log.buckets(days), coverage: () => log.coverage(),
+  buckets: (days) => log.buckets(days), bucketSnapshot: (days) => log.bucketSnapshot(days), coverage: () => log.coverage(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),
   names: (ids) => conversationNames.names(ids),
   close: async () => { await stop(); log.close(); },

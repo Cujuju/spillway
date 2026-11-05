@@ -3,9 +3,18 @@ import { storedTotalKey } from './activityTotals';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { fallbackKey, sameUsage } from './usageMerge';
+import { connectionStatements } from './connectionStatements';
 
-/** Reused for bulk migration/seeding as well as individual appends; connections own their statements. */
-const identityInserts = new WeakMap<Db, ReturnType<Db['prepare']>>();
+const statementsFor = connectionStatements({
+  insert: 'INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source, at, provider, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  boundary: "INSERT INTO meta (key, value) VALUES ('first-matchable-proxy', ?) ON CONFLICT(key) DO UPDATE SET value = min(value, excluded.value)",
+  identity: 'SELECT * FROM usage_identities WHERE key = ?',
+  removeIdentity: 'DELETE FROM usage_identities WHERE key = ?',
+  removeRequest: "DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?",
+  upstream: 'SELECT * FROM usage_identities WHERE upstream_id = ? AND source = ? AND matched = 0',
+  session: 'SELECT * FROM usage_identities WHERE fallback_key = ? AND source = ? AND matched = 0',
+  matched: 'UPDATE usage_identities SET matched = 1 WHERE key = ?',
+});
 
 export interface IdentityRow { key: string; event: string; row_id: number; matched: number; source: string; at: string; provider: string; client: string | null; upstream_id: string | null }
 export function identityEvent(row: IdentityRow): ActivityEvent {
@@ -28,47 +37,42 @@ export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: 
   const { requestId, model, authIndex, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed } = e;
   const { costUsd, uncachedCostUsd } = accountedUsage(e);
-  let insert = identityInserts.get(db);
-  if (!insert) {
-    insert = db.prepare('INSERT OR IGNORE INTO usage_identities (key, event, row_id, fallback_key, upstream_id, source, at, provider, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    identityInserts.set(db, insert);
-  }
-  insert.run([identityKey(e), JSON.stringify({
+  const statements = statementsFor(db);
+  statements.insert.run([identityKey(e), JSON.stringify({
     costUsd, uncachedCostUsd,
     totalStart, totalDay, requestId, model, authIndex, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);
   if (e.source === 'proxy' && (e.upstreamId || e.sessionId)) {
-    db.prepare("INSERT INTO meta (key, value) VALUES ('first-matchable-proxy', ?) ON CONFLICT(key) DO UPDATE SET value = min(value, excluded.value)").run(e.at);
+    statements.boundary.run(e.at);
   }
 }
 
 /** Called inside the same transaction as totals, requests and checkpoints. */
 export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remove?: ActivityEvent; removeKey?: string; id?: number } {
-  const existing = db.prepare('SELECT * FROM usage_identities WHERE key = ?').get(identityKey(e)) as IdentityRow | undefined;
+  const statements = statementsFor(db);
+  const existing = statements.identity.get(identityKey(e)) as IdentityRow | undefined;
   if (existing) {
     const old = identityEvent(existing);
     // Streaming blocks can precede final usage; copied earlier blocks must never undo the final count.
     if (e.source === 'client-log' && !existing.matched && ((!old.upstreamId && e.upstreamId) || e.outputTokens > old.outputTokens)) {
-      db.prepare('DELETE FROM usage_identities WHERE key = ?').run(identityKey(e));
-      db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?").run(existing.row_id, old.requestId);
+      statements.removeIdentity.run(identityKey(e));
+      statements.removeRequest.run(existing.row_id, old.requestId);
       const updated = { ...e, upstreamId: e.upstreamId ?? old.upstreamId };
       return { ...reconcileUsage(db, updated), remove: old, removeKey: removalKey(existing) };
     }
     return { skip: true, id: existing.row_id };
   }
   const opposite = e.source === 'proxy' ? 'client-log' : 'proxy';
-  const byUpstream = e.upstreamId ? db.prepare(`SELECT * FROM usage_identities
-    WHERE upstream_id = ? AND source = ? AND matched = 0`).all(e.upstreamId, opposite) as IdentityRow[] : [];
-  const bySession = e.sessionId ? db.prepare(`SELECT * FROM usage_identities
-    WHERE fallback_key = ? AND source = ? AND matched = 0`).all(fallbackKey(e), opposite) as IdentityRow[] : [];
+  const byUpstream = e.upstreamId ? statements.upstream.all(e.upstreamId, opposite) as IdentityRow[] : [];
+  const bySession = e.sessionId ? statements.session.all(fallbackKey(e), opposite) as IdentityRow[] : [];
   const match = [...byUpstream, ...bySession].find((r) => sameUsage(identityEvent(r), e));
   if (!match) return { skip: false };
-  db.prepare('UPDATE usage_identities SET matched = 1 WHERE key = ?').run(match.key);
+  statements.matched.run(match.key);
   rememberUsage(db, e, e.source === 'proxy' ? 0 : match.row_id);
-  db.prepare('UPDATE usage_identities SET matched = 1 WHERE key = ?').run(identityKey(e));
+  statements.matched.run(identityKey(e));
   if (e.source === 'client-log') return { skip: true, id: match.row_id };
-  db.prepare("DELETE FROM requests WHERE id = ? AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.requestId') = ?").run(match.row_id, identityEvent(match).requestId);
+  statements.removeRequest.run(match.row_id, identityEvent(match).requestId);
   return { skip: false, remove: identityEvent(match), removeKey: removalKey(match) };
 }
 

@@ -4,7 +4,7 @@ import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucket, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
+  ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
 import type { ManagedPolicyStatus } from './types';
 
@@ -67,8 +67,8 @@ export interface DesktopApi {
   /** Share of local client usage that went through the proxy. */
   activityImportState(): Promise<ActivityImportState>;
   activityCoverage(): Promise<ProxyCoverage>;
-  /** Totals for the latest `days` local days; null returns all. */
-  activityBuckets(days: number | null): Promise<ActivityBucket[]>;
+  /** Activity and fixed forecast ranges from the same totals and local-day boundary; null holds all activity. */
+  activityBucketSnapshot(days: number | null): Promise<ActivityBucketSnapshot>;
   /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
   /** Titles the clients gave these conversations (proxy session IDs); IDs without one are left out. */
@@ -169,7 +169,7 @@ export const INVOKE = {
   activityTotals: 'activity:totals',
   activityImportState: 'activity:import-state',
   activityCoverage: 'activity:coverage',
-  activityBuckets: 'activity:buckets',
+  activityBucketSnapshot: 'activity:bucket-snapshot',
   clearActivity: 'activity:clear',
   conversationNames: 'activity:conversation-names',
   moveConversation: 'activity:move-conversation',

@@ -185,9 +185,9 @@ const handlers: Handlers = {
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
   activityTotals: () => activityLog.call('totalsList'),
   activityCoverage: () => activityLog.call('coverage'),
-  activityBuckets: (days) => {
+  activityBucketSnapshot: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
-    return activityLog.call('buckets', days === null || n > MAX_BUCKET_DAYS ? null : n);
+    return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);
   },
   clearActivity: () => activityLog.call('clear'),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),

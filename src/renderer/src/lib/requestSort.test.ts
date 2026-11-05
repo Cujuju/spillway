@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createMemo, createRoot, createSignal } from 'solid-js';
 import type { StoredActivityEvent } from '@shared/types';
-import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, sortRequests } from './requestSort';
+import { createRequestOrder, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, sortRequests, type RequestSort } from './requestSort';
 
 const row = (id: number, patch: Partial<StoredActivityEvent> = {}): StoredActivityEvent => ({
   id, at: new Date(2026, 9, 27, 12, 0, id).toISOString(), requestId: `r${id}`, selectionId: null, upstreamId: null, source: 'proxy', provider: 'claude', model: 'claude-opus-5-5', authIndex: 'a1',
@@ -9,6 +10,50 @@ const row = (id: number, patch: Partial<StoredActivityEvent> = {}): StoredActivi
 });
 const labels = { account: (a: string | null) => a ?? '', conversation: (id: string | null) => id ?? '' };
 const ids = (rows: StoredActivityEvent[]) => rows.map((r) => r.id);
+
+// Tests inspect current memo values synchronously.
+/* oxlint-disable solid/reactivity */
+it('reuses the sorted day across reveal and loading changes, but updates for rows, sort and labels', () => createRoot((dispose) => {
+  const [section, setSection] = createSignal({ rows: [row(1, { authIndex: 'a' }), row(2, { authIndex: 'b' })], shown: 1, loading: false });
+  const [sort, setSort] = createSignal<RequestSort>({ key: 'account', desc: false });
+  const [names, setNames] = createSignal<Record<string, string>>({ a: 'Alpha', b: 'Beta' });
+  const account = vi.fn((id: string | null) => names()[id ?? ''] ?? '');
+  const ordered = createRequestOrder(() => section().rows, sort, { ...labels, account });
+  const visible = createMemo(() => ordered().slice(0, section().shown));
+  expect(ids(visible())).toEqual([1]);
+  const calls = account.mock.calls.length;
+  setSection((s) => ({ ...s, shown: 2, loading: true }));
+  expect(ids(visible())).toEqual([1, 2]);
+  expect(account).toHaveBeenCalledTimes(calls);
+  setNames({ a: 'Zulu', b: 'Beta' });
+  expect(ids(visible())).toEqual([2, 1]);
+  setSection((s) => ({ ...s, rows: [row(3, { authIndex: 'b' }), ...s.rows] }));
+  expect(ids(visible())).toEqual([3, 2]);
+  setSort({ key: 'account', desc: true });
+  expect(ids(visible())).toEqual([1, 3]);
+  setSort(DEFAULT_SORT);
+  expect(ordered()).toBe(section().rows);
+  setSection((s) => ({ ...s, rows: s.rows.filter((r) => r.id !== 1) }));
+  expect(ids(visible())).toEqual([3, 2]);
+  dispose();
+}));
+
+it('refreshes conversation ordering for renamed labels while preserving nulls and ties', () => createRoot((dispose) => {
+  const rows = [row(1, { sessionId: 'a' }), row(2), row(3, { sessionId: 'b' }), row(4, { sessionId: 'b' })];
+  const [names, setNames] = createSignal<Record<string, string>>({ a: 'Alpha', b: 'Beta' });
+  const [sort, setSort] = createSignal<RequestSort>({ key: 'conversation', desc: false });
+  const dynamicLabels = { ...labels, conversation: (id: string | null) => names()[id ?? ''] ?? '' };
+  const ordered = createRequestOrder(() => rows, sort, dynamicLabels);
+  expect(ids(ordered())).toEqual([1, 4, 3, 2]);
+  setNames({ a: 'Zulu', b: 'Beta' });
+  expect(ids(ordered())).toEqual([4, 3, 1, 2]);
+  setSort({ key: 'conversation', desc: true });
+  expect(ordered()).toEqual(sortRequests(rows, sort(), dynamicLabels));
+  expect(ids(ordered())).toEqual([1, 4, 3, 2]);
+  dispose();
+}));
+
+/* oxlint-enable solid/reactivity */
 
 describe('sortRequests', () => {
   const rows = [row(1, { ttftMs: 50 }), row(2, { ttftMs: null }), row(3, { ttftMs: 20 }), row(4, { ttftMs: 50 })];

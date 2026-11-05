@@ -7,7 +7,7 @@ import type { DaySummaries } from '../lib/daySummaries';
 import { conversationLabel } from '../lib/conversationNames';
 import { dayLabel } from '../lib/format';
 import { persistedSignal } from '../lib/persisted';
-import { DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, sortRequests, type RequestSort } from '../lib/requestSort';
+import { createRequestOrder, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, type RequestSort } from '../lib/requestSort';
 import { now } from '../store';
 import { costText } from './activityFormat';
 import { REQUEST_COLUMN_COUNT, RequestRow } from './RequestRow';
@@ -141,7 +141,8 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
             const summary = () => props.days.byDay().get(day);
             // Same object until this day's section changes, so other days' updates don't re-sort it.
             const own = createMemo(() => section(day));
-            const rows = createMemo(() => (isRecordedOrder(sort()) ? own().rows : sortRequests(own().rows, sort(), { account: props.account, conversation: conversationLabel }).slice(0, own().shown)));
+            const ordered = createRequestOrder(() => own().rows, sort, { account: props.account, conversation: conversationLabel });
+            const rows = createMemo(() => isRecordedOrder(sort()) ? ordered() : ordered().slice(0, own().shown));
             const hasMore = () => !own().loaded || (isRecordedOrder(sort()) ? own().more : own().shown < own().rows.length);
             return (
               <tbody>

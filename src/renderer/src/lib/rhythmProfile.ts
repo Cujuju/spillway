@@ -1,9 +1,8 @@
-import type { ActivityBucket } from '@shared/types';
+import { RHYTHM_LOOKBACK_DAYS, type ActivityBucket } from '@shared/types';
+export { RHYTHM_LOOKBACK_DAYS } from '@shared/types';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
-/** Long enough to average out an odd week, short enough to follow a schedule change within weeks. */
-export const RHYTHM_LOOKBACK_DAYS = 21;
 /** A week's hourly evidence avoids learning a schedule from a brief burst. */
 export const RHYTHM_MIN_DAYS = 7;
 /** Leave some demand in unfamiliar work hours. */

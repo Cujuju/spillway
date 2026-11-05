@@ -2,10 +2,11 @@ import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
+import { connectionStatements } from './connectionStatements';
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
-  ACTIVITY_PAGE_SIZE, type ActivityBucket, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
+  ACTIVITY_PAGE_SIZE, RHYTHM_LOOKBACK_DAYS, type ActivityBucket, type ActivityBucketSnapshot, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
@@ -21,6 +22,19 @@ function toStored(r: RequestRow): StoredActivityEvent {
   return { ...e, source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
+const statementsFor = connectionStatements({
+  checkpoint: 'SELECT state FROM client_log_checkpoints WHERE path = ?',
+  changes: 'SELECT total_changes() AS n',
+  prune: 'DELETE FROM requests WHERE day < ?',
+  saveCheckpoint: 'INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)',
+  storedRequest: 'SELECT id, event FROM requests WHERE id = (SELECT row_id FROM usage_identities WHERE key = ?)',
+  identity: 'SELECT 1 FROM usage_identities WHERE key = ?',
+  saveTotal: 'INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)',
+  insertRequest: 'INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)',
+  linkIdentity: 'UPDATE usage_identities SET row_id = ? WHERE key = ?',
+  identityRow: 'SELECT row_id FROM usage_identities WHERE key = ?',
+  conversation: `SELECT event FROM requests WHERE (${CONVERSATION_KEY_SQL}) = (?, ?) ORDER BY id DESC LIMIT 1`,
+});
 
 /** Renderer input arrives untyped over IPC. */
 function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPageQuery | null {
@@ -80,11 +94,12 @@ export class ActivityLog {
     }
     return this.conn;
   }
+  private get statements() { return statementsFor(this.db); }
 
   checkpoint(file: string): string | undefined {
     file = clientLogKey(file);
     if (!this.checkpoints.has(file)) this.checkpoints.set(file,
-      (this.db.prepare('SELECT state FROM client_log_checkpoints WHERE path = ?').get(file) as { state: string } | undefined)?.state);
+      (this.statements.checkpoint.get(file) as { state: string } | undefined)?.state);
     return this.checkpoints.get(file);
   }
 
@@ -94,15 +109,15 @@ export class ActivityLog {
   importEvents(events: AccountedActivityEvent[], checkpoint?: { file: string; state: string }): boolean {
     try {
       const changed = this.db.transaction(() => {
-        const changes = () => (this.db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+        const changes = () => (this.statements.changes.get() as { n: number }).n;
         const before = events.length ? changes() : 0;
         this.importing = true;
         try { for (const e of events) this.append(e); }
         finally { this.importing = false; }
         if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
-        this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldestKeptDay(Date.now(), this.config.retentionDays));
+        this.statements.prune.run(oldestKeptDay(Date.now(), this.config.retentionDays));
         const changed = events.length > 0 && changes() !== before;
-        if (checkpoint) this.db.prepare('INSERT OR REPLACE INTO client_log_checkpoints VALUES (?, ?)').run(checkpoint.file, checkpoint.state);
+        if (checkpoint) this.statements.saveCheckpoint.run(checkpoint.file, checkpoint.state);
         return changed;
       })();
       if (checkpoint) this.checkpoints.set(checkpoint.file, checkpoint.state);
@@ -120,13 +135,13 @@ export class ActivityLog {
   append(event: AccountedActivityEvent): StoredActivityEvent | null {
     // A committed append can lose its reply in a worker crash; preserve its original movedFrom on replay.
     if (event.source !== 'client-log') {
-      const existing = this.db.prepare('SELECT id, event FROM requests WHERE id = (SELECT row_id FROM usage_identities WHERE key = ?)').get(identityKey(event)) as RequestRow | undefined;
+      const existing = this.statements.storedRequest.get(identityKey(event)) as RequestRow | undefined;
       if (existing) {
         const stored = toStored(existing);
         if (stored.source === (event.source ?? 'proxy') && stored.requestId === event.requestId && stored.authIndex === event.authIndex && stored.at === event.at) return stored;
       }
       // Accounted events outlive their retained request rows; acknowledge without resurrecting details.
-      if (this.db.prepare('SELECT 1 FROM usage_identities WHERE key = ?').get(identityKey(event))) return null;
+      if (this.statements.identity.get(identityKey(event))) return null;
     }
     const { costUsd, uncachedCostUsd, ...details } = event;
     const e = { ...details, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
@@ -145,19 +160,19 @@ export class ActivityLog {
           if (total) {
             const counts = accountedUsage(old);
             for (const k of Object.keys(counts) as (keyof typeof counts)[]) total[k] -= counts[k];
-            this.db.prepare('INSERT OR REPLACE INTO activity_totals VALUES (?, ?)').run(key, JSON.stringify(total));
+            this.statements.saveTotal.run(key, JSON.stringify(total));
           }
         }
         if (merge.skip) return merge.id ?? 0;
         const row = addToTotals(totals, e);
         if (this.importing) preserveImportedCost(row, accounted);
-        this.db.prepare('INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)').run(storedTotalKey(row), JSON.stringify(row));
-        const id = Number(this.db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)').run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
+        this.statements.saveTotal.run(storedTotalKey(row), JSON.stringify(row));
+        const id = Number(this.statements.insertRequest.run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
         rememberUsage(this.db, accounted, id);
-        this.db.prepare('UPDATE usage_identities SET row_id = ? WHERE key = ?').run(id, identityKey(e));
+        this.statements.linkIdentity.run(id, identityKey(e));
         if (!this.importing && matchLegacyUsage(this.db, [identityKey(e)])) {
           this.totals = null; this.revision += 1;
-          return (this.db.prepare('SELECT row_id FROM usage_identities WHERE key = ?').get(identityKey(e)) as { row_id: number }).row_id;
+          return (this.statements.identityRow.get(identityKey(e)) as { row_id: number }).row_id;
         }
         return id;
       })();
@@ -176,7 +191,7 @@ export class ActivityLog {
     if (!e.sessionId || !e.authIndex) return null;
     const key = conversationKey(e);
     if (!this.conversationAccounts.has(key)) {
-      const row = this.db.prepare(`SELECT event FROM requests WHERE (${CONVERSATION_KEY_SQL}) = (?, ?) ORDER BY id DESC LIMIT 1`).get(e.sessionId, e.model) as RequestRow | undefined;
+      const row = this.statements.conversation.get(e.sessionId, e.model) as RequestRow | undefined;
       this.conversationAccounts.set(key, row ? toStored(row).authIndex : null);
     }
     const previous = this.conversationAccounts.get(key) ?? null;
@@ -264,11 +279,29 @@ export class ActivityLog {
     return all.filter((t) => wanted.has(t.day)).map(toBucket);
   }
 
+  /** Both ranges use one clock and share bucket objects from the same totals. */
+  bucketSnapshot(days: number | null): ActivityBucketSnapshot {
+    const now = Date.now();
+    const heldDays = days === null ? null : new Set(lastDays(now, days));
+    const forecastDays = new Set(lastDays(now, RHYTHM_LOOKBACK_DAYS));
+    const held: ActivityBucket[] = [];
+    const forecast: ActivityBucket[] = [];
+    for (const total of this.loadTotals().values()) {
+      const inHeld = heldDays === null || heldDays.has(total.day);
+      const inForecast = forecastDays.has(total.day);
+      if (!inHeld && !inForecast) continue;
+      const bucket = toBucket(total);
+      if (inHeld) held.push(bucket);
+      if (inForecast) forecast.push(bucket);
+    }
+    return { held, forecast };
+  }
+
   /** Deletes requests outside the retention setting; their totals stay. */
   prune(): void {
     this.prunedOn = localDay(Date.now());
     const oldest = oldestKeptDay(Date.now(), this.config.retentionDays);
-    this.db.prepare('DELETE FROM requests WHERE day < ?').run(oldest);
+    this.statements.prune.run(oldest);
     this.db.pragma('incremental_vacuum');
   }
 

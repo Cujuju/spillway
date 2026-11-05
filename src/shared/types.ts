@@ -190,6 +190,8 @@ export interface LogLine {
 
 /** Requests per Activity page load; the list fetches the next page as it scrolls. */
 export const ACTIVITY_PAGE_SIZE = 500;
+/** Long enough to average out an odd week, short enough to follow a schedule change within weeks. */
+export const RHYTHM_LOOKBACK_DAYS = 21;
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent {
@@ -287,6 +289,8 @@ export interface ActivityDayTotal extends ActivityCounts {
   /** Null for requests without a client, including every request before clients were recorded. */
   client: string | null;
 }
+
+export interface ActivityBucketSnapshot { held: ActivityBucket[]; forecast: ActivityBucket[] }
 
 /** Activity for one local hour, account, model and client. */
 export interface ActivityBucket extends ActivityCounts {

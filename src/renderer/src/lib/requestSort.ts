@@ -1,4 +1,5 @@
 import { tokenCost } from '@shared/modelPrices';
+import { createMemo, type Accessor } from 'solid-js';
 import type { StoredActivityEvent } from '@shared/types';
 
 export type SortKey = 'time' | 'account' | 'conversation' | 'client' | 'result' | 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'cost' | 'firstToken' | 'totalTime';
@@ -66,4 +67,10 @@ export function sortRequests(rows: readonly StoredActivityEvent[], sort: Request
     .map((e) => ({ e, v: col.value(e, labels) }))
     .sort((a, b) => compare(a.v, b.v) || b.e.id - a.e.id)
     .map((r) => r.e);
+}
+
+/** Section loading and reveal counts can change without invalidating the row order. */
+export function createRequestOrder(rows: Accessor<StoredActivityEvent[]>, sort: Accessor<RequestSort>, labels: RowLabels): Accessor<StoredActivityEvent[]> {
+  const ownRows = createMemo(rows);
+  return createMemo(() => isRecordedOrder(sort()) ? ownRows() : sortRequests(ownRows(), sort(), labels));
 }

@@ -1,5 +1,5 @@
 import type { ActivityImportState } from '@shared/ipc';
-import { createComputed, createRoot, createSignal } from 'solid-js';
+import { batch, createComputed, createRoot, createSignal } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskEmails, maskSnapshot } from '@shared/privacy';
@@ -7,7 +7,6 @@ import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, THEMES, themeTokens, type Theme } from '@shared/themes';
 import { persistedSignal } from './lib/persisted';
-import { RHYTHM_LOOKBACK_DAYS } from './lib/rhythmProfile';
 import { createActivityReload } from './lib/activityReload';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
@@ -78,15 +77,24 @@ const HISTORY_REFRESH_MS = 5 * 60_000;
 const MIN_ACTIVITY_DAYS = 31;
 /** Local days of activity held; null holds all. The Activity page widens it to its time frame. */
 const [activityDays, setActivityDays] = createSignal<number | null>(MIN_ACTIVITY_DAYS);
+let activityGeneration = 0;
+let activityRequest = 0;
+let activityAppliedRequest = 0;
 const loadActivity = () => {
-  void api.activityBuckets(activityDays()).then(setActivityBuckets);
-  void api.activityBuckets(RHYTHM_LOOKBACK_DAYS).then(setForecastBuckets);
+  const generation = activityGeneration;
+  const request = ++activityRequest;
+  void api.activityBucketSnapshot(activityDays()).then(({ held, forecast }) => {
+    if (generation !== activityGeneration || request < activityAppliedRequest) return;
+    activityAppliedRequest = request;
+    batch(() => { setActivityBuckets(held); setForecastBuckets(forecast); });
+  }).catch((err: unknown) => console.error('[activity] aggregates failed to load:', err));
 };
 
 /** Holds at least `days` local days of activity (null: all), reloading when that widens or narrows. */
 export function holdActivityDays(days: number | null): void {
   const next = days === null ? null : Math.max(MIN_ACTIVITY_DAYS, days);
   if (next === activityDays()) return;
+  activityGeneration++;
   setActivityDays(next);
   loadActivity();
 }
@@ -145,7 +153,7 @@ export async function initStore(): Promise<void> {
   setLogs(logLines);
   const bucketsReload = createActivityReload(loadActivity);
   bucketsReload.refresh();
-  api.onActivityReset(bucketsReload.refresh);
+  api.onActivityReset(() => { activityGeneration++; bucketsReload.refresh(); });
 
   api.onSnapshot((next) => {
     setSnapshot(next);

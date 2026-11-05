@@ -7,6 +7,7 @@ import type { ClientId } from '@shared/types';
 import { activityLog, activityImportState } from './activityService';
 import { archiveSync } from './archiveSync';
 import { clickhouseStatus, saveClickHouse, diagnoseClickHouse, retryClickHouse, clearClickHouse, cancelClickHouse, withClickHousePaused } from './clickhouseService';
+import { diagnosticExporter } from './diagnosticService';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
@@ -115,6 +116,9 @@ const handlers: Handlers = {
     const w = mainWindow(), result = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
     return result.canceled || !result.filePath ? activityLog.call('archiveExportCancel', id) : activityLog.call('archiveExportStart', id, result.filePath);
   },
+  diagnosticPrepare: (selection) => diagnosticExporter.prepare(selection),
+  diagnosticSave: (token) => diagnosticExporter.save(token),
+  diagnosticDiscard: (id) => diagnosticExporter.discard(id),
   appBuild: () => parseBuildInfo(app.getVersion(), __APP_BUILD__, null),
   getSettings: () => getSettings(),
   setSettings: (next) => applySettings(next),

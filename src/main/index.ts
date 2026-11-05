@@ -19,6 +19,7 @@ async function startNormalApp(): Promise<void> {
   const { clickhouseUploader, cancelClickHouse } = await import('./clickhouseService');
   const { drainActivity } = await import('./activityShutdown');
   const { registerIpc } = await import('./ipc');
+  const { stopDiagnosticExport } = await import('./diagnosticService');
   const { startClientDrift } = await import('./clientDriftService');
   const { syncPreferredAccounts } = await import('./preferredAccounts');
   const { proxy } = await import('./proxySupervisor');
@@ -152,7 +153,10 @@ async function startNormalApp(): Promise<void> {
       usage.stop();
       history.flush();
       archiveSync.stop();
-      void cancelClickHouse(true).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)).catch(console.error).finally(() => {
+      void Promise.allSettled([
+        cancelClickHouse(true).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
+        stopDiagnosticExport(),
+      ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
         destroyTrays();
         app.quit();
       });

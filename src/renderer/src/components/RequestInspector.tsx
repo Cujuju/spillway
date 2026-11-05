@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import type { ArchiveDetail } from '@shared/archive';
 import { readableStreamText } from '@shared/archiveContent';
 import { shownText } from '../store';
+import { DiagnosticBundle } from './DiagnosticBundle';
 import '../styles/archive.css';
 
 const RENDER_CHUNK = 32 * 1024;
@@ -21,6 +22,7 @@ function BodyText(props: { label: string; text: string; type: string; encoding: 
 }
 
 export function RequestInspector(props: { traceId?: string | null; onConversation?: (sessionId: string) => void }) {
+  const [bundle, setBundle] = createSignal<string>();
   const [detail, setDetail] = createSignal<ArchiveDetail | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
@@ -42,6 +44,8 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   });
   return <div class="request-inspector">
     <div class="card-spaced"><strong>Request inspector</strong> <button type="button" class="btn ghost" onClick={() => void load(props.traceId)}>Refresh</button></div>
+    <Show when={props.traceId}><button class="btn ghost" type="button" onClick={() => setBundle(props.traceId!)}>Prepare diagnostic bundle…</button></Show>
+    <Show when={bundle()}>{(trace) => <DiagnosticBundle traceIds={[trace()]} onClose={() => setBundle(undefined)} />}</Show>
     <Show when={loading()}><p class="muted">Loading capture…</p></Show>
     <Show when={error()}>{(e) => <p class="notice">{shownText(e())}</p>}</Show>
     <Show when={!loading() && !error() && !detail()}><p class="muted">Unknown — no saved full inbound trace/capture identity. Historical requests and imported client logs cannot be matched safely.</p></Show>

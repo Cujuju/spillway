@@ -2,6 +2,7 @@ import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
 import type { ClickHouseConfig } from '@shared/clickhouse';
+import { diagnosticSnapshot } from './diagnosticSnapshot';
 import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
 import type { ArchiveExportOptions } from '@shared/archiveExport';
 import { ArchiveExporter } from './archiveExport';
@@ -99,6 +100,7 @@ export class ActivityLog {
   clickhouseFail(token: string, now: number, error: string): void { this.clickhouse.fail(token, now, error); }
   clickhouseRetry(): void { this.clickhouse.retry(); }
   clickhouseClear(): void { this.clickhouse.clear(); }
+  diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
   constructor(private config: ActivityConfig) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;

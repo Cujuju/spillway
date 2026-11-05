@@ -5,6 +5,7 @@ import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from '
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
+import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
 import type { AppSettings } from './settings';
 import type {
   ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
@@ -24,6 +25,9 @@ export interface DesktopApi {
   clickhouseRetry(): Promise<void>;
   clickhouseClear(): Promise<void>;
   clickhouseCancel(): Promise<void>;
+  diagnosticPrepare(selection: DiagnosticSelection): Promise<DiagnosticPreview>;
+  diagnosticSave(token: string): Promise<DiagnosticSaveResult>;
+  diagnosticDiscard(tokenOrOperationId: string): Promise<void>;
   archiveQuery(query: ArchiveQuery): Promise<ArchivePage>;
   archiveDetail(traceId: string): Promise<ArchiveDetail | null>;
   archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
@@ -154,6 +158,7 @@ export interface DesktopApi {
 export const INVOKE = {
   archiveExportPrepare: 'archive:export-prepare', archiveExportStatus: 'archive:export-status', archiveExportSave: 'archive:export-save', archiveExportCancel: 'archive:export-cancel',
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',
+  diagnosticPrepare: 'diagnostic:prepare', diagnosticSave: 'diagnostic:save', diagnosticDiscard: 'diagnostic:discard',
   archiveQuery: 'archive:query', archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
   appBuild: 'app:build',
   getSettings: 'settings:get',

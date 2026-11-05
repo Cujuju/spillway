@@ -3,6 +3,8 @@ import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchiveP
 import { shownText } from '../store';
 import { RequestInspector } from './RequestInspector';
 import { ArchiveExport } from './ArchiveExport';
+import { DiagnosticBundle } from './DiagnosticBundle';
+import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
 import '../styles/archive.css';
 
 const MiB = 1024 * 1024;
@@ -12,6 +14,8 @@ export function RequestArchive() {
   const [entries, setEntries] = createSignal<ArchiveEntry[]>([]);
   const [more, setMore] = createSignal(false);
   const [selected, setSelected] = createSignal<string>();
+  const [bundleSelection, setBundleSelection] = createSignal<string[]>([]);
+  const [bundle, setBundle] = createSignal<string[]>();
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   let generation = 0;
@@ -72,12 +76,14 @@ export function RequestArchive() {
         <button class="btn ghost" type="button" disabled={busy()} onClick={() => void load(query())}>Refresh</button>
       </div>
       <Show when={error()}>{(e) => <p class="notice">{shownText(e())}</p>}</Show>
-      <div class="archive-results"><For each={entries()} fallback={<p class="muted">No matching archive records. Historical requests have no capture identity.</p>}>{(r) => <button class="archive-result" type="button" onClick={() => setSelected(r.traceId)}>
+      <div class="archive-filters"><button class="btn ghost" type="button" disabled={!bundleSelection().length} onClick={() => setBundle([...bundleSelection()])}>Diagnostic bundle from {bundleSelection().length} selected…</button><button class="btn ghost" type="button" onClick={() => setBundleSelection([])}>Clear selection</button><small class="muted">Choose up to {DIAGNOSTIC_LIMITS.records} records. Filter by Conversation to select related requests; selection persists across pages.</small></div>
+      <div class="archive-results"><For each={entries()} fallback={<p class="muted">No matching archive records. Historical requests have no capture identity.</p>}>{(r) => <div class="diagnostic-select-row"><input type="checkbox" aria-label={`Select trace ${shownText(r.traceId)} for diagnostic bundle`} checked={bundleSelection().includes(r.traceId)} disabled={bundleSelection().length >= DIAGNOSTIC_LIMITS.records && !bundleSelection().includes(r.traceId)} onChange={(e) => setBundleSelection((old) => e.currentTarget.checked ? [...old, r.traceId] : old.filter((id) => id !== r.traceId))} /><button class="archive-result" type="button" onClick={() => setSelected(r.traceId)}>
         <span>{new Date(r.at).toLocaleString()} · {shownText(r.model || r.path || 'Unknown model')}</span><span class="badge">{r.state}</span><small>{shownText(r.sessionId ?? r.traceId)}</small>
-      </button>}</For></div>
+      </button></div>}</For></div>
       <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Show more</button></Show>
     </section>
     <ArchiveExport query={query()} traceId={selected()} />
     <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} /></section>}</Show>
+    <Show when={bundle()}>{(ids) => <DiagnosticBundle traceIds={ids()} onClose={() => setBundle(undefined)} />}</Show>
   </div>;
 }

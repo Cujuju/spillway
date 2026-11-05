@@ -12,6 +12,7 @@ vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true, restart, a
 vi.mock('./usagePoller', () => ({ usage: { start: vi.fn() } }));
 vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
 vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
+vi.mock('./diagnosticService', () => ({ diagnosticExporter: {} }));
 vi.mock('./apiProviders', () => ({}));
 vi.mock('./upstreamModels', () => ({}));
 vi.mock('./clientSetup', () => ({}));

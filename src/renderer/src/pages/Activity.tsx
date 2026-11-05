@@ -1,5 +1,6 @@
 import { ActivityImport } from '../components/ActivityImport';
 import { RequestArchive } from '../components/RequestArchive';
+import { SessionTraces } from '../components/SessionTraces';
 import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
@@ -14,7 +15,7 @@ import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Daily totals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Daily totals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 
 export function Activity() {
@@ -47,7 +48,7 @@ export function Activity() {
         <h1 class="dash-title">Activity</h1>
         <ActivityImport />
         <div class="dash-actions card-spaced">
-          <Show when={view() !== 'archive'}><Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
+          <Show when={view() !== 'archive' && view() !== 'traces'}><Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
           <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
           <select class="input" aria-label="Effective reasoning effort" value={effort()} onChange={(e) => setEffort(e.currentTarget.value)}>
@@ -71,6 +72,7 @@ export function Activity() {
         <ActivityOverview scope={scope()} account={accountName} />
       </Show>
       <Show when={view() === 'archive'}><RequestArchive /></Show>
+      <Show when={view() === 'traces'}><SessionTraces account={accountName} /></Show>
       <Show when={view() === 'totals'}>
         <ActivityTotals account={accountName} scope={scope()} />
       </Show>

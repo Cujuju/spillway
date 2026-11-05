@@ -2,6 +2,7 @@ export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: n
 import type { ArchiveDetail, ArchivePage, ArchivePolicy, ArchiveQuery, ArchiveStatus } from './archive';
 import type { ArchiveExportJob, ArchiveExportOptions } from './archiveExport';
 import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from './clickhouse';
+import type { TraceQuery, TracePage, TraceAttemptQuery, TraceAttemptPage } from './sessionTrace';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
@@ -33,6 +34,8 @@ export interface DesktopApi {
   archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
   archivePolicy(policy: ArchivePolicy): Promise<ArchiveStatus>;
   archiveClear(): Promise<void>;
+  traceQuery(query: TraceQuery): Promise<TracePage>;
+  traceAttempts(query: TraceAttemptQuery): Promise<TraceAttemptPage>;
   platform: string;
 
   /** Spillway's own version and build. */
@@ -160,6 +163,7 @@ export const INVOKE = {
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',
   diagnosticPrepare: 'diagnostic:prepare', diagnosticSave: 'diagnostic:save', diagnosticDiscard: 'diagnostic:discard',
   archiveQuery: 'archive:query', archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
+  traceQuery: 'trace:query', traceAttempts: 'trace:attempts',
   appBuild: 'app:build',
   getSettings: 'settings:get',
   setSettings: 'settings:set',

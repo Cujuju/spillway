@@ -202,6 +202,8 @@ const handlers: Handlers = {
   activityTotals: () => activityLog.call('totalsList'),
   activityCoverage: () => activityLog.call('coverage'),
   archiveQuery: (q) => activityLog.call('archiveQuery', q ?? {}),
+  traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
+  traceAttempts: (q) => activityLog.call('traceAttempts', q),
   archiveDetail: (id) => activityLog.call('archiveDetail', id),
   archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
   archivePolicy: (p) => withClickHousePaused(async () => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; }),

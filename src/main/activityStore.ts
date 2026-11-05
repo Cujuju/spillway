@@ -6,6 +6,8 @@ import { diagnosticSnapshot } from './diagnosticSnapshot';
 import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
 import type { ArchiveExportOptions } from '@shared/archiveExport';
 import { ArchiveExporter } from './archiveExport';
+import type { TraceQuery, TraceAttemptQuery } from '@shared/sessionTrace';
+import { TraceStore } from './traceStore';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
@@ -101,6 +103,8 @@ export class ActivityLog {
   clickhouseRetry(): void { this.clickhouse.retry(); }
   clickhouseClear(): void { this.clickhouse.clear(); }
   diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
+  traceQuery(q: TraceQuery) { this.archive.prune(); return new TraceStore(this.db).query(q); }
+  traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }
   constructor(private config: ActivityConfig) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;

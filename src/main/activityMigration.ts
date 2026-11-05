@@ -57,7 +57,7 @@ function rebuildDay(db: Db, day: string, existing: ActivityTotal[], requests: Re
   if (!keepRecordedCost(hours, before, repriced)) return;
   const remove = db.prepare('DELETE FROM activity_totals WHERE key = ?');
   const insert = db.prepare('INSERT INTO activity_totals (key, total) VALUES (?, ?)');
-  const moveIdentity = db.prepare("UPDATE usage_identities SET event = json_set(event, '$.totalStart', ?, '$.totalDay', ?, '$.costUsd', ?, '$.uncachedCostUsd', ?) WHERE key = ?");
+  const moveIdentity = db.prepare("UPDATE usage_identities SET event = json_set(event, '$.totalStart', ?, '$.totalDay', ?, '$.costUsd', ?, '$.uncachedCostUsd', ?, '$.latencyCount', ?, '$.latencySumMs', ?, '$.ttftCount', ?, '$.ttftSumMs', ?) WHERE key = ?");
   for (const t of existing) remove.run(rawKeys.get(storedTotalKey(t))!);
   for (const t of hours.values()) insert.run(storedTotalKey(t), JSON.stringify(t));
   for (const { id, event: e } of requests) {
@@ -70,7 +70,7 @@ function rebuildDay(db: Db, day: string, existing: ActivityTotal[], requests: Re
       const total = repriced.get(key)![k];
       counts[k] = total === 0 ? 0 : counts[k] * (before.get(key)![k] / total);
     }
-    moveIdentity.run(start, day, counts.costUsd, counts.uncachedCostUsd, identityKey(e));
+    moveIdentity.run(start, day, counts.costUsd, counts.uncachedCostUsd, counts.latencyCount, counts.latencySumMs, counts.ttftCount, counts.ttftSumMs, identityKey(e));
   }
 }
 

@@ -37,7 +37,7 @@ const WINDOW_START_PURPOSE = 'window-start';
 
 const s = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null);
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-const positive = (v: unknown) => (typeof v === 'number' && v > 0 ? v : null);
+const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
 
 /** Parses a "request" event's JSON; null when it is not an object with a request id. */
 export function parseActivityEvent(data: string): ActivityEvent | null {
@@ -61,18 +61,21 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     selectionId: s(r.selection_id),
     provider: (s(r.provider) ?? 'unknown').toLowerCase(),
     model: s(r.alias) ?? s(r.model) ?? '',
+    effectiveModel: s(r.model),
+    reasoningEffort: s(r.reasoning_effort),
     authIndex: s(r.auth_index),
     stream: r.stream === true,
     failed: r.failed === true,
     statusCode: positive(r.status_code),
     error: s(r.error),
-    latencyMs: n(r.latency_ms),
+    latencyMs: positive(r.latency_ms),
     ttftMs: positive(r.ttft_ms),
     inputTokens: n(r.input_tokens),
     outputTokens: n(r.output_tokens),
     cachedTokens: n(r.cached_tokens),
     cacheWriteTokens: n(r.cache_creation_tokens),
     sessionId: s(r.session_id),
+    parentSessionId: s(r.parent_session_id),
     userAgent,
     client: clientName(userAgent),
     // Set when stored (activityLog.append), which knows the conversation's earlier requests.

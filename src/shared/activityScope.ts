@@ -12,6 +12,8 @@ export interface ActivityScope {
   source?: 'proxy' | 'all';
   accounts: AccountScope;
   clients: ClientScope;
+  /** Effective effort keys; empty string selects unknown, null/omitted selects every effort. */
+  efforts?: KeyScope;
 }
 export const EVERY_REQUEST: ActivityScope = { accounts: null, clients: null };
 
@@ -35,8 +37,9 @@ export function clientName(userAgent: string | null): string | null {
 
 const inKeys = (keys: KeyScope, key: string) => keys === null || keys.includes(key);
 
-export const inScope = (scope: ActivityScope, row: { authIndex: string | null; client: string | null; source?: string }): boolean =>
-  (scope.source !== 'proxy' || (row.source ?? 'proxy') === 'proxy') && inKeys(scope.accounts, accountKey(row.authIndex)) && inKeys(scope.clients, clientKey(row.client));
+export const inScope = (scope: ActivityScope, row: { authIndex: string | null; client: string | null; source?: string; reasoningEffort?: string | null }): boolean =>
+  (scope.source !== 'proxy' || (row.source ?? 'proxy') === 'proxy') && inKeys(scope.accounts, accountKey(row.authIndex)) && inKeys(scope.clients, clientKey(row.client))
+  && inKeys(scope.efforts ?? null, row.reasoningEffort ?? '');
 
 export const isKeyScope = (v: unknown): v is KeyScope => v === null || (Array.isArray(v) && v.every((k) => typeof k === 'string'));
 
@@ -45,5 +48,5 @@ const normalizeKeys = (raw: unknown): KeyScope => (Array.isArray(raw) && raw.eve
 
 export function normalizeScope(raw: unknown): ActivityScope {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof ActivityScope, unknown>>;
-  return { accounts: normalizeKeys(r.accounts), clients: normalizeKeys(r.clients), ...(r.source === 'proxy' ? { source: 'proxy' as const } : {}) };
+  return { accounts: normalizeKeys(r.accounts), clients: normalizeKeys(r.clients), ...(r.efforts !== undefined ? { efforts: normalizeKeys(r.efforts) } : {}), ...(r.source === 'proxy' ? { source: 'proxy' as const } : {}) };
 }

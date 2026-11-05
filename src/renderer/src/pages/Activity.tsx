@@ -1,5 +1,5 @@
 import { ActivityImport } from '../components/ActivityImport';
-import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { AccountFilter } from '../components/AccountFilter';
 import { ActivityOverview } from '../components/ActivityOverview';
@@ -22,9 +22,11 @@ export function Activity() {
   const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isKeyScope);
   const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
   const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
+  const [effort, setEffort] = persistedSignal<string>('activity.effort', '*', (v): v is string => typeof v === 'string');
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
-  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source() }));
+  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === '*' ? null : [effort()] }));
+  const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === '*' ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
@@ -47,6 +49,11 @@ export function Activity() {
           <Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
           <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
+          <select class="input" aria-label="Effective reasoning effort" value={effort()} onChange={(e) => setEffort(e.currentTarget.value)}>
+            <option value="*">All efforts</option>
+            <option value="">Unknown effort</option>
+            <For each={efforts()}>{(value) => <option value={value}>{value}</option>}</For>
+          </select>
           <Show when={view() === 'requests'}>
             <Seg value={filter()} options={filterOptions()} onChange={setFilter} />
           </Show>

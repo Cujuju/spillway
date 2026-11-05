@@ -1,4 +1,5 @@
 import type { ActivityEvent } from '@shared/types';
+import { emptyCounts } from '@shared/activityCounts';
 import type { Db } from './activityDb';
 import { accountedUsage, identityEvent, removalKey, type IdentityRow } from './usageLedger';
 import { USAGE_MATCH_TOLERANCE_MS } from './usageMerge';
@@ -61,7 +62,7 @@ export function matchLegacyUsage(db: Db, keys?: string[]): number {
     const key = removalKey(client);
     const stored = statements.total.get(key) as { total: string } | undefined;
     if (stored) {
-      const row = JSON.parse(stored.total) as ActivityTotal;
+      const row = { ...emptyCounts(), ...JSON.parse(stored.total) } as ActivityTotal;
       const counts = accountedUsage(e);
       for (const k of Object.keys(counts) as (keyof typeof counts)[]) row[k] -= counts[k];
       statements.save.run(JSON.stringify(row), key);

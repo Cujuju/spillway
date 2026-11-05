@@ -20,11 +20,17 @@ const RETAINED_IDENTITY_MATCH = `r.id = u.row_id AND json_extract(r.event, '$.re
   AND json_extract(r.event, '$.authIndex') IS json_extract(u.event, '$.authIndex')`;
 
 export function* exportActivityEvents(db: Db): Generator<AccountedActivityEvent> {
-  const retained = `SELECT r.event, json_extract(u.event, '$.costUsd') AS costUsd, json_extract(u.event, '$.uncachedCostUsd') AS uncachedCostUsd
+  const retained = `SELECT r.event, json_extract(u.event, '$.costUsd') AS costUsd, json_extract(u.event, '$.uncachedCostUsd') AS uncachedCostUsd,
+    json_extract(u.event, '$.latencyCount') AS latencyCount, json_extract(u.event, '$.latencySumMs') AS latencySumMs,
+    json_extract(u.event, '$.ttftCount') AS ttftCount, json_extract(u.event, '$.ttftSumMs') AS ttftSumMs
     FROM requests r LEFT JOIN usage_identities u ON ${RETAINED_IDENTITY_MATCH} ORDER BY r.id`;
-  for (const r of db.prepare(retained).iterate() as Iterable<{ event: string; costUsd: number | null; uncachedCostUsd: number | null }>) {
+  for (const r of db.prepare(retained).iterate() as Iterable<{ event: string; costUsd: number | null; uncachedCostUsd: number | null;
+    latencyCount: number | null; latencySumMs: number | null; ttftCount: number | null; ttftSumMs: number | null }>) {
     const e = JSON.parse(r.event) as AccountedActivityEvent;
-    yield { ...e, costUsd: r.costUsd ?? e.costUsd, uncachedCostUsd: r.uncachedCostUsd ?? e.uncachedCostUsd };
+    // The ledger records the samples actually counted. Older hourly totals had none, even if details retain a duration.
+    yield { ...e, costUsd: r.costUsd ?? e.costUsd, uncachedCostUsd: r.uncachedCostUsd ?? e.uncachedCostUsd,
+      latencyCount: r.latencyCount ?? e.latencyCount ?? 0, latencySumMs: r.latencySumMs ?? e.latencySumMs ?? 0,
+      ttftCount: r.ttftCount ?? e.ttftCount ?? 0, ttftSumMs: r.ttftSumMs ?? e.ttftSumMs ?? 0 };
   }
   // Whole-day baselines without identities cannot be deduplicated and remain local.
   const sql = `SELECT u.* FROM usage_identities u WHERE NOT EXISTS (SELECT 1 FROM requests r

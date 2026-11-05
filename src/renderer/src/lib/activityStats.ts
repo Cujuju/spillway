@@ -81,6 +81,14 @@ function groupSummaries(rows: ActivityBucket[], keyOf: (r: ActivityBucket) => st
 export const byModel = (rows: ActivityBucket[]): ModelRow[] =>
   groupSummaries(rows, (r) => `${r.provider}|${r.model}`).map(({ first, summary }) => ({ provider: first.provider, model: first.model, summary }));
 
+/** Unknown effective models remain distinct from observed ones, even if the requested name matches. */
+export const byModelEffort = (rows: ActivityBucket[]) =>
+  groupSummaries(rows, (r) => JSON.stringify([r.provider, r.effectiveModel ?? null, r.effectiveModel ? null : r.model, r.reasoningEffort ?? null]))
+    .map(({ first, summary }) => ({ provider: first.provider, model: first.effectiveModel ?? first.model,
+      effectiveKnown: !!first.effectiveModel, effort: first.reasoningEffort ?? null, summary }));
+
+export const timingMean = (sum: number, count: number): number | null => count > 0 ? sum / count : null;
+
 /** One client's totals in the range. */
 export interface ClientRow {
   client: string | null;

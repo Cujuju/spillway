@@ -9,6 +9,7 @@ import { persistedSignal } from '../lib/persisted';
 import { activityBuckets, holdActivityDays, now } from '../store';
 import { ActivityBoard, AddChartSelect, type PendingChart } from './ActivityBoard';
 import { ActivityInfo } from './ActivityInfo';
+import { ActivityEfforts } from './ActivityEfforts';
 import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
 import { Seg } from './ui';
@@ -100,6 +101,7 @@ export function ActivityOverview(props: { scope: ActivityScope; account: (authIn
       </div>
 
       <ActivityBoard data={data} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
+      <ActivityEfforts rows={scoped()} />
     </>
   );
 }

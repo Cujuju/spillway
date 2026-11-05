@@ -5,7 +5,7 @@ import { tokenCost } from '@shared/modelPrices';
 import type { ActivityDaySummary, StoredActivityEvent } from '@shared/types';
 
 const withRequest = (s: ActivityDaySummary, e: StoredActivityEvent): ActivityDaySummary => {
-  const cost = tokenCost(e.provider, e.model, e);
+  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
   return {
     ...s, requests: s.requests + 1, failed: s.failed + (e.failed ? 1 : 0), newestId: e.id,
     costUsd: s.costUsd + (cost?.usd ?? 0), unpricedRequests: s.unpricedRequests + (cost ? 0 : 1),

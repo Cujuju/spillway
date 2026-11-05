@@ -19,7 +19,9 @@ interface RequestRow {
 function toStored(r: RequestRow): StoredActivityEvent {
   // Requests stored before conversations or clients were recorded lack these fields.
   const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
-  return { ...e, source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
+  return { ...e, effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null,
+    latencyMs: e.source === 'client-log' ? null : e.latencyMs ?? null, ttftMs: e.source === 'client-log' ? null : e.ttftMs ?? null,
+    source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 const statementsFor = connectionStatements({
@@ -49,7 +51,7 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
 function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
   const parts: string[] = scope.source === 'proxy' ? ["coalesce(json_extract(event, '$.source'), 'proxy') = 'proxy'"] : [];
   const params: string[] = [];
-  for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients]] as const) {
+  for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients], ["coalesce(json_extract(event, '$.reasoningEffort'), '')", scope.efforts ?? null]] as const) {
     if (keys === null) continue;
     parts.push(`${keySql} IN (${keys.map(() => '?').join(', ')})`);
     params.push(...keys);
@@ -85,7 +87,8 @@ export class ActivityLog {
         this.conn.transaction(() => {
           for (const r of this.conn!.prepare('SELECT id, day, event FROM requests').all() as (RequestRow & { day: string })[]) {
             const e = toStored(r);
-            rememberUsage(this.conn!, e, r.id, null, r.day);
+            // Old totals did not count timings; seeding identities must not manufacture subtraction samples.
+            rememberUsage(this.conn!, { ...e, latencyCount: 0, latencySumMs: 0, ttftCount: 0, ttftSumMs: 0 }, r.id, null, r.day);
           }
           this.conn!.prepare("INSERT INTO meta VALUES ('usage-ledger-seeded', '1')").run();
         })();
@@ -144,7 +147,10 @@ export class ActivityLog {
       if (this.statements.identity.get(identityKey(event))) return null;
     }
     const { costUsd, uncachedCostUsd, ...details } = event;
-    const e = { ...details, source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
+    const e = { ...details, effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
+      parentSessionId: event.parentSessionId ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
+      ttftMs: event.source === 'client-log' ? null : event.ttftMs ?? null,
+      source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const accounted = { ...e, costUsd, uncachedCostUsd };
     const day = localDay(Date.parse(e.at));
     const totals = this.loadTotals();

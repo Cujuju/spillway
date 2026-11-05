@@ -2,7 +2,7 @@ import { tokenCost } from '@shared/modelPrices';
 import { createMemo, type Accessor } from 'solid-js';
 import type { StoredActivityEvent } from '@shared/types';
 
-export type SortKey = 'time' | 'account' | 'conversation' | 'client' | 'result' | 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'cost' | 'firstToken' | 'totalTime';
+export type SortKey = 'time' | 'account' | 'effort' | 'conversation' | 'client' | 'result' | 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'cost' | 'firstToken' | 'totalTime';
 export interface RequestSort {
   key: SortKey;
   desc: boolean;
@@ -27,6 +27,7 @@ export const REQUEST_COLUMNS: readonly RequestColumn[] = [
   // Recorded order, the same order the database pages in.
   { key: 'time', label: 'Time', num: false, value: (e) => e.id },
   { key: 'account', label: 'Account · model', num: false, value: (e, l) => `${l.account(e.authIndex)} ${e.model}`.toLowerCase() },
+  { key: 'effort', label: 'Effort', num: false, title: 'Effective upstream reasoning effort; unknown when not recorded', value: (e) => e.reasoningEffort ?? null },
   { key: 'conversation', label: 'Conversation', num: false, title: 'The client conversation; "moved" marks a switch to another account', value: (e, l) => l.conversation(e.sessionId).toLowerCase() || null },
   { key: 'client', label: 'Client', num: false, title: 'The program that sent the request, from its User-Agent', value: (e) => e.client?.toLowerCase() ?? null },
   { key: 'result', label: 'Result', num: false, value: (e) => (e.failed ? (e.statusCode ?? null) : 0) },
@@ -34,7 +35,7 @@ export const REQUEST_COLUMNS: readonly RequestColumn[] = [
   { key: 'output', label: 'Output', num: true, value: (e) => e.outputTokens },
   { key: 'cacheRead', label: 'Cache read', num: true, value: (e) => e.cachedTokens },
   { key: 'cacheWrite', label: 'Cache write', num: true, value: (e) => e.cacheWriteTokens },
-  { key: 'cost', label: 'API cost', num: true, title: 'At API list prices', value: (e) => tokenCost(e.provider, e.model, e)?.usd ?? null },
+  { key: 'cost', label: 'API cost', num: true, title: 'At API list prices', value: (e) => tokenCost(e.provider, e.effectiveModel ?? e.model, e)?.usd ?? null },
   { key: 'firstToken', label: 'First token', num: true, title: 'Time to first token', value: (e) => e.ttftMs },
   { key: 'totalTime', label: 'Total time', num: true, value: (e) => e.latencyMs },
 ];

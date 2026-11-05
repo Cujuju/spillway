@@ -20,18 +20,25 @@ export function localDay(t: number): string {
 export const emptyCounts = (): ActivityCounts => ({
   requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
   costUsd: 0, uncachedCostUsd: 0, unpricedRequests: 0,
+  latencyCount: 0, latencySumMs: 0, ttftCount: 0, ttftSumMs: 0,
 });
 const COUNT_KEYS = Object.keys(emptyCounts()) as (keyof ActivityCounts)[];
 
 /** Adds one request, priced on its own so long-prompt rates apply. */
-export function addEvent(row: ActivityCounts, e: ActivityEvent): void {
+export function addEvent(row: ActivityCounts, e: ActivityEvent & Partial<Pick<ActivityCounts, 'latencyCount' | 'latencySumMs' | 'ttftCount' | 'ttftSumMs'>>): void {
   row.requests += 1;
   row.failed += e.failed ? 1 : 0;
   row.inputTokens += e.inputTokens;
   row.outputTokens += e.outputTokens;
   row.cachedTokens += e.cachedTokens;
   row.cacheWriteTokens += e.cacheWriteTokens;
-  const cost = tokenCost(e.provider, e.model, e);
+  const latency = e.source !== 'client-log' && Number.isFinite(e.latencyMs) && e.latencyMs! > 0;
+  const ttft = e.source !== 'client-log' && Number.isFinite(e.ttftMs) && e.ttftMs! > 0;
+  row.latencyCount += e.latencyCount ?? (latency ? 1 : 0);
+  row.latencySumMs += e.latencySumMs ?? (latency ? e.latencyMs! : 0);
+  row.ttftCount += e.ttftCount ?? (ttft ? 1 : 0);
+  row.ttftSumMs += e.ttftSumMs ?? (ttft ? e.ttftMs! : 0);
+  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
   if (cost) {
     row.costUsd += cost.usd;
     row.uncachedCostUsd += cost.uncachedUsd;
@@ -39,7 +46,7 @@ export function addEvent(row: ActivityCounts, e: ActivityEvent): void {
 }
 
 export function addCounts(row: ActivityCounts, c: ActivityCounts): void {
-  for (const k of COUNT_KEYS) row[k] += c[k];
+  for (const k of COUNT_KEYS) row[k] += c[k] ?? 0;
 }
 
 /** Older saved rows lack cache writes and cost; prices them as one batch at standard rates. */

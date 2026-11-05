@@ -33,4 +33,18 @@ describe('activity counts', () => {
     expect(row.costUsd).toBeCloseTo(4);
     expect(withCountsFilled({ provider: 'x', model: 'y', requests: 3 }).unpricedRequests).toBe(3);
   });
+
+  it('prices effective models and counts only measured timings, preserving sums through merges', () => {
+    const c = emptyCounts();
+    addEvent(c, event({ model: 'coding', effectiveModel: 'claude-opus-5-5', latencyMs: 100, ttftMs: 20 }));
+    addEvent(c, event({ model: 'coding', effectiveModel: 'claude-opus-5-5', latencyMs: 900, ttftMs: null }));
+    addEvent(c, event({ source: 'client-log', latencyMs: 0, ttftMs: null }));
+    addEvent(c, event({ latencyMs: null, ttftMs: null }));
+    expect(c).toMatchObject({ requests: 4, latencyCount: 2, latencySumMs: 1000, ttftCount: 1, ttftSumMs: 20, unpricedRequests: 0 });
+    expect(c.costUsd).toBeCloseTo(16);
+    const merged = emptyCounts();
+    addCounts(merged, c);
+    expect(merged).toEqual(c);
+    expect(withCountsFilled({ provider: 'x', model: 'y', requests: 9 })).toMatchObject({ latencyCount: 0, latencySumMs: 0 });
+  });
 });

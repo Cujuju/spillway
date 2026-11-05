@@ -27,6 +27,13 @@ describe('parseActivityEvent', () => {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'r1', session_id: 'claude:abc' }))).toMatchObject({ sessionId: 'claude:abc', movedFrom: null });
   });
 
+  it('keeps effective model and effort separate from the requested alias and unknown metadata', () => {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'r', alias: 'coding', model: 'gpt-5', reasoning_effort: '8192', parent_session_id: 'codex:parent' })))
+      .toMatchObject({ model: 'coding', effectiveModel: 'gpt-5', reasoningEffort: '8192', parentSessionId: 'codex:parent', latencyMs: null });
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'old', model: 'gpt-5' })))
+      .toMatchObject({ reasoningEffort: null, parentSessionId: null, latencyMs: null });
+  });
+
   it('keeps the client that sent the request', () => {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'r1', user_agent: 'codex_cli_rs/0.164.0' }))?.userAgent).toBe('codex_cli_rs/0.164.0');
     expect(parseActivityEvent(JSON.stringify({ request_id: 'r1' }))?.userAgent).toBeNull();

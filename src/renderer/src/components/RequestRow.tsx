@@ -17,7 +17,7 @@ export const REQUEST_COLUMN_COUNT = REQUEST_COLUMNS.length;
 
 const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
 const requestCost = (e: ActivityEvent) => {
-  const cost = tokenCost(e.provider, e.model, e);
+  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
   return cost ? usd(cost.usd) : '—';
 };
 
@@ -32,18 +32,22 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
           <HoverTip title="Request account" layout="block" rows={[
             { label: 'Account', value: props.account(props.e.authIndex) },
             ...(props.e.model ? [{ label: 'Model', value: props.e.model }] : []),
+            { label: 'Effective model', value: props.e.effectiveModel ?? 'Unknown' },
+            { label: 'Effective effort', value: props.e.reasoningEffort ?? 'Unknown' },
           ]}>
           <div class="cell-name">
             <ProviderGlyph provider={props.e.provider} size="sm" />
             <span>{props.account(props.e.authIndex)} <span class="muted">· {props.e.model || '—'}</span></span>
           </div></HoverTip>
         </td>
+        <td>{props.e.reasoningEffort ?? <span class="muted">Unknown</span>}</td>
         <td class="fill conversation-cell">
           <Show when={props.e.sessionId} fallback={<span class="muted">—</span>}>
             <div class="cell-name">
               <HoverTip title="Conversation" class="conversation-name-tip" rows={[
                 ...(conversationName(props.e.sessionId!) ? [{ label: 'Name', value: conversationName(props.e.sessionId!)! }] : []),
                 { label: 'ID', value: props.e.sessionId! },
+                ...(props.e.parentSessionId ? [{ label: 'Parent', value: props.e.parentSessionId }] : []),
               ]}><span class="conversation-name">{conversationLabel(props.e.sessionId)}</span></HoverTip>
               <Show when={props.e.movedFrom}>
                 {(from) => <HoverTip title="Conversation moved" class="conversation-moved-tip" rows={[

@@ -22,7 +22,7 @@ export function identityEvent(row: IdentityRow): ActivityEvent {
 }
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
 
-export type AccountedActivityEvent = ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd'>>;
+export type AccountedActivityEvent = ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd' | 'latencyCount' | 'latencySumMs' | 'ttftCount' | 'ttftSumMs'>>;
 /** Uses the cost actually counted when available, including migration's historical price scaling. */
 export function accountedUsage(e: AccountedActivityEvent): ActivityCounts {
   const counts = emptyCounts();
@@ -32,14 +32,15 @@ export function accountedUsage(e: AccountedActivityEvent): ActivityCounts {
   return counts;
 }
 
-/** Only accounting and match fields survive request retention; no error text, headers or timings. */
-export function rememberUsage(db: Db, e: ActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
+/** Only accounting and match fields survive retention, including mergeable timing counts/sums. */
+export function rememberUsage(db: Db, e: AccountedActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
   const { requestId, model, authIndex, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed } = e;
-  const { costUsd, uncachedCostUsd } = accountedUsage(e);
+  const { costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs } = accountedUsage(e);
   const statements = statementsFor(db);
   statements.insert.run([identityKey(e), JSON.stringify({
-    costUsd, uncachedCostUsd,
+    costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs,
+    ...(e.effectiveModel ? { effectiveModel: e.effectiveModel } : {}), ...(e.reasoningEffort ? { reasoningEffort: e.reasoningEffort } : {}),
     totalStart, totalDay, requestId, model, authIndex, sessionId,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);

@@ -203,13 +203,17 @@ export interface ActivityEvent {
   selectionId: string | null;
   provider: string;
   model: string;
+  /** Final upstream request model; model remains the client's requested model/alias. Older records omit it. */
+  effectiveModel?: string | null;
+  /** Effort observed after translation and payload configuration; absent/null means unknown. */
+  reasoningEffort?: string | null;
   authIndex: string | null;
   stream: boolean;
   failed: boolean;
   /** Upstream HTTP status of a failed attempt; null on success. */
   statusCode: number | null;
   error: string | null;
-  latencyMs: number;
+  latencyMs: number | null;
   /** Time to first token; null when not measured (non-streaming or failed). */
   ttftMs: number | null;
   inputTokens: number;
@@ -220,6 +224,7 @@ export interface ActivityEvent {
   cacheWriteTokens: number;
   /** The client conversation as the proxy keys it ("claude:<session uuid>"); null when the client sent none. */
   sessionId: string | null;
+  parentSessionId?: string | null;
   /** Account of this conversation's previous attempt on the same model, when it was another one: the prompt cache started over. */
   movedFrom: string | null;
   /** The client's User-Agent header, naming the program that sent the request; null when it sent none. */
@@ -276,10 +281,17 @@ export interface ActivityCounts {
   uncachedCostUsd: number;
   /** Requests whose model has no known price; their cost is not in `costUsd`. */
   unpricedRequests: number;
+  /** Mergeable timing observations; missing measurements never contribute a zero sample. */
+  latencyCount: number;
+  latencySumMs: number;
+  ttftCount: number;
+  ttftSumMs: number;
 }
 
 /** Requests and tokens for one local day, account, model and client; kept after that day's request log expires. */
 export interface ActivityDayTotal extends ActivityCounts {
+  effectiveModel?: string | null;
+  reasoningEffort?: string | null;
   source?: ActivityEvent['source'];
   /** Local calendar day, YYYY-MM-DD. */
   day: string;
@@ -294,6 +306,8 @@ export interface ActivityBucketSnapshot { held: ActivityBucket[]; forecast: Acti
 
 /** Activity for one local hour, account, model and client. */
 export interface ActivityBucket extends ActivityCounts {
+  effectiveModel?: string | null;
+  reasoningEffort?: string | null;
   source?: ActivityEvent['source'];
   /** Start of the local hour, epoch ms. With `wholeDay`, local midnight. */
   start: number;

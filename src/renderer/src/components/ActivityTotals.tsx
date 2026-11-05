@@ -42,7 +42,7 @@ function CountCells(props: { c: ActivityCounts; provider?: string }) {
 function byAccountModel(rows: ActivityDayTotal[]): ActivityDayTotal[] {
   const merged = new Map<string, ActivityDayTotal>();
   for (const r of rows) {
-    const key = `${r.provider}|${r.authIndex ?? ''}|${r.model}`;
+    const key = JSON.stringify([r.provider, r.authIndex, r.model, r.effectiveModel, r.reasoningEffort]);
     const row = merged.get(key) ?? { ...r, ...emptyCounts(), client: null };
     addCounts(row, r);
     merged.set(key, row);
@@ -101,7 +101,7 @@ export function ActivityTotals(props: { account: (authIndex: string | null) => s
                         <span>{props.account(r.authIndex)}</span>
                       </div>
                     </td>
-                    <td class="tabular">{r.model || '—'}</td>
+                    <td class="tabular" title={`Requested: ${r.model || 'Unknown'}; effective: ${r.effectiveModel ?? 'Unknown'}`}>{(r.effectiveModel ?? r.model) || '—'} · {r.reasoningEffort ?? 'Unknown effort'}</td>
                     <CountCells c={r} provider={r.provider} />
                   </tr>
                 )}

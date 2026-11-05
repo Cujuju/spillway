@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
 import { bucketStarts, rangeSpan, type BucketUnit } from './activityRange';
-import { byAccount, byModel, series, summarize } from './activityStats';
+import { byAccount, byModel, byModelEffort, series, summarize, timingMean } from './activityStats';
 
 // Local-clock times so bucket edges don't depend on the test machine's zone.
 const NOW = new Date(2026, 9, 26, 14, 30).getTime();
@@ -46,6 +46,21 @@ describe('byModel', () => {
     const models = byModel([row(NOW, { model: 'a', costUsd: 1 }), row(NOW, { model: 'b', costUsd: 3 }), row(NOW, { model: 'a', costUsd: 1 })]);
     expect(models.map((m) => [m.model, m.summary.requests])).toEqual([['b', 1], ['a', 2]]);
   });
+});
+
+it('compares observed effort without turning unknowns into defaults or averaging averages', () => {
+  const rows = byModelEffort([
+    row(NOW, { model: 'alias', effectiveModel: 'model', reasoningEffort: 'high', requests: 1, latencyCount: 1, latencySumMs: 100 }),
+    row(NOW, { model: 'other-alias', effectiveModel: 'model', reasoningEffort: 'high', requests: 9, latencyCount: 9, latencySumMs: 8100 }),
+    row(NOW, { model: 'alias', effectiveModel: 'model', reasoningEffort: 'low' }),
+    row(NOW, { model: 'alias' }),
+  ]);
+  expect(rows).toHaveLength(3);
+  const high = rows.find((r) => r.effort === 'high')!;
+  expect(high.summary.requests).toBe(10);
+  expect(timingMean(high.summary.latencySumMs, high.summary.latencyCount)).toBe(820);
+  expect(timingMean(0, 0)).toBeNull();
+  expect(rows.find((r) => r.effort === null)).toMatchObject({ effectiveKnown: false, model: 'alias' });
 });
 
 describe('byAccount', () => {

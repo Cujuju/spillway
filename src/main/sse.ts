@@ -1,5 +1,6 @@
 import type { ActivityEvent } from '@shared/types';
 import { clientName } from '@shared/activityScope';
+import { activityTransport, transportReason } from '@shared/activityTransport';
 
 export interface SseMessage {
   event: string;
@@ -65,6 +66,9 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     reasoningEffort: s(r.reasoning_effort),
     authIndex: s(r.auth_index),
     stream: r.stream === true,
+    downstreamTransport: activityTransport(r.downstream_transport),
+    upstreamTransport: activityTransport(r.upstream_transport),
+    transportFallbackReason: transportReason(r.transport_fallback_reason),
     failed: r.failed === true,
     statusCode: positive(r.status_code),
     error: s(r.error),

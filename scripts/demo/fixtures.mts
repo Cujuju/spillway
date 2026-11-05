@@ -96,6 +96,7 @@ function poisson(mean: number, rand: () => number): number {
 
 export interface FakeEvent {
   reasoning_effort?: string;
+  downstream_transport?: 'http' | 'websocket'; upstream_transport?: 'http' | 'websocket' | 'websocket+http'; transport_fallback_reason?: string;
   at: string; request_id: string; upstream_id: string; selection_id: string; provider: string; model: string; auth_index: string;
   stream: boolean; failed: boolean; status_code: number; error?: string; latency_ms: number; ttft_ms: number;
   input_tokens: number; output_tokens: number; cached_tokens: number; cache_creation_tokens: number; session_id: string; user_agent: string;
@@ -159,6 +160,10 @@ export function generate(now: number): DemoData {
           at: new Date(at).toISOString(), request_id: hex(rand, 16), upstream_id: `msg_${hex(rand, 20)}`, selection_id: hex(rand, 12),
           provider: account.provider, model, auth_index: account.authIndex, stream: true, failed,
           reasoning_effort: ['low', 'medium', 'high'][Math.floor(rand() * 3)],
+          // Synthetic transport observations; unrelated to the real proxy configuration.
+          downstream_transport: account.provider === 'codex' && i % 7 !== 0 ? 'websocket' : 'http',
+          upstream_transport: account.provider === 'codex' ? (i % 7 === 0 ? 'websocket+http' : 'websocket') : 'http',
+          ...(account.provider === 'codex' && i % 7 === 0 ? { transport_fallback_reason: 'websocket_upgrade_426' } : {}),
           status_code: failed ? 529 : 0, ...(failed ? { error: 'Overloaded' } : {}),
           latency_ms: 2000 + Math.floor(rand() * 30_000), ttft_ms: 400 + Math.floor(rand() * 2500),
           input_tokens: input, output_tokens: failed ? 0 : 100 + Math.floor(rand() * 3000),

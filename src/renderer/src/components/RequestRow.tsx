@@ -1,6 +1,7 @@
 import { HoverTip } from './ChartTip';
 import { Show } from 'solid-js';
 import { tokenCost } from '@shared/modelPrices';
+import { transportRows } from '@shared/activityTransport';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
 import { conversationLabel, conversationName } from '../lib/conversationNames';
 import { usd } from '../lib/format';
@@ -68,9 +69,10 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
           <Show when={props.e.client} fallback={<span class="muted">—</span>}>{(name) => name()}</Show></HoverTip>
         </td>
         <td>
+          <HoverTip title="Attempt transport" rows={transportRows(props.e)} focusable note="Observed per attempt. Unknown means unrecorded; prompts and response bodies are not required. Rejected client upgrades before model execution are not included.">
           <Show when={props.e.failed} fallback={<span class="badge green">OK</span>}>
             <span class="badge red">{props.e.statusCode ?? 'Failed'}</span>
-          </Show>
+          </Show></HoverTip>
         </td>
         <TokenCell v={props.e.inputTokens} />
         <TokenCell v={props.e.outputTokens} />

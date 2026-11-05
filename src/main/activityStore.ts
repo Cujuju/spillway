@@ -4,6 +4,7 @@ export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
 import { connectionStatements } from './connectionStatements';
 import { localDay } from '@shared/activityCounts';
+import { normalizeTransport } from '@shared/activityTransport';
 import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import {
   ACTIVITY_PAGE_SIZE, RHYTHM_LOOKBACK_DAYS, type ActivityBucket, type ActivityBucketSnapshot, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
@@ -19,7 +20,7 @@ interface RequestRow {
 function toStored(r: RequestRow): StoredActivityEvent {
   // Requests stored before conversations or clients were recorded lack these fields.
   const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
-  return { ...e, effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null,
+  return { ...e, ...normalizeTransport(e), effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null,
     latencyMs: e.source === 'client-log' ? null : e.latencyMs ?? null, ttftMs: e.source === 'client-log' ? null : e.ttftMs ?? null,
     source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
@@ -147,7 +148,7 @@ export class ActivityLog {
       if (this.statements.identity.get(identityKey(event))) return null;
     }
     const { costUsd, uncachedCostUsd, ...details } = event;
-    const e = { ...details, effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
+    const e = { ...details, ...normalizeTransport(event), effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
       parentSessionId: event.parentSessionId ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
       ttftMs: event.source === 'client-log' ? null : event.ttftMs ?? null,
       source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };

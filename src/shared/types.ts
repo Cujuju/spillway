@@ -1,5 +1,6 @@
 /** IPC contract shared by main, preload and renderer. */
 import type { ActivityScope } from './activityScope';
+import type { TransportMetadata } from './activityTransport';
 import type { BuildInfo } from './buildInfo';
 
 export type ProviderId = string;
@@ -194,7 +195,7 @@ export const ACTIVITY_PAGE_SIZE = 500;
 export const RHYTHM_LOOKBACK_DAYS = 21;
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
-export interface ActivityEvent {
+export interface ActivityEvent extends TransportMetadata {
   at: string;
   requestId: string;
   upstreamId: string | null;

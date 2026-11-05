@@ -14,6 +14,14 @@ describe('SseParser', () => {
 });
 
 describe('parseActivityEvent', () => {
+  it('preserves observed transport metadata without inferring historical transports', () => {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'old', stream: true, executor_type: 'CodexWebsocketsExecutor' })))
+      .toMatchObject({ downstreamTransport: null, upstreamTransport: null, transportFallbackReason: null });
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'attempt', downstream_transport: 'http', upstream_transport: 'websocket+http', transport_fallback_reason: 'websocket_upgrade_426' })))
+      .toMatchObject({ downstreamTransport: 'http', upstreamTransport: 'websocket+http', transportFallbackReason: 'websocket_upgrade_426' });
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'bad', downstream_transport: 'sse', upstream_transport: 1, transport_fallback_reason: 'raw error body' })))
+      .toMatchObject({ downstreamTransport: null, upstreamTransport: null, transportFallbackReason: null });
+  });
   it('maps the proxy fields and prefers the client alias for the model', () => {
     const e = parseActivityEvent(JSON.stringify({
       at: '2026-10-25T12:00:00Z', request_id: 'r1', selection_id: 's1', provider: 'Claude', model: 'claude-x', alias: 'fable',

@@ -6,6 +6,7 @@ import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog, activityImportState } from './activityService';
 import { archiveSync } from './archiveSync';
+import { clickhouseStatus, saveClickHouse, diagnoseClickHouse, retryClickHouse, clearClickHouse, cancelClickHouse, withClickHousePaused } from './clickhouseService';
 import { applyDraft, modelListKey, parseForEdit, readGroups, removeGroup, setKeyEnabled } from './apiProviders';
 import { listUpstreamModels } from './upstreamModels';
 import { applyClient, CLIENT_IDS, clientConfigFiles, clientStatus, undoClient } from './clientSetup';
@@ -199,13 +200,16 @@ const handlers: Handlers = {
   archiveQuery: (q) => activityLog.call('archiveQuery', q ?? {}),
   archiveDetail: (id) => activityLog.call('archiveDetail', id),
   archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
-  archivePolicy: async (p) => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; },
-  archiveClear: async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.refresh(); await activityLog.call('archiveClear'); },
+  archivePolicy: (p) => withClickHousePaused(async () => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; }),
+  archiveClear: () => withClickHousePaused(async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.refresh(); await activityLog.call('archiveClear'); }),
+  clickhouseStatus,
+  clickhouseSave: saveClickHouse, clickhouseDiagnose: diagnoseClickHouse, clickhouseRetry: retryClickHouse, clickhouseClear: clearClickHouse,
+  clickhouseCancel: () => cancelClickHouse(),
   activityBucketSnapshot: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);
   },
-  clearActivity: () => activityLog.call('clear'),
+  clearActivity: () => withClickHousePaused(() => activityLog.call('clear')),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
   // The dialog opens the link: a second account for a provider needs a private window, not the signed-in browser.

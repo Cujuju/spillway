@@ -1,0 +1,75 @@
+import type { ClickHouseBatch, ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from '@shared/clickhouse';
+import { checkClickHouseSchema, clickhouseDDL, clickhouseRequest, insertClickHouse } from './clickhouseHttp';
+import { clickhouseDestination } from './clickhouseStore';
+const DELIVERY_INTERVAL_MS = 3_000;
+
+export interface ClickHouseWorker {
+  status(): Promise<Omit<ClickHouseStatus, 'hasCredentials' | 'running' | 'paused'>>;
+  prepare(): Promise<ClickHouseBatch | null>;
+  acknowledge(token: string, destination: string): Promise<void>;
+  fail(token: string, now: number, error: string): Promise<void>;
+}
+function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const cancelled = () => reject(new Error('ClickHouse operation cancelled; delivery may be uncertain'));
+    signal.addEventListener('abort', cancelled, { once: true });
+    if (signal.aborted) cancelled();
+    void work.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancelled));
+  });
+}
+/** HTTP waits never occupy the Activity worker's RPC queue. */
+export class ClickHouseUploader {
+  private controller: AbortController | null = null;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private active: Promise<void> | null = null;
+  private stopped = true;
+  error: string | null = null;
+  get running(): boolean { return this.controller !== null; }
+  get paused(): boolean { return this.stopped; }
+  constructor(private worker: ClickHouseWorker, private credentials: (config: ClickHouseConfig) => ClickHouseCredentials | undefined) {}
+  start(): void { this.stopped = false; this.schedule(0); }
+  private schedule(ms: number): void {
+    clearTimeout(this.timer);
+    if (!this.stopped) this.timer = setTimeout(() => {
+      this.active = this.runOnce().finally(() => { this.active = null; this.schedule(DELIVERY_INTERVAL_MS); });
+    }, ms);
+  }
+  async stop(): Promise<void> {
+    this.stopped = true; clearTimeout(this.timer); this.controller?.abort(); await this.active;
+  }
+  async runOnce(now = Date.now()): Promise<void> {
+    if (this.controller) return;
+    const controller = new AbortController(); this.controller = controller;
+    let batch: ClickHouseBatch | null = null;
+    try {
+      const state = await abortable(this.worker.status(), controller.signal);
+      if (controller.signal.aborted || !state.config.enabled || state.nextAttemptAt > now) return;
+      batch = await abortable(this.worker.prepare(), controller.signal);
+      if (!batch || controller.signal.aborted) return;
+      if (batch.destination !== clickhouseDestination(state.config)) throw new Error('ClickHouse batch destination changed; delivery paused');
+      await checkClickHouseSchema(state.config, this.credentials(state.config), controller.signal);
+      // Retention/clear can invalidate a frozen batch while HTTP diagnostics are running.
+      const current = await abortable(this.worker.prepare(), controller.signal);
+      if (current?.token !== batch.token || controller.signal.aborted) return;
+      await insertClickHouse(state.config, this.credentials(state.config), batch.payload, controller.signal);
+      if (!controller.signal.aborted) await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);
+      this.error = null;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : 'ClickHouse upload failed';
+      if (batch && !controller.signal.aborted) {
+        try { await abortable(this.worker.fail(batch.token, Math.max(now, Date.now()), this.error), controller.signal); }
+        catch { this.error = 'ClickHouse local outbox update failed; retry retained'; }
+      }
+    } finally { this.controller = null; }
+  }
+  async diagnose(config: ClickHouseConfig, create = false): Promise<string> {
+    if (this.controller) throw new Error('ClickHouse operation already running');
+    const controller = new AbortController(); this.controller = controller;
+    try {
+      if (create && (await clickhouseRequest(config, this.credentials(config), clickhouseDDL(config), controller.signal)).trim()) throw new Error('ClickHouse schema creation returned an unexpected response');
+      await checkClickHouseSchema(config, this.credentials(config), controller.signal);
+      this.error = null; return 'Connected; archive schema v1 is compatible. Insert permission is checked on delivery.';
+    } catch (e) { this.error = e instanceof Error ? e.message : 'ClickHouse diagnostic failed'; throw new Error(this.error); }
+    finally { this.controller = null; }
+  }
+}

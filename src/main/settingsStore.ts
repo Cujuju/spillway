@@ -4,8 +4,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import path from 'node:path';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { appPaths } from './paths';
+import { validateClickHouseCredentials, type ClickHouseCredentials } from '@shared/clickhouse';
 
-/** Secrets are generated locally and never leave this machine. */
+/** Stored using the platform's existing secrets mechanism; destination credentials stay in the main process. */
 interface Secrets {
   /** Key clients such as Claude Code send to the proxy. */
   clientApiKey: string;
@@ -13,6 +14,7 @@ interface Secrets {
   managementKey: string;
   /** Hex key of the encrypted activity database (activityDb.ts). Losing it sets that database aside. */
   databaseKey: string;
+  clickhouse?: ClickHouseCredentials & { endpoint: string };
 }
 
 const SECRET_BYTES = 32;
@@ -80,11 +82,20 @@ async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean
     if (typeof parsed.clientApiKey !== 'string') return null;
     // Files from older versions lack later keys; they get them and are rewritten.
     const complete = present(parsed.managementKey) && present(parsed.databaseKey);
+    let clickhouse: Secrets['clickhouse'];
+    if (parsed.clickhouse) {
+      try {
+        if (typeof parsed.clickhouse.endpoint !== 'string') throw new Error('Missing credential binding');
+        clickhouse = { ...validateClickHouseCredentials(parsed.clickhouse), endpoint: parsed.clickhouse.endpoint };
+      }
+      catch { console.error('[settings] invalid ClickHouse credentials ignored'); }
+    }
     return {
       value: {
         clientApiKey: parsed.clientApiKey,
         managementKey: present(parsed.managementKey) ? parsed.managementKey : newSecret(),
         databaseKey: present(parsed.databaseKey) ? parsed.databaseKey : newDatabaseKey(),
+        ...(clickhouse ? { clickhouse } : {}),
       },
       reEncrypt: reEncrypt || !complete,
     };
@@ -111,9 +122,22 @@ export function getSecrets(): Secrets {
   return secrets;
 }
 
+let secretWrites = Promise.resolve();
+function mutateSecrets(change: (value: Secrets) => Secrets): Promise<void> {
+  const operation = secretWrites.then(async () => {
+    const next = change(getSecrets());
+    writeFileAtomic(appPaths.secretsFile, await encode(next));
+    secrets = next;
+  });
+  secretWrites = operation.catch(() => { /* The caller receives the failure; later writes may still succeed. */ });
+  return operation;
+}
 export async function regenerateClientApiKey(): Promise<string> {
-  const next = { ...getSecrets(), clientApiKey: newSecret() };
-  writeFileAtomic(appPaths.secretsFile, await encode(next));
-  secrets = next;
-  return next.clientApiKey;
+  const key = newSecret();
+  await mutateSecrets((value) => ({ ...value, clientApiKey: key }));
+  return key;
+}
+export function setClickHouseCredentials(raw: ClickHouseCredentials | null, endpoint = ''): Promise<void> {
+  const credentials = raw === null ? undefined : { ...validateClickHouseCredentials(raw), endpoint };
+  return mutateSecrets((value) => ({ ...value, clickhouse: credentials }));
 }

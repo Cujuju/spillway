@@ -16,6 +16,7 @@ async function startNormalApp(): Promise<void> {
   const { installAppMenu } = await import('./appMenu');
   const { activity } = await import('./activityStream');
   const { archiveSync } = await import('./archiveSync');
+  const { clickhouseUploader, cancelClickHouse } = await import('./clickhouseService');
   const { drainActivity } = await import('./activityShutdown');
   const { registerIpc } = await import('./ipc');
   const { startClientDrift } = await import('./clientDriftService');
@@ -128,6 +129,7 @@ async function startNormalApp(): Promise<void> {
       wireEvents();
       installAppMenu(() => openSettingsSection('about'));
       activityLog.start();
+      clickhouseUploader.start();
       applyLoginItem();
       // The tray is always present: it hosts the limit icons and the hidden-start entry point.
       ensureAppTray();
@@ -150,7 +152,7 @@ async function startNormalApp(): Promise<void> {
       usage.stop();
       history.flush();
       archiveSync.stop();
-      void drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog).catch(console.error).finally(() => {
+      void cancelClickHouse(true).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)).catch(console.error).finally(() => {
         destroyTrays();
         app.quit();
       });

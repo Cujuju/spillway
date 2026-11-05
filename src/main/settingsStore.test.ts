@@ -10,13 +10,20 @@ const secretsFile = path.join(dir, 'secrets.bin');
 vi.mock('electron', () => ({ safeStorage: { isAsyncEncryptionAvailable: async () => false } }));
 vi.mock('./paths', () => ({ appPaths: { secretsFile } }));
 
-const { loadSecrets } = await import('./settingsStore');
+const { loadSecrets, setClickHouseCredentials, getSecrets, regenerateClientApiKey } = await import('./settingsStore');
 
 beforeEach(() => rmSync(secretsFile, { force: true }));
 afterEach(() => rmSync(secretsFile, { force: true }));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('secrets', () => {
+  it('preserves main-only destination credentials across reload and concurrent key changes', async () => {
+    const initial = await loadSecrets();
+    await Promise.all([setClickHouseCredentials({ username: 'export-user', password: 'export-secret' }), regenerateClientApiKey()]);
+    expect(getSecrets().managementKey).toBe(initial.managementKey);
+    expect((await loadSecrets()).clickhouse).toEqual({ username: 'export-user', password: 'export-secret', endpoint: '' });
+    await setClickHouseCredentials(null); expect((await loadSecrets()).clickhouse).toBeUndefined();
+  });
   it('keeps the management key across launches, so a tool given it once keeps working', async () => {
     const first = await loadSecrets();
     expect(first.managementKey).not.toBe('');

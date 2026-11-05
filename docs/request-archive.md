@@ -24,6 +24,8 @@ Types are in `src/shared/archive.ts`. `ArchiveEntry.schemaVersion` is `1`. `id` 
 
 These APIs are the integration surface for export/bundle/trace implementations. [Portable archive export v1](portable-archive.md) adds a worker-owned frozen selection and JSONL manifest/capture/trailer API. Existing data-transfer v1 exports Activity metadata only and remains independent. Use `schemaVersion`, stable IDs, explicit state, provenance and bounded detail in consumers; never silently label missing captures complete.
 
+The optional [ClickHouse destination](clickhouse-export.md) consumes worker-owned archive revisions through a bounded encrypted outbox. It remains default-off and requires a separate content opt-in; it does not change local accounting or retention.
+
 ## Policy and completeness
 
 Default body policy is off, 7 days, 100 MiB. Allowed retention is 1–90 days and logical body budget 1–1024 MiB. HTTP retains at most 256 KiB wire and decoded bytes per direction. The worker decodes identity/gzip/x-gzip/zstd and up to two stacked encodings. Zstd has an 8 MiB decoder window/memory limit. Unsupported/corrupt encodings are explicitly partial with bounded base64 fallback. Invalid UTF-8 replacement can expand stored text. Codex downstream WS limits are 128 application messages per connection, 64 KiB per message and 256 KiB per direction, including negotiated permessage-deflate. Frame/count/byte truncation, failed writes and abnormal disconnects are explicit. Provider-hidden payloads, upstream executor bodies, WS control frames and other WS protocols are outside the support boundary.

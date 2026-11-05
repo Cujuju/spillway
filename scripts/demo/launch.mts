@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generate, userConfigYaml, type DemoData } from './fixtures.mts';
 import { startDemoProxy, type DemoProxy } from './server.mts';
+import { startDemoClickHouse } from './clickhouse.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DARK_THEME = 'dracula';
@@ -17,6 +18,7 @@ export const DEMO_WINDOW = { width: 1280, height: 970 };
 export interface DemoApp {
   child: ChildProcess;
   proxy: DemoProxy;
+  clickhouse?: Awaited<ReturnType<typeof startDemoClickHouse>>;
   exited: Promise<void>;
   /** Quits the app if still running, stops the fake proxy and deletes the throwaway folders. */
   close(): Promise<void>;
@@ -26,6 +28,7 @@ export interface DemoOptions {
   theme?: string;
   /** Chrome DevTools Protocol port for scripted control (screenshots). */
   debuggingPort?: number;
+  clickhouse?: boolean;
 }
 
 function writeProfile(dir: string, theme: string, data: DemoData): void {
@@ -51,7 +54,7 @@ const CLIENT_HOME_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME'];
 /** Electron's appData folder relative to the home folder, per platform. */
 const APP_DATA_UNDER_HOME: Partial<Record<NodeJS.Platform, string[]>> = { win32: ['AppData', 'Roaming'], darwin: ['Library', 'Application Support'], linux: ['.config'] };
 
-export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOptions = {}): Promise<DemoApp> {
+export async function launchDemo({ theme = DARK_THEME, debuggingPort, clickhouse: withClickHouse }: DemoOptions = {}): Promise<DemoApp> {
   const data = generate(Date.now());
   const scratch = mkdtempSync(path.join(tmpdir(), 'spillway-demo-'));
   const profile = path.join(scratch, 'profile');
@@ -60,6 +63,7 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOpti
   mkdirSync(path.join(home, ...APP_DATA_UNDER_HOME[process.platform] ?? []), { recursive: true });
   writeProfile(profile, theme, data);
   const proxy = await startDemoProxy(data);
+  const clickhouse = withClickHouse ? await startDemoClickHouse() : undefined;
 
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home };
   if (process.platform === 'linux') env.XDG_CONFIG_HOME = path.join(home, '.config');
@@ -73,6 +77,7 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOpti
   return {
     child,
     proxy,
+    clickhouse,
     exited,
     async close() {
       if (child.exitCode === null) {
@@ -80,6 +85,7 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort }: DemoOpti
         await exited;
       }
       await proxy.close();
+      await clickhouse?.close();
       rmSync(scratch, { recursive: true, force: true });
     },
   };

@@ -1,5 +1,7 @@
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
+import { ClickHouseStore } from './clickhouseStore';
+import type { ClickHouseConfig } from '@shared/clickhouse';
 import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
 import type { ArchiveExportOptions } from '@shared/archiveExport';
 import { ArchiveExporter } from './archiveExport';
@@ -89,6 +91,14 @@ export class ActivityLog {
   archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
   archiveClear(): void { this.exporter?.cancelCurrent(); this.archive.clear(); }
+  private get clickhouse() { return new ClickHouseStore(this.db, this.archive); }
+  clickhouseStatus() { return this.clickhouse.status(); }
+  clickhouseConfigure(c: ClickHouseConfig): void { this.clickhouse.configure(c); }
+  clickhousePrepare() { return this.clickhouse.prepare(); }
+  clickhouseAcknowledge(token: string, destination: string): void { this.clickhouse.acknowledge(token, destination); }
+  clickhouseFail(token: string, now: number, error: string): void { this.clickhouse.fail(token, now, error); }
+  clickhouseRetry(): void { this.clickhouse.retry(); }
+  clickhouseClear(): void { this.clickhouse.clear(); }
   constructor(private config: ActivityConfig) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;

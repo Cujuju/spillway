@@ -12,8 +12,9 @@ const args = process.argv.slice(2);
 if (args.includes(SCREENSHOTS_FLAG)) {
   for (const file of await capture()) console.log(path.relative(ROOT, file));
 } else {
-  const app = await launchDemo({ theme: args.find((a) => !a.startsWith('--')) });
+  const app = await launchDemo({ theme: args.find((a) => !a.startsWith('--')), clickhouse: args.includes('--clickhouse') });
   console.log(`demo: fake proxy at ${app.proxy.endpoint}, ${app.proxy.eventCount} requests`);
+  if (app.clickhouse) console.log(`demo: fake ClickHouse at ${app.clickhouse.endpoint}; enter this origin in Settings → ClickHouse export`);
   await app.exited;
   await app.close();
 }

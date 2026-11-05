@@ -32,6 +32,9 @@ const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
   archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(),
   archiveExportPrepare: (o) => log.archiveExportPrepare(o), archiveExportStatus: (id) => log.archiveExportStatus(id),
   archiveExportStart: (id, file) => log.archiveExportStart(id, file), archiveExportCancel: (id) => log.archiveExportCancel(id),
+  clickhouseStatus: () => log.clickhouseStatus(), clickhouseConfigure: (c) => log.clickhouseConfigure(c),
+  clickhousePrepare: () => log.clickhousePrepare(), clickhouseAcknowledge: (t, d) => log.clickhouseAcknowledge(t, d),
+  clickhouseFail: (t, n, e) => log.clickhouseFail(t, n, e), clickhouseRetry: () => log.clickhouseRetry(), clickhouseClear: () => log.clickhouseClear(),
   close: async () => { await stop(); await log.archiveExportDispose(); log.close(); },
 };
 let queue = Promise.resolve();

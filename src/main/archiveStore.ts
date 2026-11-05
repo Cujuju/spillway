@@ -51,7 +51,7 @@ export class ArchiveStore {
     const row = this.db.prepare('SELECT value FROM archive_meta WHERE key = ?').get(key) as { value: string } | undefined;
     return row ? JSON.parse(row.value) as T : fallback;
   }
-  private write(key: string, value: unknown): void { this.db.prepare('INSERT OR REPLACE INTO archive_meta VALUES (?, ?)').run(key, JSON.stringify(value)); }
+  private write(key: string, value: unknown): void { this.db.prepare('INSERT INTO archive_meta VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
   setPolicy(raw: ArchivePolicy): ArchiveStatus {
     this.policy = normalizeArchivePolicy(raw);
     this.write('policy', this.policy);

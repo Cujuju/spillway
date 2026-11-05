@@ -190,7 +190,7 @@ const handlers: Handlers = {
   archiveDetail: (id) => activityLog.call('archiveDetail', id),
   archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
   archivePolicy: async (p) => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; },
-  archiveClear: async () => { await activityLog.call('archivePolicy', { captureBodies: false, retentionDays: 7, maxBytes: 100 * 1024 * 1024 }); await archiveSync.refresh(); await activityLog.call('archiveClear'); },
+  archiveClear: async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.refresh(); await activityLog.call('archiveClear'); },
   activityBucketSnapshot: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);

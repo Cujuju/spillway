@@ -1,17 +1,18 @@
-import { createEffect, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { ArchiveDetail } from '@shared/archive';
+import { readableStreamText } from '@shared/archiveContent';
 import { shownText } from '../store';
 import '../styles/archive.css';
 
 const RENDER_CHUNK = 32 * 1024;
 function BodyText(props: { label: string; text: string; type: string; encoding: string }) {
   const [limit, setLimit] = createSignal(RENDER_CHUNK);
-  const text = () => {
+  const text = createMemo(() => {
     const value = shownText(props.text);
     if (value.length > RENDER_CHUNK) return value;
     try { return JSON.stringify(JSON.parse(value), null, 2); }
     catch { return value; /* SSE, plain text and binary wire bytes are displayed verbatim. */ }
-  };
+  });
   return <section class="archive-body">
     <h3>{props.label} <small class="muted">{shownText(props.type)} {shownText(props.encoding)}</small></h3>
     <pre>{text().slice(0, limit()) || 'No body bytes stored.'}</pre>
@@ -23,17 +24,22 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   const [detail, setDetail] = createSignal<ArchiveDetail | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const readableResponse = createMemo(() => { const d = detail(); return d ? readableStreamText(d.response, d.frames.filter((f) => f.direction === 'response')) : ''; });
   let generation = 0;
-  const load = async (trace: string | null | undefined) => {
+  const load = async (trace: string | null | undefined, quiet = false) => {
     const gen = ++generation;
-    setDetail(null); setError(null);
+    if (!quiet) setDetail(null); setError(null);
     if (!trace) { setLoading(false); return; }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try { const d = await window.api.archiveDetail(trace); if (gen === generation) setDetail(d); }
     catch (e) { if (gen === generation) setError(String(e)); }
     finally { if (gen === generation) setLoading(false); }
   };
-  createEffect(() => { void load(props.traceId); });
+  createEffect(() => {
+    const trace = props.traceId; void load(trace);
+    const timer = setInterval(() => void load(trace, true), 3_000);
+    onCleanup(() => { clearInterval(timer); generation++; });
+  });
   return <div class="request-inspector">
     <div class="card-spaced"><strong>Request inspector</strong> <button type="button" class="btn ghost" onClick={() => void load(props.traceId)}>Refresh</button></div>
     <Show when={loading()}><p class="muted">Loading capture…</p></Show>
@@ -42,15 +48,16 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
     <Show when={detail()}>{(d) => <>
       <p><span class="badge">{d().state}</span> {shownText(d().reason || 'Finalized downstream exchange')}. {d().bytes.toLocaleString()} stored bytes.</p>
       <p class="archive-identities">Trace {shownText(d().traceId)} · {shownText(d().method)} {shownText(d().path)} · HTTP {d().status || 'unknown'}</p>
-      <Show when={d().state === 'pending'}><p class="muted">Awaiting finalization. Long-lived connections remain pending; refresh after the connection closes.</p></Show>
+      <Show when={d().state === 'pending'}><p class="muted">Awaiting finalization. Open WebSocket messages update here while the bounded capture is available.</p></Show>
       <Show when={d().state === 'expired'}><p class="muted">Body and search text were deleted by retention or byte budget. The stable identity remains.</p></Show>
       <Show when={d().sessionId && props.onConversation}><button class="btn ghost" type="button" onClick={() => props.onConversation?.(d().sessionId!)}>Browse this conversation</button></Show>
       <details><summary>{d().attempts.length} linked upstream attempts (up to 200 retained)</summary><For each={d().attempts}>{(a) => <p class="archive-identities">{shownText(a.requestId)} · selection {shownText(a.selectionId ?? 'unknown')} · {new Date(a.at).toLocaleString()}</p>}</For></details>
+      <Show when={readableResponse()}><BodyText label="Readable response text" text={readableResponse()} type="Joined text deltas" encoding="" /></Show>
       <div class="archive-bodies">
         <BodyText label="Request" text={d().request} type={d().requestType} encoding={d().requestEncoding} />
         <BodyText label="Response" text={d().response} type={d().responseType} encoding={d().responseEncoding} />
       </div>
-      <p class="muted">Captured downstream wire text may contain prompts, completions and secrets inside the body. Headers are excluded. “Complete” means the observed HTTP bytes fit the limit; it does not certify upstream success or application-level completeness.</p>
+      <p class="muted">Format: {d().format}. HTTP content encodings are decoded when supported; WebSocket payloads are decoded application messages. Original encoding labels are retained. Prompts, completions and body secrets may be present; headers are excluded. “Complete” covers observed bytes/messages within limits and does not certify upstream success or semantic completeness.</p>
     </>}</Show>
   </div>;
 }

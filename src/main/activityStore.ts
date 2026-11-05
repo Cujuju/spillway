@@ -1,5 +1,5 @@
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
-import { ArchiveStore } from './archiveStore';
+import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
@@ -326,9 +326,9 @@ export class ActivityLog {
   clear(): void {
     this.db.transaction(() => {
       this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
+      this.db.exec(ARCHIVE_CLEAR_SQL);
     })();
     this.totals = new Map();
-    this.db.exec('DELETE FROM archive_fts; DELETE FROM archive_entries; DELETE FROM archive_attempts;');
     this.conversationAccounts.clear();
   }
 

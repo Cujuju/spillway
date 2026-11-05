@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
+import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { parseActivityEvent } from './sse';
@@ -62,15 +62,44 @@ it('evicts oldest bodies by byte budget, bounds queries and treats keywords as l
   expect(() => store.query({ text: '" OR * NOT (broken' })).not.toThrow();
   expect(store.query({ state: 'complete' }).entries).toHaveLength(2);
 });
-it('records sequence gaps/restarts and rolls back invalid pages before advancing the cursor', () => {
+it('records gaps/restarts and skips malformed records with a trustworthy cursor', () => {
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); observe(store);
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(4)] });
   expect(store.status()).toMatchObject({ sequence: 4, gaps: 3, dropped: 3 });
-  expect(() => store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(5), record(6, { request: 'x'.repeat(800_000) })] })).toThrow();
-  expect(store.status().sequence).toBe(4); expect(store.detail('inbound-full-5')).toBeNull();
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(5), record(6, { request: 'x'.repeat(1_100_000) }), record(7)] });
+  expect(store.status()).toMatchObject({ sequence: 7, rejected: 1 }); expect(store.detail('inbound-full-6')).toBeNull();
+  expect(store.detail('inbound-full-7')?.state).toBe('complete');
   store.ingest({ version: 1, epoch: 'epoch-b', dropped: 0, records: [] });
   expect(store.status()).toMatchObject({ sequence: 0, restarts: 1 });
   expect(store.detail('inbound-full-1')?.reason).toBe('proxy-restarted-before-capture');
+});
+it('rolls back real database errors without advancing the replay cursor', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  db.exec("CREATE TRIGGER fail_capture BEFORE INSERT ON archive_entries WHEN NEW.trace_id='inbound-full-2' BEGIN SELECT RAISE(ABORT,'disk write failed'); END");
+  expect(() => store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1), record(2)] })).toThrow('disk write failed');
+  expect(store.status().sequence).toBe(0); expect(store.detail('inbound-full-1')).toBeNull();
+});
+it('indexes JSON escapes and joins Claude/Codex stream deltas and WebSocket fragments', () => {
+  const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: JSON.stringify({ input: 'first\nsecond\tthird' }), response: 'data: {"delta":{"type":"text_delta","text":"arch"}}\n\ndata: {"delta":{"type":"text_delta","text":"ive"}}\n\n' }), record(2, { frames: [{ index: 1, direction: 'response', at: new Date().toISOString(), type: 'text', truncated: false, payload: '{"delta":"web"}' }, { index: 2, direction: 'response', at: new Date().toISOString(), type: 'text', truncated: false, payload: '{"delta":"socket"}' }] })] });
+  expect(store.query({ text: 'second third archive' }).entries).toHaveLength(1);
+  expect(store.query({ text: 'websocket' }).entries).toHaveLength(1);
+});
+it('keeps empty missing records out of expiry and byte accounting, and resets diagnostic counters', () => {
+  const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 4, records: [record(3, { state: 'missing', request: '', response: '' })] });
+  store.prune(Date.now() + 10 * 86_400_000);
+  expect(store.detail('inbound-full-3')).toMatchObject({ state: 'missing', bytes: 0 });
+  store.clear(); expect(store.status()).toMatchObject({ entries: 0, dropped: 0, gaps: 0, restarts: 0, rejected: 0 });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 4, records: [] });
+  expect(store.status().dropped).toBe(0);
+});
+it('pages with a durable tuple cursor even after the last displayed row is removed', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  const at = Date.now();
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { startedAt: new Date(at - 1000).toISOString() }), record(2, { startedAt: new Date(at).toISOString() })] });
+  const first = store.query().entries[0]!; db.prepare('DELETE FROM archive_entries WHERE id=?').run(first.id);
+  expect(store.query({ before: archiveCursor(first) }).entries[0]?.traceId).toBe('inbound-full-1');
 });
 it('clears index and bodies and makes timed-out pending states explicit', () => {
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); observe(store);

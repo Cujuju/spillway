@@ -72,7 +72,7 @@ async function startNormalApp(): Promise<void> {
     activity.on('event', (e) => send(EVENTS.onActivity, e));
     proxy.on('log', (l) => send(EVENTS.onProxyLog, l));
     proxy.on('ready', () => {
-      archiveSync.start();
+      void archiveSync.start();
       activity.start();
       void syncPreferredAccounts().finally(() => usage.start());
     });

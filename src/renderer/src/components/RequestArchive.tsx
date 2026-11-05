@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import { DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CaptureState } from '@shared/archive';
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CaptureState } from '@shared/archive';
 import { shownText } from '../store';
 import { RequestInspector } from './RequestInspector';
 import '../styles/archive.css';
@@ -24,6 +24,10 @@ export function RequestArchive() {
     finally { if (gen === generation) setBusy(false); }
   };
   createEffect(() => { const q = query(); const timer = setTimeout(() => void load(q), 200); onCleanup(() => clearTimeout(timer)); });
+  onMount(() => {
+    const timer = setInterval(() => { void window.api.archiveStatus().then(setStatus).catch((e) => setError(String(e))); }, 3_000);
+    onCleanup(() => clearInterval(timer));
+  });
   const filter = (key: keyof ArchiveQuery, value: string) => setQuery((q) => ({ ...q, [key]: value || undefined, before: undefined }));
   const policy = () => status()?.policy ?? DEFAULT_ARCHIVE_POLICY;
   const save = async (p: ArchivePolicy) => {
@@ -47,9 +51,9 @@ export function RequestArchive() {
         <label>Keep bodies (days) <input type="number" min="1" max="90" value={policy().retentionDays} disabled={busy()} onChange={(e) => void save({ ...policy(), retentionDays: Number(e.currentTarget.value) })} /></label>
         <label>Body budget (MiB) <input type="number" min="1" max="1024" value={policy().maxBytes / MiB} disabled={busy()} onChange={(e) => void save({ ...policy(), maxBytes: Number(e.currentTarget.value) * MiB })} /></label>
       </div>
-      <p class="muted">256 KiB per request and response. Oldest bodies expire first. The budget counts stored body records before index overhead; database file size can be larger. Up to 20,000 metadata identities remain. Turning capture off keeps existing bodies until expiry or deletion.</p>
-      <p class="muted">The proxy uses a temporary bounded memory spool. Overflow, disconnection and proxy crashes can lose captures. WebSocket frames are unavailable. This setting is separate from proxy text-file logging.</p>
-      <Show when={status()}>{(s) => <p class="muted">{s().entries.toLocaleString()} records · {(s().bytes / MiB).toFixed(1)} MiB · {s().dropped} proxy drops · {s().gaps} sequence gaps · {s().restarts} observed epoch changes</p>}</Show>
+      <p class="muted">HTTP: 256 KiB wire and decoded bytes per request/response; gzip and zstd supported. Codex WebSocket: up to 128 application messages, 64 KiB per message and 256 KiB per direction. Truncation is explicit. Oldest bodies expire first. Budget counts serialized detail before index overhead; database file size can be larger. Up to 20,000 identities remain. Turning capture off keeps saved bodies until expiry or deletion.</p>
+      <p class="muted">The proxy uses a temporary bounded memory spool. Overflow, disconnection and proxy crashes can lose captures. Provider-hidden data and WebSocket control frames are outside this capture boundary. Capture is separate from proxy text-file logging.</p>
+      <Show when={status()}>{(s) => <p class="muted">{s().entries.toLocaleString()} records · {(s().bytes / MiB).toFixed(1)} MiB · {s().dropped} proxy drops · {s().gaps} observed sequence gaps (overlap with drops; do not add) · {s().restarts} epoch changes · {s().rejected} rejected records</p>}</Show>
       <Show when={status()?.syncError}><p class="notice">Capture sync: {shownText(status()!.syncError!)}. Check the proxy version and connection.</p></Show>
       <button class="btn ghost" type="button" disabled={busy()} onClick={() => void clear()}>Delete archive and turn capture off</button>
     </section>
@@ -69,7 +73,7 @@ export function RequestArchive() {
       <div class="archive-results"><For each={entries()} fallback={<p class="muted">No matching archive records. Historical requests have no capture identity.</p>}>{(r) => <button class="archive-result" type="button" onClick={() => setSelected(r.traceId)}>
         <span>{new Date(r.at).toLocaleString()} · {shownText(r.model || r.path || 'Unknown model')}</span><span class="badge">{r.state}</span><small>{shownText(r.sessionId ?? r.traceId)}</small>
       </button>}</For></div>
-      <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => void load({ ...query(), before: entries().at(-1)?.id }, true)}>Show more</button></Show>
+      <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Show more</button></Show>
     </section>
     <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} /></section>}</Show>
   </div>;

@@ -11,9 +11,11 @@ export function normalizeArchivePolicy(raw: unknown): ArchivePolicy {
 /** Proxy spool v1: one downstream HTTP exchange; not one upstream attempt. */
 export interface CaptureRecord {
   id: string; traceId: string; epoch: string; sequence: number; startedAt: string;
-  method: string; path: string; status: number; state: 'complete' | 'partial' | 'missing'; reason: string;
+  method: string; path: string; status: number; state: 'complete' | 'partial' | 'missing' | 'pending'; reason: string;
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;
+  format?: 'http' | 'websocket'; requestDecoded?: boolean; responseDecoded?: boolean; frames?: CaptureFrame[];
 }
+export interface CaptureFrame { index: number; direction: 'request' | 'response'; at: string; type: 'text' | 'binary'; payload: string; truncated: boolean }
 export interface CapturePage { version: number; epoch: string; dropped: number; records: CaptureRecord[] }
 export interface ArchiveEntry {
   schemaVersion: 1; captureEpoch: string | null; captureSequence: number | null;
@@ -23,6 +25,7 @@ export interface ArchiveEntry {
 }
 export interface ArchiveDetail extends ArchiveEntry {
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;
+  format: 'http' | 'websocket'; requestDecoded: boolean; responseDecoded: boolean; frames: CaptureFrame[];
   attempts: { requestId: string; selectionId: string | null; at: string }[];
 }
 export interface ArchiveQuery {
@@ -32,4 +35,6 @@ export interface ArchiveQuery {
 export interface ArchivePage { entries: ArchiveEntry[]; more: boolean }
 export interface ArchiveStatus {
   policy: ArchivePolicy; bytes: number; entries: number; epoch: string | null; sequence: number; dropped: number; gaps: number; restarts: number;
+  rejected: number;
 }
+export const archiveCursor = (entry: Pick<ArchiveEntry, 'at' | 'id'>): string => JSON.stringify([entry.at, entry.id]);

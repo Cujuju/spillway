@@ -5,11 +5,13 @@ import { normalizeSettings, type AppSettings } from '@shared/settings';
 let settings: AppSettings;
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
 const restart = vi.fn<() => Promise<void>>();
+const archiveMocks = vi.hoisted(() => ({ call: vi.fn(), refresh: vi.fn() }));
 vi.mock('electron', () => ({ ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler), on: vi.fn() } }));
 vi.mock('./settingsStore', () => ({ getSettings: () => settings, setSettings: (next: AppSettings) => (settings = normalizeSettings(next)) }));
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true, restart, applyConfig: vi.fn() } }));
 vi.mock('./usagePoller', () => ({ usage: { start: vi.fn() } }));
-vi.mock('./activityService', () => ({}));
+vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
+vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
 vi.mock('./apiProviders', () => ({}));
 vi.mock('./upstreamModels', () => ({}));
 vi.mock('./clientSetup', () => ({}));
@@ -33,7 +35,16 @@ beforeEach(() => {
   settings = normalizeSettings({});
   handlers.clear();
   restart.mockReset();
+  archiveMocks.call.mockReset(); archiveMocks.refresh.mockReset();
   registerIpc();
+});
+
+it('deleting archive preserves retention/budget and disables capture before clearing data', async () => {
+  const policy = { captureBodies: true, retentionDays: 33, maxBytes: 9 * 1024 * 1024 };
+  archiveMocks.call.mockResolvedValue({ policy });
+  await handlers.get(INVOKE.archiveClear)!(null);
+  expect(archiveMocks.call.mock.calls).toEqual([['archiveStatus'], ['archivePolicy', { ...policy, captureBodies: false }], ['archiveClear']]);
+  expect(archiveMocks.refresh).toHaveBeenCalledOnce();
 });
 
 it('returns current settings after a restart instead of overwriting a later save with the old reply', async () => {

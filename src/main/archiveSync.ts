@@ -6,18 +6,26 @@ export class ArchiveSync {
   error: string | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
+  private active = false;
+  private leased: boolean | undefined;
+  private renewAt = 0;
   private run: Promise<void> = Promise.resolve();
-  start(): void { this.stop(); const gen = this.generation; this.run = this.tick(gen); }
-  stop(): void { clearTimeout(this.timer); this.generation++; }
+  start(): Promise<void> { this.stop(); this.active = true; this.leased = undefined; const gen = this.generation; return this.run = this.tick(gen); }
+  stop(): void { clearTimeout(this.timer); this.generation++; this.active = false; }
   async refresh(): Promise<void> {
-    this.stop(); await this.run;
-    const gen = this.generation; this.run = this.tick(gen); await this.run;
+    const active = this.active; this.stop(); const gen = this.generation; await this.run;
+    if (!active || gen !== this.generation) { this.error = null; return; }
+    this.active = true; this.run = this.tick(gen); await this.run;
   }
   private async tick(gen: number): Promise<void> {
+    let delay = 3_000;
     try {
       const status = await activityLog.call('archiveStatus');
       if (gen !== this.generation) return;
-      await management.captureLease(status.policy.captureBodies);
+      if (this.leased !== status.policy.captureBodies || status.policy.captureBodies && Date.now() >= this.renewAt) {
+        await management.captureLease(status.policy.captureBodies);
+        this.leased = status.policy.captureBodies; this.renewAt = Date.now() + 20_000;
+      }
       if (status.policy.captureBodies) {
         let cursor = status.sequence, epoch = status.epoch;
         for (let pages = 0; pages < 4 && gen === this.generation; pages++) {
@@ -27,12 +35,13 @@ export class ArchiveSync {
           await activityLog.call('archiveIngest', page);
           if (!page.records.length) break;
           cursor = page.records.at(-1)!.sequence;
+          if (pages === 3 && page.records.length === 4) delay = 50;
         }
       }
       this.error = null;
     } catch (e) { this.error = e instanceof Error ? e.message : String(e); }
     finally {
-      if (gen === this.generation) this.timer = setTimeout(() => { this.run = this.tick(gen); }, 3_000);
+      if (gen === this.generation && this.active) this.timer = setTimeout(() => { this.run = this.tick(gen); }, delay);
     }
   }
 }

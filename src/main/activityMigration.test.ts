@@ -54,7 +54,7 @@ it('turns a fully retained day into hourly totals that sum to its baseline', () 
   expect(sum(after)).toEqual(sum([old]));
   const identity = db.prepare('SELECT event FROM usage_identities').all() as { event: string }[];
   expect(identity.map((r) => JSON.parse(r.event).totalStart)).toEqual(events.map((e) => localHourStart(Date.parse(e.at))));
-  expect(identity.map((r) => JSON.parse(r.event).latencySumMs)).toEqual(events.map((e) => e.latencyMs));
+  expect(identity.map((r) => JSON.parse(r.event).latencySumMs)).toEqual(events.map((e) => e.failed ? 0 : e.latencyMs));
 });
 
 it('keeps the cost recorded at the time instead of repricing', () => {

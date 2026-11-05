@@ -40,8 +40,9 @@ describe('activity counts', () => {
     addEvent(c, event({ model: 'coding', effectiveModel: 'claude-opus-5-5', latencyMs: 900, ttftMs: null }));
     addEvent(c, event({ source: 'client-log', latencyMs: 0, ttftMs: null }));
     addEvent(c, event({ latencyMs: null, ttftMs: null }));
-    expect(c).toMatchObject({ requests: 4, latencyCount: 2, latencySumMs: 1000, ttftCount: 1, ttftSumMs: 20, unpricedRequests: 0 });
-    expect(c.costUsd).toBeCloseTo(16);
+    addEvent(c, event({ failed: true, latencyMs: 5, ttftMs: 2 }));
+    expect(c).toMatchObject({ requests: 5, failed: 1, latencyCount: 2, latencySumMs: 1000, ttftCount: 1, ttftSumMs: 20, unpricedRequests: 0 });
+    expect(c.costUsd).toBeCloseTo(20);
     const merged = emptyCounts();
     addCounts(merged, c);
     expect(merged).toEqual(c);

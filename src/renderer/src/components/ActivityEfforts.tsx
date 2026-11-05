@@ -16,7 +16,7 @@ export function ActivityEfforts(props: { rows: ActivityBucket[] }) {
   return (
     <div class="card table-card">
       <div class="card-head"><h3>Model and effort</h3></div>
-      <p class="muted">Selected time frame and filters. Timings use measured proxy attempts only; sample counts appear below each mean. Historical and local-log effort stays unknown.</p>
+      <p class="muted">Selected time frame and filters. Timings use measured successful proxy attempts only; sample counts appear below each mean. Historical and local-log effort stays unknown.</p>
       <table class="table dense">
         <thead><tr><th>Effective model</th><th>Effort</th><th class="num">Requests</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="num">API cost</th><th class="num">Mean first token</th><th class="num">Mean total time</th></tr></thead>
         <tbody>
@@ -24,7 +24,7 @@ export function ActivityEfforts(props: { rows: ActivityBucket[] }) {
             {(r) => <tr>
               <td><div class="cell-name"><ProviderGlyph provider={r.provider} size="sm" /><span>{r.model || 'Unknown'}{!r.effectiveKnown && <span class="muted"> (requested; effective unknown)</span>}</span></div></td>
               <td>{r.effort ?? 'Unknown'}</td>
-              <td class="tabular num">{r.summary.requests.toLocaleString()}</td>
+              <td class="tabular num">{r.summary.requests.toLocaleString()}<div class="muted">{r.summary.failed.toLocaleString()} failed</div></td>
               <td class="tabular num">{compactNumber(r.summary.inputTokens)}</td>
               <td class="tabular num">{compactNumber(r.summary.outputTokens)}</td>
               <td class="tabular num">{compactNumber(r.summary.cachedTokens)}</td>

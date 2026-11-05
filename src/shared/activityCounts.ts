@@ -32,12 +32,14 @@ export function addEvent(row: ActivityCounts, e: ActivityEvent & Partial<Pick<Ac
   row.outputTokens += e.outputTokens;
   row.cachedTokens += e.cachedTokens;
   row.cacheWriteTokens += e.cacheWriteTokens;
-  const latency = e.source !== 'client-log' && Number.isFinite(e.latencyMs) && e.latencyMs! > 0;
-  const ttft = e.source !== 'client-log' && Number.isFinite(e.ttftMs) && e.ttftMs! > 0;
-  row.latencyCount += e.latencyCount ?? (latency ? 1 : 0);
-  row.latencySumMs += e.latencySumMs ?? (latency ? e.latencyMs! : 0);
-  row.ttftCount += e.ttftCount ?? (ttft ? 1 : 0);
-  row.ttftSumMs += e.ttftSumMs ?? (ttft ? e.ttftMs! : 0);
+  if (!e.failed && e.source !== 'client-log') {
+    const latency = Number.isFinite(e.latencyMs) && e.latencyMs! > 0;
+    const ttft = Number.isFinite(e.ttftMs) && e.ttftMs! > 0;
+    row.latencyCount += e.latencyCount ?? (latency ? 1 : 0);
+    row.latencySumMs += e.latencySumMs ?? (latency ? e.latencyMs! : 0);
+    row.ttftCount += e.ttftCount ?? (ttft ? 1 : 0);
+    row.ttftSumMs += e.ttftSumMs ?? (ttft ? e.ttftMs! : 0);
+  }
   const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
   if (cost) {
     row.costUsd += cost.usd;

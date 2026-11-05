@@ -281,7 +281,7 @@ export interface ActivityCounts {
   uncachedCostUsd: number;
   /** Requests whose model has no known price; their cost is not in `costUsd`. */
   unpricedRequests: number;
-  /** Mergeable timing observations; missing measurements never contribute a zero sample. */
+  /** Mergeable successful-attempt timing observations; missing measurements never contribute a zero sample. */
   latencyCount: number;
   latencySumMs: number;
   ttftCount: number;

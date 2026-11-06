@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
-import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_QUEUE_LIMIT, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, validateClickHouseCredentials } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_QUEUE_LIMIT, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, validateClickHouseCredentials } from '@shared/clickhouse';
 import { startDemoClickHouse } from '../../scripts/demo/clickhouse.mts';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
@@ -14,7 +14,7 @@ import { checkClickHouseSchema, clickhouseRequest, clickhouseTimeout, insertClic
 import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [], servers: Awaited<ReturnType<typeof startDemoClickHouse>>[] = [];
-afterEach(async () => { for (const server of servers.splice(0)) await server.close(); for (const db of dbs.splice(0)) if (db.open) db.close(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); for (const server of servers.splice(0)) await server.close(); for (const db of dbs.splice(0)) if (db.open) db.close(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 function setup() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-clickhouse-')); dirs.push(dir);
   const file = path.join(dir, 'activity.db'), db = openActivityDb(file, 'ab'.repeat(32)); dbs.push(db);
@@ -69,6 +69,7 @@ it('acknowledging an old pending WS snapshot leaves its final revision queued; r
   store.acknowledge(final.token, final.destination); ingest(archive, record(2)); expect(store.status().queued).toBe(0);
 });
 it('keeps frozen payloads, identity and retry/backoff across encrypted database restart', () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0);
   const { db, archive, store, file } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); ingest(archive); store.configure({ ...config, includeBodies: true });
   const first = store.prepare()!; store.fail(first.token, 1000, 'ClickHouse HTTP 500'); db.pragma('wal_checkpoint(TRUNCATE)'); db.close();
   expect(readFileSync(file).includes(Buffer.from('private-content-for-upload'))).toBe(false);
@@ -88,7 +89,7 @@ it('bounds batches and references, refuses destination changes with backlog, and
   const { db, archive, store } = setup(); store.configure(config);
   db.transaction(() => { for (let n = 0; n < CLICKHOUSE_QUEUE_LIMIT + 2; n++) db.prepare("INSERT INTO archive_entries(id,trace_id,at,state,reason) VALUES(?,?,?,'missing','metadata-only')").run(`trace:full-trace-${n}`, `full-trace-${n}`, new Date().toISOString()); })();
   expect(store.status()).toMatchObject({ queued: CLICKHOUSE_QUEUE_LIMIT, discarded: 2 });
-  const batch = store.prepare()!; expect(batch.rows).toHaveLength(32); expect(Buffer.byteLength(batch.payload)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
+  const batch = store.prepare()!; expect(batch.rows).toHaveLength(CLICKHOUSE_BATCH_ROWS); expect(Buffer.byteLength(batch.payload)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
   expect(() => store.configure({ ...config, table: 'other' })).toThrow(/Clear/);
   store.clear(); expect(store.status().queued).toBe(0); expect(store.prepare()).toBeNull();
   store.configure({ ...config, table: 'other' }); expect(store.status().config.table).toBe('other');
@@ -99,7 +100,7 @@ it('uploads acknowledged batches with header-only credentials and no content/cre
   const s = await server(), { archive, store } = setup(); store.configure({ ...config, endpoint: s.endpoint }); observe(archive);
   await uploader(store).runOnce(); expect(store.status()).toMatchObject({ queued: 0, acknowledged: 1, error: null });
   expect(s.rows.size).toBe(1); const insert = s.requests.find((r) => r.sql.startsWith('INSERT'))!;
-  expect(insert.url).toBe('/?wait_end_of_query=1'); expect(insert.key).toBe('test-secret'); expect(insert.sql).toContain('async_insert=0'); expect(insert.sql).not.toContain('test-secret');
+  expect(insert.url).toBe('/?wait_end_of_query=1'); expect(insert.key).toBe('test-secret'); expect(insert.sql).toContain('SETTINGS async_insert=1, wait_for_async_insert=1'); expect(insert.sql).not.toContain('test-secret');
   s.behavior.status = 401; s.behavior.body = 'test-secret private-content-for-upload';
   await expect(clickhouseRequest({ ...config, endpoint: s.endpoint }, undefined, 'SELECT 1', new AbortController().signal)).rejects.toThrow('ClickHouse HTTP 401 (credentials or permissions)');
 });
@@ -193,4 +194,43 @@ it('accepts versioned plain/shared/replicated engines and rejects other version 
     s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow(/schema v1/);
   }
   expect(clickhouseTimeout(CLICKHOUSE_BATCH_BYTES)).toBeGreaterThan(2 * 60_000);
+});
+it('drains a backlog larger than one batch without an interval between acknowledgments', async () => {
+  const s = await server(), { db, store } = setup(); store.configure({ ...config, endpoint: s.endpoint });
+  db.transaction(() => { for (let n = 0; n <= CLICKHOUSE_BATCH_ROWS; n++) db.prepare("INSERT INTO archive_entries(id,trace_id,at,state,reason) VALUES(?,?,?,'missing','metadata-only')").run(`trace:full-trace-drain-${n}`, `full-trace-drain-${n}`, new Date().toISOString()); })();
+  const upload = uploader(store), timer = vi.spyOn(upload as unknown as { schedule(ms: number): void }, 'schedule');
+  try {
+    upload.start();
+    await vi.waitFor(() => expect(store.status().acknowledged).toBe(CLICKHOUSE_BATCH_ROWS + 1), { timeout: 2000 });
+    expect(s.requests.filter((r) => r.sql.startsWith('INSERT')).map((r) => lines(r.sql.slice(r.sql.indexOf('\n') + 1)).length)).toEqual([CLICKHOUSE_BATCH_ROWS, 1]);
+    expect(timer.mock.calls.slice(0, 2)).toEqual([[0], [0]]);
+  } finally { await upload.stop(); }
+});
+it('verifies schema once across batches and verifies again after an insert failure', async () => {
+  const s = await server(), { archive, store } = setup(); store.configure({ ...config, endpoint: s.endpoint });
+  const upload = uploader(store), checks = () => s.requests.filter((r) => !r.sql.startsWith('INSERT')).length;
+  observe(archive); expect(await upload.runOnce()).toBe(true);
+  observe(archive, 'schema-next'); expect(await upload.runOnce()).toBe(true); expect(checks()).toBe(3);
+  observe(archive, 'schema-failure'); s.behavior.insertStatus = 500;
+  expect(await upload.runOnce()).toBe(false); expect(checks()).toBe(3);
+  s.behavior.insertStatus = 200; store.retry();
+  expect(await upload.runOnce()).toBe(true); expect(checks()).toBe(6);
+  expect(await upload.runOnce()).toBe(false); expect(checks()).toBe(6);
+});
+it('requests server batching and waits for the asynchronous insert to flush', async () => {
+  const s = await server();
+  await insertClickHouse({ ...config, endpoint: s.endpoint }, undefined, '{"source_id":"s","id":"i","revision":1}\n', new AbortController().signal);
+  expect(s.requests[0]?.sql).toContain('SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT JSONEachRow');
+  expect(s.requests[0]?.url).toBe('/?wait_end_of_query=1');
+});
+it('jitters exponential backoff between half and all of its capped delay', () => {
+  const { archive, store } = setup(); observe(archive); store.configure(config); const batch = store.prepare()!;
+  const random = vi.spyOn(Math, 'random');
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const delay = Math.min(300_000, 1000 * 2 ** Math.min(attempt, 9)), value = [0, 0.5, 1][attempt % 3]!;
+    random.mockReturnValue(value); store.fail(batch.token, 1000, 'unavailable');
+    const actual = store.status().nextAttemptAt - 1000;
+    expect(actual).toBeGreaterThanOrEqual(delay / 2); expect(actual).toBeLessThanOrEqual(delay);
+    expect(actual).toBe(delay * (1 - 0.5 * value));
+  }
 });

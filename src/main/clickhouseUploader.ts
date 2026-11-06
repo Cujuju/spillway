@@ -23,46 +23,59 @@ export class ClickHouseUploader {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private active: Promise<void> | null = null;
   private stopped = true;
+  private verifiedDestination: string | null = null;
   error: string | null = null;
   get running(): boolean { return this.controller !== null; }
   get paused(): boolean { return this.stopped; }
   constructor(private worker: ClickHouseWorker, private credentials: (config: ClickHouseConfig) => ClickHouseCredentials | undefined) {}
-  start(): void { this.stopped = false; this.schedule(0); }
+  start(): void { this.verifiedDestination = null; this.stopped = false; this.schedule(0); }
   private schedule(ms: number): void {
     clearTimeout(this.timer);
     if (!this.stopped) this.timer = setTimeout(() => {
-      this.active = this.runOnce().finally(() => { this.active = null; this.schedule(DELIVERY_INTERVAL_MS); });
+      this.active = this.runOnce().then((acknowledged) => { this.active = null; this.schedule(acknowledged ? 0 : DELIVERY_INTERVAL_MS); });
     }, ms);
   }
   async stop(): Promise<void> {
+    this.verifiedDestination = null;
     this.stopped = true; clearTimeout(this.timer); this.controller?.abort(); await this.active;
   }
-  async runOnce(now = Date.now()): Promise<void> {
-    if (this.controller) return;
+  async runOnce(now = Date.now()): Promise<boolean> {
+    if (this.controller) return false;
     const controller = new AbortController(); this.controller = controller;
     let batch: ClickHouseBatch | null = null;
     try {
       const state = await abortable(this.worker.status(), controller.signal);
-      if (controller.signal.aborted || !state.config.enabled || state.nextAttemptAt > now) return;
+      const destination = clickhouseDestination(state.config);
+      if (this.verifiedDestination !== destination) this.verifiedDestination = null;
+      if (controller.signal.aborted || !state.config.enabled || state.nextAttemptAt > now) return false;
       batch = await abortable(this.worker.prepare(), controller.signal);
-      if (!batch || controller.signal.aborted) return;
-      if (batch.destination !== clickhouseDestination(state.config)) throw new Error('ClickHouse batch destination changed; delivery paused');
-      await checkClickHouseSchema(state.config, this.credentials(state.config), controller.signal);
+      if (!batch || controller.signal.aborted) return false;
+      if (batch.destination !== destination) throw new Error('ClickHouse batch destination changed; delivery paused');
+      if (this.verifiedDestination !== destination) {
+        await checkClickHouseSchema(state.config, this.credentials(state.config), controller.signal);
+        if (controller.signal.aborted) return false;
+        this.verifiedDestination = destination;
+      }
       // Retention/clear can invalidate a frozen batch while HTTP diagnostics are running.
       const current = await abortable(this.worker.prepare(), controller.signal);
-      if (current?.token !== batch.token || controller.signal.aborted) return;
+      if (current?.token !== batch.token || controller.signal.aborted) return false;
       await insertClickHouse(state.config, this.credentials(state.config), batch.payload, controller.signal);
-      if (!controller.signal.aborted) await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);
+      if (controller.signal.aborted) return false;
+      await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);
       this.error = null;
+      return true;
     } catch (e) {
+      this.verifiedDestination = null;
       this.error = e instanceof Error ? e.message : 'ClickHouse upload failed';
       if (batch && !controller.signal.aborted) {
         try { await abortable(this.worker.fail(batch.token, Math.max(now, Date.now()), this.error), controller.signal); }
         catch { this.error = 'ClickHouse local outbox update failed; retry retained'; }
       }
+      return false;
     } finally { this.controller = null; }
   }
   async diagnose(config: ClickHouseConfig, create = false): Promise<string> {
+    this.verifiedDestination = null;
     if (this.controller) throw new Error('ClickHouse operation already running');
     const controller = new AbortController(); this.controller = controller;
     try {

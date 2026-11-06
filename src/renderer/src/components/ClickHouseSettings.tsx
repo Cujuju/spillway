@@ -1,5 +1,8 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { DEFAULT_CLICKHOUSE_CONFIG, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_QUEUE_LIMIT, DEFAULT_CLICKHOUSE_CONFIG, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
+
+const MIB = 1024 * 1024;
+const BACKLOG_HELP = `One batch is capped at ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} records / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB; the reference queue is capped at ${CLICKHOUSE_QUEUE_LIMIT.toLocaleString()} records.`;
 import { shownText } from '../store';
 import { Dialog, SettingRow, SettingsGroup, Toggle } from './ui';
 
@@ -61,7 +64,7 @@ export function ClickHouseSettings() {
       <SettingRow label="Upload status" help="Acknowledgments count delivered revisions, never task successes or billable requests. Queries must use FINAL to remove retry duplicates and superseded revisions.">
         <span class="secondary">{!status()?.config.enabled ? 'Disabled' : status()?.paused ? 'Paused' : status()?.running ? 'Uploading / checking' : 'Waiting'} · {status()?.queued ?? 0} queued · {status()?.acknowledged ?? 0} revisions acknowledged · {status()?.discarded ?? 0} discarded ({status()?.oversized ?? 0} oversized)</span>
       </SettingRow>
-      <SettingRow label="Backlog" help={`One batch is capped at 32 records / 8 MiB; the reference queue is capped at 20,000 records. Oldest: ${status()?.oldestQueuedAt ?? 'none'}`}>
+      <SettingRow label="Backlog" help={`${BACKLOG_HELP} Oldest: ${status()?.oldestQueuedAt ?? 'none'}`}>
         <span class="secondary">{status()?.batchBytes ?? 0} batch bytes · {status()?.attempts ?? 0} retries · next {status()?.nextAttemptAt ? new Date(status()!.nextAttemptAt).toLocaleString() : 'when ready'}</span>
       </SettingRow>
       <SettingRow label="Queue controls" help="Cancel pauses until Retry, Save or restart. Clear discards unsent work; later revisions can queue again. Clear/expiry never retract remote copies; an in-flight cancelled write may already have reached the server.">

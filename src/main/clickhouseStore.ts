@@ -5,6 +5,8 @@ import type { ArchiveStore } from './archiveStore';
 
 const enabled = "coalesce(json_extract((SELECT config FROM clickhouse_state WHERE singleton=1),'$.enabled'),0)=1";
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
+// Equal jitter spreads retries across installs while retaining the exponential delay as the upper bound.
+const RETRY_JITTER_FRACTION = 0.5;
 const boundQueue = `UPDATE clickhouse_state SET discarded=discarded+(SELECT count(*) FROM clickhouse_queue)-${CLICKHOUSE_QUEUE_LIMIT} WHERE (SELECT count(*) FROM clickhouse_queue)>${CLICKHOUSE_QUEUE_LIMIT};
 DELETE FROM clickhouse_queue WHERE revision IN (SELECT revision FROM clickhouse_queue ORDER BY revision LIMIT max(0,(SELECT count(*) FROM clickhouse_queue)-${CLICKHOUSE_QUEUE_LIMIT}));`;
 const enqueue = (id: string) => `DELETE FROM clickhouse_queue WHERE id=${id} AND ${enabled}; INSERT INTO clickhouse_queue(id,queued_at) SELECT ${id},strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE ${enabled}; ${boundQueue}`;
@@ -112,8 +114,9 @@ export class ClickHouseStore {
   }
   fail(token: string, now: number, error: string): void {
     const b = this.batch(); if (!b || b.token !== token) return;
+    const delay = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** Math.min(b.attempts, RETRY_MAX_EXPONENT));
     this.db.transaction(() => {
-      this.db.prepare('UPDATE clickhouse_batch SET attempts=attempts+1,next_attempt=?').run(now + Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** Math.min(b.attempts, RETRY_MAX_EXPONENT)));
+      this.db.prepare('UPDATE clickhouse_batch SET attempts=attempts+1,next_attempt=?').run(now + delay * (1 - RETRY_JITTER_FRACTION * Math.random()));
       this.db.prepare('UPDATE clickhouse_state SET error=?').run(error.slice(0, 256));
     })();
   }

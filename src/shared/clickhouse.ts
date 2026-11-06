@@ -5,7 +5,8 @@ export interface ClickHouseCredentials { username: string; password: string }
 export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, endpoint: '', database: 'default', table: 'spillway_archive_v1', includeBodies: false };
 export const CLICKHOUSE_QUEUE_LIMIT = 20_000;
 export const CLICKHOUSE_BATCH_BYTES = 8 * 1024 * 1024;
-export const CLICKHOUSE_BATCH_ROWS = 32;
+// ClickHouse recommends at least 1,000 rows per insert to reduce part creation overhead.
+export const CLICKHOUSE_BATCH_ROWS = 1_000;
 export interface ClickHouseStatus {
   config: ClickHouseConfig; hasCredentials: boolean; queued: number; batchBytes: number; oldestQueuedAt: string | null;
   acknowledged: number; discarded: number; oversized: number; attempts: number; nextAttemptAt: number; lastAcknowledgedAt: string | null;

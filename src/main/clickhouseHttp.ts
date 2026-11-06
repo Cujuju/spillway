@@ -52,6 +52,6 @@ export async function checkClickHouseSchema(c: ClickHouseConfig, credentials: Cl
   } catch { throw new Error('ClickHouse table does not match archive schema v1 (columns, engine or sorting key)'); }
 }
 export async function insertClickHouse(c: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, payload: string, signal: AbortSignal): Promise<void> {
-  const result = await clickhouseRequest(c, credentials, `INSERT INTO ${clickhouseTable(c)} SETTINGS async_insert=0 FORMAT JSONEachRow\n${payload}`, signal);
+  const result = await clickhouseRequest(c, credentials, `INSERT INTO ${clickhouseTable(c)} SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT JSONEachRow\n${payload}`, signal);
   if (result.trim()) throw new Error('ClickHouse insert returned an unexpected response; batch retained');
 }

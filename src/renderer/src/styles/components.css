@@ -125,6 +125,10 @@
   color: var(--color-text);
   min-width: 0;
 }
+/* Sized to the chosen option instead of the widest one. */
+.select.fit-content {
+  field-sizing: content;
+}
 .input:focus,
 .select:focus {
   outline: var(--border-width) solid var(--color-accent-border);

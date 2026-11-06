@@ -99,7 +99,7 @@ function ProxySection() {
       </SettingsGroup>
       <SettingsGroup title="Routing">
         <SettingRow label="Routing strategy" help={STRATEGIES.find((s) => s.value === p().strategy)?.help}>
-          <select class="select" value={p().strategy} onChange={(e) => set((d) => void (d.proxy.strategy = e.currentTarget.value as RoutingStrategy))}>
+          <select class="select fit-content" value={p().strategy} onChange={(e) => set((d) => void (d.proxy.strategy = e.currentTarget.value as RoutingStrategy))}>
             <For each={STRATEGIES}>{(s) => <option value={s.value}>{s.label}</option>}</For>
           </select>
         </SettingRow>

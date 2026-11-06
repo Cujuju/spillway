@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { randomUUID } from 'node:crypto';
+import { evalReplay, forgetEvalExport, importEvalFile, invalidateEval, prepareEvalExport, prepareEvalReplay, saveEvalExport, withEvalDeletion } from './evalService';
 import type { Document } from 'yaml';
 import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
 import { parseBuildInfo } from '@shared/buildInfo';
@@ -106,6 +108,13 @@ const OPEN_PATHS = {
 } as const;
 
 const handlers: Handlers = {
+  evalList: () => activityLog.call('evalList'), evalGet: (id, revision) => activityLog.call('evalGet', id, revision),
+  evalCreate: (trace, annotation, bodies) => activityLog.call('evalCreate', randomUUID(), trace, annotation, bodies),
+  evalRevise: (id, revision, annotation) => activityLog.call('evalRevise', randomUUID(), id, revision, annotation),
+  evalDelete: (id) => { invalidateEval(id); return activityLog.call('evalDelete', id); },
+  evalImport: importEvalFile, evalExportPrepare: prepareEvalExport, evalExportSave: saveEvalExport, evalExportDiscard: forgetEvalExport,
+  evalReplayPrepare: prepareEvalReplay,
+  evalReplayStart: (id) => evalReplay.start(id), evalReplayStatus: (id) => evalReplay.status(id), evalReplayCancel: (id) => evalReplay.cancel(id),
   archiveExportPrepare: (options) => activityLog.call('archiveExportPrepare', options),
   archiveExportStatus: (id) => activityLog.call('archiveExportStatus', id),
   archiveExportCancel: (id) => activityLog.call('archiveExportCancel', id),
@@ -215,7 +224,7 @@ const handlers: Handlers = {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);
   },
-  clearActivity: () => withClickHousePaused(() => activityLog.call('clear')),
+  clearActivity: () => withEvalDeletion(() => withClickHousePaused(() => activityLog.call('clear'))),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
   // The dialog opens the link: a second account for a provider needs a private window, not the signed-in browser.

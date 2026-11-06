@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import type { ActivityMethods, Method, Request, WorkerMessage } from './activityProtocol';
+import type { ActivityMethods as BaseMethods, EvalMethods, Method, Request, WorkerMessage } from './activityProtocol';
+type ActivityMethods = BaseMethods & EvalMethods;
 /** One second avoids a hot crash loop while keeping queued proxy events close to real time. */
 export const ACTIVITY_RESTART_BACKOFF_MS = 1_000;
 /** Assumption: 2,000 events/hour; retain two hours of worker outage in memory. */

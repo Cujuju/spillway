@@ -8,6 +8,8 @@ import type { ArchiveExportOptions } from '@shared/archiveExport';
 import { ArchiveExporter } from './archiveExport';
 import type { TraceQuery, TraceAttemptQuery } from '@shared/sessionTrace';
 import { TraceStore } from './traceStore';
+import { EvalCaseStore } from './evalCaseStore';
+import type { EvalAnnotation } from '@shared/evalCase';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
@@ -75,6 +77,14 @@ function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | 
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
+  private get cases() { return new EvalCaseStore(this.db, this.archive); }
+  evalList() { return this.cases.list(); }
+  evalGet(id: string, revision?: number) { return this.cases.get(id, revision); }
+  evalCreate(operation: string, traceId: string, annotation: EvalAnnotation, bodies: boolean) { return this.cases.create(operation, traceId, annotation, bodies); }
+  evalRevise(operation: string, id: string, revision: number, annotation: EvalAnnotation) { return this.cases.revise(operation, id, revision, annotation); }
+  evalDelete(id: string): void { this.cases.delete(id); }
+  evalExport(id: string, revision: number, bodies: boolean) { return this.cases.export(id, revision, bodies); }
+  evalImport(file: string) { return this.cases.importFile(file); }
   private exportStartupWarning: string | null = null;
   archiveExportStartupError(message: string): void { this.exportStartupWarning = message; }
   private exporter: ArchiveExporter | null = null;
@@ -356,6 +366,7 @@ export class ActivityLog {
     this.db.transaction(() => {
       this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
+      this.db.exec('DELETE FROM eval_cases');
     })();
     this.totals = new Map();
     this.conversationAccounts.clear();

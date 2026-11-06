@@ -3,6 +3,7 @@ import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchiveP
 import { shownText } from '../store';
 import { RequestInspector } from './RequestInspector';
 import { ArchiveExport } from './ArchiveExport';
+import { EvalCases } from './EvalCases';
 import { DiagnosticBundle } from './DiagnosticBundle';
 import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
 import '../styles/archive.css';
@@ -62,6 +63,7 @@ export function RequestArchive() {
       <Show when={status()?.syncError}><p class="notice">Capture sync: {shownText(status()!.syncError!)}. Check the proxy version and connection.</p></Show>
       <Show when={status()?.exportWarning}><p class="notice">Export cleanup: {shownText(status()!.exportWarning!)}</p></Show>
       <button class="btn ghost" type="button" disabled={busy()} onClick={() => void clear()}>Delete archive and turn capture off</button>
+      <p class="muted">Archive deletion preserves pinned eval cases. Delete each case explicitly below; deleting all Activity also deletes all eval cases and revisions.</p>
     </section>
     <section class="card request-inspector">
       <div class="archive-filters">
@@ -83,6 +85,7 @@ export function RequestArchive() {
       <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Show more</button></Show>
     </section>
     <ArchiveExport query={query()} traceId={selected()} />
+    <EvalCases traceId={selected()} />
     <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} /></section>}</Show>
     <Show when={bundle()}>{(ids) => <DiagnosticBundle traceIds={ids()} onClose={() => setBundle(undefined)} />}</Show>
   </div>;

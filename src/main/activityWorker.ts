@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { ActivityLog } from './activityStore';
 import { conversationNames } from './conversationNames';
 import { startClientLogSync } from './clientLogSync';
-import type { ActivityMethods, Request, WorkerConfig } from './activityProtocol';
+import type { ActivityMethods, EvalMethods, Request, WorkerConfig } from './activityProtocol';
 const port = parentPort!;
 const log = new ActivityLog(workerData as WorkerConfig);
 log.prune();
@@ -14,7 +14,10 @@ const startSync = () => startClientLogSync(log, () => {
   port.postMessage({ event: 'reset' });
 }, (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
-const methods: Omit<ActivityMethods, 'clear'> & { clear(): Promise<void> } = {
+const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise<void> } = {
+  evalList: () => log.evalList(), evalGet: (id, revision) => log.evalGet(id, revision),
+  evalCreate: (...args) => log.evalCreate(...args), evalRevise: (...args) => log.evalRevise(...args),
+  evalDelete: (id) => log.evalDelete(id), evalExport: (...args) => log.evalExport(...args), evalImport: (file) => log.evalImport(file),
   append: (e) => {
     const revision = log.revision;
     const stored = log.append(e);

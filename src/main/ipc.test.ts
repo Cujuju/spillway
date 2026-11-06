@@ -13,6 +13,7 @@ vi.mock('./usagePoller', () => ({ usage: { start: vi.fn() } }));
 vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
 vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
 vi.mock('./diagnosticService', () => ({ diagnosticExporter: {} }));
+vi.mock('./evalService', () => ({ evalReplay: {}, forgetEvalExport: vi.fn(), invalidateEval: vi.fn(), importEvalFile: vi.fn(), prepareEvalExport: vi.fn(), prepareEvalReplay: vi.fn(), saveEvalExport: vi.fn(), withEvalDeletion: (fn: () => Promise<unknown>) => fn() }));
 vi.mock('./apiProviders', () => ({}));
 vi.mock('./upstreamModels', () => ({}));
 vi.mock('./clientSetup', () => ({}));

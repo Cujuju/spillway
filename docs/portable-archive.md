@@ -1,6 +1,6 @@
 # Portable request archive v1
 
-Implements item 3 of [#112](https://github.com/Cujuju/spillway/issues/112). The canonical TypeScript record contract is `src/shared/archiveExport.ts`. This is a local, unencrypted, versioned JSON Lines export of the [request archive](request-archive.md), independent of encrypted accounting/history `--data-export` / `--data-import`. Those transfer commands and their key contract are unchanged. Spillway does not import portable archives into Activity or the capture database.
+Implements item 3 of [#112](https://github.com/Cujuju/spillway/issues/112). The canonical TypeScript record contract is `src/shared/archiveExport.ts`. This is a local, unencrypted, versioned JSON Lines export of the [request archive](request-archive.md), independent of encrypted accounting/history `--data-export` / `--data-import`. Those transfer commands and their key contract are unchanged. Spillway does not import portable archives into Activity requests or live capture tables. The separate [eval case consumer](eval-cases.md) validates bounded files into pinned snapshots in the existing encrypted worker database.
 
 ## Selecting and saving
 

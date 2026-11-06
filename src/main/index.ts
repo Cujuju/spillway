@@ -20,6 +20,7 @@ async function startNormalApp(): Promise<void> {
   const { drainActivity } = await import('./activityShutdown');
   const { registerIpc } = await import('./ipc');
   const { stopDiagnosticExport } = await import('./diagnosticService');
+  const { invalidateEval } = await import('./evalService');
   const { startClientDrift } = await import('./clientDriftService');
   const { syncPreferredAccounts } = await import('./preferredAccounts');
   const { proxy } = await import('./proxySupervisor');
@@ -152,6 +153,7 @@ async function startNormalApp(): Promise<void> {
       session.defaultSession.flushStorageData();
       usage.stop();
       history.flush();
+      invalidateEval();
       archiveSync.stop();
       void Promise.allSettled([
         cancelClickHouse(true).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),

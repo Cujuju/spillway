@@ -1,6 +1,7 @@
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
 import type { ArchiveDetail, ArchivePage, ArchivePolicy, ArchiveQuery, ArchiveStatus } from './archive';
 import type { ArchiveExportJob, ArchiveExportOptions } from './archiveExport';
+import type { EvalAnnotation, EvalCase, EvalCaseSummary, EvalExportPreview, EvalReplayPreview, EvalReplayResult } from './evalCase';
 import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from './clickhouse';
 import type { TraceQuery, TracePage, TraceAttemptQuery, TraceAttemptPage } from './sessionTrace';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
@@ -15,6 +16,19 @@ import type { ManagedPolicyStatus } from './types';
 
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
+  evalList(): Promise<EvalCaseSummary[]>;
+  evalGet(id: string, revision?: number): Promise<EvalCase>;
+  evalCreate(traceId: string, annotation: EvalAnnotation, includeBodies: boolean): Promise<EvalCase>;
+  evalRevise(id: string, revision: number, annotation: EvalAnnotation): Promise<EvalCase>;
+  evalDelete(id: string): Promise<void>;
+  evalImport(): Promise<EvalCaseSummary[]>;
+  evalExportPrepare(id: string, revision: number, includeBodies: boolean): Promise<EvalExportPreview>;
+  evalExportSave(token: string): Promise<string | null>;
+  evalExportDiscard(): Promise<void>;
+  evalReplayPrepare(id: string, revision: number): Promise<EvalReplayPreview>;
+  evalReplayStart(id: string): Promise<EvalReplayResult>;
+  evalReplayStatus(id: string): Promise<EvalReplayResult>;
+  evalReplayCancel(id: string): Promise<void>;
   archiveExportPrepare(options: ArchiveExportOptions): Promise<ArchiveExportJob>;
   archiveExportStatus(id: string): Promise<ArchiveExportJob>;
   /** Native save dialog; the renderer cannot supply an output path. */
@@ -159,6 +173,9 @@ export interface DesktopApi {
 
 /** invoke channels: name → method on DesktopApi. */
 export const INVOKE = {
+  evalList: 'eval:list', evalGet: 'eval:get', evalCreate: 'eval:create', evalRevise: 'eval:revise', evalDelete: 'eval:delete', evalImport: 'eval:import',
+  evalExportPrepare: 'eval:export-prepare', evalExportSave: 'eval:export-save', evalExportDiscard: 'eval:export-discard',
+  evalReplayPrepare: 'eval:replay-prepare', evalReplayStart: 'eval:replay-start', evalReplayStatus: 'eval:replay-status', evalReplayCancel: 'eval:replay-cancel',
   archiveExportPrepare: 'archive:export-prepare', archiveExportStatus: 'archive:export-status', archiveExportSave: 'archive:export-save', archiveExportCancel: 'archive:export-cancel',
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',
   diagnosticPrepare: 'diagnostic:prepare', diagnosticSave: 'diagnostic:save', diagnosticDiscard: 'diagnostic:discard',

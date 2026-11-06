@@ -36,12 +36,13 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - About (Settings → About; macOS app menu opens it): credits live in `src/renderer/src/lib/credits.ts`, one entry per contributor. Logo sizes come from `scripts/make-icon.ps1`.
 - License notices ship in `licenses/` (`electron-builder.ts`; `beforePack` fails without them): npm packages per bundle from `rollup-plugin-license` (`electron.vite.config.ts`), Go modules from `go-licenses` (`scripts/build-proxy.mjs`). A Go module released without a LICENSE gets one in `scripts/go-license-overrides/<module>/`.
 
-- Demo and screenshots (`docs/setup.md`): `pnpm demo` runs the app on fake data from `scripts/demo/` (fake proxy, attached with `--proxy-endpoint`); `pnpm demo --screenshots` writes `docs/images/`, and `release promote` refreshes, commits and pushes them. New management calls the app makes need a fake answer in `scripts/demo/server.mts`.
+- Demo and screenshots (`docs/setup.md`): `pnpm demo` runs the app on fake data from `scripts/demo/` (fake proxy, attached with `--proxy-endpoint`); `pnpm demo --screenshots` writes `docs/images/`; `pnpm smoke` is the boot check (see Checks); and `release promote` refreshes, commits and pushes them. New management calls the app makes need a fake answer in `scripts/demo/server.mts`.
 
 - Platforms: Windows x64, macOS arm64/x64 and Linux x64 (AppImage). Proxy binaries live in `resources/bin/<platform>-<arch>/` (Node names); `scripts/build-proxy.mjs`, `electron-builder.ts` (`${platform}-${arch}`) and `src/main/paths.ts` must agree. UI wording for tray/taskbar comes from `src/renderer/src/lib/platform.ts`. Linux uses XDG autostart and pkexec for Claude Code's managed policy under `/etc/claude-code/`.
 
 ## Checks
-`pnpm lint && pnpm typecheck && pnpm test && pnpm build`. Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
+`pnpm lint && pnpm typecheck && pnpm test && pnpm smoke` (`smoke` builds first). Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
+Never report done, or commit, without a passing `pnpm smoke` this session; quote its `smoke: ok` line. It boots the built app on a throwaway profile and the fake proxy, opens every page, and fails on a crash or uncaught renderer error. It doesn't cover the `electron-vite dev` server: after changing `electron.vite.config.ts`, also start `pnpm dev`.
 `pnpm lint` is oxlint with the StockApp/MoManga/ChattyPop rule set (`.oxlintrc.json`); warnings fail it.
 `pnpm typecheck` first rebuilds the `link:` toolkit packages (`scripts/build-linked.mjs`): their types come from their gitignored `dist/`.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.

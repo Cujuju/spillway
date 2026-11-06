@@ -29,6 +29,8 @@ Launch at login only applies to installed builds.
 
 The demo window opens at 1280×970, tall enough to show all five accounts. `pnpm demo --screenshots` captures the Dashboard, Activity and Providers pages from it in a dark and a light theme into `docs/images/`, then quits. `pnpm release promote` runs it, commits changed images and pushes `main`. 5-hour windows follow the local clock, so run it during the day to show live ones.
 
+`pnpm smoke` builds the app, boots it the same way, opens every page and quits. It exits non-zero if Electron is missing, the app exits or the window never draws, or a page crashes or throws an uncaught error. It runs the built app, not the `pnpm dev` server.
+
 The app's `--proxy-endpoint=<url>` switch makes it use a proxy already running at that address instead of starting the bundled one; the demo uses it.
 
 ## macOS

@@ -2,6 +2,7 @@
 
 import { IS_DEV_BUILD } from './app';
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
+import { MAX_CONSOLE_LINES, MIN_CONSOLE_LINES, NOTICE_DELIVERIES, NOTICE_STYLES, type NoticeDelivery, type NoticeStyle } from './notice';
 import { THEME_CHOICES } from './themes';
 import { UPDATE_CHANNELS, type UpdateChannel } from './updateFeed';
 import { DEFAULT_WINDOW_START, MINUTES_PER_DAY, MINUTES_PER_HOUR, normalizeWindowStart, type WindowStartSettings } from './windowStartSettings';
@@ -101,6 +102,13 @@ export interface AppSettings {
     limitReset: boolean;
     accountSwitched: boolean;
     proxyCrashed: boolean;
+    /** Spillway's overlay, the OS notification, or both. */
+    delivery: NoticeDelivery;
+    style: NoticeStyle;
+    /** Top drip keeps a resting lip at the top edge between notices. */
+    dripLip: boolean;
+    /** Console: most lines shown at once. */
+    consoleLines: number;
   };
   updates: {
     /** Check for a new release at start and periodically. */
@@ -204,6 +212,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     limitReset: true,
     accountSwitched: false,
     proxyCrashed: true,
+    delivery: 'spillway',
+    style: 'tray',
+    // Off: an always-on lip covers the top-centre of the screen.
+    dripLip: false,
+    consoleLines: 3,
   },
   updates: {
     autoCheck: true,
@@ -313,6 +326,10 @@ export function normalizeSettings(raw: unknown): AppSettings {
       limitReset: bool(n.limitReset, d.notifications.limitReset),
       accountSwitched: bool(n.accountSwitched, d.notifications.accountSwitched),
       proxyCrashed: bool(n.proxyCrashed, d.notifications.proxyCrashed),
+      delivery: pick(n.delivery, NOTICE_DELIVERIES, d.notifications.delivery),
+      style: pick(n.style, NOTICE_STYLES, d.notifications.style),
+      dripLip: bool(n.dripLip, d.notifications.dripLip),
+      consoleLines: int(n.consoleLines, d.notifications.consoleLines, MIN_CONSOLE_LINES, MAX_CONSOLE_LINES),
     },
     updates: {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),

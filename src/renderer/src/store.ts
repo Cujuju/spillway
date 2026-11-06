@@ -5,7 +5,8 @@ import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskEmails, maskSnapshot } from '@shared/privacy';
 import { rollPastResets } from '@shared/usageWindows';
 import { msToNextMinute } from '@shared/resetTime';
-import { resolveTheme, THEMES, themeTokens, type Theme } from '@shared/themes';
+import { resolveTheme, THEMES, type Theme } from '@shared/themes';
+import { paintTheme } from './lib/theme';
 import { persistedSignal } from './lib/persisted';
 import { createActivityReload } from './lib/activityReload';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
@@ -124,10 +125,7 @@ export const [activeTheme, setActiveTheme] = createSignal<Theme>(THEMES[0]!);
 
 function applyTheme(choice: string): void {
   const theme = resolveTheme(choice, prefersDark.matches);
-  const root = document.documentElement;
-  for (const [name, value] of Object.entries(themeTokens(theme))) root.style.setProperty(name, value);
-  root.style.colorScheme = theme.scheme;
-  root.dataset.theme = theme.id;
+  paintTheme(document.documentElement, theme);
   setActiveTheme(theme);
 }
 

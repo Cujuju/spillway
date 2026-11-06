@@ -79,6 +79,31 @@ export function showMainWindow(): void {
   w.focus();
 }
 
+/** Every renderer page runs sandboxed behind the same preload (window.api). */
+export const rendererPreferences: Electron.WebPreferences = {
+  preload: path.join(import.meta.dirname, '../preload/index.cjs'),
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: true,
+};
+
+/** Loads a renderer page from the dev server in development, else from the build. */
+export function loadRendererPage(w: BrowserWindow, page: 'index.html' | 'notice.html'): void {
+  const devUrl = process.env.ELECTRON_RENDERER_URL;
+  if (!app.isPackaged && devUrl) void w.loadURL(new URL(page, `${devUrl}/`).href);
+  else void w.loadFile(path.join(import.meta.dirname, '../renderer', page));
+}
+
+/** Shows the window and sends it one event. A window still loading gets it after load; sent earlier, the renderer misses it. */
+export function showWindowAndSend(channel: string, payload?: unknown): void {
+  showMainWindow();
+  const contents = mainWindow()?.webContents;
+  if (!contents) return;
+  const send = () => contents.send(channel, payload);
+  if (contents.isLoading()) contents.once('did-finish-load', send);
+  else send();
+}
+
 export function createMainWindow(show: boolean): BrowserWindow {
   const saved = loadState();
   win = new BrowserWindow({
@@ -92,12 +117,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     backgroundColor: themeBackground(),
     icon: shellIconPath(),
     title: APP_NAME,
-    webPreferences: {
-      preload: path.join(import.meta.dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    webPreferences: rendererPreferences,
   });
   if (saved?.maximized) win.maximize();
   win.setMenuBarVisibility(false);
@@ -133,8 +153,6 @@ export function createMainWindow(show: boolean): BrowserWindow {
   win.once('ready-to-show', () => {
     if (show) win?.show();
   });
-  const devUrl = process.env.ELECTRON_RENDERER_URL;
-  if (!app.isPackaged && devUrl) void win.loadURL(devUrl);
-  else void win.loadFile(path.join(import.meta.dirname, '../renderer/index.html'));
+  loadRendererPage(win, 'index.html');
   return win;
 }

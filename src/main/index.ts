@@ -1,10 +1,9 @@
 import './identity';
-import { app, nativeTheme, Notification, session } from 'electron';
+import { app, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
 import { APP_ID, APP_NAME } from '@shared/app';
 import { minuteToClock } from '@shared/windowStartSettings';
 import { history } from './historyStore';
-import { appIconPath } from './paths';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
 
@@ -30,7 +29,9 @@ async function startNormalApp(): Promise<void> {
   const { startUpdateInstaller } = await import('./updateInstaller');
   const { usage } = await import('./usagePoller');
   const { windowStarter } = await import('./windowStarter');
-  const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } = await import('./window');
+  const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, showWindowAndSend, syncWindowBackground } = await import('./window');
+  const { notify } = await import('./notifier');
+  const { noticeOverlay } = await import('./noticeOverlay');
 
   const isMac = process.platform === 'darwin';
 
@@ -39,14 +40,7 @@ async function startNormalApp(): Promise<void> {
 
   const send = (channel: string, payload: unknown) => mainWindow()?.webContents.send(channel, payload);
 
-  /** Shows the window on a Settings section. A window still loading gets it after load; sent earlier, the renderer misses it. */
-  function openSettingsSection(section: string): void {
-    showMainWindow();
-    const contents = mainWindow()?.webContents;
-    if (!contents) return;
-    if (contents.isLoading()) contents.once('did-finish-load', () => send(EVENTS.onOpenSettings, section));
-    else send(EVENTS.onOpenSettings, section);
-  }
+  const openSettingsSection = (section: string) => showWindowAndSend(EVENTS.onOpenSettings, section);
 
   function applyLoginItem(): void {
     if (!app.isPackaged || app.commandLine.hasSwitch('user-data-dir')) return;
@@ -84,13 +78,12 @@ async function startNormalApp(): Promise<void> {
     proxy.on('crashed', (code) => {
       usage.stop();
       archiveSync.stop();
-      if (getSettings().notifications.proxyCrashed && Notification.isSupported()) {
-        new Notification({ title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, icon: appIconPath() }).show();
+      if (getSettings().notifications.proxyCrashed) {
+        notify({ kind: 'proxyStopped', target: 'proxy', title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, short: 'Proxy stopped' });
       }
     });
     updates.on('status', (s) => send(EVENTS.onUpdateStatus, s));
     updates.on('found', (version) => {
-      if (!Notification.isSupported()) return;
       const { autoInstall, installMinute } = getSettings().updates;
       const time = minuteToClock(installMinute);
       const bodies = {
@@ -99,9 +92,7 @@ async function startNormalApp(): Promise<void> {
         scheduled: `${APP_NAME} ${version} is downloading and installs at ${time}.`,
         restart: `${APP_NAME} ${version} is downloading and installs the next time ${APP_NAME} quits.`,
       };
-      const n = new Notification({ title: 'Update available', body: bodies[autoInstall], icon: appIconPath() });
-      n.on('click', () => openSettingsSection('updates'));
-      n.show();
+      notify({ kind: 'updateFound', target: 'updates', title: 'Update available', body: bodies[autoInstall], short: `${APP_NAME} ${version}` });
     });
     onSettingsChange((next, prev) => {
       // The renderer saves whole settings objects, so it must see changes made here (tray account choice).
@@ -150,6 +141,7 @@ async function startNormalApp(): Promise<void> {
       createMainWindow(!hidden);
       windowCreated = true;
       startClientDrift();
+      noticeOverlay.start();
       startUpdateInstaller();
       updates.setAutoCheck(getSettings().updates.autoCheck);
       if (getSettings().proxy.autoStart) await proxy.start();
@@ -171,6 +163,7 @@ async function startNormalApp(): Promise<void> {
         stopDiagnosticExport(),
       ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
         destroyTrays();
+        noticeOverlay.destroy();
         app.quit();
       });
     });

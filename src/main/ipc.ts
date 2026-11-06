@@ -31,6 +31,9 @@ import { updates } from './updater';
 import { usage } from './usagePoller';
 import { windowStarter } from './windowStarter';
 import { mainWindow } from './window';
+import { noticeOverlay } from './noticeOverlay';
+import { openNoticeTarget, previewNotice } from './notifier';
+import { NOTICE_TARGETS } from '@shared/notice';
 
 type Handlers = { [K in keyof typeof INVOKE]: (...args: Parameters<DesktopApi[K]>) => ReturnType<DesktopApi[K]> | Awaited<ReturnType<DesktopApi[K]>> };
 
@@ -279,6 +282,10 @@ const handlers: Handlers = {
     if (target) await shell.openPath(target);
   },
   copyText: (text) => clipboard.writeText(text),
+  noticeResize: (width, height) => noticeOverlay.resize(Number(width), Number(height)),
+  noticeOpen: (target) => openNoticeTarget((NOTICE_TARGETS as readonly unknown[]).includes(target) ? target : 'window'),
+  noticePointer: (over) => noticeOverlay.pointer(over === true),
+  noticePreview: () => previewNotice(),
 };
 
 export function registerIpc(): void {

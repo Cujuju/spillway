@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-vi.mock('electron', () => ({ Notification: {} }));
+vi.mock('./notifier', () => ({ notify: vi.fn() }));
 vi.mock('./historyStore', () => ({ history: { add: vi.fn() } }));
 vi.mock('./managementClient', async (original) => ({
   ...await original<typeof import('./managementClient')>(),
@@ -7,7 +7,6 @@ vi.mock('./managementClient', async (original) => ({
 }));
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true } }));
 vi.mock('./settingsStore', () => ({ getSettings: vi.fn() }));
-vi.mock('./paths', () => ({ appIconPath: vi.fn() }));
 vi.mock('./usageEvents', () => ({ diffUsage: () => [] }));
 const { usage } = await import('./usagePoller');
 const { management, UsageRefreshError } = await import('./managementClient');

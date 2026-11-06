@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_CONSOLE_LINES, MIN_CONSOLE_LINES } from './notice';
 import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, DEFAULT_UPDATE_INSTALL_MINUTE, UPDATE_INSTALL_MODES, normalizeSettings, proxyConfigChanged } from './settings';
 
 describe('normalizeSettings', () => {
+  it('validates notification delivery, style and console lines', () => {
+    expect(normalizeSettings({}).notifications).toMatchObject({ delivery: 'spillway', style: 'tray', dripLip: false, consoleLines: 3 });
+    const bad = normalizeSettings({ notifications: { delivery: 'toast', style: 'waterline', dripLip: 'yes', consoleLines: 1 } }).notifications;
+    expect(bad).toMatchObject({ delivery: 'spillway', style: 'tray', dripLip: false, consoleLines: MIN_CONSOLE_LINES });
+    expect(normalizeSettings({ notifications: { consoleLines: 40 } }).notifications.consoleLines).toBe(MAX_CONSOLE_LINES);
+    expect(normalizeSettings({ notifications: { delivery: 'both', style: 'drip', dripLip: true } }).notifications).toMatchObject({ delivery: 'both', style: 'drip', dripLip: true });
+  });
+
   it('defaults and validates the optional Rhythm ZIP format', () => {
     expect(normalizeSettings({}).activity.zipCode).toBe('');
     expect(normalizeSettings({ activity: { zipCode: ' 00601 ' } }).activity.zipCode).toBe('00601');

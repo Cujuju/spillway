@@ -3,6 +3,7 @@ import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
 import { AboutSection } from '../components/AboutSection';
 import { ClickHouseSettings } from '../components/ClickHouseSettings';
+import { NotificationSettings } from '../components/NotificationSettings';
 import { SectionedPage, type NavGroup } from '../components/SectionedPage';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrayIconSettings } from '../components/TrayIconSettings';
@@ -175,27 +176,6 @@ function DashboardSection() {
   );
 }
 
-function Notifications() {
-  const n = () => settings().notifications;
-  const rows: { key: keyof AppSettings['notifications']; label: string; help: string }[] = [
-    { key: 'limitHit', label: 'Limit reached', help: 'An account hit a limit.' },
-    { key: 'limitReset', label: 'Limit reset', help: 'A limited account is usable again.' },
-    { key: 'accountSwitched', label: 'Account switched', help: 'New conversations moved to another account.' },
-    { key: 'proxyCrashed', label: 'Proxy crashed', help: 'The proxy exited unexpectedly.' },
-  ];
-  return (
-    <SettingsGroup>
-      <For each={rows}>
-        {(r) => (
-          <SettingRow label={r.label} help={r.help}>
-            <Toggle value={n()[r.key]} onChange={(v) => set((d) => void (d.notifications[r.key] = v))} />
-          </SettingRow>
-        )}
-      </For>
-    </SettingsGroup>
-  );
-}
-
 function Advanced() {
   const [confirming, setConfirming] = createSignal<'usage' | 'activity' | null>(null);
   const folders = [
@@ -267,7 +247,7 @@ export function Settings() {
         <Match when={section() === 'proxy'}><ProxySection /></Match>
         <Match when={section() === 'windowStart'}><WindowStartSettings /></Match>
         <Match when={section() === 'dashboard'}><DashboardSection /></Match>
-        <Match when={section() === 'notifications'}><Notifications /></Match>
+        <Match when={section() === 'notifications'}><NotificationSettings /></Match>
         <Match when={section() === 'updates'}><UpdateSettings /></Match>
         <Match when={section() === 'clickhouse'}><ClickHouseSettings /></Match>
         <Match when={section() === 'advanced'}><Advanced /></Match>

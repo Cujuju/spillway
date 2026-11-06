@@ -57,6 +57,8 @@ export default defineConfig(({ command }) => {
         dedupe: ['solid-js'],
       },
       server: { fs: { allow: ['.', TOOLKIT_DIR] } },
+      // The app window and the notification overlay window.
+      build: { rollupOptions: { input: { index: resolve('src/renderer/index.html'), notice: resolve('src/renderer/notice.html') } } },
     },
   };
 });

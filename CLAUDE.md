@@ -31,6 +31,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 
 - Themes: one palette per theme in `src/shared/themes.ts`, used by the renderer (inline CSS vars) and the window background. Tints derive in `tokens.css`; don't hardcode colours.
 - Email masking: the renderer's `snapshot` memo masks every credential field when "Show emails" is off, so views never handle raw emails. Main-process text (notifications) uses `maskEmails`.
+- Notifications: every notice goes through `notify()` (`src/main/notifier.ts`); never `new Notification` elsewhere. Delivery (Spillway overlay, system, both) and style (Tray drip, Top drip, Console) are settings. The overlay (`noticeOverlay.ts`, `src/renderer/src/notice/`) is a transparent always-on-top window sized to its content; clicks off a notice pass through (Windows keeps windows ≥ ~39 px tall).
 - Proxy status has one indicator: the sidebar's Proxy icon, tinted by state.
 - About (Settings → About; macOS app menu opens it): credits live in `src/renderer/src/lib/credits.ts`, one entry per contributor. Logo sizes come from `scripts/make-icon.ps1`.
 - License notices ship in `licenses/` (`electron-builder.ts`; `beforePack` fails without them): npm packages per bundle from `rollup-plugin-license` (`electron.vite.config.ts`), Go modules from `go-licenses` (`scripts/build-proxy.mjs`). A Go module released without a LICENSE gets one in `scripts/go-license-overrides/<module>/`.

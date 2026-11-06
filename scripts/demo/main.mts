@@ -14,7 +14,7 @@ if (args.includes(SCREENSHOTS_FLAG)) {
 } else {
   const app = await launchDemo({ theme: args.find((a) => !a.startsWith('--')), clickhouse: args.includes('--clickhouse') });
   console.log(`demo: fake proxy at ${app.proxy.endpoint}, ${app.proxy.eventCount} requests`);
-  if (app.clickhouse) console.log(`demo: fake ClickHouse at ${app.clickhouse.endpoint}; enter this origin in Settings → ClickHouse export`);
+  if (app.clickhouse) console.log(`demo: fake ClickHouse at ${app.clickhouse.endpoint}; enter this origin in Settings → Data → ClickHouse`);
   await app.exited;
   await app.close();
 }

@@ -9,7 +9,7 @@ import { startDemoClickHouse } from '../../scripts/demo/clickhouse.mts';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
-import { ClickHouseUploader } from './clickhouseUploader';
+import { ClickHouseUploader, DELIVERY_INTERVAL_MS } from './clickhouseUploader';
 import { checkClickHouseSchema, clickhouseRequest, clickhouseTimeout, insertClickHouse } from './clickhouseHttp';
 import { parseActivityEvent } from './sse';
 
@@ -204,6 +204,15 @@ it('drains a backlog larger than one batch without an interval between acknowled
     await vi.waitFor(() => expect(store.status().acknowledged).toBe(CLICKHOUSE_BATCH_ROWS + 1), { timeout: 2000 });
     expect(s.requests.filter((r) => r.sql.startsWith('INSERT')).map((r) => lines(r.sql.slice(r.sql.indexOf('\n') + 1)).length)).toEqual([CLICKHOUSE_BATCH_ROWS, 1]);
     expect(timer.mock.calls.slice(0, 2)).toEqual([[0], [0]]);
+  } finally { await upload.stop(); }
+});
+it('keeps delivery scheduled when a run rejects unexpectedly', async () => {
+  const { store } = setup(), upload = uploader(store), timer = vi.spyOn(upload as unknown as { schedule(ms: number): void }, 'schedule');
+  vi.spyOn(upload, 'runOnce').mockRejectedValueOnce(new Error('escaped'));
+  try {
+    upload.start();
+    await vi.waitFor(() => expect(timer).toHaveBeenCalledTimes(2));
+    expect(timer.mock.calls[1]).toEqual([DELIVERY_INTERVAL_MS]); expect(upload.error).toBe('ClickHouse delivery failed unexpectedly');
   } finally { await upload.stop(); }
 });
 it('verifies schema once across batches and verifies again after an insert failure', async () => {

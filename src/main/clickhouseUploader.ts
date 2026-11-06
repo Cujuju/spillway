@@ -1,7 +1,7 @@
 import type { ClickHouseBatch, ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from '@shared/clickhouse';
 import { checkClickHouseSchema, clickhouseDDL, clickhouseRequest, insertClickHouse } from './clickhouseHttp';
 import { clickhouseDestination } from './clickhouseStore';
-const DELIVERY_INTERVAL_MS = 3_000;
+export const DELIVERY_INTERVAL_MS = 3_000;
 
 export interface ClickHouseWorker {
   status(): Promise<Omit<ClickHouseStatus, 'hasCredentials' | 'running' | 'paused'>>;
@@ -32,7 +32,9 @@ export class ClickHouseUploader {
   private schedule(ms: number): void {
     clearTimeout(this.timer);
     if (!this.stopped) this.timer = setTimeout(() => {
-      this.active = this.runOnce().then((acknowledged) => { this.active = null; this.schedule(acknowledged ? 0 : DELIVERY_INTERVAL_MS); });
+      // runOnce reports its own failures; the catch keeps delivery scheduled if one escapes.
+      this.active = this.runOnce().catch(() => { this.error = 'ClickHouse delivery failed unexpectedly'; return false; })
+        .then((acknowledged) => { this.active = null; this.schedule(acknowledged ? 0 : DELIVERY_INTERVAL_MS); });
     }, ms);
   }
   async stop(): Promise<void> {

@@ -34,7 +34,7 @@ async function setup() {
   const s = await startDemoClickHouse(); servers.push(s);
   const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, endpoint: s.endpoint };
   mock.credentials = { ...mock.credentials!, endpoint: s.endpoint };
-  mock.log!.clickhouseConfigure(config); mock.log!.archiveObserve(parseActivityEvent('{"request_id":"execution-one","trace_id":"full-trace-0001","model":"alias","provider":"codex"}')!);
+  mock.log!.clickhouseConfigure(config); mock.log!.clickhousePrepare(); mock.log!.archiveObserve(parseActivityEvent('{"request_id":"execution-one","trace_id":"full-trace-0001","model":"alias","provider":"codex"}')!);
   return { s, config };
 }
 it('cancels old in-flight credentials before replacement and never returns them in status', async () => {

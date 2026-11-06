@@ -1,12 +1,13 @@
 export type CaptureState = 'unknown' | 'missing' | 'pending' | 'partial' | 'complete' | 'expired';
 export interface ArchivePolicy { captureBodies: boolean; retentionDays: number; maxBytes: number }
 export const DEFAULT_ARCHIVE_POLICY: ArchivePolicy = { captureBodies: false, retentionDays: 7, maxBytes: 100 * 1024 * 1024 };
+export const ARCHIVE_MAX_BYTES = 1024 * 1024 * 1024;
 export const CAPTURE_BODY_LIMIT = 256 * 1024;
 export const ARCHIVE_PAGE_SIZE = 50;
 export function normalizeArchivePolicy(raw: unknown): ArchivePolicy {
   const r = raw && typeof raw === 'object' ? raw as Partial<ArchivePolicy> : {};
   const bounded = (n: unknown, d: number, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) ? Math.round(Math.max(min, Math.min(max, n))) : d;
-  return { captureBodies: r.captureBodies === true, retentionDays: bounded(r.retentionDays, 7, 1, 90), maxBytes: bounded(r.maxBytes, DEFAULT_ARCHIVE_POLICY.maxBytes, 1024 * 1024, 1024 * 1024 * 1024) };
+  return { captureBodies: r.captureBodies === true, retentionDays: bounded(r.retentionDays, 7, 1, 90), maxBytes: bounded(r.maxBytes, DEFAULT_ARCHIVE_POLICY.maxBytes, 1024 * 1024, ARCHIVE_MAX_BYTES) };
 }
 /** Proxy spool v1: one downstream HTTP exchange; not one upstream attempt. */
 export interface CaptureRecord {

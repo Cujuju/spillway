@@ -88,6 +88,7 @@ export function openActivityDb(file: string, hexKey: string): Db {
     db.transaction(() => {
       db.exec(SCHEMA);
       db.exec(ARCHIVE_SCHEMA);
+      for (const row of db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'clickhouse_*'").all() as { name: string }[]) db.exec(`DROP TRIGGER "${row.name.replaceAll('"', '""')}"`);
       db.exec(CLICKHOUSE_SCHEMA);
       db.exec(TRACE_SCHEMA);
       db.exec(EVAL_SCHEMA);

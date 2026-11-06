@@ -58,9 +58,6 @@ export class ClickHouseUploader {
         if (controller.signal.aborted) return false;
         this.verifiedDestination = destination;
       }
-      // Retention/clear can invalidate a frozen batch while HTTP diagnostics are running.
-      const current = await abortable(this.worker.prepare(), controller.signal);
-      if (current?.token !== batch.token || controller.signal.aborted) return false;
       await insertClickHouse(state.config, this.credentials(state.config), batch.payload, controller.signal);
       if (controller.signal.aborted) return false;
       await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);
@@ -83,7 +80,7 @@ export class ClickHouseUploader {
     try {
       if (create && (await clickhouseRequest(config, this.credentials(config), clickhouseDDL(config), controller.signal)).trim()) throw new Error('ClickHouse schema creation returned an unexpected response');
       await checkClickHouseSchema(config, this.credentials(config), controller.signal);
-      this.error = null; return 'Connected; archive schema v1 is compatible. Insert permission is checked on delivery.';
+      this.error = null; return 'Connected; archive schema v2 is compatible. Insert permission is checked on delivery.';
     } catch (e) { this.error = e instanceof Error ? e.message : 'ClickHouse diagnostic failed'; throw new Error(this.error); }
     finally { this.controller = null; }
   }

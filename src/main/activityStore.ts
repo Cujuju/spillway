@@ -96,7 +96,7 @@ export class ActivityLog {
   archiveExportCancel(id: string) { return this.exports.cancel(id); }
   async archiveExportDispose(): Promise<void> { await this.exporter?.dispose(); }
   private archiveStore: ArchiveStore | null = null;
-  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db); }
+  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact) }); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveQuery(q: ArchiveQuery) { return this.archive.query(q); }

@@ -1,18 +1,21 @@
+import { ARCHIVE_MAX_BYTES } from './archive';
 export interface ClickHouseConfig {
-  enabled: boolean; endpoint: string; database: string; table: string; includeBodies: boolean;
+  enabled: boolean; endpoint: string; database: string; table: string; includeBodies: boolean; sourceLabel: string;
 }
 export interface ClickHouseCredentials { username: string; password: string }
-export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, endpoint: '', database: 'default', table: 'spillway_archive_v1', includeBodies: false };
-export const CLICKHOUSE_QUEUE_LIMIT = 20_000;
+export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, endpoint: '', database: 'default', table: 'spillway_events_v2', includeBodies: false, sourceLabel: '' };
+// The outbox holds at least as much content as the archive can retain.
+export const CLICKHOUSE_OUTBOX_BYTES = ARCHIVE_MAX_BYTES;
+export const CLICKHOUSE_SOURCE_LABEL_MAX = 64;
 export const CLICKHOUSE_BATCH_BYTES = 8 * 1024 * 1024;
 // ClickHouse recommends at least 1,000 rows per insert to reduce part creation overhead.
 export const CLICKHOUSE_BATCH_ROWS = 1_000;
 export interface ClickHouseStatus {
-  config: ClickHouseConfig; hasCredentials: boolean; queued: number; batchBytes: number; oldestQueuedAt: string | null;
+  config: ClickHouseConfig; hasCredentials: boolean; queued: number; queuedBytes: number; oldestQueuedAt: string | null;
   acknowledged: number; discarded: number; oversized: number; attempts: number; nextAttemptAt: number; lastAcknowledgedAt: string | null;
-  error: string | null; running: boolean; paused: boolean;
+  error: string | null; running: boolean; paused: boolean; backfilling: boolean;
 }
-export interface ClickHouseBatch { token: string; destination: string; payload: string; rows: { id: string; revision: number }[]; attempts: number; nextAttemptAt: number }
+export interface ClickHouseBatch { token: string; destination: string; payload: string; rows: number; attempts: number; nextAttemptAt: number }
 export function validateClickHouseConfig(raw: unknown): ClickHouseConfig {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid ClickHouse settings');
   const r = raw as ClickHouseConfig;
@@ -27,7 +30,9 @@ export function validateClickHouseConfig(raw: unknown): ClickHouseConfig {
     endpoint = url.origin;
   }
   if (r.enabled && !endpoint) throw new Error('An endpoint is required to enable ClickHouse');
-  return { enabled: r.enabled, includeBodies: r.includeBodies, endpoint, database: r.database, table: r.table };
+  const sourceLabel = r.sourceLabel === undefined ? '' : r.sourceLabel;
+  if (typeof sourceLabel !== 'string' || sourceLabel.trim().length > CLICKHOUSE_SOURCE_LABEL_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(sourceLabel)) throw new Error('Invalid ClickHouse source label');
+  return { sourceLabel: sourceLabel.trim(), enabled: r.enabled, includeBodies: r.includeBodies, endpoint, database: r.database, table: r.table };
 }
 export function validateClickHouseCredentials(raw: unknown): ClickHouseCredentials {
   const r = raw as ClickHouseCredentials | null;

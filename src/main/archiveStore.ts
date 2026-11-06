@@ -19,6 +19,8 @@ CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS archive_fts USING fts5(id UNINDEXED, text);
 CREATE TABLE IF NOT EXISTS archive_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
+export interface ArchiveFactSink { append(fact: ArchiveFact): void }
+export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot'; traceId: string; at: string; captureState: string; record: object; content: object | null };
 type Row = { id: string; trace_id: string; at: string; state: ArchiveEntry['state']; reason: string; session_id: string | null; model: string; provider: string; client: string | null; capture_id: string | null; capture_epoch: string | null; capture_sequence: number | null; method: string; path: string; status: number; bytes: number; detail: string };
 const ENTRY_COLUMNS = 'id,trace_id,at,state,reason,session_id,model,provider,client,capture_id,capture_epoch,capture_sequence,method,path,status,bytes';
 const entry = (r: Row): ArchiveEntry => ({ schemaVersion: 1, captureEpoch: r.capture_epoch, captureSequence: r.capture_sequence, id: r.id, traceId: r.trace_id, at: r.at, state: r.state, reason: r.reason, sessionId: r.session_id, model: r.model, provider: r.provider, client: r.client, captureId: r.capture_id, method: r.method, path: r.path, status: r.status, bytes: r.bytes });
@@ -31,9 +33,9 @@ const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType:
 export class ArchiveStore {
   private policy: ArchivePolicy;
   private lastPruned = 0;
-  constructor(private db: Db) {
+  constructor(private db: Db, private sink?: ArchiveFactSink) {
     this.policy = normalizeArchivePolicy(this.read('policy', {}));
-    this.db.exec("UPDATE archive_entries SET state=CASE WHEN bytes>0 THEN 'partial' ELSE 'missing' END, reason='archive-reopened-before-finalization' WHERE state='pending'");
+    this.settle('archive-reopened-before-finalization');
     this.prune(Date.now(), true);
     if (this.read('indexFormat', 0) < 2) this.db.transaction(() => {
       this.db.exec('DELETE FROM archive_fts');
@@ -47,17 +49,26 @@ export class ArchiveStore {
       this.write('indexFormat', 2);
     })();
   }
+  private settle(reason: string, before?: string): void {
+    this.db.transaction(() => {
+      const state = before ? "'missing'" : "CASE WHEN bytes>0 THEN 'partial' ELSE 'missing' END";
+      const rows = this.db.prepare(`UPDATE archive_entries SET state=${state},reason=? WHERE state='pending' ${before ? "AND reason <> 'websocket-open' AND at < ?" : ''} RETURNING trace_id,at,state`).all(reason, ...before ? [before] : []) as { trace_id: string; at: string; state: string }[];
+      for (const r of rows) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: r.state, record: { state: r.state, reason }, content: null });
+    })();
+  }
   private read<T>(key: string, fallback: T): T {
     const row = this.db.prepare('SELECT value FROM archive_meta WHERE key = ?').get(key) as { value: string } | undefined;
     return row ? JSON.parse(row.value) as T : fallback;
   }
   private write(key: string, value: unknown): void { this.db.prepare('INSERT INTO archive_meta VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
   setPolicy(raw: ArchivePolicy): ArchiveStatus {
-    this.policy = normalizeArchivePolicy(raw);
-    this.write('policy', this.policy);
-    if (!this.policy.captureBodies) this.db.prepare("UPDATE archive_entries SET state=CASE WHEN bytes>0 THEN 'partial' ELSE 'missing' END, reason='capture-disabled' WHERE state='pending'").run();
-    this.prune(Date.now(), true);
-    return this.status();
+    return this.db.transaction(() => {
+      this.policy = normalizeArchivePolicy(raw);
+      this.write('policy', this.policy);
+      if (!this.policy.captureBodies) this.settle('capture-disabled');
+      this.prune(Date.now(), true);
+      return this.status();
+    })();
   }
   observe(e: ActivityEvent): void {
     if (e.source !== 'proxy' || !e.traceId || !TRACE.test(e.traceId)) return;
@@ -71,7 +82,9 @@ export class ArchiveStore {
       const provenance = { source: 'proxy', model: text(e.model), effectiveModel: text(e.effectiveModel), reasoningEffort: text(e.reasoningEffort),
         provider: text(e.provider), client: text(e.client), sessionId: text(e.sessionId), parentSessionId: text(e.parentSessionId),
         failed: typeof e.failed === 'boolean' ? e.failed : null, statusCode: measured(e.statusCode), latencyMs: measured(e.latencyMs), ttftMs: measured(e.ttftMs), ...normalizeTransport(e) };
-      this.db.prepare('INSERT OR IGNORE INTO archive_attempts SELECT ?,?,? WHERE (SELECT count(*) FROM archive_attempts WHERE trace_id=?) < 200').run(identity, e.traceId, JSON.stringify({ requestId: e.requestId, selectionId: e.selectionId, at: e.at, provenance }), e.traceId);
+      const attempt = { requestId: e.requestId, selectionId: e.selectionId, at: e.at, provenance };
+      const inserted = this.db.prepare('INSERT OR IGNORE INTO archive_attempts SELECT ?,?,? WHERE (SELECT count(*) FROM archive_attempts WHERE trace_id=?) < 200').run(identity, e.traceId, JSON.stringify(attempt), e.traceId);
+      if (inserted.changes) this.sink?.append({ kind: 'attempt', traceId: e.traceId!, at: e.at, captureState: '', record: { ...attempt, sessionId: e.sessionId, model: e.model, provider: e.provider, client: e.client }, content: null });
     })();
   }
   ingest(page: CapturePage): void {
@@ -83,7 +96,7 @@ export class ArchiveStore {
       if (previous && previous !== page.epoch) {
         this.write('dropBaseline', 0);
         this.write('restarts', this.read('restarts', 0) + 1);
-        this.db.prepare("UPDATE archive_entries SET state=CASE WHEN bytes>0 THEN 'partial' ELSE 'missing' END, reason='proxy-restarted-before-capture' WHERE state='pending'").run();
+        this.settle('proxy-restarted-before-capture');
       }
       for (const r of page.records) {
         if (!r || !Number.isSafeInteger(r.sequence) || r.sequence < 1) throw new Error('Invalid capture cursor');
@@ -95,7 +108,10 @@ export class ArchiveStore {
           && (['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= 8192)
           && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= 64 * 1024 * 3) && r.frames.reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 6);
         if (!valid) { this.write('rejected', this.read('rejected', 0) + 1); continue; }
-        const detail = JSON.stringify({ request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' : 'http', requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] });
+        const captured = { request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' : 'http', requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
+        const detail = JSON.stringify(captured);
+        const { request, response, frames, ...metadata } = captured;
+        this.sink?.append({ kind: 'capture', traceId: r.traceId, at: r.startedAt, captureState: r.state, record: { ...metadata, captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason, startedAt: r.startedAt, frameCount: frames.length }, content: request || response || frames.length ? { request, response, frames } : null });
         const id = `trace:${r.traceId}`;
         this.db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,bytes,detail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(trace_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,method=excluded.method,path=excluded.path,status=excluded.status,bytes=excluded.bytes,detail=excluded.detail`)
@@ -124,7 +140,7 @@ export class ArchiveStore {
         if (!oldest.length) break;
         for (const r of oldest) { if (bytes <= this.policy.maxBytes) break; expire(r.id); bytes -= r.bytes; }
       }
-      this.db.prepare("UPDATE archive_entries SET state='missing', reason='capture-unavailable-or-interrupted' WHERE state='pending' AND reason <> 'websocket-open' AND at < ?").run(new Date(now - 10 * 60_000).toISOString());
+      this.settle('capture-unavailable-or-interrupted', new Date(now - 10 * 60_000).toISOString());
       const count = (this.db.prepare('SELECT count(*) AS n FROM archive_entries').get() as { n: number }).n;
       const obsolete = count > MAX_METADATA ? this.db.prepare('SELECT id, trace_id FROM archive_entries ORDER BY at,id LIMIT ?').all(count - MAX_METADATA) as { id: string; trace_id: string }[] : [];
       for (const r of obsolete) {
@@ -175,6 +191,7 @@ export class ArchiveStore {
     this.lastPruned = 0;
   }
 }
-export const ARCHIVE_CLEAR_SQL = `DELETE FROM archive_fts; DELETE FROM archive_entries; DELETE FROM archive_attempts;
+export const ARCHIVE_CLEAR_SQL = `UPDATE clickhouse_export SET discarded=discarded+queued_rows,backfill_cursor=NULL; DELETE FROM clickhouse_outbox;
+DELETE FROM archive_fts; DELETE FROM archive_entries; DELETE FROM archive_attempts;
 INSERT OR REPLACE INTO archive_meta VALUES ('dropBaseline', coalesce((SELECT value FROM archive_meta WHERE key='proxyDropped'),'0'));
 DELETE FROM archive_meta WHERE key IN ('dropped','gaps','restarts','rejected');`;

@@ -24,7 +24,7 @@ Types are in `src/shared/archive.ts`. `ArchiveEntry.schemaVersion` is `1`. `id` 
 
 These APIs are the integration surface for export/bundle/trace implementations. [Portable archive export v1](portable-archive.md) adds a worker-owned frozen selection and JSONL manifest/capture/trailer API. Existing data-transfer v1 exports Activity metadata only and remains independent. Use `schemaVersion`, stable IDs, explicit state, provenance and bounded detail in consumers; never silently label missing captures complete.
 
-The optional [ClickHouse destination](clickhouse-export.md) consumes worker-owned archive revisions through a bounded encrypted outbox. It remains default-off and requires a separate content opt-in; it does not change local accounting or retention.
+The optional [ClickHouse destination](clickhouse-export.md) exports immutable attempt, capture, settlement and backfill facts through a byte-bounded encrypted outbox. It remains default-off and requires a separate content opt-in; it does not change local accounting or retention.
 
 ## Policy and completeness
 

@@ -1,7 +1,7 @@
 /** Settings for starting each account's 5-hour window as soon as it resets. */
 
-const MINUTES_PER_HOUR = 60;
-const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
+export const MINUTES_PER_HOUR = 60;
+export const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
 /** Defaults the active-hours fields show before the user picks their own day. */
 const DEFAULT_ACTIVE_START_MINUTE = 8 * MINUTES_PER_HOUR;
 const DEFAULT_ACTIVE_END_MINUTE = 23 * MINUTES_PER_HOUR;
@@ -73,6 +73,13 @@ export function withinActiveHours(hours: ActiveHours, date: Date): boolean {
 
 /** "HH:MM" for an `<input type="time">`. */
 export const minuteToTime = (m: number) => `${String(Math.floor(m / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(m % MINUTES_PER_HOUR).padStart(2, '0')}`;
+
+/** The user's short clock time ("3:00 AM") for minutes after local midnight. */
+export function minuteToClock(minute: number): string {
+  const at = new Date();
+  at.setHours(0, minute, 0, 0);
+  return at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
 
 /** Minutes after midnight from "HH:MM"; null when malformed. */
 export function timeToMinute(text: string): number | null {

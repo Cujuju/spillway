@@ -2,6 +2,7 @@ import './identity';
 import { app, nativeTheme, Notification, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
 import { APP_ID, APP_NAME } from '@shared/app';
+import { minuteToClock } from '@shared/windowStartSettings';
 import { history } from './historyStore';
 import { appIconPath } from './paths';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
@@ -26,6 +27,7 @@ async function startNormalApp(): Promise<void> {
   const { proxy } = await import('./proxySupervisor');
   const { destroyTrays, ensureAppTray, taskbarDark } = await import('./tray');
   const { updates } = await import('./updater');
+  const { startUpdateInstaller } = await import('./updateInstaller');
   const { usage } = await import('./usagePoller');
   const { windowStarter } = await import('./windowStarter');
   const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, syncWindowBackground } = await import('./window');
@@ -89,7 +91,15 @@ async function startNormalApp(): Promise<void> {
     updates.on('status', (s) => send(EVENTS.onUpdateStatus, s));
     updates.on('found', (version) => {
       if (!Notification.isSupported()) return;
-      const n = new Notification({ title: 'Update available', body: `${APP_NAME} ${version} is ready to download in Settings → Updates.`, icon: appIconPath() });
+      const { autoInstall, installMinute } = getSettings().updates;
+      const time = minuteToClock(installMinute);
+      const bodies = {
+        off: `${APP_NAME} ${version} is ready to download in Settings → Updates.`,
+        now: `${APP_NAME} ${version} is downloading and installs when it is ready.`,
+        scheduled: `${APP_NAME} ${version} is downloading and installs at ${time}.`,
+        restart: `${APP_NAME} ${version} is downloading and installs the next time ${APP_NAME} quits.`,
+      };
+      const n = new Notification({ title: 'Update available', body: bodies[autoInstall], icon: appIconPath() });
       n.on('click', () => openSettingsSection('updates'));
       n.show();
     });
@@ -140,6 +150,7 @@ async function startNormalApp(): Promise<void> {
       createMainWindow(!hidden);
       windowCreated = true;
       startClientDrift();
+      startUpdateInstaller();
       updates.setAutoCheck(getSettings().updates.autoCheck);
       if (getSettings().proxy.autoStart) await proxy.start();
     });

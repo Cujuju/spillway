@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, normalizeSettings, proxyConfigChanged } from './settings';
+import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, DEFAULT_UPDATE_INSTALL_MINUTE, UPDATE_INSTALL_MODES, normalizeSettings, proxyConfigChanged } from './settings';
 
 describe('normalizeSettings', () => {
   it('defaults and validates the optional Rhythm ZIP format', () => {
@@ -63,6 +63,17 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({}).updates.channel).toBe('stable');
     expect(normalizeSettings({ updates: { channel: 'nightly' } }).updates.channel).toBe('nightly');
     expect(normalizeSettings({ updates: { channel: 'beta' } }).updates.channel).toBe('stable');
+  });
+
+  it('defaults and normalizes automatic install settings', () => {
+    expect(normalizeSettings({}).updates).toMatchObject({ autoInstall: 'off', installMinute: DEFAULT_UPDATE_INSTALL_MINUTE });
+    for (const autoInstall of UPDATE_INSTALL_MODES) {
+      expect(normalizeSettings({ updates: { autoInstall } }).updates.autoInstall).toBe(autoInstall);
+    }
+    expect(normalizeSettings({ updates: { autoInstall: 'invalid', installMinute: '03:00' } }).updates).toMatchObject({ autoInstall: 'off', installMinute: DEFAULT_UPDATE_INSTALL_MINUTE });
+    expect(normalizeSettings({ updates: { installMinute: -1 } }).updates.installMinute).toBe(0);
+    expect(normalizeSettings({ updates: { installMinute: 1440 } }).updates.installMinute).toBe(1439);
+    expect(normalizeSettings({ updates: { installMinute: 180.6 } }).updates.installMinute).toBe(181);
   });
 });
 

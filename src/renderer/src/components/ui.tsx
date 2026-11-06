@@ -5,6 +5,7 @@ import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX }
 import { Portal } from 'solid-js/web';
 import { resetParts } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
+import { minuteToTime, timeToMinute } from '@shared/windowStartSettings';
 import { isBoolean, persistedSignal } from '../lib/persisted';
 import { providerLogo, providerVar } from '../lib/providers';
 
@@ -102,6 +103,21 @@ export function NumberField(props: { value: number; onCommit: (v: number) => voi
         <span class="number-field-unit">{props.unit}</span>
       </Show>
     </label>
+  );
+}
+
+/** Time-of-day input; `value` and the committed value are minutes after local midnight. */
+export function TimeField(props: { value: number; onCommit: (minute: number) => void }) {
+  return (
+    <input
+      class="input tabular"
+      type="time"
+      value={minuteToTime(props.value)}
+      onChange={(e) => {
+        const minute = timeToMinute(e.currentTarget.value);
+        if (minute !== null) props.onCommit(minute);
+      }}
+    />
   );
 }
 

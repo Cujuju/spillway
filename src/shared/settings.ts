@@ -4,7 +4,7 @@ import { IS_DEV_BUILD } from './app';
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { THEME_CHOICES } from './themes';
 import { UPDATE_CHANNELS, type UpdateChannel } from './updateFeed';
-import { DEFAULT_WINDOW_START, normalizeWindowStart, type WindowStartSettings } from './windowStartSettings';
+import { DEFAULT_WINDOW_START, MINUTES_PER_DAY, MINUTES_PER_HOUR, normalizeWindowStart, type WindowStartSettings } from './windowStartSettings';
 
 export type RoutingStrategy = 'soonest-reset' | 'fill-first' | 'round-robin' | 'weighted-round-robin';
 /** Whether API keys are routed to before or after subscription logins. */
@@ -16,6 +16,12 @@ export type TrayIconValue = 'remaining' | 'used';
 /** 'none' draws the digits alone. */
 export type TrayIconShape = 'square' | 'rounded' | 'circle' | 'none';
 export type TrayIconFill = 'outline' | 'filled';
+
+/** When a downloaded update installs. */
+export const UPDATE_INSTALL_MODES = ['off', 'now', 'scheduled', 'restart'] as const;
+export type UpdateInstallMode = (typeof UPDATE_INSTALL_MODES)[number];
+/** Quiet overnight install time, in local minutes after midnight. */
+export const DEFAULT_UPDATE_INSTALL_MINUTE = 3 * MINUTES_PER_HOUR;
 
 /** How one tray icon is drawn, so icons for different limits look different. */
 export interface TrayIconLook {
@@ -97,8 +103,12 @@ export interface AppSettings {
     proxyCrashed: boolean;
   };
   updates: {
-    /** Check for a new release at start and periodically; downloading and installing stay manual. */
+    /** Check for a new release at start and periodically. */
     autoCheck: boolean;
+    /** Off keeps downloads and installs manual; other modes download when found. */
+    autoInstall: UpdateInstallMode;
+    /** Local minutes after midnight for scheduled installs. */
+    installMinute: number;
     /** Nightly also takes prereleases, built on each push; stable takes promoted ones only. */
     channel: UpdateChannel;
   };
@@ -197,6 +207,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   updates: {
     autoCheck: true,
+    autoInstall: 'off',
+    installMinute: DEFAULT_UPDATE_INSTALL_MINUTE,
     channel: 'stable',
   },
   activity: {
@@ -304,6 +316,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     },
     updates: {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),
+      autoInstall: pick(u.autoInstall, UPDATE_INSTALL_MODES, d.updates.autoInstall),
+      installMinute: int(u.installMinute, d.updates.installMinute, 0, MINUTES_PER_DAY - 1),
       channel: pick(u.channel, UPDATE_CHANNELS, d.updates.channel),
     },
     activity: {

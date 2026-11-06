@@ -1,9 +1,11 @@
 import { createResource, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { IS_DEV_BUILD } from '@shared/app';
+import type { UpdateInstallMode } from '@shared/settings';
 import type { UpdateStatus } from '@shared/types';
 import type { UpdateChannel } from '@shared/updateFeed';
+import { minuteToClock } from '@shared/windowStartSettings';
 import { settings, updateSettings } from '../store';
-import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
+import { Seg, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
 
 type Of<K extends UpdateStatus['state']> = Extract<UpdateStatus, { state: K }>;
 
@@ -12,10 +14,17 @@ const CHANNEL_OPTIONS: readonly { value: UpdateChannel; label: string; title: st
   { value: 'nightly', label: 'Nightly', title: 'A build of every pushed change' },
 ];
 
+const INSTALL_OPTIONS: readonly { value: UpdateInstallMode; label: string; help: string }[] = [
+  { value: 'off', label: 'Off', help: 'Download and install updates yourself, below.' },
+  { value: 'now', label: 'Right away', help: 'Download when found, then restart and install. The proxy restarts with the app.' },
+  { value: 'scheduled', label: 'At a set time', help: 'Download when found, then restart and install at this time.' },
+  { value: 'restart', label: 'Next restart', help: 'Download when found, then install the next time you quit or restart the app.' },
+];
+
 /** "0.41.3 (nightly)" for a prerelease. */
 const named = (u: { version: string; nightly: boolean }) => `${u.version}${u.nightly ? ' (nightly)' : ''}`;
 
-/** Settings → Updates: channel, version, check, download and install. Main verifies every file before install. */
+/** Settings → Updates: channel, automatic check and install, version, check, download and install. Main verifies every file before install. */
 export function UpdateSettings() {
   const [build] = createResource(() => window.api.appBuild());
   const [status, setStatus] = createSignal<UpdateStatus | null>(null);
@@ -27,16 +36,27 @@ export function UpdateSettings() {
     const s = status();
     return s?.state === k ? (s as Of<K>) : undefined;
   };
+  const u = () => settings().updates;
+  /** When a ready update installs on its own, as a sentence; empty when it waits for the user or installs at once. */
+  const installsWhen = () => ({ off: '', now: '', scheduled: ` It installs at ${minuteToClock(u().installMinute)}.`, restart: ' It installs when you quit.' })[u().autoInstall];
   const checkButton = () => <button class="btn" onClick={() => void window.api.checkForUpdates()}>Check for updates</button>;
 
   return (
     <SettingsGroup>
       <SettingRow label="Channel" help="Nightly gets the latest changes; stable gets tested ones. Switching to stable never downgrades: you stay on this version until stable passes it.">
-        <Seg label="Update channel" value={settings().updates.channel} options={CHANNEL_OPTIONS} onChange={(v) => void updateSettings((d) => void (d.updates.channel = v))} />
+        <Seg label="Update channel" value={u().channel} options={CHANNEL_OPTIONS} onChange={(v) => void updateSettings((d) => void (d.updates.channel = v))} />
       </SettingRow>
-      <SettingRow label="Check automatically" help="Check after launch and every few hours, and notify. Nothing downloads or installs until you choose.">
-        <Toggle value={settings().updates.autoCheck} onChange={(v) => void updateSettings((d) => void (d.updates.autoCheck = v))} />
+      <SettingRow label="Check automatically" help="Check after launch and every few hours, and notify when an update is found.">
+        <Toggle value={u().autoCheck} onChange={(v) => void updateSettings((d) => void (d.updates.autoCheck = v))} />
       </SettingRow>
+      <SettingRow label="Install automatically" help={INSTALL_OPTIONS.find((o) => o.value === u().autoInstall)?.help}>
+        <Seg label="Install automatically" value={u().autoInstall} options={INSTALL_OPTIONS} onChange={(v) => void updateSettings((d) => void (d.updates.autoInstall = v))} />
+      </SettingRow>
+      <Show when={u().autoInstall === 'scheduled'}>
+        <SettingRow label="Install at" help="Local time, on any day an update is waiting." nested>
+          <TimeField value={u().installMinute} onCommit={(m) => void updateSettings((d) => void (d.updates.installMinute = m))} />
+        </SettingRow>
+      </Show>
       <SettingRow label={`Version ${build()?.version ?? ''}`} help="Updates are verified against this app's signing key before they install.">
         <Switch
           fallback={
@@ -70,7 +90,7 @@ export function UpdateSettings() {
           <Match when={when('ready')}>
             {(r) => (
               <>
-                <span>Version {named(r())} is downloaded and verified.</span>
+                <span>Version {named(r())} is downloaded and verified.{installsWhen()}</span>
                 <button class="btn primary" title="Stops the proxy, installs the update and reopens the app" onClick={() => void window.api.installUpdate()}>
                   Restart and install
                 </button>

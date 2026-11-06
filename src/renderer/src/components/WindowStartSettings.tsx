@@ -2,9 +2,9 @@ import { createResource, For, Show } from 'solid-js';
 import { cheapestModel } from '@shared/modelPrices';
 import type { AppSettings } from '@shared/settings';
 import { providerLabel } from '@shared/trayValues';
-import { minuteToTime, timeToMinute, WINDOW_START_PROVIDERS, WINDOW_START_REQUEST, type WindowStartProvider } from '@shared/windowStartSettings';
+import { WINDOW_START_PROVIDERS, WINDOW_START_REQUEST, type WindowStartProvider } from '@shared/windowStartSettings';
 import { settings, snapshot, updateSettings } from '../store';
-import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
+import { Seg, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
 
 const set = (fn: (d: AppSettings) => void) => void updateSettings(fn);
 
@@ -33,19 +33,6 @@ function ModelPicker(props: { provider: WindowStartProvider }) {
   );
 }
 
-function TimeField(props: { value: number; onCommit: (minute: number) => void }) {
-  return (
-    <input
-      class="input tabular"
-      type="time"
-      value={minuteToTime(props.value)}
-      onChange={(e) => {
-        const minute = timeToMinute(e.currentTarget.value);
-        if (minute !== null) props.onCommit(minute);
-      }}
-    />
-  );
-}
 
 /** Settings → Rolling windows: start each account's 5-hour window as soon as it resets. */
 export function WindowStartSettings() {

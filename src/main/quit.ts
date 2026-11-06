@@ -24,8 +24,12 @@ export async function requestQuit({ relaunch = false } = {}): Promise<void> {
     if (r.response !== CONFIRM_BUTTON) return;
   }
   if (relaunch) {
-    // Electron starts the new instance once this one has exited, after the proxy stops (before-quit).
-    if (app.isPackaged) app.relaunch(process.platform === 'linux' && process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {});
+    // Restart after the proxy stops (before-quit), letting the toolkit finish a staged update first.
+    if (app.isPackaged) {
+      const { installsOnQuit, updates } = await import('./updater');
+      if (installsOnQuit() && updates.status().state === 'ready') updates.installOnQuit(true);
+      else app.relaunch(process.platform === 'linux' && process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {});
+    }
     else relaunchDev();
   }
   app.quit();

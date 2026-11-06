@@ -1,4 +1,5 @@
 import './identity';
+import { spillwayNotice } from '@shared/notice';
 import { app, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
 import { APP_ID, APP_NAME } from '@shared/app';
@@ -30,8 +31,7 @@ async function startNormalApp(): Promise<void> {
   const { usage } = await import('./usagePoller');
   const { windowStarter } = await import('./windowStarter');
   const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, showWindowAndSend, syncWindowBackground } = await import('./window');
-  const { notify } = await import('./notifier');
-  const { noticeOverlay } = await import('./noticeOverlay');
+  const { notify, noticeOverlay, startNotices } = await import('./notifier');
 
   const isMac = process.platform === 'darwin';
 
@@ -79,7 +79,7 @@ async function startNormalApp(): Promise<void> {
       usage.stop();
       archiveSync.stop();
       if (getSettings().notifications.proxyCrashed) {
-        notify({ kind: 'proxyStopped', target: 'proxy', title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, short: 'Proxy stopped' });
+        notify(spillwayNotice('proxyStopped', { target: 'proxy', title: 'Proxy stopped unexpectedly', body: `Exit code ${code ?? 'unknown'}`, short: 'Proxy stopped' }));
       }
     });
     updates.on('status', (s) => send(EVENTS.onUpdateStatus, s));
@@ -92,7 +92,7 @@ async function startNormalApp(): Promise<void> {
         scheduled: `${APP_NAME} ${version} is downloading and installs at ${time}.`,
         restart: `${APP_NAME} ${version} is downloading and installs the next time ${APP_NAME} quits.`,
       };
-      notify({ kind: 'updateFound', target: 'updates', title: 'Update available', body: bodies[autoInstall], short: `${APP_NAME} ${version}` });
+      notify(spillwayNotice('updateFound', { target: 'updates', title: 'Update available', body: bodies[autoInstall], short: `${APP_NAME} ${version}` }));
     });
     onSettingsChange((next, prev) => {
       // The renderer saves whole settings objects, so it must see changes made here (tray account choice).
@@ -141,7 +141,7 @@ async function startNormalApp(): Promise<void> {
       createMainWindow(!hidden);
       windowCreated = true;
       startClientDrift();
-      noticeOverlay.start();
+      startNotices();
       startUpdateInstaller();
       updates.setAutoCheck(getSettings().updates.autoCheck);
       if (getSettings().proxy.autoStart) await proxy.start();

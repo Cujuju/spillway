@@ -169,6 +169,9 @@ importers:
 
   .:
     dependencies:
+      '@cujuju/electron-notices':
+        specifier: link:../solidjs-toolkit/packages/electron-notices
+        version: link:../solidjs-toolkit/packages/electron-notices
       '@cujuju/electron-updates':
         specifier: link:../solidjs-toolkit/packages/electron-updates
         version: link:../solidjs-toolkit/packages/electron-updates

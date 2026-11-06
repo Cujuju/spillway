@@ -1,48 +1,30 @@
-/** Spillway notifications: one shape for the OS notification and the overlay window (settings.notifications.delivery). */
+import type { NoticeInput, NoticeTone, NoticeView } from '@cujuju/electron-notices';
+import type { AppSettings } from './settings';
+import { darkTheme, resolveTheme, type Palette } from './themes';
 
-export type NoticeKind = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyStopped' | 'updateFound' | 'clientDrift';
-/** What clicking a notice opens. */
-export const NOTICE_TARGETS = ['window', 'proxy', 'updates'] as const;
-export type NoticeTarget = (typeof NOTICE_TARGETS)[number];
-export type NoticeTone = 'warn' | 'ok' | 'info' | 'error';
-
-/** Where notifications show. */
-export const NOTICE_DELIVERIES = ['spillway', 'system', 'both'] as const;
-export type NoticeDelivery = (typeof NOTICE_DELIVERIES)[number];
-/** Overlay looks: cards by the tray, a lip at the top edge, or log lines. */
-export const NOTICE_STYLES = ['tray', 'drip', 'console'] as const;
-export type NoticeStyle = (typeof NOTICE_STYLES)[number];
-
-export const MIN_CONSOLE_LINES = 2;
-export const MAX_CONSOLE_LINES = 8;
-
-export interface NoticeInput {
-  kind: NoticeKind;
-  /** OS title; overlay headline. */
-  title: string;
-  /** OS body; overlay detail. May be empty. */
-  body: string;
-  /** Top drip's resting lip; a few words. */
-  short: string;
-  target: NoticeTarget;
-}
-
-export interface Notice extends NoticeInput {
-  id: number;
-  /** Epoch ms. */
-  at: number;
-}
-
-export const NOTICE_TONE: Record<NoticeKind, NoticeTone> = {
-  limitHit: 'warn',
-  limitReset: 'ok',
-  accountSwitched: 'info',
-  proxyStopped: 'error',
-  updateFound: 'info',
-  clientDrift: 'warn',
+export type SpillwayNoticeKind = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyStopped' | 'updateFound' | 'clientDrift';
+export type SpillwayNoticeTarget = 'window' | 'proxy' | 'updates';
+export const NOTICE_KINDS: Record<SpillwayNoticeKind, { tone: NoticeTone; tag: string }> = {
+  limitHit: { tone: 'warn', tag: 'LIMIT' },
+  limitReset: { tone: 'ok', tag: 'RESET' },
+  accountSwitched: { tone: 'info', tag: 'SWITCH' },
+  proxyStopped: { tone: 'error', tag: 'PROXY' },
+  updateFound: { tone: 'info', tag: 'UPDATE' },
+  clientDrift: { tone: 'warn', tag: 'DRIFT' },
 };
-
-/** Errors stay on screen until clicked or dismissed. */
-export const isSticky = (n: NoticeInput): boolean => NOTICE_TONE[n.kind] === 'error';
-
-export const deliversTo = (d: NoticeDelivery): { system: boolean; overlay: boolean } => ({ system: d !== 'spillway', overlay: d !== 'system' });
+export function spillwayNotice(kind: SpillwayNoticeKind, input: { title: string; body?: string; short?: string; target?: SpillwayNoticeTarget }): NoticeInput {
+  return { ...input, ...NOTICE_KINDS[kind], icon: kind };
+}
+const vars = (p: Palette): Record<string, string> => ({
+  '--notice-surface': p.raised, '--notice-sunken': p.sunken, '--notice-hover': p.hover,
+  '--notice-text': p.text, '--notice-text-secondary': p.secondary,
+  '--notice-border': p.border, '--notice-border-strong': p.borderStrong,
+  '--notice-accent': p.accentLight, '--notice-info': p.accentLight,
+  '--notice-ok': p.green, '--notice-warn': p.amber, '--notice-error': p.red,
+});
+export function noticeView(settings: AppSettings, prefersDark: boolean): NoticeView {
+  const theme = resolveTheme(settings.general.theme, prefersDark);
+  const { delivery, style, dripLip, consoleLines } = settings.notifications;
+  return { config: { delivery, style, dripLip, consoleLines },
+    appearance: { vars: vars(theme.palette), dripVars: vars(darkTheme(theme).palette), colorScheme: theme.scheme } };
+}

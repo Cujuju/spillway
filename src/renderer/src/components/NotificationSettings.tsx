@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { deliversTo, MAX_CONSOLE_LINES, MIN_CONSOLE_LINES, type NoticeDelivery, type NoticeStyle } from '@shared/notice';
+import { deliversTo, MAX_CONSOLE_LINES, MIN_CONSOLE_LINES, type NoticeDelivery, type NoticeStyle } from '@cujuju/electron-notices';
 import type { AppSettings } from '@shared/settings';
 import { TRAY_NAME } from '../lib/platform';
 import { settings, updateSettings } from '../store';
@@ -9,7 +9,7 @@ type Notifications = AppSettings['notifications'];
 type EventKey = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyCrashed';
 
 const DELIVERIES: readonly { value: NoticeDelivery; label: string; help: string }[] = [
-  { value: 'spillway', label: 'Spillway', help: 'Spillway’s own notifications, on top of other apps.' },
+  { value: 'overlay', label: 'Spillway', help: 'Spillway’s own notifications, on top of other apps.' },
   { value: 'system', label: 'System', help: 'Your system’s notifications.' },
   { value: 'both', label: 'Both', help: 'Spillway’s and the system’s.' },
 ];

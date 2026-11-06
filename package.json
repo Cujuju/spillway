@@ -43,6 +43,7 @@
     "node": "^24.0.0"
   },
   "dependencies": {
+    "@cujuju/electron-notices": "link:../solidjs-toolkit/packages/electron-notices",
     "@cujuju/electron-updates": "link:../solidjs-toolkit/packages/electron-updates",
     "@cujuju/solidjs-color-picker": "0.3.0",
     "@cujuju/solidjs-hold-action": "link:../solidjs-toolkit/packages/hold-action",

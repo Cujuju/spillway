@@ -32,7 +32,7 @@ export default defineConfig(({ command }) => {
   return {
     main: {
       // Bundled: a linked package isn't in the packaged app's node_modules.
-      plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates'] }), bundledLicenses('main')],
+      plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-updates', '@cujuju/electron-notices'] }), bundledLicenses('main')],
       resolve: { alias: { '@shared': resolve('src/shared') } },
       define: {
         ...devDefine,
@@ -43,7 +43,7 @@ export default defineConfig(({ command }) => {
       },
     },
     preload: {
-      plugins: [externalizeDepsPlugin(), bundledLicenses('preload')],
+      plugins: [externalizeDepsPlugin({ exclude: ['@cujuju/electron-notices'] }), bundledLicenses('preload')],
       resolve: { alias: { '@shared': resolve('src/shared') } },
       define: devDefine,
       build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } },

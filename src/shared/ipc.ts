@@ -8,7 +8,6 @@ import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList,
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
-import type { Notice, NoticeTarget } from './notice';
 import type { AppSettings } from './settings';
 import type {
   ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
@@ -150,12 +149,6 @@ export interface DesktopApi {
   openPath(which: 'data' | 'config' | 'auths' | 'logs' | 'userConfig'): Promise<void>;
   copyText(text: string): Promise<void>;
 
-  /** Notification overlay: its content size (0 hides the window). */
-  noticeResize(width: number, height: number): Promise<void>;
-  /** Opens what a clicked notice points at. */
-  noticeOpen(target: NoticeTarget): Promise<void>;
-  /** Whether the pointer is over a notice; elsewhere clicks pass through the overlay. */
-  noticePointer(over: boolean): Promise<void>;
   /** Shows a sample notice through the chosen delivery. */
   noticePreview(): Promise<void>;
 
@@ -179,8 +172,6 @@ export interface DesktopApi {
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
   onTaskbarDark(cb: (dark: boolean) => void): () => void;
-  /** Notification overlay only. */
-  onNotice(cb: (n: Notice) => void): () => void;
 }
 
 /** invoke channels: name → method on DesktopApi. */
@@ -255,9 +246,6 @@ export const INVOKE = {
   openExternal: 'shell:external',
   openPath: 'shell:path',
   copyText: 'clipboard:copy',
-  noticeResize: 'notice:resize',
-  noticeOpen: 'notice:open',
-  noticePointer: 'notice:pointer',
   noticePreview: 'notice:preview',
   managementLockouts: 'mgmt:lockouts',
   resetManagementLockouts: 'mgmt:lockouts-reset',
@@ -285,5 +273,4 @@ export const EVENTS = {
   onActivityReset: 'activity:reset',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',
-  onNotice: 'notice:show',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

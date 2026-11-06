@@ -1,8 +1,6 @@
 import { render } from 'solid-js/web';
-import '../styles/tokens.css';
-import './notice.css';
-import { NoticeApp } from './NoticeApp';
+import '@cujuju/electron-notices/styles.css';
+import { NoticeOverlay } from '@cujuju/electron-notices/renderer';
+import { NOTICE_ICONS } from './icons';
 
-document.documentElement.dataset.platform = window.api.platform;
-
-render(() => <NoticeApp />, document.getElementById('root')!);
+render(() => <NoticeOverlay bridge={window.notices} icons={NOTICE_ICONS} label="spillway" />, document.getElementById('root')!);

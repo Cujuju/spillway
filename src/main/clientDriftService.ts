@@ -1,3 +1,4 @@
+import { spillwayNotice } from '@shared/notice';
 import { app } from 'electron';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
@@ -44,8 +45,8 @@ export function startClientDrift(): void {
     changed: () => mainWindow()?.webContents.send(EVENTS.onClientSetupChanged),
     warn: (id) => {
       const name = id === 'managed-policy' ? 'Claude Code managed policy' : id === 'claude' ? 'Claude Code' : 'Codex';
-      notify({ kind: 'clientDrift', target: 'proxy', title: 'Client proxy settings changed',
-        body: `${name} is no longer configured for the current Spillway proxy. Open Proxy to review.`, short: `${name} changed` });
+      notify(spillwayNotice('clientDrift', { target: 'proxy', title: 'Client proxy settings changed',
+        body: `${name} is no longer configured for the current Spillway proxy. Open Proxy to review.`, short: `${name} changed` }));
     },
   });
   monitor.start();

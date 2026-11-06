@@ -1,3 +1,4 @@
+import { createNoticeBridge } from '@cujuju/electron-notices';
 import { contextBridge, ipcRenderer } from 'electron';
 import { EVENTS, INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import { unwrapRemoteError } from '@shared/ipcError';
@@ -20,3 +21,5 @@ for (const [method, channel] of Object.entries(EVENTS)) {
 }
 
 contextBridge.exposeInMainWorld('api', api as unknown as DesktopApi);
+
+contextBridge.exposeInMainWorld('notices', createNoticeBridge(ipcRenderer));

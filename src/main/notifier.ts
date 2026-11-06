@@ -1,36 +1,53 @@
-import { Notification } from 'electron';
+import { BrowserWindow, ipcMain, nativeTheme, Notification, screen } from 'electron';
+import { createNoticeOverlay, createNotifier, handleNoticeIpc, OVERLAY_WINDOW_OPTIONS, type NoticeInput } from '@cujuju/electron-notices';
+import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
-import { deliversTo, type NoticeInput, type NoticeTarget } from '@shared/notice';
-import { noticeOverlay } from './noticeOverlay';
+import { noticeView, spillwayNotice } from '@shared/notice';
 import { appIconPath } from './paths';
-import { getSettings } from './settingsStore';
-import { showMainWindow, showWindowAndSend } from './window';
+import { getSettings, onSettingsChange } from './settingsStore';
+import { loadRendererPage, rendererPreferences, showMainWindow, showWindowAndSend } from './window';
 
-let nextId = 1;
-
-export function openNoticeTarget(target: NoticeTarget): void {
+export const noticeOverlay = createNoticeOverlay({
+  createWindow() {
+    const w = new BrowserWindow({ ...OVERLAY_WINDOW_OPTIONS, title: `${APP_NAME} notifications`, webPreferences: rendererPreferences });
+    loadRendererPage(w, 'notice.html');
+    return w;
+  },
+  primaryDisplay: () => screen.getPrimaryDisplay(),
+  view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors),
+  platform: process.platform,
+});
+export function openNoticeTarget(target: string | undefined): void {
   if (target === 'proxy') showWindowAndSend(EVENTS.onOpenProxy);
   else if (target === 'updates') showWindowAndSend(EVENTS.onOpenSettings, 'updates');
   else showMainWindow();
 }
-
-/** Every Spillway notification goes through here, so the delivery setting covers all of them. */
-export function notify(input: NoticeInput): void {
-  const to = deliversTo(getSettings().notifications.delivery);
-  if (to.system && Notification.isSupported()) {
+const notifier = createNotifier({
+  overlay: noticeOverlay,
+  delivery: () => getSettings().notifications.delivery,
+  system(input) {
+    if (!Notification.isSupported()) return;
     const n = new Notification({ title: input.title, body: input.body, icon: appIconPath() });
     n.on('click', () => openNoticeTarget(input.target));
     n.show();
-  }
-  if (to.overlay) noticeOverlay.show({ ...input, id: nextId++, at: Date.now() });
+  },
+});
+export function notify(input: NoticeInput): void { notifier.notify(input); }
+export function startNotices(): void {
+  handleNoticeIpc(ipcMain, noticeOverlay, openNoticeTarget);
+  noticeOverlay.refresh();
+  onSettingsChange(noticeOverlay.refresh);
+  nativeTheme.on('updated', noticeOverlay.refresh);
+  screen.on('display-metrics-changed', noticeOverlay.refresh);
+  screen.on('display-added', noticeOverlay.refresh);
+  screen.on('display-removed', noticeOverlay.refresh);
 }
 
-/** Settings → Notifications → Preview: one of each tone in turn, through the chosen delivery. */
 const PREVIEWS: NoticeInput[] = [
-  { kind: 'limitHit', target: 'window', title: 'Preview: 5-hour limit reached', body: 'Switching to the next account.', short: 'Preview: limit reached' },
-  { kind: 'accountSwitched', target: 'window', title: 'Preview: now using another account', body: 'New conversations go to the next account.', short: 'Preview: switched' },
-  { kind: 'limitReset', target: 'window', title: 'Preview: limit reset', body: 'The account is available again.', short: 'Preview: limit reset' },
-  { kind: 'proxyStopped', target: 'proxy', title: 'Preview: proxy stopped', body: 'Errors stay until you click or dismiss them.', short: 'Preview: proxy stopped' },
+  spillwayNotice('limitHit', { target: 'window', title: 'Preview: 5-hour limit reached', body: 'Switching to the next account.', short: 'Preview: limit reached' }),
+  spillwayNotice('accountSwitched', { target: 'window', title: 'Preview: now using another account', body: 'New conversations go to the next account.', short: 'Preview: switched' }),
+  spillwayNotice('limitReset', { target: 'window', title: 'Preview: limit reset', body: 'The account is available again.', short: 'Preview: limit reset' }),
+  spillwayNotice('proxyStopped', { target: 'proxy', title: 'Preview: proxy stopped', body: 'Errors stay until you click or dismiss them.', short: 'Preview: proxy stopped' }),
 ];
 let previewIndex = 0;
 

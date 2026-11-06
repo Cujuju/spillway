@@ -1,5 +1,6 @@
+import { spillwayNotice } from '@shared/notice';
 import { EventEmitter } from 'node:events';
-import type { NoticeInput } from '@shared/notice';
+import type { NoticeInput } from '@cujuju/electron-notices';
 import { maskEmails } from '@shared/privacy';
 import { resetText } from '@shared/resetTime';
 import type { ResetCreditOutcome, UsageSnapshot } from '@shared/types';
@@ -19,16 +20,16 @@ export function usageNotice(event: UsageEvent): NoticeInput | null {
   // Notifications show on screen, so they honour "Show emails" like the window does.
   const name = (c: { label: string }) => (dashboard.showEmails ? c.label : maskEmails(c.label));
   if (event.kind === 'limitHit' && n.limitHit) {
-    return { kind: 'limitHit', target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reached`,
-      body: event.resetsAt ? resetText(event.resetsAt, Date.now()) : 'Switching to the next account.', short: `${event.windowLabel} limit reached` };
+    return spillwayNotice('limitHit', { target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reached`,
+      body: event.resetsAt ? resetText(event.resetsAt, Date.now()) : 'Switching to the next account.', short: `${event.windowLabel} limit reached` });
   }
   if (event.kind === 'limitReset' && n.limitReset) {
-    return { kind: 'limitReset', target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reset`,
-      body: 'The account is available again.', short: `${event.windowLabel} limit reset` };
+    return spillwayNotice('limitReset', { target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reset`,
+      body: 'The account is available again.', short: `${event.windowLabel} limit reset` });
   }
   if (event.kind === 'accountSwitched' && n.accountSwitched) {
-    return { kind: 'accountSwitched', target: 'window', title: `${event.provider}: now using ${name(event.to)}`,
-      body: event.from ? `Previously ${name(event.from)}.` : '', short: `${event.provider} → ${name(event.to)}` };
+    return spillwayNotice('accountSwitched', { target: 'window', title: `${event.provider}: now using ${name(event.to)}`,
+      body: event.from ? `Previously ${name(event.from)}.` : '', short: `${event.provider} → ${name(event.to)}` });
   }
   return null;
 }

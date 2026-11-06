@@ -3,13 +3,17 @@ import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { archiveCursor, type ArchiveEntry, type ArchiveQuery, type CaptureState } from '@shared/archive';
-import { EXPORT_MAX_RECORD_BYTES, EXPORT_MAX_RECORDS, EXPORT_MAX_SNAPSHOT_BYTES, EXPORT_PREVIEW_TTL_MS, PORTABLE_ARCHIVE_FORMAT, type ArchiveExportJob, type ArchiveExportOptions, type PortableAttempt, type PortableCapture, type PortablePayloadData, type PortableTrailer } from '@shared/archiveExport';
+import { DEFAULT_EXPORT_LIMITS, EXPORT_PREVIEW_TTL_MS, type ExportLimits, PORTABLE_ARCHIVE_FORMAT, type ArchiveExportJob, type ArchiveExportOptions, type PortableAttempt, type PortableCapture, type PortablePayloadData, type PortableTrailer } from '@shared/archiveExport';
 import type { Db } from './activityDb';
 import type { ArchiveStore } from './archiveStore';
 import { normalizeTransport } from '@shared/activityTransport';
 
 const STATES: CaptureState[] = ['unknown', 'missing', 'pending', 'partial', 'complete', 'expired'];
 const SNAPSHOT = 'portable_export_snapshot';
+const MIB = 1024 * 1024;
+/** Snapshot room for entry metadata and attempt links beyond the archive's body budget. */
+const METADATA_ALLOWANCE_BYTES = 16 * MIB;
+const mib = (bytes: number): string => `${bytes / MIB} MiB`;
 const text = (v: unknown, max = 8192): v is string => typeof v === 'string' && v.length <= max;
 const date = (v: unknown): v is string => text(v, 64) && Number.isFinite(Date.parse(v));
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -94,7 +98,7 @@ export class ArchiveExporter {
   private canceled = false;
   private initialized = false;
   cleanupWarning: string | null = null;
-  constructor(private db: Db, private archive: ArchiveStore) {
+  constructor(private db: Db, private archive: ArchiveStore, private limits: ExportLimits = DEFAULT_EXPORT_LIMITS) {
     this.initialize();
   }
   private initialize(): void {
@@ -139,7 +143,8 @@ export class ArchiveExporter {
     const states = Object.fromEntries(STATES.map((s) => [s, 0])) as Record<CaptureState, number>;
     const wanted = selection.ids ? new Set(selection.ids) : null, found = new Set<string>();
     let count = 0, bytes = 0;
-    const limit = Math.min(EXPORT_MAX_SNAPSHOT_BYTES, status.policy.maxBytes + 16 * 1024 * 1024);
+    const { recordBytes, snapshotBytes, records } = this.limits;
+    const limit = Math.min(snapshotBytes, status.policy.maxBytes + METADATA_ALLOWANCE_BYTES);
     this.db.transaction(() => {
       let before: string | undefined;
       for (;;) {
@@ -154,8 +159,8 @@ export class ArchiveExporter {
           const body = selection.includeRecordedBodies && e.bytes > 0;
           const size = (this.db.prepare('SELECT length(CAST(detail AS BLOB)) AS n FROM archive_entries WHERE id=?').get(e.id) as { n: number }).n;
           const added = Buffer.byteLength(meta) + Buffer.byteLength(joined) + (body ? size : 2);
-          if (body && size > EXPORT_MAX_RECORD_BYTES || added > EXPORT_MAX_RECORD_BYTES) throw new Error('Archived record exceeds the 32 MiB export limit');
-          if (++count > EXPORT_MAX_RECORDS || bytes + added > limit) throw new Error('Export snapshot limit reached (up to 128 MiB / 20,000 records). Select a smaller date range or omit bodies.');
+          if (body && size > recordBytes || added > recordBytes) throw new Error(`Archived record exceeds the ${mib(recordBytes)} export limit`);
+          if (++count > records || bytes + added > limit) throw new Error(`Export snapshot limit reached (up to ${mib(snapshotBytes)} / ${records.toLocaleString('en-US')} records). Select a smaller date range or omit bodies.`);
           bytes += added; states[e.state]++; found.add(e.id);
           this.db.prepare(`INSERT INTO ${SNAPSHOT} SELECT ?,?,CASE WHEN ? THEN detail ELSE '{}' END,? FROM archive_entries WHERE id=?`).run(count, meta, body ? 1 : 0, joined, e.id);
         }
@@ -221,7 +226,7 @@ export class ArchiveExporter {
     const check = () => { if (this.canceled || Date.now() >= Date.parse(job.manifest.expiresAt)) throw new Error('Export canceled or expired'); };
     const emit = async (value: unknown, digest = true) => {
       const line = Buffer.from(`${JSON.stringify(value)}\n`, 'utf8');
-      if (line.length > EXPORT_MAX_RECORD_BYTES) throw new Error('Encoded export record exceeds 32 MiB');
+      if (line.length > this.limits.recordBytes) throw new Error(`Encoded export record exceeds ${mib(this.limits.recordBytes)}`);
       for (let offset = 0; offset < line.length;) {
         check(); const { bytesWritten } = await file!.write(line, offset, Math.min(64 * 1024, line.length - offset));
         if (!bytesWritten) throw new Error('Export disk write made no progress');

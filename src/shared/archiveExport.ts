@@ -6,6 +6,8 @@ export const PORTABLE_ARCHIVE_VERSION = 1;
 export const EXPORT_MAX_RECORD_BYTES = 32 * 1024 * 1024;
 export const EXPORT_MAX_SNAPSHOT_BYTES = 128 * 1024 * 1024;
 export const EXPORT_MAX_RECORDS = 20_000;
+export interface ExportLimits { recordBytes: number; snapshotBytes: number; records: number }
+export const DEFAULT_EXPORT_LIMITS: ExportLimits = { recordBytes: EXPORT_MAX_RECORD_BYTES, snapshotBytes: EXPORT_MAX_SNAPSHOT_BYTES, records: EXPORT_MAX_RECORDS };
 export const EXPORT_PREVIEW_TTL_MS = 15 * 60_000;
 
 export interface ArchiveExportOptions {

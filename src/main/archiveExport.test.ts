@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
-import { EXPORT_MAX_RECORD_BYTES, EXPORT_PREVIEW_TTL_MS, type ArchiveExportJob, type PortableCapture, type PortableManifest, type PortableTrailer } from '@shared/archiveExport';
+import { DEFAULT_EXPORT_LIMITS, EXPORT_MAX_RECORD_BYTES, EXPORT_PREVIEW_TTL_MS, type ArchiveExportJob, type ExportLimits, type PortableCapture, type PortableManifest, type PortableTrailer } from '@shared/archiveExport';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { ArchiveExporter, normalizeExportOptions } from './archiveExport';
@@ -28,11 +28,14 @@ afterEach(async () => {
   for (const db of dbs.splice(0)) if (db.open) db.close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
-function setup() {
+const MIB = 1024 * 1024;
+/** Production limits scaled down so budget tests stay fast; the snapshot cap sits below the record cap, as production's does once the policy's body budget is small. */
+const SMALL_LIMITS: ExportLimits = { ...DEFAULT_EXPORT_LIMITS, recordBytes: 2 * MIB, snapshotBytes: MIB };
+function setup(limits = DEFAULT_EXPORT_LIMITS) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-portable-')); dirs.push(dir);
   const file = path.join(dir, 'activity.db'), db = openActivityDb(file, 'ab'.repeat(32)); dbs.push(db);
   const store = new ArchiveStore(db); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
-  const exporter = new ArchiveExporter(db, store); exporters.push(exporter);
+  const exporter = new ArchiveExporter(db, store, limits); exporters.push(exporter);
   return { dir, file, db, store, exporter };
 }
 function fixture(sequence = 1, extra: Partial<CaptureRecord> = {}): CaptureRecord {
@@ -176,11 +179,11 @@ it('cleans stale encrypted snapshots and owned incomplete files on worker restar
 });
 
 it('enforces snapshot and record budgets atomically, and streams large escaped records above 64 KiB', async () => {
-  const { store, exporter, db, dir } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 }); ingest(store, [fixture()]);
-  db.prepare('UPDATE archive_entries SET detail=?').run('x'.repeat(18 * 1024 * 1024));
+  const { store, exporter, db, dir } = setup(SMALL_LIMITS); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: MIB }); ingest(store, [fixture()]);
+  db.prepare('UPDATE archive_entries SET detail=?').run('x'.repeat((SMALL_LIMITS.snapshotBytes + SMALL_LIMITS.recordBytes) / 2));
   expect(() => exporter.prepare({ includeRecordedBodies: true })).toThrow('snapshot limit'); expect(snapshotCount(db)).toBe(0);
-  db.prepare('UPDATE archive_entries SET detail=?').run('x'.repeat(EXPORT_MAX_RECORD_BYTES + 1));
-  expect(() => exporter.prepare({ includeRecordedBodies: true })).toThrow('32 MiB'); expect(snapshotCount(db)).toBe(0);
+  db.prepare('UPDATE archive_entries SET detail=?').run('x'.repeat(SMALL_LIMITS.recordBytes + 1));
+  expect(() => exporter.prepare({ includeRecordedBodies: true })).toThrow('exceeds the 2 MiB export limit'); expect(snapshotCount(db)).toBe(0);
   expect(exporter.prepare({}).manifest.records).toBe(1);
   ingest(store, [fixture(2, { traceId: 'full-trace-1', request: '\n東京'.repeat(60_000) })]);
   const file = path.join(dir, 'large.jsonl'); expect(await finish(exporter, exporter.prepare({ includeRecordedBodies: true }), file)).toMatchObject({ state: 'complete' });

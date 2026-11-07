@@ -5,7 +5,7 @@ import { promptTokens } from '@shared/modelPrices';
 import type { TraceAttempt } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { compactNumber, dateTime, msDuration } from '../lib/format';
-import { attemptStatus, CAPTURE_LABEL, costText } from '../lib/traceFormat';
+import { attemptStatus, CAPTURE_LABEL, costText, SESSION_KIND_LABEL } from '../lib/traceFormat';
 import { HoverTip, type TipRow } from './ChartTip';
 import { ProviderGlyph } from './ui';
 
@@ -22,6 +22,7 @@ function identityRows(a: TraceAttempt, account: string, movedFrom: string | null
     { label: 'Attempt', value: shownText(a.requestId) },
     { label: 'Selection', value: or(a.selectionId) },
     { label: 'Trace', value: or(a.traceId) },
+    { label: 'Session kind', value: a.sessionKind ? SESSION_KIND_LABEL[a.sessionKind] : '—' },
     { label: 'Parent session', value: or(a.parentSessionId) },
     { label: 'Capture', value: CAPTURE_LABEL[a.captureState] },
     ...transportRows(a),

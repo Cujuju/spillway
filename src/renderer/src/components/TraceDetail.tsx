@@ -4,7 +4,7 @@ import type { TraceAttempt, TraceNode } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { compactNumber, dateTime } from '../lib/format';
 import { conversationLabel } from '../lib/conversationNames';
-import { costText, KIND_BADGE, meanText, modelLabel, nodeLabel } from '../lib/traceFormat';
+import { costText, KIND_BADGE, meanText, modelLabel, nodeLabel, ORIGIN_BADGE, PARENT_LINK } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
 import { TraceAttempts } from './TraceAttempts';
 import { CopyButton } from './ui';
@@ -52,6 +52,7 @@ export function TraceDetail(props: {
       <div class="panel-head">
         <h2 class="card-title trace-title">{shownText(nodeLabel(props.n))}</h2>
         <span class={`badge ${kind().tone}`}>{kind().label}</span>
+        <Show when={props.n.sessionKind && ORIGIN_BADGE[props.n.sessionKind]}>{(o) => <span class={`badge ${o().tone}`}>{o().label}</span>}</Show>
         <InfoTip title="Own usage" note={OWN_USAGE_NOTE} />
         <div class="panel-head-end">
           <Show when={props.n.sessionId}>{(id) => <>
@@ -67,10 +68,10 @@ export function TraceDetail(props: {
         <div class="kv"><dt>Models</dt><dd class="tag-row"><For each={props.n.models} fallback={<span class="muted">—</span>}>{(m) => <span class="badge">{shownText(modelLabel(m))}</span>}</For></dd></div>
         <div class="kv"><dt>Effort</dt><dd class="tag-row"><For each={props.n.efforts} fallback={<span class="muted">—</span>}>{(e) => <span class="badge">{e}</span>}</For></dd></div>
         <div class="kv"><dt>Parent</dt><dd class="tag-row">
-          <For each={props.n.parents} fallback={<span class="muted">None recorded</span>}>{(p) => (
+          <For each={props.n.parents} fallback={<span class="muted">{props.n.sessionKind === 'root' ? 'Root session' : 'None recorded'}</span>}>{(p) => (
             <HoverTip title="Parent" rows={[
               { label: 'Session', value: shownText(p.sessionId) },
-              { label: 'Link', value: p.kind === 'subagent' ? 'Subagent' : 'Unclassified' },
+              { label: 'Link', value: PARENT_LINK[p.kind] },
               { label: 'In range', value: p.observed ? 'Yes' : 'No' },
               ...(p.cycle ? [{ label: 'Cycle', value: 'Yes' }] : []),
             ]} layout="contents">

@@ -1,5 +1,6 @@
 import type { CaptureState } from '@shared/archive';
-import type { TraceAttempt, TraceNode } from '@shared/sessionTrace';
+import type { TraceAttempt, TraceNode, TraceParent } from '@shared/sessionTrace';
+import type { SessionKind } from '@shared/types';
 import { conversationLabel } from './conversationNames';
 import { msDuration, usd } from './format';
 
@@ -30,6 +31,26 @@ export const KIND_BADGE: Record<TraceNode['kind'], { label: string; tone: Tone }
   session: { label: 'Session', tone: '' },
   subagent: { label: 'Subagent', tone: 'accent' },
   unassigned: { label: 'No session', tone: 'amber' },
+};
+
+/** How a session began, where the kind badge and parent row don't already say it. */
+export const ORIGIN_BADGE: Partial<Record<SessionKind, { label: string; tone: Tone }>> = {
+  fork: { label: 'Fork', tone: '' },
+  compaction: { label: 'Compaction', tone: '' },
+};
+
+export const PARENT_LINK: Record<TraceParent['kind'], string> = {
+  subagent: 'Subagent',
+  fork: 'Fork',
+  compaction: 'Compaction',
+  unknown: 'Unclassified',
+};
+
+export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  root: 'Root',
+  subagent: 'Subagent',
+  fork: 'Fork',
+  compaction: 'Compaction',
 };
 
 /** Average of measured samples; null when none. */

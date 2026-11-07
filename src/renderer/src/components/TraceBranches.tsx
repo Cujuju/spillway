@@ -3,7 +3,7 @@ import { For, Show } from 'solid-js';
 import type { TraceCoverage, TraceNode } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { compactNumber, dateTime } from '../lib/format';
-import { costText, KIND_BADGE, nodeLabel } from '../lib/traceFormat';
+import { costText, KIND_BADGE, nodeLabel, ORIGIN_BADGE } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
 
 const EVIDENCE_NOTE = 'Parents come only from proxy parent-session metadata; subagents carry a claude:/codex: …:agent: ID. Retention removes old attempts: archived links keep session, effort, transport and account; tokens and cost come from the matching usage record while it lasts. Pages are a live read; refresh after new traffic. Range: up to 90 days, 7 by default.';
@@ -44,6 +44,7 @@ export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNod
               </span>
               <span class="trace-node-meta">
                 <Show when={n.kind !== 'session'}><span class={`badge compact ${KIND_BADGE[n.kind].tone}`}>{KIND_BADGE[n.kind].label}</span></Show>
+                <Show when={n.sessionKind && ORIGIN_BADGE[n.sessionKind]}>{(o) => <span class={`badge compact ${o().tone}`}>{o().label}</span>}</Show>
                 <Show when={n.metrics.failed}><span class="badge compact red">{n.metrics.failed} failed</span></Show>
                 <Show when={n.conflictingParents || n.parents.some((p) => p.cycle)}>
                   <HoverTip title="Parent links" rows={[{ label: 'Issue', value: n.conflictingParents ? 'Conflicting parents' : 'Cycle' }]} note="No single ancestry is chosen.">

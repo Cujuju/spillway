@@ -20,7 +20,7 @@ import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
 import { activityBuckets, now, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Totals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'archive', label: 'Archive' }, { value: 'traces', label: 'Traces' }, { value: 'totals', label: 'Totals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 /** Default custom span: the last 30 days. */
 const DEFAULT_CUSTOM_DAYS = 30;

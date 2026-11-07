@@ -66,21 +66,6 @@
   --filter-date-width: 150px;
   width: var(--filter-date-width);
 }
-.filter-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-3);
-}
-.filter-foot:empty {
-  display: none;
-}
-.filter-foot .chip-value {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .filter-coverage {
   display: inline-flex;
   align-items: center;

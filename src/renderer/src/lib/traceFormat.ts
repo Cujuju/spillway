@@ -80,3 +80,11 @@ export const CAPTURE_LABEL: Record<CaptureState, string> = {
   expired: 'Expired',
   unknown: 'Not retained',
 };
+
+/** Where an attempt's captured exchange opens: a side panel over the session card, or under its row. */
+export const EXCHANGE_LAYOUTS = ['panel', 'inline'] as const;
+export type ExchangeLayout = (typeof EXCHANGE_LAYOUTS)[number];
+export const EXCHANGE_LAYOUT_OPTIONS: readonly { value: ExchangeLayout; label: string; title: string }[] = [
+  { value: 'panel', label: 'Panel', title: 'Open exchanges in a side panel' },
+  { value: 'inline', label: 'Inline', title: 'Open exchanges under their row' },
+];

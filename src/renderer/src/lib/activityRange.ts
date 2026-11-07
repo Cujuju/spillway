@@ -33,6 +33,8 @@ export const dayText = (t: number) => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+/** `day` moved by `days` calendar days, YYYY-MM-DD. */
+export const shiftDay = (day: string, days: number) => dayText(shiftDays(parseDay(day), days));
 const validDay = (v: unknown): v is string =>
   typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && dayText(parseDay(v)) === v;
 

@@ -1,5 +1,5 @@
 import { ScanSearch } from 'lucide-solid';
-import { For, Show } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import { transportRows } from '@shared/activityTransport';
 import { promptTokens } from '@shared/modelPrices';
 import type { TraceAttempt } from '@shared/sessionTrace';
@@ -29,13 +29,13 @@ function identityRows(a: TraceAttempt, account: string, movedFrom: string | null
   ];
 }
 
-function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void }) {
+function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void; inspected: boolean }) {
   const a = () => props.a;
   const account = () => (a().authIndex ? shownText(props.account(a().authIndex)) : '—');
   const status = () => attemptStatus(a());
   const tokens = () => a().tokens;
   return (
-    <tr>
+    <tr classList={{ selected: props.inspected }}>
       <td class="tabular">
         <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)} note={a().captureReason ? shownText(a().captureReason) : undefined}>{dateTime(a().at)}</HoverTip>
       </td>
@@ -66,15 +66,21 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       <td class="num tabular">{msDuration(a().latencyMs)}</td>
       <td class="trace-inspect">
         <Show when={a().traceId}>{(trace) => (
-          <button type="button" class="chip-btn" title="Inspect exchange" aria-label="Inspect exchange" onClick={() => props.onInspect(trace())}><ScanSearch size={ICON_PX} /></button>
+          <button type="button" class="chip-btn" title="Inspect exchange" aria-label="Inspect exchange" aria-pressed={props.inspected} onClick={() => props.onInspect(trace())}><ScanSearch size={ICON_PX} /></button>
         )}</Show>
       </td>
     </tr>
   );
 }
 
-/** A node's own attempts, newest first. Hover the time for IDs and transport; the icon opens the captured exchange. */
-export function TraceAttempts(props: { attempts: TraceAttempt[]; busy: boolean; account: (id: string | null) => string; onInspect: (traceId: string) => void }) {
+/** Columns in an attempt row; an inline exchange spans them all. */
+const COLUMNS = 10;
+
+/** A node's own attempts, newest first. Hover the time for IDs and transport; the icon opens the captured exchange, under its row when `exchange` is set. */
+export function TraceAttempts(props: {
+  attempts: TraceAttempt[]; busy: boolean; account: (id: string | null) => string; onInspect: (traceId: string) => void;
+  inspected?: string; exchange?: (traceId: string) => JSX.Element;
+}) {
   return (
     <div class="trace-table">
       <table class="table dense">
@@ -85,8 +91,14 @@ export function TraceAttempts(props: { attempts: TraceAttempt[]; busy: boolean; 
           </tr>
         </thead>
         <tbody aria-busy={props.busy}>
-          <For each={props.attempts} fallback={<tr><td class="empty-row" colSpan={10}>{props.busy ? 'Loading…' : 'No attempts in this range.'}</td></tr>}>
-            {(a) => <AttemptRow a={a} account={props.account} onInspect={props.onInspect} />}
+          <For each={props.attempts} fallback={<tr><td class="empty-row" colSpan={COLUMNS}>{props.busy ? 'Loading…' : 'No attempts in this range.'}</td></tr>}>
+            {(a) => {
+              const open = () => !!a.traceId && a.traceId === props.inspected;
+              return <>
+                <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} />
+                <Show when={open() && props.exchange}>{(render) => <tr class="attempt-exchange"><td colSpan={COLUMNS}>{render()(a.traceId!)}</td></tr>}</Show>
+              </>;
+            }}
           </For>
         </tbody>
       </table>

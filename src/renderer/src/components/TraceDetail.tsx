@@ -1,13 +1,13 @@
 import { CornerLeftUp, ListTree } from 'lucide-solid';
-import { For, Show } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import type { TraceAttempt, TraceNode } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { compactNumber, dateTime } from '../lib/format';
 import { conversationLabel } from '../lib/conversationNames';
-import { costText, KIND_BADGE, meanText, modelLabel, nodeLabel, ORIGIN_BADGE, PARENT_LINK } from '../lib/traceFormat';
+import { costText, EXCHANGE_LAYOUT_OPTIONS, KIND_BADGE, meanText, modelLabel, nodeLabel, ORIGIN_BADGE, PARENT_LINK, type ExchangeLayout } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
 import { TraceAttempts } from './TraceAttempts';
-import { CopyButton } from './ui';
+import { CopyButton, Seg } from './ui';
 
 const ICON_PX = 14;
 const OWN_USAGE_NOTE = 'Totals cover this node only; parent and child costs are never added together. Cost is a list-price estimate.';
@@ -40,11 +40,12 @@ function Stats(props: { n: TraceNode }) {
   );
 }
 
-/** One node: identity, own-usage stats, models, parent links and its attempts. */
+/** One node: identity, own-usage stats, models, parent links and its attempts. `exchange` renders an inspected attempt under its row. */
 export function TraceDetail(props: {
   n: TraceNode; attempts: TraceAttempt[]; busy: boolean; more: boolean; error: string | null;
   account: (id: string | null) => string; onInspect: (traceId: string) => void; onNavigate: (sessionId: string) => void;
   onChildren: (sessionId: string) => void; onMore: () => void;
+  inspected?: string; layout: ExchangeLayout; onLayout: (v: ExchangeLayout) => void; exchange?: (traceId: string) => JSX.Element;
 }) {
   const kind = () => KIND_BADGE[props.n.kind];
   return (
@@ -55,6 +56,7 @@ export function TraceDetail(props: {
         <Show when={props.n.sessionKind && ORIGIN_BADGE[props.n.sessionKind]}>{(o) => <span class={`badge ${o().tone}`}>{o().label}</span>}</Show>
         <InfoTip title="Own usage" note={OWN_USAGE_NOTE} />
         <div class="panel-head-end">
+          <Seg label="Open exchanges" value={props.layout} options={EXCHANGE_LAYOUT_OPTIONS} onChange={props.onLayout} />
           <Show when={props.n.sessionId}>{(id) => <>
             <CopyButton value={id()} what="session ID" label="Copy ID" ghost />
             <button class="btn ghost" type="button" onClick={() => props.onChildren(id())}><ListTree size={ICON_PX} />Children</button>
@@ -88,7 +90,7 @@ export function TraceDetail(props: {
         <span class="panel-count">{props.attempts.length.toLocaleString()}{props.more ? '+' : ''}</span>
       </div>
       <Show when={props.error}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
-      <TraceAttempts attempts={props.attempts} busy={props.busy} account={props.account} onInspect={props.onInspect} />
+      <TraceAttempts attempts={props.attempts} busy={props.busy} account={props.account} onInspect={props.onInspect} inspected={props.inspected} exchange={props.exchange} />
       <Show when={props.more}><button class="btn ghost list-more" type="button" disabled={props.busy} onClick={() => props.onMore()}>Load more</button></Show>
     </section>
   );

@@ -512,6 +512,17 @@ th[aria-sort] .sort-btn {
 .account-menu.choice-menu {
   --account-menu-width: 180px;
 }
+/* A typed phrase: one labelled field (Traces session and search). */
+.scope-field {
+  display: grid;
+  gap: var(--spacing-1_5);
+  padding: var(--spacing-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.scope-field .input {
+  font-size: var(--text-body);
+}
 .account-menu input[type='radio'] {
   margin: 0;
   accent-color: var(--color-accent);

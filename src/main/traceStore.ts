@@ -2,7 +2,7 @@ import { sessionKind } from '@shared/types';
 import type { Db } from './activityDb';
 import { normalizeTransport } from '@shared/activityTransport';
 import { tokenCost, type TokenCounts } from '@shared/modelPrices';
-import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, traceNodeId, type TraceAttempt, type TraceAttemptPage, type TraceAttemptQuery, type TraceCoverage, type TracePage, type TraceQuery, type TraceRange } from '@shared/sessionTrace';
+import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_MAX_DAYS, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, traceNodeId, type TraceAttempt, type TraceAttemptPage, type TraceAttemptQuery, type TraceCoverage, type TracePage, type TraceQuery, type TraceRange } from '@shared/sessionTrace';
 import { traceNodes } from './traceGraph';
 
 const REQUEST_IDENTITY = `CASE WHEN json_extract(event,'$.source')='client-log' THEN 'client-log:'||json_extract(event,'$.requestId') ELSE 'proxy:'||json_extract(event,'$.requestId')||':'||coalesce(json_extract(event,'$.authIndex'),'')||':'||json_extract(event,'$.at') END`;
@@ -79,7 +79,7 @@ function range(q: TraceRange, now = Date.now()): Required<TraceRange> {
   if (q.from !== undefined && !date(q.from) || q.to !== undefined && !date(q.to)) throw new Error('Invalid trace date range');
   const to = new Date(q.to ?? now).toISOString();
   const from = new Date(q.from ?? Date.parse(to) - 7 * DAY).toISOString();
-  if (from > to || Date.parse(to) - Date.parse(from) > 90 * DAY) throw new Error('Trace range must be at most 90 days');
+  if (from > to || Date.parse(to) - Date.parse(from) > TRACE_MAX_DAYS * DAY) throw new Error(`Trace range must be at most ${TRACE_MAX_DAYS} days`);
   return { from, to, source: q.source === 'all' ? 'all' : 'proxy' };
 }
 function nodeFilter(nodeId: string | undefined, origin: 'activity' | 'archive'): { sql: string; args: string[] } | null {

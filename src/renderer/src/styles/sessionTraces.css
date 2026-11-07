@@ -1,19 +1,39 @@
 /* Activity → Traces: the branch list beside the selected node. Shared pieces live in archive.css. */
 
+/* Fills the page below the scope sentence; both cards share its height and scroll inside. */
+.trace-view {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-height: 0;
+}
 .trace-columns {
   --trace-list-min: 280px;
   --trace-detail-min: 420px;
+  /* Below this the page scrolls instead of squeezing the lists. */
+  --trace-columns-min: 480px;
+  position: relative;
+  flex: 1 0 var(--trace-columns-min);
+  /* Explicit, so the cards' content never sets the height (a flex item's auto minimum would). */
+  min-height: var(--trace-columns-min);
   display: grid;
   grid-template-columns: minmax(var(--trace-list-min), 1fr) minmax(var(--trace-detail-min), 2.2fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--card-gap);
-  align-items: start;
+}
+.trace-columns > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ── Branch list ── */
 .trace-branches .record-list {
   --record-list-max: 760px;
   display: grid;
-  max-height: var(--record-list-max);
+  align-content: start;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   margin-inline: calc(-1 * var(--card-pad));
 }
@@ -84,8 +104,10 @@
 .trace-attempts-head {
   margin: var(--spacing-1) 0 var(--spacing-2);
 }
-.trace-table {
-  --record-table-max: 560px;
+.trace-detail .trace-table {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 .trace-table td {
   white-space: nowrap;
@@ -104,6 +126,37 @@
   border-radius: var(--radius-btn);
 }
 
+/* ── Exchange: a side panel over the session card's right side, or a row under its attempt ── */
+.exchange-panel {
+  --exchange-panel-width: 640px;
+  position: absolute;
+  inset: 0 0 0 auto;
+  /* Above the tables' sticky headers. */
+  z-index: calc(var(--z-raised) + 1);
+  width: min(var(--exchange-panel-width), 100%);
+  overflow: auto;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-floating);
+}
+.attempt-exchange > td {
+  padding: var(--spacing-3) var(--card-pad);
+  white-space: normal;
+  background: var(--color-surface-sunken);
+}
+.table.dense tbody tr.attempt-exchange:hover td {
+  background: var(--color-surface-sunken);
+}
+/* Its bodies wrap to the table's width instead of widening it. */
+.attempt-exchange .request-inspector {
+  contain: inline-size;
+}
+.inspector-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
 @media (max-width: 900px) {
-  .trace-columns { grid-template-columns: 1fr; }
+  .trace-columns { grid-template-columns: 1fr; grid-template-rows: none; flex: none; }
+  .trace-branches .record-list { max-height: var(--record-list-max); }
 }

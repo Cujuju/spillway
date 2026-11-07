@@ -7,6 +7,8 @@ export const TRACE_PAGE_SIZE = 25;
 export const TRACE_ATTEMPT_PAGE_SIZE = 50;
 export const TRACE_SCAN_LIMIT = 5_000;
 export type TraceSource = 'proxy' | 'all';
+/** Longest window one trace query may span. */
+export const TRACE_MAX_DAYS = 90;
 export interface TraceRange { from?: string; to?: string; source?: TraceSource }
 export interface TraceQuery extends TraceRange {
   nodeId?: string; parentSessionId?: string; text?: string;

@@ -117,43 +117,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.trace-table tr.inspectable {
-  cursor: pointer;
-}
-.trace-table tr.inspectable:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-accent-border);
-  outline-offset: calc(-1 * var(--focus-ring-width));
-}
-
-/* ── Exchange: a side panel over the session card's right side, or a row under its attempt ── */
-.exchange-panel {
-  --exchange-panel-width: 640px;
-  position: absolute;
-  inset: 0 0 0 auto;
-  /* Above the tables' sticky headers. */
-  z-index: calc(var(--z-raised) + 1);
-  width: min(var(--exchange-panel-width), 100%);
-  overflow: auto;
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-floating);
-}
-.attempt-exchange > td {
-  padding: var(--spacing-3) var(--card-pad);
-  white-space: normal;
-  background: var(--color-surface-sunken);
-}
-.table.dense tbody tr.attempt-exchange:hover td {
-  background: var(--color-surface-sunken);
-}
-/* Its bodies wrap to the table's width instead of widening it. */
-.attempt-exchange .request-inspector {
-  contain: inline-size;
-}
-.inspector-step {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1);
-}
 
 @media (max-width: 900px) {
   .trace-columns { grid-template-columns: 1fr; grid-template-rows: none; flex: none; }

@@ -88,3 +88,18 @@ export const EXCHANGE_LAYOUT_OPTIONS: readonly { value: ExchangeLayout; label: s
   { value: 'panel', label: 'Panel', title: 'Open exchanges in a side panel' },
   { value: 'inline', label: 'Inline', title: 'Open exchanges under their row' },
 ];
+
+/** Capture reasons the app writes (archiveStore.ts), in words. The proxy can send others; those show as sent. */
+const CAPTURE_REASON: Record<string, string> = {
+  'metadata-only': 'Record bodies was off.',
+  'capture-disabled': 'Record bodies was turned off before the capture finished.',
+  'awaiting-finalization': 'Waiting for the proxy to finish the capture.',
+  'websocket-open': 'The WebSocket is still open; its messages update here.',
+  'archive-reopened-before-finalization': 'The app restarted before the capture finished.',
+  'proxy-restarted-before-capture': 'The proxy restarted before handing over the capture.',
+  'capture-unavailable-or-interrupted': 'The capture never arrived or was interrupted.',
+  'retention-or-byte-budget': 'Removed by retention or the byte budget; the identity remains.',
+};
+/** Reasons meaning text was never recorded because Record bodies was off. */
+export const RECORDING_OFF_REASONS: ReadonlySet<string> = new Set(['metadata-only', 'capture-disabled']);
+export const captureReasonText = (reason: string) => CAPTURE_REASON[reason] ?? reason;

@@ -1,15 +1,14 @@
-import { For, Show, type JSX } from 'solid-js';
+import { createEffect, For, Show, type JSX } from 'solid-js';
 import { transportRows } from '@shared/activityTransport';
 import { promptTokens } from '@shared/modelPrices';
 import type { TraceAttempt } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { compactNumber, dateTime, msDuration } from '../lib/format';
-import { attemptStatus, CAPTURE_LABEL, costText, SESSION_KIND_LABEL } from '../lib/traceFormat';
+import { attemptStatus, CAPTURE_LABEL, captureReasonText, costText, SESSION_KIND_LABEL } from '../lib/traceFormat';
+import { onRowActivate, REVEAL_ROW } from '../lib/exchangeNav';
 import { HoverTip, type TipRow } from './ChartTip';
 import { ProviderGlyph } from './ui';
 
-/** Keys that open or close a focused row's exchange, like a button. */
-const ACTIVATE_KEYS = new Set(['Enter', ' ']);
 const or = (v: string | null | undefined) => (v ? shownText(v) : '—');
 
 function identityRows(a: TraceAttempt, account: string, movedFrom: string | null): TipRow[] {
@@ -34,13 +33,16 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
   const account = () => (a().authIndex ? shownText(props.account(a().authIndex)) : '—');
   const status = () => attemptStatus(a());
   const tokens = () => a().tokens;
+  let row: HTMLTableRowElement | undefined;
+  createEffect(() => { if (props.inspected) row?.scrollIntoView(REVEAL_ROW); });
   return (
     <tr classList={{ selected: props.inspected, inspectable: !!a().traceId }} tabIndex={a().traceId ? 0 : undefined}
       aria-expanded={a().traceId ? props.inspected : undefined}
       onClick={() => { const t = a().traceId; if (t) props.onInspect(t); }}
-      onKeyDown={(e) => { const t = a().traceId; if (t && e.target === e.currentTarget && ACTIVATE_KEYS.has(e.key)) { e.preventDefault(); props.onInspect(t); } }}>
+      ref={row}
+      onKeyDown={(e) => onRowActivate(e, () => { const t = a().traceId; if (t) props.onInspect(t); })}>
       <td class="tabular">
-        <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)} note={a().captureReason ? shownText(a().captureReason) : undefined}>{dateTime(a().at)}</HoverTip>
+        <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)} note={a().captureReason ? shownText(captureReasonText(a().captureReason)) : undefined}>{dateTime(a().at)}</HoverTip>
       </td>
       <td class="fill">
         <div class="cell-name">
@@ -94,7 +96,7 @@ export function TraceAttempts(props: {
               const open = () => !!a.traceId && a.traceId === props.inspected;
               return <>
                 <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} />
-                <Show when={open() && props.exchange}>{(render) => <tr class="attempt-exchange"><td colSpan={COLUMNS}>{render()(a.traceId!)}</td></tr>}</Show>
+                <Show when={open() && props.exchange}>{(render) => <tr class="row-exchange"><td colSpan={COLUMNS}>{render()(a.traceId!)}</td></tr>}</Show>
               </>;
             }}
           </For>

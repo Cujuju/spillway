@@ -4,6 +4,7 @@ import { shownText } from '../store';
 import { persistedSignal } from '../lib/persisted';
 import { traceViewQuery, type TraceWindow } from '../lib/traceViewQuery';
 import { EXCHANGE_LAYOUTS, type ExchangeLayout } from '../lib/traceFormat';
+import { createExchangeSteps } from '../lib/exchangeNav';
 import { RequestInspector } from './RequestInspector';
 import { TraceBranches } from './TraceBranches';
 import { TraceDetail } from './TraceDetail';
@@ -13,9 +14,6 @@ import '../styles/sessionTraces.css';
 
 /** Typing settles before a query runs. */
 const QUERY_DEBOUNCE_MS = 200;
-/** Keys that step through or close the open exchange; typing in a field keeps them. */
-const STEP_KEYS: Record<string, -1 | 1> = { ArrowUp: -1, ArrowDown: 1 };
-const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 /** Filters, usage source and time frame come from the page's scope sentence. */
 export function SessionTraces(props: {
@@ -67,23 +65,9 @@ export function SessionTraces(props: {
   const refresh = () => { setSelected(undefined); setInspected(undefined); attemptGeneration++; void load(query(), props.window); };
 
   // The open exchange steps through the attempts that have one.
-  const inspectable = createMemo(() => attempts().flatMap((a) => (a.traceId ? [a.traceId] : [])));
-  const position = createMemo(() => inspectable().indexOf(inspected() ?? ''));
-  const step = (delta: -1 | 1) => { const id = inspectable()[position() + delta]; if (id) setInspected(id); };
-  createEffect(() => {
-    if (!inspected()) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.ctrlKey || e.metaKey || typing(e.target)) return;
-      if (e.key === 'Escape') { setInspected(undefined); return; }
-      const delta = STEP_KEYS[e.key];
-      if (delta) { e.preventDefault(); step(delta); }
-    };
-    document.addEventListener('keydown', onKey);
-    onCleanup(() => document.removeEventListener('keydown', onKey));
-  });
+  const step = createExchangeSteps(createMemo(() => attempts().flatMap((a) => (a.traceId ? [a.traceId] : []))), inspected, setInspected);
   const exchange = (traceId: string) => (
-    <RequestInspector traceId={traceId} onConversation={navigate} onClose={() => setInspected(undefined)}
-      step={{ index: position(), count: inspectable().length, onStep: step }} />
+    <RequestInspector traceId={traceId} onConversation={navigate} onClose={() => setInspected(undefined)} step={step()} />
   );
 
   return <div class="inspect trace-view">

@@ -6,6 +6,8 @@ import { AccountFilter } from './AccountFilter';
 import { ClientFilter } from './ClientFilter';
 import { ChoiceChip } from './ScopeChip';
 import { RESET_TRACE_FILTERS, TraceScopeParts, traceFiltersNarrowed, type TraceFilters } from './TraceScopeParts';
+import { ArchiveScopeParts } from './ArchiveScopeParts';
+import { archiveFiltersNarrowed, RESET_ARCHIVE_FILTERS, type ArchiveFilters } from '../lib/archiveViewQuery';
 
 export type UsageSource = 'proxy' | 'all';
 /** The effort filter's "every effort" value; '' is requests with no recorded effort. */
@@ -31,15 +33,15 @@ const shortDay = (day: string) => {
   return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-/** A view's time frame: a preset, or inclusive days up to `today`. `ranges` limits the presets; `maxDays` the custom span. */
+/** A view's time frame: a preset, or inclusive days up to `today`. `ranges` limits the presets; `maxDays` the custom span; `initial` is the unnarrowed preset (DEFAULT_RANGE). */
 export interface TimeFrame {
   range: Range; custom: CustomRange; today: string; onRange: (v: Range) => void; onCustom: (v: CustomRange) => void;
-  ranges?: readonly Range[]; maxDays?: number;
+  ranges?: readonly Range[]; maxDays?: number; initial?: Range;
 }
 
 const earlier = (a: string, b: string) => (a < b ? a : b);
 
-/** The Activity scope as a sentence. `full` adds accounts, clients and effort; `traces` the Traces filters; `time` "over the last 7 days". */
+/** The Activity scope as a sentence. `full` adds accounts, clients and effort; `traces` and `archive` their tab's filters (archive replaces the source); `time` "over the last 7 days". */
 export function ActivityScopeLine(props: {
   full: boolean;
   source: UsageSource; onSource: (v: UsageSource) => void;
@@ -47,6 +49,7 @@ export function ActivityScopeLine(props: {
   clients: ClientOption[]; clientScope: ClientScope; onClients: (v: ClientScope) => void;
   efforts: string[]; effort: string; onEffort: (v: string) => void;
   traces?: { value: TraceFilters; onChange: (patch: Partial<TraceFilters>) => void };
+  archive?: { value: ArchiveFilters; onChange: (patch: Partial<ArchiveFilters>) => void };
   time?: TimeFrame;
 }) {
   const effortOptions = createMemo(() => [
@@ -54,20 +57,25 @@ export function ActivityScopeLine(props: {
     { value: '', label: 'Unknown effort', phrase: 'unknown effort' },
     ...props.efforts.map((e) => ({ value: e, label: e, phrase: `${e} effort` })),
   ]);
-  const narrowed = () => props.source !== 'proxy' || (props.time !== undefined && props.time.range !== DEFAULT_RANGE)
+  const initialRange = () => props.time?.initial ?? DEFAULT_RANGE;
+  const narrowed = () => (!props.archive && props.source !== 'proxy') || (props.time !== undefined && props.time.range !== initialRange())
     || (props.traces !== undefined && traceFiltersNarrowed(props.traces.value))
+    || (props.archive !== undefined && archiveFiltersNarrowed(props.archive.value))
     || (props.full && (props.accounts !== null || props.clientScope !== null || props.effort !== ANY_EFFORT));
   const reset = () => {
-    props.onSource('proxy');
-    props.time?.onRange(DEFAULT_RANGE);
+    if (!props.archive) props.onSource('proxy');
+    props.time?.onRange(initialRange());
     props.traces?.onChange(RESET_TRACE_FILTERS);
+    props.archive?.onChange(RESET_ARCHIVE_FILTERS);
     if (!props.full) return;
     props.onAccounts(null); props.onClients(null); props.onEffort(ANY_EFFORT);
   };
   return (
     <div class="scope-line" role="group" aria-label="Activity scope">
       <span>Showing</span>
-      <ChoiceChip label="Usage" value={props.source} initial="proxy" options={SOURCES} onChange={props.onSource} />
+      <Show when={!props.archive} fallback={<span>archived requests</span>}>
+        <ChoiceChip label="Usage" value={props.source} initial="proxy" options={SOURCES} onChange={props.onSource} />
+      </Show>
       <Show when={props.full}>
         <span>for</span>
         <AccountFilter groups={props.groups} value={props.accounts} onChange={props.onAccounts} />
@@ -77,9 +85,10 @@ export function ActivityScopeLine(props: {
         <ChoiceChip label="Effort" value={props.effort} initial={ANY_EFFORT} options={effortOptions()} onChange={props.onEffort} />
       </Show>
       <Show when={props.traces}>{(t) => <TraceScopeParts value={t().value} onChange={t().onChange} />}</Show>
+      <Show when={props.archive}>{(a) => <ArchiveScopeParts value={a().value} onChange={a().onChange} />}</Show>
       <Show when={props.time}>{(t) => <>
         <span>over</span>
-        <ChoiceChip label="Time frame" value={t().range} initial={DEFAULT_RANGE} options={t().ranges ? RANGE_OPTIONS.filter((o) => t().ranges!.includes(o.value)) : RANGE_OPTIONS} onChange={t().onRange}
+        <ChoiceChip label="Time frame" value={t().range} initial={initialRange()} options={t().ranges ? RANGE_OPTIONS.filter((o) => t().ranges!.includes(o.value)) : RANGE_OPTIONS} onChange={t().onRange}
           phrase={t().range === 'custom' ? `${shortDay(t().custom.from)} – ${shortDay(t().custom.to)}` : undefined}
           opensMore="custom" extra={
             <Show when={t().range === 'custom'}>

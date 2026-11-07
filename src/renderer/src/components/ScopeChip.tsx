@@ -28,6 +28,18 @@ export function ScopeChip(props: { label: string; value: string; active: boolean
   );
 }
 
+/** A typed phrase's labelled field inside a ScopeChip menu; Enter closes the menu. The first field takes focus. */
+export function ScopeField(props: { label: string; value: string; onInput: (v: string) => void; placeholder?: string; search?: boolean; first?: boolean }) {
+  return (
+    <label class="scope-field">
+      <span>{props.label}</span>
+      <input class="input" type={props.search ? 'search' : 'text'} autofocus={props.first} placeholder={props.placeholder} value={props.value}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover(); }}
+        onInput={(e) => props.onInput(e.currentTarget.value)} />
+    </label>
+  );
+}
+
 /** One choice from a short list. Picking closes the menu, except `opensMore`, whose fields (`extra`) follow the list. `phrase` overrides the option's. */
 export function ChoiceChip<T extends string>(props: {
   label: string; value: T; initial: T; options: readonly { value: T; label: string; phrase: string }[]; onChange: (v: T) => void;

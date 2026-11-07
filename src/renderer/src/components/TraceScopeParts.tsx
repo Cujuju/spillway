@@ -1,7 +1,7 @@
 import { shownText } from '../store';
 import { conversationLabel } from '../lib/conversationNames';
 import { HoverTip } from './ChartTip';
-import { ChoiceChip, ScopeChip } from './ScopeChip';
+import { ChoiceChip, ScopeChip, ScopeField } from './ScopeChip';
 
 export type TraceSort = 'cost' | 'failed' | 'recent';
 /** The Traces view's own filters; the usage source and time frame are the sentence's other phrases. */
@@ -19,10 +19,6 @@ const SORTS = [
 export const traceFiltersNarrowed = (f: TraceFilters) => f.sort !== DEFAULT_TRACE_FILTERS.sort || !!f.text || !!f.nodeId || !!f.parentSessionId;
 /** The node for one exact session ID. */
 export const sessionNode = (sessionId: string) => `${SESSION_NODE}${sessionId}`;
-
-const closeOnEnter = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
-  if (e.key === 'Enter') e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
-};
 
 /** The Traces row cap, beside the sentence; hover explains it. */
 export function TraceLimitNote(props: { limit: number }) {
@@ -48,20 +44,14 @@ export function TraceScopeParts(props: { value: TraceFilters; onChange: (patch: 
       <span>in</span>
       <ScopeChip label="Session" value={session()} active={!!props.value.nodeId || !!props.value.parentSessionId}
         onClear={() => props.onChange({ nodeId: undefined, parentSessionId: undefined })}>
-        <label class="scope-field">
-          <span>Exact session ID</span>
-          <input class="input" autofocus placeholder="Session ID" value={sessionId()} onKeyDown={closeOnEnter}
-            onInput={(e) => props.onChange({ nodeId: e.currentTarget.value.trim() ? sessionNode(e.currentTarget.value.trim()) : undefined, parentSessionId: undefined })} />
-        </label>
+        <ScopeField label="Exact session ID" placeholder="Session ID" first value={sessionId()}
+          onInput={(v) => props.onChange({ nodeId: v.trim() ? sessionNode(v.trim()) : undefined, parentSessionId: undefined })} />
       </ScopeChip>
       <span>matching</span>
       <ScopeChip label="Search" value={props.value.text ? `“${props.value.text}”` : 'anything'} active={!!props.value.text}
         onClear={() => props.onChange({ text: undefined })}>
-        <label class="scope-field">
-          <span>Sessions, models or effort</span>
-          <input class="input" type="search" autofocus placeholder="Search" value={props.value.text ?? ''} onKeyDown={closeOnEnter}
-            onInput={(e) => props.onChange({ text: e.currentTarget.value || undefined })} />
-        </label>
+        <ScopeField label="Sessions, models or effort" placeholder="Search" search first value={props.value.text ?? ''}
+          onInput={(v) => props.onChange({ text: v || undefined })} />
       </ScopeChip>
       <span>ranked by</span>
       <ChoiceChip label="Rank by" value={props.value.sort} initial={DEFAULT_TRACE_FILTERS.sort} options={SORTS} onChange={(sort) => props.onChange({ sort })} />

@@ -1,12 +1,14 @@
 import { ChevronDown, ChevronUp, FileArchive, MessagesSquare, RefreshCw, X } from 'lucide-solid';
-import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
-import type { ArchiveDetail } from '@shared/archive';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import type { ArchiveDetail, ArchivePolicy } from '@shared/archive';
 import { readableStreamText } from '@shared/archiveContent';
 import { shownText } from '../store';
-import { CAPTURE_LABEL, CAPTURE_TONE } from '../lib/traceFormat';
+import { CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, RECORDING_OFF_REASONS } from '../lib/traceFormat';
+import type { InspectorStep } from '../lib/exchangeNav';
 import { dateTime } from '../lib/format';
 import { HoverTip, InfoTip } from './ChartTip';
 import { DiagnosticBundle } from './DiagnosticBundle';
+import { RECORD_BODIES_HELP } from './ArchiveCapture';
 import '../styles/archive.css';
 
 const RENDER_CHUNK = 32 * 1024;
@@ -16,10 +18,8 @@ const ICON_PX = 14;
 const KIB = 1024;
 /** Newest upstream attempts listed in the hover readout; the count shows them all. */
 const ATTEMPT_TIP_ROWS = 8;
-const STATE_NOTE: Partial<Record<ArchiveDetail['state'], string>> = {
-  pending: 'Awaiting finalization; open WebSocket messages update here.',
-  expired: 'Bodies were removed by retention or the byte budget. The identity remains.',
-};
+const BUNDLE_NOTE = 'Save this exchange with its metadata and logs as a file to attach to a bug report.';
+const hasText = (d: ArchiveDetail) => !!(d.request || d.response || d.frames.length);
 const FORMAT_NOTE = 'HTTP encodings are decoded when supported; WebSocket payloads are decoded messages. Headers are excluded; prompts and body secrets may be present. "Captured" means all observed bytes within limits, not upstream success.';
 
 function BodyText(props: { label: string; text: string; type: string; encoding: string }) {
@@ -37,8 +37,28 @@ function BodyText(props: { label: string; text: string; type: string; encoding: 
   </section>;
 }
 
-/** Where the shown exchange sits in its list: `index` of `count`, -1 when not listed. */
-export interface InspectorStep { index: number; count: number; onStep: (delta: -1 | 1) => void }
+/** Text never recorded because Record bodies was off: one line, with a switch for new requests. */
+function RecordBodiesOff() {
+  const [policy, setPolicy] = createSignal<ArchivePolicy>();
+  const [error, setError] = createSignal<string>();
+  onMount(() => void window.api.archiveStatus().then((st) => setPolicy(st.policy)).catch((e) => setError(String(e))));
+  const turnOn = async (p: ArchivePolicy) => {
+    setError(undefined);
+    try { setPolicy((await window.api.archivePolicy({ ...p, captureBodies: true })).policy); }
+    catch (e) { setError(String(e)); }
+  };
+  return <div class="archive-no-text">
+    <span>No text recorded: Record bodies was off.</span>
+    <Show when={policy()}>{(p) => (
+      <Show when={!p().captureBodies} fallback={<span class="muted">It's on now, so new requests keep theirs.</span>}>
+        <HoverTip title="Record bodies" rows={[]} note={`${RECORD_BODIES_HELP} Also under Archive → Capture.`} layout="contents">
+          <button class="btn" type="button" onClick={() => void turnOn(p())}>Turn on</button>
+        </HoverTip>
+      </Show>
+    )}</Show>
+    <Show when={error()}>{(e) => <span class="danger-text">{shownText(e())}</span>}</Show>
+  </div>;
+}
 
 export function RequestInspector(props: { traceId?: string | null; onConversation?: (sessionId: string) => void; onClose?: () => void; step?: InspectorStep }) {
   const [bundle, setBundle] = createSignal<string>();
@@ -66,7 +86,7 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
       <h2 class="card-title">Exchange</h2>
       <Show when={detail()}>{(d) => <>
         <span class={`badge ${CAPTURE_TONE[d().state]}`}>{CAPTURE_LABEL[d().state]}</span>
-        <Show when={STATE_NOTE[d().state] || d().reason}><InfoTip title={CAPTURE_LABEL[d().state]} note={[STATE_NOTE[d().state], d().reason && shownText(d().reason)].filter(Boolean).join(' ')} /></Show>
+        <Show when={d().reason && !RECORDING_OFF_REASONS.has(d().reason)}><InfoTip title={CAPTURE_LABEL[d().state]} note={shownText(captureReasonText(d().reason))} /></Show>
       </>}</Show>
       <div class="panel-head-end">
         <Show when={props.step}>{(s) => (
@@ -77,7 +97,11 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
           </span>
         )}</Show>
         <Show when={detail()?.sessionId && props.onConversation}><button class="btn ghost" type="button" onClick={() => props.onConversation?.(detail()!.sessionId!)}><MessagesSquare size={ICON_PX} />Conversation</button></Show>
-        <Show when={props.traceId}><button class="btn ghost" type="button" onClick={() => setBundle(props.traceId!)}><FileArchive size={ICON_PX} />Diagnostic bundle</button></Show>
+        <Show when={props.traceId}>
+          <HoverTip title="Diagnostic bundle" rows={[]} note={BUNDLE_NOTE} layout="contents">
+            <button class="btn icon-btn ghost" type="button" aria-label="Diagnostic bundle" onClick={() => setBundle(props.traceId!)}><FileArchive size={ICON_PX} /></button>
+          </HoverTip>
+        </Show>
         <button type="button" class="btn icon-btn ghost" title="Refresh" aria-label="Refresh" onClick={() => void load(props.traceId)}><RefreshCw size={ICON_PX} /></button>
         <Show when={props.onClose}><button type="button" class="btn icon-btn ghost" title={props.step ? 'Close (Esc)' : 'Close'} aria-label="Close" onClick={() => props.onClose?.()}><X size={ICON_PX} /></button></Show>
       </div>
@@ -99,11 +123,17 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
         </dd></div>
         <div class="kv kv-wide"><dt>Trace</dt><dd class="selectable">{shownText(d().traceId)}</dd></div>
       </dl>
-      <Show when={readableResponse()}><BodyText label="Response text" text={readableResponse()} type="Joined deltas" encoding="" /></Show>
-      <div class="archive-bodies">
-        <BodyText label="Request" text={d().request} type={d().requestType} encoding={d().requestEncoding} />
-        <BodyText label="Response" text={d().response} type={d().responseType} encoding={d().responseEncoding} />
-      </div>
+      <Show when={hasText(d())} fallback={
+        <Show when={RECORDING_OFF_REASONS.has(d().reason)} fallback={<p class="archive-no-text">No text stored.</p>}>
+          <RecordBodiesOff />
+        </Show>
+      }>
+        <Show when={readableResponse()}><BodyText label="Response text" text={readableResponse()} type="Joined deltas" encoding="" /></Show>
+        <div class="archive-bodies">
+          <BodyText label="Request" text={d().request} type={d().requestType} encoding={d().requestEncoding} />
+          <BodyText label="Response" text={d().response} type={d().responseType} encoding={d().responseEncoding} />
+        </div>
+      </Show>
     </>}</Show>
   </div>;
 }

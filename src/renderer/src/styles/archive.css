@@ -179,8 +179,13 @@
   z-index: var(--z-raised);
   background: var(--color-surface);
 }
-.archive-table tbody tr {
+/* Rows that open their exchange on click, Enter or Space. */
+.table tr.inspectable {
   cursor: pointer;
+}
+.table tr.inspectable:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent-border);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 .table tr.selected td {
   background: var(--color-accent-subtle);
@@ -204,9 +209,56 @@
   color: var(--color-text-muted);
 }
 
+/* ── Exchange: a side panel over the list card's right side, or a row under its record ── */
+.exchange-panel {
+  --exchange-panel-width: 640px;
+  position: absolute;
+  inset: 0 0 0 auto;
+  /* Above the tables' sticky headers. */
+  z-index: calc(var(--z-raised) + 1);
+  width: min(var(--exchange-panel-width), 100%);
+  overflow: auto;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-floating);
+}
+.row-exchange > td {
+  padding: var(--spacing-3) var(--card-pad);
+  white-space: normal;
+  background: var(--color-surface-sunken);
+}
+.table.dense tbody tr.row-exchange:hover td {
+  background: var(--color-surface-sunken);
+}
+/* Its bodies wrap to the table's width instead of widening it. */
+.row-exchange .request-inspector {
+  contain: inline-size;
+}
+.inspector-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
 /* ── Exchange inspector ── */
 .request-inspector {
   min-width: 0;
+}
+/* Nothing recorded: one line in place of the body panes. */
+.archive-no-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin: 0;
+  padding: var(--spacing-2_5) var(--spacing-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-sunken);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+}
+.archive-no-text .danger-text {
+  color: var(--color-red-light);
 }
 .archive-bodies {
   display: grid;
@@ -292,4 +344,94 @@ textarea.archive-raw {
 }
 .export-job .stat-strip.inset {
   margin-bottom: 0;
+}
+
+/* ── Archive: the Records card takes the space below the scope sentence and scrolls inside ── */
+/* Sized by the page, not its content: export and eval cases overflow below, so the page scrolls to them. */
+.archive-view {
+  /* Below this the page scrolls instead of squeezing the list. */
+  --archive-records-min: 480px;
+  flex: 1 0 0;
+  min-height: var(--archive-records-min);
+  /* A fixed track: a minmax() row would shrink to leave the overflowing cards room. */
+  grid-template-rows: max(var(--archive-records-min), 100%);
+}
+/* The overflowing last card keeps the page's bottom inset. */
+.archive-view > :last-child {
+  margin-bottom: var(--page-pad);
+}
+.archive-records {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The table, and the exchange panel over its right side; the card head stays reachable above both. */
+.archive-list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-inline: calc(-1 * var(--card-pad));
+}
+.archive-list .archive-table {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-inline: 0;
+}
+.archive-list .exchange-panel {
+  border-radius: 0;
+  border-block-end: 0;
+  border-inline-end: 0;
+}
+.capture-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  min-width: 0;
+}
+.capture-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.capture-status .badge {
+  cursor: help;
+}
+
+/* ── Capture menu: the policy rows under the Capture button ── */
+.account-menu.capture-menu {
+  --account-menu-width: 360px;
+  padding: var(--spacing-2) var(--spacing-3);
+}
+.capture-menu-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  padding-top: var(--spacing-1);
+}
+.capture-menu-head .section-label {
+  margin: 0;
+}
+.capture-menu-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-1_5);
+  padding-block: var(--spacing-2) var(--spacing-1);
+  border-top: var(--border-width) solid var(--color-divider);
+}
+.capture-menu-confirm {
+  flex: 1 1 100%;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.btn.ghost.capture-delete {
+  color: var(--color-red-light);
 }

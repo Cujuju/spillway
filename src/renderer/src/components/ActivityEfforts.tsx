@@ -3,6 +3,7 @@ import type { ActivityBucket } from '@shared/types';
 import { byModelEffort, timingMean } from '../lib/activityStats';
 import { compactNumber } from '../lib/format';
 import { costText } from './activityFormat';
+import { InfoTip } from './ChartTip';
 import { ProviderGlyph } from './ui';
 
 const mean = (sum: number, count: number) => {
@@ -10,13 +11,22 @@ const mean = (sum: number, count: number) => {
   return ms === null ? '—' : `${(ms / 1000).toFixed(2)} s`;
 };
 
+const ABOUT_ROWS = [
+  { label: 'Scope', value: 'Time frame and filters above' },
+  { label: 'Timings', value: 'Successful proxy attempts' },
+  { label: 'n', value: 'Samples behind each mean' },
+  { label: 'Unknown effort', value: 'Older and local-log requests' },
+];
+
 /** Uses the overview's exact range and filters, with durable sums rather than means of hourly means. */
 export function ActivityEfforts(props: { rows: ActivityBucket[] }) {
   const rows = createMemo(() => byModelEffort(props.rows));
   return (
     <div class="card table-card">
-      <div class="card-head"><h3>Model and effort</h3></div>
-      <p class="muted">Selected time frame and filters. Timings use measured successful proxy attempts only; sample counts appear below each mean. Historical and local-log effort stays unknown.</p>
+      <div class="panel-head">
+        <h2 class="card-title">Model and effort</h2>
+        <InfoTip title="Model and effort" rows={ABOUT_ROWS} />
+      </div>
       <table class="table dense">
         <thead><tr><th>Effective model</th><th>Effort</th><th class="num">Requests</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="num">API cost</th><th class="num">Mean first token</th><th class="num">Mean total time</th></tr></thead>
         <tbody>

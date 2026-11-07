@@ -249,7 +249,8 @@
   visibility: hidden;
 }
 .table tr:hover .move-conversation,
-.move-conversation:focus {
+.move-conversation:focus,
+.move-conversation.cujuju-select-flyout-trigger-open {
   visibility: visible;
 }
 .move-conversation-error {

@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Search } from 'lucide-solid';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
+import type { AppSettings } from '@shared/settings';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AccountPanel } from '../components/AccountPanel';
@@ -9,7 +10,7 @@ import { PoolPanel } from '../components/PoolPanel';
 import { createProviderPools } from '../components/poolModel';
 import { ALL_PROVIDERS as ALL, ProviderCards } from '../components/ProviderCards';
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
-import { Notice } from '../components/ui';
+import { Notice, Select } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
 import { isString, isStringOrNull, persistedSignal } from '../lib/persisted';
 import { durationChoices, lengthLineId } from '../lib/poolWindows';
@@ -17,6 +18,11 @@ import { proxyStatus, setPage, settings, shownText, snapshot, updateSettings, us
 import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
+const ACCOUNT_SORTS: readonly { value: AppSettings['dashboard']['accountSort']; label: string }[] = [
+  { value: 'reset', label: 'Soonest reset' },
+  { value: 'usage', label: 'Most left' },
+  { value: 'name', label: 'Name' },
+];
 /** Claude first: it is the provider this app was built around; the rest by account count. */
 const PRIMARY_PROVIDER = 'claude';
 
@@ -208,15 +214,8 @@ export function Dashboard() {
             <Search size={ICON_PX} />
             <input placeholder="Search by name or email" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
           </label>
-          <select
-            class="select"
-            value={settings().dashboard.accountSort}
-            onChange={(e) => void updateSettings((d) => { d.dashboard.accountSort = e.currentTarget.value as typeof d.dashboard.accountSort; })}
-          >
-            <option value="reset">Soonest reset</option>
-            <option value="usage">Most left</option>
-            <option value="name">Name</option>
-          </select>
+          <Select label="Sort accounts" value={settings().dashboard.accountSort} options={ACCOUNT_SORTS}
+            onChange={(v) => void updateSettings((d) => { d.dashboard.accountSort = v; })} />
         </div>
         {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
         <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>

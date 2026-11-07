@@ -4,7 +4,7 @@ import type { AppSettings } from '@shared/settings';
 import { providerLabel } from '@shared/trayValues';
 import { WINDOW_START_PROVIDERS, WINDOW_START_REQUEST, type WindowStartProvider } from '@shared/windowStartSettings';
 import { settings, snapshot, updateSettings } from '../store';
-import { Seg, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
+import { Seg, Select, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
 
 const set = (fn: (d: AppSettings) => void) => void updateSettings(fn);
 
@@ -22,14 +22,9 @@ function ModelPicker(props: { provider: WindowStartProvider }) {
   });
   const auto = () => cheapestModel(models() ?? []);
   return (
-    <select
-      class="select"
-      value={settings().windowStart.models[props.provider]}
-      onChange={(e) => set((d) => void (d.windowStart.models[props.provider] = e.currentTarget.value))}
-    >
-      <option value="">{auto() ? `Cheapest (${auto()})` : 'Cheapest'}</option>
-      <For each={models() ?? []}>{(id) => <option value={id}>{id}</option>}</For>
-    </select>
+    <Select label="Model" value={settings().windowStart.models[props.provider]}
+      options={[{ value: '', label: auto() ? `Cheapest (${auto()})` : 'Cheapest' }, ...(models() ?? []).map((id) => ({ value: id, label: id }))]}
+      onChange={(id) => { const provider = props.provider; set((d) => void (d.windowStart.models[provider] = id)); }} />
   );
 }
 

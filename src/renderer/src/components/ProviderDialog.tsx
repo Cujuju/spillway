@@ -5,7 +5,7 @@ import {
 } from '@shared/apiProviders';
 import type { CredentialModel } from '@shared/types';
 import { ModelFamilyList } from './ModelFamilyList';
-import { Dialog, Notice, Toggle } from './ui';
+import { Dialog, Notice, Select, Toggle } from './ui';
 
 const ICON_PX = 13;
 
@@ -114,9 +114,8 @@ export function ProviderDialog(props: {
       <div class="form">
         <label class="form-field">
           <span>Type</span>
-          <select class="select" value={family()} disabled={!!props.target} onChange={(e) => { setFamily(e.currentTarget.value as ApiKeyFamily); void loadModels(); }}>
-            <For each={API_KEY_FAMILIES}>{(f) => <option value={f}>{FAMILY_INFO[f].label}</option>}</For>
-          </select>
+          <Select label="Type" value={family()} disabled={!!props.target} options={API_KEY_FAMILIES.map((f) => ({ value: f, label: FAMILY_INFO[f].label }))}
+            onChange={(f) => { setFamily(f); void loadModels(); }} />
           <span class="form-help">{info().hint}</span>
         </label>
         <label class="form-field">

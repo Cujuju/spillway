@@ -44,24 +44,18 @@
   text-overflow: ellipsis;
 }
 /* The title doubles as the metric menu: plain title text, sized to the chosen option. */
-.board-tile-head > .title-switch {
-  field-sizing: content;
-  padding: 0;
-  border: none;
+/* The metric picker reads as the tile's title: the select trigger without its box. */
+.board-tile-head > .title-switch.select-flyout {
+  height: auto;
+  padding: 0 var(--cujuju-select-flyout-chevron-room) 0 0;
+  border: 0;
   background: transparent;
-  font-family: inherit;
+  font-size: inherit;
   line-height: inherit;
-  cursor: pointer;
+  color: inherit;
 }
-/* The open list reads as a menu, not as the faint uppercase title. */
-.board-tile-head > .title-switch option {
-  background: var(--color-surface-raised);
-  color: var(--color-text);
-  text-transform: none;
-  letter-spacing: normal;
-}
-.board-tile-head > .title-switch:hover,
-.board-tile-head > .title-switch:focus-visible {
+.board-tile-head > .title-switch.select-flyout:is(:hover, :focus-visible, .cujuju-select-flyout-trigger-open) {
+  background: transparent;
   color: var(--color-text-muted);
 }
 /* A small remove button, so the header is only as tall as its title. */

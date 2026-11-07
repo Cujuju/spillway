@@ -1,6 +1,7 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
-import { createMemo, createSignal, For, Show, untrack } from 'solid-js';
+import { createMemo, createSignal, Show, untrack } from 'solid-js';
+import { Select } from './ui';
 import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
 import { appendRow } from '../lib/boardGrow';
 import { settings, updateSettings } from '../store';
@@ -12,28 +13,14 @@ const TILE_GAP_TOKEN = '--card-gap';
 const ICON_PX = 12;
 /** Height asked for a chart added below the board: a header plus a readable chart. */
 const NEW_ROW_PX = 320;
-/** Select value meaning "nothing picked", so the menu reads as a button. */
-const NO_CHOICE = '';
-
 /** A chart waiting to be placed. */
 export type PendingChart = Placing & { spec: ActivityPanelSpec };
 
 /** Picks a chart to add; placing it is the board's job. */
 export function AddChartSelect(props: { onPick: (chart: PendingChart) => void }) {
   return (
-    <select
-      class="select"
-      aria-label="Add chart"
-      onChange={(e) => {
-        const choice = ADD_CHOICES[Number(e.currentTarget.value)];
-        e.currentTarget.value = NO_CHOICE;
-        if (choice) props.onPick({ id: crypto.randomUUID(), label: choice.label, spec: choice.spec });
-      }}
-    >
-      {/* `selected` here, not `value` on the select: the value is set before the options exist. */}
-      <option value={NO_CHOICE} disabled selected>Add chart…</option>
-      <For each={ADD_CHOICES}>{(choice, i) => <option value={i()}>{choice.label}</option>}</For>
-    </select>
+    <Select label="Add chart" placeholder="Add chart…" options={ADD_CHOICES.map((c, i) => ({ value: i, label: c.label }))}
+      onChange={(i) => { const choice = ADD_CHOICES[i]; if (choice) props.onPick({ id: crypto.randomUUID(), label: choice.label, spec: choice.spec }); }} />
   );
 }
 
@@ -111,15 +98,9 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
               <section class="card board-tile">
                 <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
                   <Show when={def.switchesMetric} fallback={<div class="section-label">{def.title(spec())}</div>}>
-                    <select class="section-label title-switch" aria-label="Chart metric" title="Change metric"
-                      onChange={(e) => {
-                        const metric = ACTIVITY_METRICS.find((m) => m === e.currentTarget.value);
-                        if (metric) void setMetric(tile.id, metric);
-                      }}>
-                      <For each={ACTIVITY_METRICS}>
-                        {(m) => <option value={m} selected={m === spec().metric}>{def.title({ ...spec(), metric: m })}</option>}
-                      </For>
-                    </select>
+                    <Select class="section-label title-switch" label="Chart metric" title="Change metric" value={spec().metric}
+                      options={ACTIVITY_METRICS.map((m) => ({ value: m, label: def.title({ ...spec(), metric: m }) }))}
+                      onChange={(metric) => void setMetric(tile.id, metric)} />
                   </Show>
                   <Show when={def.info}>{(info) => info()()}</Show>
                   <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>

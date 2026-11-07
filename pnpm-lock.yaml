@@ -175,9 +175,18 @@ importers:
       '@cujuju/electron-updates':
         specifier: link:../solidjs-toolkit/packages/electron-updates
         version: link:../solidjs-toolkit/packages/electron-updates
+      '@cujuju/solidjs-anchored-popover':
+        specifier: link:../solidjs-toolkit/packages/anchored-popover
+        version: link:../solidjs-toolkit/packages/anchored-popover
       '@cujuju/solidjs-color-picker':
         specifier: 0.3.0
         version: 0.3.0(solid-js@1.9.17)
+      '@cujuju/solidjs-glass':
+        specifier: link:../solidjs-toolkit/packages/glass
+        version: link:../solidjs-toolkit/packages/glass
+      '@cujuju/solidjs-glass-menu':
+        specifier: link:../solidjs-toolkit/packages/glass-menu
+        version: link:../solidjs-toolkit/packages/glass-menu
       '@cujuju/solidjs-hold-action':
         specifier: link:../solidjs-toolkit/packages/hold-action
         version: link:../solidjs-toolkit/packages/hold-action
@@ -187,6 +196,9 @@ importers:
       '@cujuju/solidjs-kv-tooltip':
         specifier: link:../solidjs-toolkit/packages/kv-tooltip
         version: link:../solidjs-toolkit/packages/kv-tooltip
+      '@cujuju/solidjs-select-flyout':
+        specifier: link:../solidjs-toolkit/packages/select-flyout
+        version: link:../solidjs-toolkit/packages/select-flyout
       '@cujuju/solidjs-tiling-window-manager':
         specifier: link:../solidjs-toolkit/packages/tiling-window-manager
         version: link:../solidjs-toolkit/packages/tiling-window-manager

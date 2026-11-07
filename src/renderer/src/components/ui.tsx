@@ -1,6 +1,7 @@
 import { HoverTip, type TipRow } from './ChartTip';
 import { dateTime } from '../lib/format';
 import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from 'lucide-solid';
+import { Flyout } from '@cujuju/solidjs-select-flyout';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { resetParts } from '@shared/resetTime';
@@ -26,6 +27,22 @@ export function Toggle(props: { value: boolean; onChange: (v: boolean) => void; 
   );
 }
 
+export interface SelectOption<T> { value: T; label: string; disabled?: boolean; title?: string }
+
+/** The app's single-choice picker: the toolkit flyout on a plain panel. No matching `value` shows `placeholder`, so it reads as an action menu. */
+export function Select<T extends string | number>(props: {
+  value?: T; options: readonly SelectOption<T>[]; onChange: (v: T) => void;
+  label?: string; placeholder?: string; disabled?: boolean; class?: string; title?: string;
+}) {
+  return (
+    <Flyout surface="plain" class={props.class ? `select-flyout ${props.class}` : 'select-flyout'}
+      value={props.value === undefined ? '' : String(props.value)}
+      options={props.options.map((o) => ({ value: String(o.value), label: o.label, disabled: o.disabled, title: o.title }))}
+      onChange={(v) => { const o = props.options.find((x) => String(x.value) === v); if (o) props.onChange(o.value); }}
+      ariaLabel={props.label} placeholder={props.placeholder} disabled={props.disabled} title={props.title} />
+  );
+}
+
 export function Seg<T extends string | number>(props: { label?: string; compact?: boolean; value: T; options: readonly { value: T; label: string; title?: string; tipRows?: TipRow[] }[]; onChange: (v: T) => void }) {
   return (
     <Show when={props.compact} fallback={
@@ -44,12 +61,7 @@ export function Seg<T extends string | number>(props: { label?: string; compact?
         </For>
       </div>
     }>
-      <select class="select seg-select" aria-label={props.label} onChange={(e) => {
-        const option = props.options.find((o) => String(o.value) === e.currentTarget.value);
-        if (option) props.onChange(option.value);
-      }}>
-        <For each={props.options}>{(o) => <option value={o.value} selected={o.value === props.value}>{o.label}</option>}</For>
-      </select>
+      <Select label={props.label} value={props.value} options={props.options} onChange={props.onChange} />
     </Show>
   );
 }

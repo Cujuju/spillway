@@ -6,7 +6,7 @@ import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
 import type { TipRow } from './ChartTip';
-import { Seg, Tabs } from './ui';
+import { Seg, Select, Tabs } from './ui';
 
 const HOURS_PER_DAY = 24;
 /** Forecast lengths in hours: short ones for 5-hour windows, then days for weekly ones. */
@@ -113,9 +113,8 @@ export function PoolPanel(props: {
             <Show when={props.windows.length && !stacked()}>
               <Seg label="Chart window" value={props.line ?? ''} options={props.windows} onChange={props.onLine} />
             </Show>
-            <select class="select" value={hours()} onChange={(e) => void updateSettings((d) => { d.dashboard.forecastHours = Number(e.currentTarget.value); })}>
-              <For each={FORECAST_HOUR_CHOICES}>{(n) => <option value={n}>Next {lengthText(n)}</option>}</For>
-            </select>
+            <Select label="Forecast" value={hours()} options={FORECAST_HOUR_CHOICES.map((n) => ({ value: n, label: `Next ${lengthText(n)}` }))}
+              onChange={(n) => void updateSettings((d) => { d.dashboard.forecastHours = n; })} />
           </div>
         </Tabs>
         <div class="pool-charts">

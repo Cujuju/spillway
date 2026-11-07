@@ -45,10 +45,14 @@
   "dependencies": {
     "@cujuju/electron-notices": "link:../solidjs-toolkit/packages/electron-notices",
     "@cujuju/electron-updates": "link:../solidjs-toolkit/packages/electron-updates",
+    "@cujuju/solidjs-anchored-popover": "link:../solidjs-toolkit/packages/anchored-popover",
     "@cujuju/solidjs-color-picker": "0.3.0",
+    "@cujuju/solidjs-glass": "link:../solidjs-toolkit/packages/glass",
+    "@cujuju/solidjs-glass-menu": "link:../solidjs-toolkit/packages/glass-menu",
     "@cujuju/solidjs-hold-action": "link:../solidjs-toolkit/packages/hold-action",
     "@cujuju/solidjs-hooks": "link:../solidjs-toolkit/packages/hooks",
     "@cujuju/solidjs-kv-tooltip": "link:../solidjs-toolkit/packages/kv-tooltip",
+    "@cujuju/solidjs-select-flyout": "link:../solidjs-toolkit/packages/select-flyout",
     "@cujuju/solidjs-tiling-window-manager": "link:../solidjs-toolkit/packages/tiling-window-manager",
     "better-sqlite3-multiple-ciphers": "^13.0.3",
     "yaml": "^2.9.1"

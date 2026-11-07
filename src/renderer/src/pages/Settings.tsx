@@ -11,7 +11,7 @@ import { UpdateSettings } from '../components/UpdateSettings';
 import { WindowStartSettings } from '../components/WindowStartSettings';
 import { RhythmZipSetting } from '../components/RhythmZipSetting';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
-import { Dialog, NumberField, Seg, SettingRow, SettingsGroup, Toggle } from '../components/ui';
+import { Dialog, NumberField, Seg, Select, SettingRow, SettingsGroup, Toggle } from '../components/ui';
 import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setObservedSpans, setWindowSummaries, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
@@ -100,9 +100,7 @@ function ProxySection() {
       </SettingsGroup>
       <SettingsGroup title="Routing">
         <SettingRow label="Routing strategy" help={STRATEGIES.find((s) => s.value === p().strategy)?.help}>
-          <select class="select fit-content" value={p().strategy} onChange={(e) => set((d) => void (d.proxy.strategy = e.currentTarget.value as RoutingStrategy))}>
-            <For each={STRATEGIES}>{(s) => <option value={s.value}>{s.label}</option>}</For>
-          </select>
+          <Select label="Routing strategy" value={p().strategy} options={STRATEGIES} onChange={(v) => set((d) => void (d.proxy.strategy = v))} />
         </SettingRow>
         <SettingRow label="API keys" help={API_KEY_ORDERS.find((o) => o.value === p().apiKeyOrder)?.help}>
           <Seg value={p().apiKeyOrder} options={API_KEY_ORDERS} onChange={(v) => set((d) => void (d.proxy.apiKeyOrder = v))} />

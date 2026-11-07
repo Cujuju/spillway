@@ -144,8 +144,7 @@
 :root[data-platform='win32'] {
   --control-text-lift: 1px;
 }
-.input,
-.select {
+.input {
   height: var(--control-height);
   padding: 0 var(--spacing-2) calc(2 * var(--control-text-lift, 0px));
   font-size: var(--text-sm);
@@ -155,13 +154,27 @@
   color: var(--color-text);
   min-width: 0;
 }
-/* Sized to the chosen option instead of the widest one. */
-.select.fit-content {
-  field-sizing: content;
-}
-.input:focus,
-.select:focus {
+.input:focus {
   outline: var(--border-width) solid var(--color-accent-border);
+}
+/* Select (ui.tsx) is the toolkit's select flyout; these are the host tokens it reads, scoped to it. */
+.select-flyout,
+.cujuju-select-flyout-panel {
+  --height-btn: var(--control-height);
+  --font-size-sm: var(--text-sm);
+}
+/* The trigger matches .input; open or focused, its border takes the focus colour. */
+.select-flyout {
+  --color-primary: var(--color-accent-border);
+  --color-surface: var(--color-surface-input);
+  min-width: 0;
+  padding-bottom: calc(2 * var(--control-text-lift, 0px));
+}
+.cujuju-select-flyout-panel {
+  --color-primary: var(--color-accent-light);
+  --color-primary-alpha-10: var(--color-accent-subtle);
+  --color-surface: var(--color-surface-raised);
+  --radius-md: var(--radius-btn);
 }
 /* A number with its unit inside the box: the label is the visible input, the inner input is bare. */
 /* Fits a setting's short value (number and unit, or a ZIP code); narrow fits a table's priority. */

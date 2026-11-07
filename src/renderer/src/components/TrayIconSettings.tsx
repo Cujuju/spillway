@@ -8,7 +8,7 @@ import { drawTrayIcon, paintFor, TRAY_PX_2X } from '../lib/trayRender';
 import { activeTheme, settings, snapshot, taskbarDark, updateSettings } from '../store';
 import { poolRemaining } from './poolModel';
 import { TrayIconLookEditor } from './TrayIconLookEditor';
-import { NumberField, Seg, SettingRow, SettingsGroup, Toggle } from './ui';
+import { NumberField, Seg, Select, SettingRow, SettingsGroup, Toggle } from './ui';
 
 const ICON_PX = 14;
 /** Preview at 2x so the tile is legible in the settings list. */
@@ -132,19 +132,13 @@ export function TrayIconSettings() {
         </div>
 
         <div class="tray-add">
-          <select class="select" value={provider()} onChange={(e) => setProvider(e.currentTarget.value)}>
-            <For each={providers()}>{(p) => <option value={p}>{providerLabel(p)}</option>}</For>
-          </select>
-          <select class="select" value={effectiveWindow()} onChange={(e) => setWindowKey(e.currentTarget.value)}>
-            <For each={windows()} fallback={<option value="">No limits reported yet</option>}>{(w) => <option value={w.key}>{w.label}</option>}</For>
-          </select>
-          <select class="select" value={scope()} onChange={(e) => setScope(e.currentTarget.value as TrayIconScope)}>
-            <For each={SCOPES}>{(s) => <option value={s.value} title={s.title}>{s.label}</option>}</For>
-          </select>
+          <Select label="Provider" value={provider()} options={providers().map((p) => ({ value: p, label: providerLabel(p) }))} onChange={setProvider} />
+          <Select label="Limit" value={effectiveWindow()} placeholder="No limits reported yet" disabled={!windows().length}
+            options={windows().map((w) => ({ value: w.key, label: w.label }))} onChange={setWindowKey} />
+          <Select label="Measure" value={scope()} options={SCOPES} onChange={setScope} />
           <Show when={scope() === 'account'}>
-            <select class="select" value={effectiveCredential()} onChange={(e) => setCredentialId(e.currentTarget.value)}>
-              <For each={accounts()} fallback={<option value="">No accounts</option>}>{(c) => <option value={c.id}>{c.label}</option>}</For>
-            </select>
+            <Select label="Account" value={effectiveCredential()} placeholder="No accounts" disabled={!accounts().length}
+              options={accounts().map((c) => ({ value: c.id, label: c.label }))} onChange={setCredentialId} />
           </Show>
           <button class="btn primary" disabled={!canAdd()} title={duplicate() ? 'Already added' : undefined} onClick={add}>
             <Plus size={ICON_PX} /> Add icon

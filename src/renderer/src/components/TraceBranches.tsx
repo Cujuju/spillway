@@ -35,7 +35,7 @@ export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNod
         </span>
       </div>
       <div class="record-list" aria-busy={props.busy}>
-        <For each={props.nodes} fallback={<p class="empty">{props.busy ? 'Loading…' : 'No branches in this range.'}</p>}>
+        <For each={props.nodes} fallback={<p class="empty-note">{props.busy ? 'Loading…' : 'No branches in this range.'}</p>}>
           {(n) => (
             <button type="button" class="trace-node" aria-pressed={props.selected === n.id} onClick={() => props.onSelect(n)}>
               <span class="trace-node-top">

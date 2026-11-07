@@ -73,9 +73,9 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
       </div>
     </div>
     <Show when={bundle()}>{(trace) => <DiagnosticBundle traceIds={[trace()]} onClose={() => setBundle(undefined)} />}</Show>
-    <Show when={loading()}><p class="empty">Loading…</p></Show>
+    <Show when={loading()}><p class="empty-note">Loading…</p></Show>
     <Show when={error()}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
-    <Show when={!loading() && !error() && !detail()}><p class="empty">No capture for this request. Imported and older requests have no capture ID.</p></Show>
+    <Show when={!loading() && !error() && !detail()}><p class="empty-note">No capture for this request. Imported and older requests have no capture ID.</p></Show>
     <Show when={detail()}>{(d) => <>
       <dl class="kv-grid">
         <div class="kv"><dt>Request</dt><dd>{shownText([d().method, d().path].filter(Boolean).join(' ')) || '—'}</dd></div>

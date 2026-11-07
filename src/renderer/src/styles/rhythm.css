@@ -126,13 +126,8 @@
   box-shadow: inset 0 1.5px 0 var(--color-accent-light);
   -webkit-box-reflect: below 1px linear-gradient(transparent 50%, rgb(0 0 0 / 45%));
 }
-.rhythm-bar.empty {
-  height: 2px !important;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-text-soft) 25%, transparent);
-  box-shadow: none;
-  -webkit-box-reflect: unset;
-}
+/* Hours with no activity draw nothing and take no focus. */
+.rhythm-bar.empty { visibility: hidden; }
 .rhythm-sky[data-up='sun'] .rhythm-bar.current:not(.empty) { outline: 1.2px solid color-mix(in srgb, var(--color-amber) 85%, transparent); }
 .rhythm-sky[data-up='moon'] .rhythm-bar.current:not(.empty) { outline: 1.2px solid color-mix(in srgb, var(--rhythm-moon) 85%, transparent); }
 .rhythm-bar:hover,

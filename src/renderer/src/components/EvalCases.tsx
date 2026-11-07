@@ -92,7 +92,7 @@ export function EvalCases(props: { traceId?: string }) {
       </div>
     </Show>
 
-    <Show when={!editing()}><p class="empty">{list().length ? 'Choose a case, or select a record and press New.' : 'No cases yet. Select a record, then press New.'}</p></Show>
+    <Show when={!editing()}><p class="empty-note">{list().length ? 'Choose a case, or select a record and press New.' : 'No cases yet. Select a record, then press New.'}</p></Show>
     <Show when={editing()}>
     <div class="panel-head eval-editor-head">
       <h3 class="section-label">{selected() ? `Revision ${selected()!.revision}` : 'New case'}</h3>

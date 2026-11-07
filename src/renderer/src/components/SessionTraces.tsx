@@ -94,7 +94,7 @@ export function SessionTraces(props: { account: (id: string | null) => string; s
 
     <div class="trace-columns">
       <TraceBranches coverage={coverage()} onRefresh={refresh} nodes={nodes()} busy={busy()} more={!!next()} selected={selected()?.id} onSelect={choose} onMore={() => void load({ ...query(), before: next()! }, true)} />
-      <Show when={selected()} fallback={<section class="card"><p class="empty">Select a branch to see its requests and parent links.</p></section>}>{(n) => (
+      <Show when={selected()} fallback={<section class="card"><p class="empty-note">Select a branch to see its requests and parent links.</p></section>}>{(n) => (
         <TraceDetail n={n()} attempts={attempts()} busy={attemptBusy()} more={!!attemptNext()} error={attemptError()} account={props.account}
           onInspect={setInspected} onNavigate={navigate} onMore={() => void loadAttempts(n(), query(), attemptNext()!)}
           onChildren={(id) => { setSessionInput(''); filter({ nodeId: undefined, text: undefined, parentSessionId: id }); }} />

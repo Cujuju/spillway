@@ -5,19 +5,15 @@ import { tokenCost } from '@shared/modelPrices';
 import { transportRows } from '@shared/activityTransport';
 import type { ActivityEvent, StoredActivityEvent } from '@shared/types';
 import { conversationLabel, conversationName } from '../lib/conversationNames';
-import { usd } from '../lib/format';
+import { msDuration, usd } from '../lib/format';
 import { REQUEST_COLUMNS } from '../lib/requestSort';
 import { shownText } from '../store';
 import { MoveConversation } from './MoveConversation';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
 
-const MS_PER_SECOND = 1000;
-/** Below this, show milliseconds; above, seconds with one decimal. */
-const SHOW_SECONDS_FROM_MS = 1000;
 export const REQUEST_COLUMN_COUNT = REQUEST_COLUMNS.length;
 
-const duration = (ms: number | null) => (ms === null ? '—' : ms < SHOW_SECONDS_FROM_MS ? `${ms} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`);
 const requestCost = (e: ActivityEvent) => {
   const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
   return cost ? usd(cost.usd) : '—';
@@ -81,8 +77,8 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
         <TokenCell v={props.e.cachedTokens} />
         <TokenCell v={props.e.cacheWriteTokens} provider={props.e.provider} />
         <td class="tabular num">{requestCost(props.e)}</td>
-        <td class="tabular num">{duration(props.e.ttftMs)}</td>
-        <td class="tabular num">{duration(props.e.latencyMs)}</td>
+        <td class="tabular num">{msDuration(props.e.ttftMs)}</td>
+        <td class="tabular num">{msDuration(props.e.latencyMs)}</td>
       </tr>
       <Show when={inspect()}><tr><td colSpan={REQUEST_COLUMN_COUNT}><RequestInspector traceId={props.e.traceId} /></td></tr></Show>
       <Show when={errorText()}>

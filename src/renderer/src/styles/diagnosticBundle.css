@@ -1,8 +1,8 @@
-.diagnostic-bundle { display: grid; gap: 10px; min-width: 0; }
+.diagnostic-bundle { display: grid; gap: var(--spacing-2_5); min-width: 0; font-size: var(--text-sm); }
 .diagnostic-bundle p { margin: 0; overflow-wrap: anywhere; }
-.diagnostic-bundle label { display: flex; gap: 8px; align-items: start; overflow-wrap: anywhere; }
-.diagnostic-selection { display: grid; gap: 5px; max-height: 120px; overflow: auto; font-family: monospace; font-size: 12px; }
-.diagnostic-json { white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 360px; padding: 12px; background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: 6px; user-select: text; font-size: 12px; }
-.diagnostic-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.diagnostic-select-row { display: flex; align-items: center; gap: 8px; }
-.diagnostic-select-row > .archive-result { flex: 1; min-width: 0; }
+.diagnostic-bundle label { display: flex; gap: var(--spacing-2); align-items: center; overflow-wrap: anywhere; }
+.diagnostic-bundle .stat-strip.inset { margin: 0; }
+.diagnostic-warning { display: flex; align-items: center; gap: var(--spacing-1_5); color: var(--color-amber); }
+.diagnostic-selection { --selection-max: 120px; display: grid; gap: var(--spacing-1); max-height: var(--selection-max); overflow: auto; padding: var(--spacing-2); font-size: var(--text-xs); background: var(--color-surface-sunken); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-btn); }
+.diagnostic-json { --json-view-max: 360px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: var(--json-view-max); padding: var(--spacing-3); background: var(--color-surface-sunken); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-btn); user-select: text; font-family: inherit; font-size: var(--text-xs); }
+.diagnostic-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--spacing-2); font-size: var(--text-xs); }

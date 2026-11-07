@@ -1,17 +1,310 @@
-.archive-layout { display: grid; gap: 14px; }
-.request-inspector { padding: 16px; white-space: normal; min-width: 0; }
-.request-inspector p { margin-block: 10px; overflow-wrap: anywhere; }
-.archive-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
-.archive-filters label { display: flex; gap: 6px; flex-direction: column; }
-.archive-filters input:not([type=checkbox]), .archive-filters select { max-width: 220px; }
-.archive-bodies { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; }
-.archive-body { min-width: 0; }
-.archive-body pre { max-height: 440px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: 6px; font-size: 12px; user-select: text; }
-.archive-identities { font-family: monospace; font-size: 12px; overflow-wrap: anywhere; user-select: text; }
-.archive-results { display: grid; margin-block: 12px; max-height: 440px; overflow: auto; }
-.archive-result { display: flex; flex-wrap: wrap; text-align: left; gap: 10px; padding: 10px; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--color-border); cursor: pointer; }
-.archive-result:hover { background: var(--color-surface-hover); }
-.archive-result small { flex-basis: 100%; overflow-wrap: anywhere; }
-.eval-cases > label { display: grid; gap: 6px; margin-block: 10px; }
-.eval-cases textarea { width: 100%; box-sizing: border-box; resize: vertical; }
-.eval-cases .archive-raw { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; padding: 12px; background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: 6px; font-size: 12px; }
+/* Activity → Traces and Archive: card heads, filter bars, key-value grids, record tables, body viewers. */
+
+.inspect {
+  display: grid;
+  gap: var(--card-gap);
+}
+.inspect > .card + .card,
+.inspect .card + .card {
+  margin-top: 0;
+}
+
+/* ── Card head: title, its badges and info icon, actions pushed right ── */
+.panel-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  min-height: var(--control-height);
+  margin-bottom: var(--spacing-3);
+}
+.panel-head > .section-label {
+  margin: 0;
+}
+.panel-head-end {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  margin-left: auto;
+}
+.panel-count {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.panel-head .btn svg,
+.inspect-actions .btn svg {
+  flex-shrink: 0;
+}
+
+/* ── Filter bar: one wrapping row of controls ── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.filter-bar .input,
+.filter-bar .select {
+  font-size: var(--text-xs);
+}
+.filter-grow {
+  --filter-grow-min: 160px;
+  flex: 1 1 var(--filter-grow-min);
+}
+.filter-narrow {
+  --filter-narrow-width: 100px;
+  width: var(--filter-narrow-width);
+}
+.date-range {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  color: var(--color-text-muted);
+}
+.date-range .input {
+  --filter-date-width: 150px;
+  width: var(--filter-date-width);
+}
+.filter-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
+}
+.filter-foot:empty {
+  display: none;
+}
+.filter-foot .chip-value {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-coverage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.inspect-notice {
+  margin: var(--spacing-3) 0 0;
+}
+
+/* ── Stats inside a card: the stat strip, framed ── */
+.stat-strip.inset {
+  --stat-cell-min: 120px;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+  margin-bottom: var(--spacing-4);
+}
+.stat-strip.inset .stat-value {
+  font-size: var(--text-md);
+}
+/* Failures and drops read red; the stat classes set their own colour. */
+.stat-cell .danger-text {
+  color: var(--color-red-light);
+}
+
+/* ── Key-value grid ── */
+.kv-grid {
+  --kv-min: 180px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--kv-min), 1fr));
+  gap: var(--spacing-3) var(--spacing-4);
+  margin: 0 0 var(--spacing-4);
+}
+.kv {
+  min-width: 0;
+}
+.kv-wide {
+  grid-column: 1 / -1;
+}
+.kv dt {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-1);
+}
+.kv dd {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+/* ── Rows of settings inside a card, and an action row ── */
+.inspect-rows {
+  border-top: var(--border-width) solid var(--color-divider);
+}
+.inspect-rows .list-row {
+  padding-inline: 0;
+}
+.inspect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-1_5);
+  margin-top: var(--spacing-3);
+}
+.inspect-details {
+  margin-block: var(--spacing-3);
+  font-size: var(--text-xs);
+}
+.inspect-details summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+/* ── Record tables: scroll inside the card; the selected row is tinted ── */
+.archive-table,
+.trace-table {
+  --record-table-max: 480px;
+  max-height: var(--record-table-max);
+  overflow: auto;
+  margin-inline: calc(-1 * var(--card-pad));
+}
+.archive-table .table.dense :is(th, td):first-child,
+.trace-table .table.dense :is(th, td):first-child {
+  padding-left: var(--card-pad);
+}
+.archive-table .table.dense :is(th, td):last-child,
+.trace-table .table.dense :is(th, td):last-child {
+  padding-right: var(--card-pad);
+}
+.archive-table thead th,
+.trace-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-raised);
+  background: var(--color-surface);
+}
+.archive-table tbody tr {
+  cursor: pointer;
+}
+.table tr.selected td {
+  background: var(--color-accent-subtle);
+}
+.col-check {
+  width: var(--control-height);
+}
+.col-check input {
+  display: block;
+  margin: 0;
+}
+.list-more {
+  display: flex;
+  margin: var(--spacing-2) auto 0;
+}
+.empty {
+  margin: 0;
+  padding: var(--spacing-6) var(--spacing-3);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Exchange inspector ── */
+.request-inspector {
+  min-width: 0;
+}
+.archive-bodies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--spacing-3);
+}
+.archive-body {
+  min-width: 0;
+  margin-bottom: var(--spacing-3);
+}
+.archive-body-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-1_5);
+  font-size: var(--text-xs);
+}
+.archive-body-head .section-label {
+  margin: 0;
+}
+.archive-body pre,
+.archive-raw {
+  --body-view-max: 440px;
+  max-height: var(--body-view-max);
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--spacing-3);
+  background: var(--color-surface-sunken);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  line-height: var(--leading-log);
+  user-select: text;
+}
+textarea.archive-raw {
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  color: var(--color-text);
+}
+
+/* ── Eval cases and export ── */
+.eval-list {
+  --record-table-max: 220px;
+  margin-bottom: var(--spacing-4);
+}
+.eval-editor-head {
+  margin-bottom: var(--spacing-2);
+}
+.form-grid {
+  --form-col-min: 200px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--form-col-min), 1fr));
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+}
+.form-grid .form-field.wide {
+  grid-column: 1 / -1;
+}
+.form-grid .form-field > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.form-grid textarea.input {
+  height: auto;
+  padding-block: var(--spacing-1_5);
+  resize: vertical;
+  font-family: inherit;
+}
+.eval-section {
+  margin-top: var(--spacing-4);
+  padding-top: var(--spacing-4);
+  border-top: var(--border-width) solid var(--color-divider);
+}
+.export-job {
+  margin-top: var(--spacing-4);
+}
+.export-job .stat-strip.inset {
+  margin-bottom: 0;
+}

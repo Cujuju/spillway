@@ -1,3 +1,4 @@
+import { Info } from 'lucide-solid';
 import { For, Show, type JSX } from 'solid-js';
 import { KvTooltip, KvTooltipPanel, type KvTooltipAnchor } from '@cujuju/solidjs-kv-tooltip';
 
@@ -45,6 +46,17 @@ export function HoverTip(props: { title: string; rows: TipRow[]; note?: string; 
     >
       {props.children}
     </KvTooltip>
+  );
+}
+
+const INFO_ICON_PX = 14;
+
+/** An info icon whose tooltip carries what is too long for the page: definitions, limits, caveats. */
+export function InfoTip(props: { title: string; rows?: TipRow[]; note?: string }) {
+  return (
+    <HoverTip title={props.title} rows={props.rows ?? []} note={props.note}>
+      <span class="activity-info" aria-label={props.title}><Info size={INFO_ICON_PX} /></span>
+    </HoverTip>
   );
 }
 

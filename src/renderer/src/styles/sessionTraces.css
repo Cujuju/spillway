@@ -1,10 +1,112 @@
-.trace-layout { display: grid; gap: var(--page-gap); }
-.trace-columns { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(340px, 2fr); gap: var(--page-gap); align-items: start; }
-.trace-nodes { display: grid; max-height: 720px; overflow: auto; margin-block: var(--spacing-3); }
-.trace-node { display: grid; gap: var(--spacing-1_5); text-align: left; padding: var(--spacing-3); background: transparent; color: inherit; border: 0; border-bottom: 1px solid var(--color-border); cursor: pointer; }
-.trace-node:hover, .trace-node[aria-pressed=true] { background: var(--color-surface-hover); }
-.trace-identity { overflow-wrap: anywhere; user-select: text; }
-.trace-relations { display: grid; gap: var(--spacing-2); padding: var(--spacing-3); background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: var(--radius-btn); margin-block: var(--spacing-4); }
-.trace-attempt { border-top: 1px solid var(--color-border); padding-block: var(--spacing-3); }
-.trace-detail { min-width: 0; }
-@media (max-width: 900px) { .trace-columns { grid-template-columns: 1fr; } }
+/* Activity → Traces: the branch list beside the selected node. Shared pieces live in archive.css. */
+
+.trace-columns {
+  --trace-list-min: 280px;
+  --trace-detail-min: 420px;
+  display: grid;
+  grid-template-columns: minmax(var(--trace-list-min), 1fr) minmax(var(--trace-detail-min), 2.2fr);
+  gap: var(--card-gap);
+  align-items: start;
+}
+
+/* ── Branch list ── */
+.trace-branches .record-list {
+  --record-list-max: 760px;
+  display: grid;
+  max-height: var(--record-list-max);
+  overflow: auto;
+  margin-inline: calc(-1 * var(--card-pad));
+}
+.trace-node {
+  display: grid;
+  gap: var(--spacing-1_5);
+  padding: var(--spacing-2_5) var(--card-pad);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-top: var(--border-width) solid var(--color-divider);
+  cursor: pointer;
+}
+.trace-node:hover {
+  background: var(--color-row-hover);
+}
+.trace-node[aria-pressed='true'] {
+  background: var(--color-accent-subtle);
+}
+.trace-node-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+.trace-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.trace-node-cost {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.trace-node-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-1_5);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace-node-time {
+  margin-left: auto;
+}
+
+/* ── Selected node ── */
+.trace-detail {
+  min-width: 0;
+}
+.trace-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-parent {
+  max-width: 100%;
+  padding-inline: var(--spacing-2);
+  margin-left: calc(-1 * var(--spacing-2));
+}
+.trace-attempts-head {
+  margin: var(--spacing-1) 0 var(--spacing-2);
+}
+.trace-table {
+  --record-table-max: 560px;
+}
+.trace-table td {
+  white-space: nowrap;
+}
+.trace-account {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trace-inspect {
+  width: var(--control-height);
+}
+.trace-inspect .chip-btn {
+  height: calc(var(--control-height) - 2 * var(--border-width));
+  border: 0;
+  border-radius: var(--radius-btn);
+}
+
+@media (max-width: 900px) {
+  .trace-columns { grid-template-columns: 1fr; }
+}

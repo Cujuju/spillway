@@ -1,14 +1,27 @@
+import { FileArchive, RefreshCw } from 'lucide-solid';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type ArchiveEntry, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CaptureState } from '@shared/archive';
-import { shownText } from '../store';
-import { RequestInspector } from './RequestInspector';
-import { ArchiveExport } from './ArchiveExport';
-import { EvalCases } from './EvalCases';
-import { DiagnosticBundle } from './DiagnosticBundle';
 import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
+import { shownText } from '../store';
+import { dateTime } from '../lib/format';
+import { conversationLabel } from '../lib/conversationNames';
+import { CAPTURE_LABEL, CAPTURE_TONE } from '../lib/traceFormat';
+import { ArchiveCapture } from './ArchiveCapture';
+import { ArchiveExport } from './ArchiveExport';
+import { DiagnosticBundle } from './DiagnosticBundle';
+import { EvalCases } from './EvalCases';
+import { HoverTip } from './ChartTip';
+import { RequestInspector } from './RequestInspector';
 import '../styles/archive.css';
 
-const MiB = 1024 * 1024;
+const ICON_PX = 14;
+/** Typing settles before a query runs. */
+const QUERY_DEBOUNCE_MS = 200;
+/** Store health (drops, bytes) changes as traffic arrives. */
+const STATUS_REFRESH_MS = 3_000;
+const STATES: readonly CaptureState[] = ['complete', 'partial', 'pending', 'missing', 'expired'];
+const TEXT_FILTERS = [['provider', 'Provider'], ['model', 'Model'], ['client', 'Client'], ['sessionId', 'Conversation']] as const;
+
 export function RequestArchive() {
   const [status, setStatus] = createSignal<ArchiveStatus & { syncError?: string | null }>();
   const [query, setQuery] = createSignal<ArchiveQuery>({});
@@ -29,9 +42,9 @@ export function RequestArchive() {
     } catch (e) { if (gen === generation) setError(String(e)); }
     finally { if (gen === generation) setBusy(false); }
   };
-  createEffect(() => { const q = query(); const timer = setTimeout(() => void load(q), 200); onCleanup(() => clearTimeout(timer)); });
+  createEffect(() => { const q = query(); const timer = setTimeout(() => void load(q), QUERY_DEBOUNCE_MS); onCleanup(() => clearTimeout(timer)); });
   onMount(() => {
-    const timer = setInterval(() => { void window.api.archiveStatus().then(setStatus).catch((e) => setError(String(e))); }, 3_000);
+    const timer = setInterval(() => { void window.api.archiveStatus().then(setStatus).catch((e) => setError(String(e))); }, STATUS_REFRESH_MS);
     onCleanup(() => clearInterval(timer));
   });
   const filter = (key: keyof ArchiveQuery, value: string) => setQuery((q) => ({ ...q, [key]: value || undefined, before: undefined }));
@@ -48,45 +61,66 @@ export function RequestArchive() {
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
-  return <div class="archive-layout">
-    <section class="card request-inspector">
-      <h2>Local request archive</h2>
-      <p>Metadata is recorded by default. Body capture is optional and applies to future traffic while Spillway is connected. Captured text and its full-text index are encrypted with the Activity database key.</p>
-      <div class="archive-filters">
-        <label><input type="checkbox" checked={policy().captureBodies} disabled={busy()} onChange={(e) => void save({ ...policy(), captureBodies: e.currentTarget.checked })} /> Record request and response bodies</label>
-        <label>Keep bodies (days) <input type="number" min="1" max="90" value={policy().retentionDays} disabled={busy()} onChange={(e) => void save({ ...policy(), retentionDays: Number(e.currentTarget.value) })} /></label>
-        <label>Body budget (MiB) <input type="number" min="1" max="1024" value={policy().maxBytes / MiB} disabled={busy()} onChange={(e) => void save({ ...policy(), maxBytes: Number(e.currentTarget.value) * MiB })} /></label>
+  const picked = (id: string) => bundleSelection().includes(id);
+  const full = () => bundleSelection().length >= DIAGNOSTIC_LIMITS.records;
+  const toggle = (id: string, on: boolean) => setBundleSelection((old) => on ? [...old, id] : old.filter((x) => x !== id));
+
+  return <div class="inspect">
+    <ArchiveCapture status={status()} policy={policy()} busy={busy()} onSave={(p) => void save(p)} onClear={() => void clear()} />
+    <section class="card">
+      <div class="panel-head">
+        <h2 class="card-title">Records</h2>
+        <span class="panel-count">{entries().length.toLocaleString()}{more() ? '+' : ''}</span>
+        <div class="panel-head-end">
+          <Show when={bundleSelection().length}>
+            <span class="panel-count">{bundleSelection().length} / {DIAGNOSTIC_LIMITS.records} selected</span>
+            <button class="btn ghost" type="button" onClick={() => setBundleSelection([])}>Clear</button>
+            <button class="btn" type="button" onClick={() => setBundle([...bundleSelection()])}><FileArchive size={ICON_PX} />Diagnostic bundle</button>
+          </Show>
+          <button class="btn icon-btn ghost" type="button" title="Refresh" aria-label="Refresh" disabled={busy()} onClick={() => void load(query())}><RefreshCw size={ICON_PX} /></button>
+        </div>
       </div>
-      <p class="muted">HTTP: 256 KiB wire and decoded bytes per request/response; gzip and zstd supported. Codex WebSocket: up to 128 application messages, 64 KiB per message and 256 KiB per direction. Truncation is explicit. Oldest bodies expire first. Budget counts serialized detail before index overhead; database file size can be larger. Up to 20,000 identities remain. Turning capture off keeps saved bodies until expiry or deletion.</p>
-      <p class="muted">The proxy uses a temporary bounded memory spool. Overflow, disconnection and proxy crashes can lose captures. Provider-hidden data and WebSocket control frames are outside this capture boundary. Capture is separate from proxy text-file logging.</p>
-      <Show when={status()}>{(s) => <p class="muted">{s().entries.toLocaleString()} records · {(s().bytes / MiB).toFixed(1)} MiB · {s().dropped} proxy drops · {s().gaps} observed sequence gaps (overlap with drops; do not add) · {s().restarts} epoch changes · {s().rejected} rejected records</p>}</Show>
-      <Show when={status()?.syncError}><p class="notice">Capture sync: {shownText(status()!.syncError!)}. Check the proxy version and connection.</p></Show>
-      <Show when={status()?.exportWarning}><p class="notice">Export cleanup: {shownText(status()!.exportWarning!)}</p></Show>
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void clear()}>Delete archive and turn capture off</button>
-      <p class="muted">Archive deletion preserves pinned eval cases. Delete each case explicitly below; deleting all Activity also deletes all eval cases and revisions.</p>
-    </section>
-    <section class="card request-inspector">
-      <div class="archive-filters">
-        <label>Keywords <input value={query().text ?? ''} placeholder="Search captured text" onInput={(e) => filter('text', e.currentTarget.value)} /></label>
-        <label>Provider <input value={query().provider ?? ''} onInput={(e) => filter('provider', e.currentTarget.value)} /></label>
-        <label>Model <input value={query().model ?? ''} onInput={(e) => filter('model', e.currentTarget.value)} /></label>
-        <label>Client <input value={query().client ?? ''} onInput={(e) => filter('client', e.currentTarget.value)} /></label>
-        <label>Conversation <input value={query().sessionId ?? ''} onInput={(e) => filter('sessionId', e.currentTarget.value)} /></label>
-        <label>From <input type="datetime-local" value={query().from ?? ''} onInput={(e) => filter('from', e.currentTarget.value)} /></label>
-        <label>To <input type="datetime-local" value={query().to ?? ''} onInput={(e) => filter('to', e.currentTarget.value)} /></label>
-        <label>State <select value={query().state ?? ''} onChange={(e) => filter('state', e.currentTarget.value as CaptureState)}><option value="">All</option><For each={['missing', 'pending', 'partial', 'complete', 'expired']}>{(s) => <option value={s}>{s}</option>}</For></select></label>
-        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void load(query())}>Refresh</button>
+      <div class="filter-bar">
+        <input class="input filter-grow" type="search" placeholder="Search captured text" aria-label="Search captured text" value={query().text ?? ''} onInput={(e) => filter('text', e.currentTarget.value)} />
+        <For each={TEXT_FILTERS}>{([key, label]) => <input class="input filter-narrow" placeholder={label} aria-label={label} value={query()[key] ?? ''} onInput={(e) => filter(key, e.currentTarget.value)} />}</For>
+        <select class="select" aria-label="Capture state" value={query().state ?? ''} onChange={(e) => filter('state', e.currentTarget.value)}>
+          <option value="">Any state</option>
+          <For each={STATES}>{(s) => <option value={s}>{CAPTURE_LABEL[s]}</option>}</For>
+        </select>
+        <span class="date-range">
+          <input class="input" type="datetime-local" aria-label="From" title="From" value={query().from ?? ''} onInput={(e) => filter('from', e.currentTarget.value)} />
+          <span aria-hidden="true">–</span>
+          <input class="input" type="datetime-local" aria-label="To" title="To" value={query().to ?? ''} onInput={(e) => filter('to', e.currentTarget.value)} />
+        </span>
       </div>
-      <Show when={error()}>{(e) => <p class="notice">{shownText(e())}</p>}</Show>
-      <div class="archive-filters"><button class="btn ghost" type="button" disabled={!bundleSelection().length} onClick={() => setBundle([...bundleSelection()])}>Diagnostic bundle from {bundleSelection().length} selected…</button><button class="btn ghost" type="button" onClick={() => setBundleSelection([])}>Clear selection</button><small class="muted">Choose up to {DIAGNOSTIC_LIMITS.records} records. Filter by Conversation to select related requests; selection persists across pages.</small></div>
-      <div class="archive-results"><For each={entries()} fallback={<p class="muted">No matching archive records. Historical requests have no capture identity.</p>}>{(r) => <div class="diagnostic-select-row"><input type="checkbox" aria-label={`Select trace ${shownText(r.traceId)} for diagnostic bundle`} checked={bundleSelection().includes(r.traceId)} disabled={bundleSelection().length >= DIAGNOSTIC_LIMITS.records && !bundleSelection().includes(r.traceId)} onChange={(e) => setBundleSelection((old) => e.currentTarget.checked ? [...old, r.traceId] : old.filter((id) => id !== r.traceId))} /><button class="archive-result" type="button" onClick={() => setSelected(r.traceId)}>
-        <span>{new Date(r.at).toLocaleString()} · {shownText(r.model || r.path || 'Unknown model')}</span><span class="badge">{r.state}</span><small>{shownText(r.sessionId ?? r.traceId)}</small>
-      </button></div>}</For></div>
-      <Show when={more()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Show more</button></Show>
+      <Show when={error()}>{(e) => <p class="notice error inspect-notice">{shownText(e())}</p>}</Show>
+      <div class="archive-table">
+        <table class="table dense">
+          <thead><tr><th class="col-check" /><th>Time</th><th>Model</th><th>Conversation</th><th>Capture</th></tr></thead>
+          <tbody aria-busy={busy()}>
+            <For each={entries()} fallback={<tr><td class="empty-row" colSpan={5}>{busy() ? 'Loading…' : 'No records match.'}</td></tr>}>{(r) => (
+              <tr classList={{ selected: selected() === r.traceId }} onClick={() => setSelected(r.traceId)}>
+                <td class="col-check" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" aria-label="Add to diagnostic bundle" checked={picked(r.traceId)} disabled={full() && !picked(r.traceId)} onChange={(e) => toggle(r.traceId, e.currentTarget.checked)} />
+                </td>
+                <td class="tabular"><button class="sort-btn" type="button" aria-pressed={selected() === r.traceId} onClick={(e) => { e.stopPropagation(); setSelected(r.traceId); }}>{dateTime(r.at)}</button></td>
+                <td class="fill">{shownText(r.model || r.path || '—')}</td>
+                <td class="fill">
+                  <HoverTip title="Conversation" rows={[{ label: 'ID', value: shownText(r.sessionId ?? '—') }, { label: 'Trace', value: shownText(r.traceId) }]}>
+                    <span>{r.sessionId ? shownText(conversationLabel(r.sessionId)) : <span class="muted">—</span>}</span>
+                  </HoverTip>
+                </td>
+                <td><span class={`badge compact ${CAPTURE_TONE[r.state]}`}>{CAPTURE_LABEL[r.state]}</span></td>
+              </tr>
+            )}</For>
+          </tbody>
+        </table>
+      </div>
+      <Show when={more()}><button class="btn ghost list-more" type="button" disabled={busy()} onClick={() => { const last = entries().at(-1); if (last) void load({ ...query(), before: archiveCursor(last) }, true); }}>Load more</button></Show>
     </section>
+    <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} onClose={() => setSelected(undefined)} /></section>}</Show>
     <ArchiveExport query={query()} traceId={selected()} />
     <EvalCases traceId={selected()} />
-    <Show when={selected()}>{(trace) => <section class="card"><RequestInspector traceId={trace()} onConversation={(id) => setQuery({ sessionId: id })} /></section>}</Show>
     <Show when={bundle()}>{(ids) => <DiagnosticBundle traceIds={ids()} onClose={() => setBundle(undefined)} />}</Show>
   </div>;
 }

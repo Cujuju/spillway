@@ -1,11 +1,27 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { FileArchive, MessagesSquare, RefreshCw, X } from 'lucide-solid';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ArchiveDetail } from '@shared/archive';
 import { readableStreamText } from '@shared/archiveContent';
 import { shownText } from '../store';
+import { CAPTURE_LABEL, CAPTURE_TONE } from '../lib/traceFormat';
+import { dateTime } from '../lib/format';
+import { HoverTip, InfoTip } from './ChartTip';
 import { DiagnosticBundle } from './DiagnosticBundle';
 import '../styles/archive.css';
 
 const RENDER_CHUNK = 32 * 1024;
+/** A pending capture's open WebSocket messages arrive while it is shown. */
+const LIVE_REFRESH_MS = 3_000;
+const ICON_PX = 14;
+const KIB = 1024;
+/** Newest upstream attempts listed in the hover readout; the count shows them all. */
+const ATTEMPT_TIP_ROWS = 8;
+const STATE_NOTE: Partial<Record<ArchiveDetail['state'], string>> = {
+  pending: 'Awaiting finalization; open WebSocket messages update here.',
+  expired: 'Bodies were removed by retention or the byte budget. The identity remains.',
+};
+const FORMAT_NOTE = 'HTTP encodings are decoded when supported; WebSocket payloads are decoded messages. Headers are excluded; prompts and body secrets may be present. "Captured" means all observed bytes within limits, not upstream success.';
+
 function BodyText(props: { label: string; text: string; type: string; encoding: string }) {
   const [limit, setLimit] = createSignal(RENDER_CHUNK);
   const text = createMemo(() => {
@@ -15,13 +31,13 @@ function BodyText(props: { label: string; text: string; type: string; encoding: 
     catch { return value; /* SSE, plain text and binary wire bytes are displayed verbatim. */ }
   });
   return <section class="archive-body">
-    <h3>{props.label} <small class="muted">{shownText(props.type)} {shownText(props.encoding)}</small></h3>
-    <pre>{text().slice(0, limit()) || 'No body bytes stored.'}</pre>
-    <Show when={text().length > limit()}><button class="btn ghost" type="button" onClick={() => setLimit((n) => n + RENDER_CHUNK)}>Show next 32 KiB</button></Show>
+    <div class="archive-body-head"><span class="section-label">{props.label}</span><span class="muted">{shownText([props.type, props.encoding].filter(Boolean).join(' · '))}</span></div>
+    <pre>{text().slice(0, limit()) || 'No body stored.'}</pre>
+    <Show when={text().length > limit()}><button class="btn ghost" type="button" onClick={() => setLimit((n) => n + RENDER_CHUNK)}>Show more</button></Show>
   </section>;
 }
 
-export function RequestInspector(props: { traceId?: string | null; onConversation?: (sessionId: string) => void }) {
+export function RequestInspector(props: { traceId?: string | null; onConversation?: (sessionId: string) => void; onClose?: () => void }) {
   const [bundle, setBundle] = createSignal<string>();
   const [detail, setDetail] = createSignal<ArchiveDetail | null>(null);
   const [error, setError] = createSignal<string | null>(null);
@@ -39,29 +55,45 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   };
   createEffect(() => {
     const trace = props.traceId; void load(trace);
-    const timer = setInterval(() => void load(trace, true), 3_000);
+    const timer = setInterval(() => void load(trace, true), LIVE_REFRESH_MS);
     onCleanup(() => { clearInterval(timer); generation++; });
   });
   return <div class="request-inspector">
-    <div class="card-spaced"><strong>Request inspector</strong> <button type="button" class="btn ghost" onClick={() => void load(props.traceId)}>Refresh</button></div>
-    <Show when={props.traceId}><button class="btn ghost" type="button" onClick={() => setBundle(props.traceId!)}>Prepare diagnostic bundle…</button></Show>
+    <div class="panel-head">
+      <h2 class="card-title">Exchange</h2>
+      <Show when={detail()}>{(d) => <>
+        <span class={`badge ${CAPTURE_TONE[d().state]}`}>{CAPTURE_LABEL[d().state]}</span>
+        <Show when={STATE_NOTE[d().state] || d().reason}><InfoTip title={CAPTURE_LABEL[d().state]} note={[STATE_NOTE[d().state], d().reason && shownText(d().reason)].filter(Boolean).join(' ')} /></Show>
+      </>}</Show>
+      <div class="panel-head-end">
+        <Show when={detail()?.sessionId && props.onConversation}><button class="btn ghost" type="button" onClick={() => props.onConversation?.(detail()!.sessionId!)}><MessagesSquare size={ICON_PX} />Conversation</button></Show>
+        <Show when={props.traceId}><button class="btn ghost" type="button" onClick={() => setBundle(props.traceId!)}><FileArchive size={ICON_PX} />Diagnostic bundle</button></Show>
+        <button type="button" class="btn icon-btn ghost" title="Refresh" aria-label="Refresh" onClick={() => void load(props.traceId)}><RefreshCw size={ICON_PX} /></button>
+        <Show when={props.onClose}><button type="button" class="btn icon-btn ghost" title="Close" aria-label="Close" onClick={() => props.onClose?.()}><X size={ICON_PX} /></button></Show>
+      </div>
+    </div>
     <Show when={bundle()}>{(trace) => <DiagnosticBundle traceIds={[trace()]} onClose={() => setBundle(undefined)} />}</Show>
-    <Show when={loading()}><p class="muted">Loading capture…</p></Show>
-    <Show when={error()}>{(e) => <p class="notice">{shownText(e())}</p>}</Show>
-    <Show when={!loading() && !error() && !detail()}><p class="muted">Unknown — no saved full inbound trace/capture identity. Historical requests and imported client logs cannot be matched safely.</p></Show>
+    <Show when={loading()}><p class="empty">Loading…</p></Show>
+    <Show when={error()}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
+    <Show when={!loading() && !error() && !detail()}><p class="empty">No capture for this request. Imported and older requests have no capture ID.</p></Show>
     <Show when={detail()}>{(d) => <>
-      <p><span class="badge">{d().state}</span> {shownText(d().reason || 'Finalized downstream exchange')}. {d().bytes.toLocaleString()} stored bytes.</p>
-      <p class="archive-identities">Trace {shownText(d().traceId)} · {shownText(d().method)} {shownText(d().path)} · HTTP {d().status || 'unknown'}</p>
-      <Show when={d().state === 'pending'}><p class="muted">Awaiting finalization. Open WebSocket messages update here while the bounded capture is available.</p></Show>
-      <Show when={d().state === 'expired'}><p class="muted">Body and search text were deleted by retention or byte budget. The stable identity remains.</p></Show>
-      <Show when={d().sessionId && props.onConversation}><button class="btn ghost" type="button" onClick={() => props.onConversation?.(d().sessionId!)}>Browse this conversation</button></Show>
-      <details><summary>{d().attempts.length} linked upstream attempts (up to 200 retained)</summary><For each={d().attempts}>{(a) => <p class="archive-identities">{shownText(a.requestId)} · selection {shownText(a.selectionId ?? 'unknown')} · {new Date(a.at).toLocaleString()}</p>}</For></details>
-      <Show when={readableResponse()}><BodyText label="Readable response text" text={readableResponse()} type="Joined text deltas" encoding="" /></Show>
+      <dl class="kv-grid">
+        <div class="kv"><dt>Request</dt><dd>{shownText([d().method, d().path].filter(Boolean).join(' ')) || '—'}</dd></div>
+        <div class="kv"><dt>Status</dt><dd>{d().status || '—'}</dd></div>
+        <div class="kv"><dt>Stored</dt><dd>{(d().bytes / KIB).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB</dd></div>
+        <div class="kv"><dt>Format</dt><dd>{d().format}<InfoTip title="Format" note={FORMAT_NOTE} /></dd></div>
+        <div class="kv"><dt>Upstream attempts</dt><dd>
+          <HoverTip title="Upstream attempts" rows={d().attempts.slice(0, ATTEMPT_TIP_ROWS).map((a) => ({ label: dateTime(a.at), value: shownText(a.selectionId ?? a.requestId) }))} note={d().attempts.length > ATTEMPT_TIP_ROWS ? `First ${ATTEMPT_TIP_ROWS} of ${d().attempts.length}; up to 200 retained.` : 'Up to 200 retained.'}>
+            <span>{d().attempts.length}</span>
+          </HoverTip>
+        </dd></div>
+        <div class="kv kv-wide"><dt>Trace</dt><dd class="selectable">{shownText(d().traceId)}</dd></div>
+      </dl>
+      <Show when={readableResponse()}><BodyText label="Response text" text={readableResponse()} type="Joined deltas" encoding="" /></Show>
       <div class="archive-bodies">
         <BodyText label="Request" text={d().request} type={d().requestType} encoding={d().requestEncoding} />
         <BodyText label="Response" text={d().response} type={d().responseType} encoding={d().responseEncoding} />
       </div>
-      <p class="muted">Format: {d().format}. HTTP content encodings are decoded when supported; WebSocket payloads are decoded application messages. Original encoding labels are retained. Prompts, completions and body secrets may be present; headers are excluded. “Complete” covers observed bytes/messages within limits and does not certify upstream success or semantic completeness.</p>
     </>}</Show>
   </div>;
 }

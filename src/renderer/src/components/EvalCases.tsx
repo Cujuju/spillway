@@ -1,6 +1,20 @@
+import { Download, Plus, RefreshCw } from 'lucide-solid';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { EvalAnnotation, EvalCase, EvalCaseSummary, EvalExportPreview, EvalReplayPreview, EvalReplayResult } from '@shared/evalCase';
 import { shownText } from '../store';
+import { InfoTip } from './ChartTip';
+import { SettingRow, Toggle } from './ui';
+
+const ICON_PX = 14;
+/** A running replay reports its result this often. */
+const REPLAY_POLL_MS = 400;
+/** Characters of a pinned snapshot rendered inline; the export preview has the rest. */
+const SNAPSHOT_PREVIEW_CHARS = 32 * 1024;
+const MS_PER_SECOND = 1000;
+const CASES_NOTE = 'Pinned, encrypted snapshots that outlive archive expiry and deletion. Each save is a new immutable revision. Limits: 200 cases, 8 revisions and 8 MiB per case, 64 MiB total. Deleting all Activity deletes cases too.';
+const REPLAY_NOTE = 'Replay supports self-contained text-only POST /v1/chat/completions and /v1/messages. Responses/Codex, WebSocket, tools and attachments stay inspect-only. Full agent-task replay needs a reproducible workspace this app does not provide.';
+const ASSERT_NOTE = 'JSON array of {kind, value}; kinds: contains, not-contains, equals. Exact, case-sensitive matches on model output. All must pass; nothing executes.';
+const EXPORT_NOTE = 'Exports are unencrypted. Known credential patterns and app secrets are redacted; review prose yourself. Redaction can change replay input, and the file records its policy.';
 
 const blank = (): EvalAnnotation => ({ title: '', notes: '', expectedOutcome: '', assertions: [], context: { repository: '', revision: '', workspace: 'unknown', notes: '' } });
 export function EvalCases(props: { traceId?: string }) {
@@ -16,6 +30,8 @@ export function EvalCases(props: { traceId?: string }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
   const [message, setMessage] = createSignal<string>();
+  /** The editor opens for a chosen case or after New. */
+  const [editing, setEditing] = createSignal(false);
   let disposed = false, polling = false;
   const refresh = async () => { const rows = await window.api.evalList(); if (!disposed) setList(rows); };
   const run = async (fn: () => Promise<void>) => {
@@ -29,8 +45,9 @@ export function EvalCases(props: { traceId?: string }) {
   };
   const choose = async (id: string, revision?: number) => {
     await forget(); const c = await window.api.evalGet(id, revision); if (disposed) return;
-    setSelected(c); setDraft(c.annotation); setAssertions(JSON.stringify(c.annotation.assertions, null, 2));
+    setSelected(c); setDraft(c.annotation); setAssertions(JSON.stringify(c.annotation.assertions, null, 2)); setEditing(true);
   };
+  const reset = async () => { await forget(); setSelected(undefined); setDraft(blank()); setAssertions('[]'); };
   const annotation = (): EvalAnnotation => ({ ...draft(), assertions: JSON.parse(assertions()) as EvalAnnotation['assertions'] });
   const save = async () => {
     const c = selected(); await forget();
@@ -47,60 +64,123 @@ export function EvalCases(props: { traceId?: string }) {
     polling = true;
     void window.api.evalReplayStatus(r.id).then((next) => { if (!disposed && replay()?.id === next.id) setResult(next); })
       .catch((e) => { if (!disposed) setError(String(e)); }).finally(() => { polling = false; });
-  }, 400);
+  }, REPLAY_POLL_MS);
   onCleanup(() => { disposed = true; clearInterval(timer); void forget().catch((e) => console.error('Eval preview cleanup failed', e)); });
   const field = (key: 'title' | 'notes' | 'expectedOutcome', value: string) => setDraft((d) => ({ ...d, [key]: value }));
   const context = (key: 'repository' | 'revision' | 'notes', value: string) => setDraft((d) => ({ ...d, context: { ...d.context, [key]: value } }));
-  return <section class="card request-inspector eval-cases">
-    <h2>Durable eval cases</h2>
-    <p>Supported replay: self-contained text-only HTTP POST /v1/chat/completions and /v1/messages. Responses/Codex, WebSocket, tools, tool results, attachments and stateful context remain inspectable protocol snapshots with replay unsupported. Full agent-task replay needs a reproducible repository/tool environment and an agent harness, which this app does not provide.</p>
-    <p>Cases are pinned encrypted snapshots, independent of archive expiry and archive deletion. Each edit creates an immutable revision. Limits: 200 cases, 8 revisions and 8 MiB per case, 4 MiB per snapshot, 64 MiB total. At capacity, additions fail; delete cases explicitly. Delete all Activity also deletes all cases.</p>
-    <div class="archive-filters">
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { await forget(); setSelected(undefined); setDraft(blank()); setAssertions('[]'); })}>New from selected capture</button>
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { const rows = await window.api.evalImport(); await refresh(); setMessage(`Imported ${rows.length} case revisions. Imports never execute.`); })}>Import cases / portable archive…</button>
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(refresh)}>Refresh cases</button>
-    </div>
-    <div class="archive-results"><For each={list()}>{(c) => <button class="archive-result" type="button" disabled={busy()} onClick={() => void run(() => choose(c.id))}><span>{shownText(c.title)} · revision {c.revision}</span><small>{c.id}</small></button>}</For></div>
-    <p>{selected() ? `${selected()!.id} · revision ${selected()!.revision}` : `New snapshot source: ${props.traceId ?? 'select an archive capture first'}`}</p>
-    <div class="archive-filters">
-      <label>Title <input maxLength={160} value={draft().title} onInput={(e) => field('title', e.currentTarget.value)} /></label>
-      <label>Repository label (unverified) <input value={draft().context.repository} onInput={(e) => context('repository', e.currentTarget.value)} /></label>
-      <label>Revision label (unverified) <input value={draft().context.revision} onInput={(e) => context('revision', e.currentTarget.value)} /></label>
-    </div>
-    <label>Annotations <textarea rows="2" value={draft().notes} onInput={(e) => field('notes', e.currentTarget.value)} /></label>
-    <label>Expected outcome (human review; never executed) <textarea rows="2" value={draft().expectedOutcome} onInput={(e) => field('expectedOutcome', e.currentTarget.value)} /></label>
-    <label>Missing workspace/tool/context notes <textarea rows="2" value={draft().context.notes} onInput={(e) => context('notes', e.currentTarget.value)} /></label>
-    <label>Literal assertions (JSON array; kinds: contains, not-contains, equals) <textarea rows="3" spellcheck={false} value={assertions()} placeholder={'[{"kind":"contains","value":"expected text"}]'} onInput={(e) => setAssertions(e.currentTarget.value)} /></label>
-    <p class="muted">Assertions compare exact, case-sensitive model output text. No regex, scripts, shell commands or repository checks run. All assertions must pass. HTTP success and passing text assertions leave task outcome unknown.</p>
-    <Show when={!selected()}><label><input type="checkbox" checked={bodies()} onChange={(e) => setBodies(e.currentTarget.checked)} /> Pin previously recorded protocol bodies with this case (may contain private text)</label></Show>
-    <button class="btn" type="button" disabled={busy() || !selected() && !props.traceId} onClick={() => void run(save)}>{selected() ? 'Save annotations as new revision' : 'Create pinned case snapshot'}</button>
-    <Show when={selected()}>{(c) => <>
-      <div class="archive-filters">
-        <button class="btn ghost" type="button" disabled={busy() || c().revision <= 1} onClick={() => void run(() => choose(c().id, c().revision - 1))}>Previous revision</button>
-        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(() => choose(c().id))}>Latest revision</button>
-        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { await window.api.evalDelete(c().id); await forget(); setSelected(undefined); setDraft(blank()); setAssertions('[]'); await refresh(); })}>Delete case and ALL its revisions</button>
+  return <section class="card eval-cases">
+    <div class="panel-head">
+      <h2 class="card-title">Eval cases</h2>
+      <InfoTip title="Eval cases" note={CASES_NOTE} />
+      <div class="panel-head-end">
+        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { const rows = await window.api.evalImport(); await refresh(); setMessage(`Imported ${rows.length} revisions. Imports never run.`); })}><Download size={ICON_PX} />Import…</button>
+        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { await reset(); setEditing(true); })}><Plus size={ICON_PX} />New</button>
+        <button class="btn icon-btn ghost" type="button" title="Refresh" aria-label="Refresh" disabled={busy()} onClick={() => void run(refresh)}><RefreshCw size={ICON_PX} /></button>
       </div>
-      <p class="muted">Source {shownText(c().provenance.source)} · {shownText(c().provenance.archiveId)} · capture {c().capture.entry.state} · payload {c().capture.payload.state}. Original messages/tools remain protocol content; they are not normalized training examples. Imported provenance is an unauthenticated claim.</p>
-      <For each={c().missingContext}>{(reason) => <p class="muted">{shownText(reason)}</p>}</For>
-      <details><summary>Inspect pinned protocol snapshot (first 32,768 characters; export preview contains retained content)</summary><pre class="archive-raw">{shownText(JSON.stringify(c().capture, null, 2).slice(0, 32 * 1024))}</pre></details>
-      <label><input type="checkbox" checked={exportBodies()} onChange={(e) => setExportBodies(e.currentTarget.checked)} /> Include retained protocol bodies in next export preview</label>
-      <p class="muted">Exports are unencrypted. Common credential patterns and current app secrets are redacted; arbitrary private prose requires your review. Redaction can change protocol input and assertions: nested hashes are recomputed and the file records its transformation policy. Replaying changed content is not byte-faithful original replay. Bodies default to omitted. Export preview shows exact saved text without screen email masking. Review annotations and bodies for secrets before saving.</p>
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { setPreview(await window.api.evalExportPrepare(c().id, c().revision, exportBodies())); })}>Prepare export for review</button>
-      <button class="btn ghost" type="button" disabled={busy() || result()?.state === 'running'} onClick={() => void run(prepareReplay)}>Preview supported model-call replay</button>
-    </>}</Show>
-    <Show when={preview()}>{(p) => <div><label>Frozen export ({p().bytes} bytes)<textarea rows="10" readOnly value={p().jsonl} spellcheck={false} /></label><button class="btn" type="button" disabled={busy()} onClick={() => void run(async () => { const path = await window.api.evalExportSave(p().token); setPreview(undefined); if (path) setMessage(`Saved ${path}`); })}>Choose file and save reviewed export</button></div>}</Show>
-    <Show when={replay()}>{(r) => <div aria-live="polite">
-      <h3>Model-call replay preview</h3><p>{r().environment}</p>
-      <p>{r().inputFidelity}</p>
-      <p>Model: {shownText(r().model ?? 'unsupported')} · route: {r().route ?? 'unsupported'} · destination: {r().destination || 'unavailable'} · {r().maxOutputTokens} output tokens · {r().timeoutMs / 1000}s deadline. Full agent-task replay: unsupported (no reproducible workspace/tool harness).</p>
-      <p>Frozen criteria: {shownText(JSON.stringify(r().assertions))}. Expected outcome: {shownText(r().expectedOutcome || 'unspecified')}. Unsaved annotation edits are excluded.</p>
-      <For each={r().reasons}>{(reason) => <p class="notice">{shownText(reason)}</p>}</For>
-      <details><summary>Exact request context (stream disabled; token cap applied)</summary><pre class="archive-raw">{shownText(r().request ?? '')}</pre></details>
-      <button class="btn" type="button" disabled={busy() || !r().supported || !!result()} onClick={() => void run(async () => { setResult(await window.api.evalReplayStart(r().id)); })}>Run this model call now (uses provider quota)</button>
-      <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { await window.api.evalReplayCancel(r().id); setResult(await window.api.evalReplayStatus(r().id)); })}>Cancel replay</button>
+    </div>
+    <Show when={list().length}>
+      <div class="archive-table eval-list">
+        <table class="table dense">
+          <thead><tr><th>Case</th><th class="num">Revision</th></tr></thead>
+          <tbody><For each={list()}>{(c) => (
+            <tr classList={{ selected: selected()?.id === c.id }}>
+              <td class="fill"><button class="sort-btn" type="button" disabled={busy()} onClick={() => void run(() => choose(c.id))}>{shownText(c.title) || 'Untitled'}</button></td>
+              <td class="num tabular">{c.revision}</td>
+            </tr>
+          )}</For></tbody>
+        </table>
+      </div>
+    </Show>
+
+    <Show when={!editing()}><p class="empty">{list().length ? 'Choose a case, or select a record and press New.' : 'No cases yet. Select a record, then press New.'}</p></Show>
+    <Show when={editing()}>
+    <div class="panel-head eval-editor-head">
+      <h3 class="section-label">{selected() ? `Revision ${selected()!.revision}` : 'New case'}</h3>
+      <Show when={!selected()}><span class="panel-count">{props.traceId ? 'from the selected record' : 'select a record first'}</span></Show>
+    </div>
+    <div class="form-grid">
+      <label class="form-field"><span>Title</span><input class="input" maxLength={160} value={draft().title} onInput={(e) => field('title', e.currentTarget.value)} /></label>
+      <label class="form-field"><span>Repository</span><input class="input" placeholder="Label only" value={draft().context.repository} onInput={(e) => context('repository', e.currentTarget.value)} /></label>
+      <label class="form-field"><span>Revision</span><input class="input" placeholder="Label only" value={draft().context.revision} onInput={(e) => context('revision', e.currentTarget.value)} /></label>
+      <label class="form-field wide"><span>Notes</span><textarea class="input" rows="2" value={draft().notes} onInput={(e) => field('notes', e.currentTarget.value)} /></label>
+      <label class="form-field wide"><span>Expected outcome</span><textarea class="input" rows="2" placeholder="For human review" value={draft().expectedOutcome} onInput={(e) => field('expectedOutcome', e.currentTarget.value)} /></label>
+      <label class="form-field wide"><span>Missing context</span><textarea class="input" rows="2" placeholder="Workspace, tools, files" value={draft().context.notes} onInput={(e) => context('notes', e.currentTarget.value)} /></label>
+      <label class="form-field wide"><span>Assertions <InfoTip title="Assertions" note={ASSERT_NOTE} /></span>
+        <textarea class="input" rows="3" spellcheck={false} value={assertions()} placeholder={'[{"kind":"contains","value":"expected text"}]'} onInput={(e) => setAssertions(e.currentTarget.value)} /></label>
+    </div>
+    <Show when={!selected()}>
+      <div class="inspect-rows"><SettingRow label="Pin bodies" help="Store recorded protocol bodies with the case. May contain private text.">
+        <Toggle value={bodies()} label="Pin bodies" onChange={setBodies} />
+      </SettingRow></div>
+    </Show>
+    <div class="inspect-actions">
+      <Show when={selected()}>{(c) => <>
+        <button class="btn danger" type="button" disabled={busy()} onClick={() => void run(async () => { await window.api.evalDelete(c().id); await reset(); setEditing(false); await refresh(); })}>Delete case</button>
+        <span class="spacer" />
+        <button class="btn ghost" type="button" disabled={busy() || c().revision <= 1} onClick={() => void run(() => choose(c().id, c().revision - 1))}>Previous</button>
+        <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(() => choose(c().id))}>Latest</button>
+      </>}</Show>
+      <Show when={!selected()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => setEditing(false)}>Cancel</button></Show>
+      <button class="btn primary" type="button" disabled={busy() || !selected() && !props.traceId} onClick={() => void run(save)}>{selected() ? 'Save revision' : 'Create case'}</button>
+    </div>
+    </Show>
+
+    <Show when={selected()}>{(c) => <div class="eval-section">
+      <dl class="kv-grid">
+        <div class="kv"><dt>Source</dt><dd>{shownText(c().provenance.source)}</dd></div>
+        <div class="kv"><dt>Capture</dt><dd>{c().capture.entry.state}</dd></div>
+        <div class="kv"><dt>Payload</dt><dd>{c().capture.payload.state}</dd></div>
+        <div class="kv kv-wide"><dt>Archive ID</dt><dd class="selectable">{shownText(c().provenance.archiveId)}</dd></div>
+      </dl>
+      <For each={c().missingContext}>{(reason) => <p class="notice info inspect-notice">{shownText(reason)}</p>}</For>
+      <details class="inspect-details"><summary>Pinned snapshot</summary><pre class="archive-raw">{shownText(JSON.stringify(c().capture, null, 2).slice(0, SNAPSHOT_PREVIEW_CHARS))}</pre></details>
+      <div class="inspect-rows"><SettingRow label="Export with bodies" help="Include retained protocol bodies in the next export.">
+        <Toggle value={exportBodies()} label="Export with bodies" onChange={setExportBodies} />
+      </SettingRow></div>
+      <div class="inspect-actions">
+        <InfoTip title="Export" note={EXPORT_NOTE} />
+        <span class="spacer" />
+        <button class="btn ghost" type="button" disabled={busy() || result()?.state === 'running'} onClick={() => void run(prepareReplay)}>Preview replay</button>
+        <button class="btn" type="button" disabled={busy()} onClick={() => void run(async () => { setPreview(await window.api.evalExportPrepare(c().id, c().revision, exportBodies())); })}>Prepare export</button>
+      </div>
     </div>}</Show>
-    <Show when={result()}>{(r) => <div aria-live="polite"><p>Replay {r().state} · HTTP {r().httpStatus ?? 'unknown'} · criteria {r().comparison} · task outcome unknown. {shownText(r().error ?? '')}</p><pre class="archive-raw">{shownText(r().output)}</pre><For each={r().checks}>{(check) => <p>{check.passed ? 'Pass' : 'Fail'}: {check.assertion.kind} {shownText(check.assertion.value)}</p>}</For></div>}</Show>
-    <Show when={error()}>{(e) => <p class="notice">{shownText(e())}</p>}</Show>
-    <Show when={message()}>{(m) => <p>{shownText(m())}</p>}</Show>
+
+    <Show when={preview()}>{(p) => <div class="eval-section">
+      <div class="panel-head"><h3 class="section-label">Export preview</h3><span class="panel-count">{p().bytes.toLocaleString()} bytes</span>
+        <div class="panel-head-end"><button class="btn primary" type="button" disabled={busy()} onClick={() => void run(async () => { const path = await window.api.evalExportSave(p().token); setPreview(undefined); if (path) setMessage(`Saved ${path}`); })}>Save file…</button></div>
+      </div>
+      <textarea class="input archive-raw" rows="10" readOnly value={p().jsonl} spellcheck={false} />
+    </div>}</Show>
+    <Show when={replay()}>{(r) => <div class="eval-section" aria-live="polite">
+      <div class="panel-head"><h3 class="section-label">Replay</h3><InfoTip title="Replay" rows={[
+          { label: 'Assertions', value: r().assertions.length.toLocaleString() },
+          { label: 'Expected', value: shownText(r().expectedOutcome || '—') },
+        ]} note={`${r().environment} ${r().inputFidelity} ${REPLAY_NOTE}`} />
+        <div class="panel-head-end">
+          <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(async () => { await window.api.evalReplayCancel(r().id); setResult(await window.api.evalReplayStatus(r().id)); })}>Cancel</button>
+          <button class="btn primary" type="button" disabled={busy() || !r().supported || !!result()} onClick={() => void run(async () => { setResult(await window.api.evalReplayStart(r().id)); })}>Run (uses quota)</button>
+        </div>
+      </div>
+      <dl class="kv-grid">
+        <div class="kv"><dt>Model</dt><dd>{shownText(r().model ?? 'Unsupported')}</dd></div>
+        <div class="kv"><dt>Route</dt><dd>{r().route ?? 'Unsupported'}</dd></div>
+        <div class="kv"><dt>Output cap</dt><dd>{r().maxOutputTokens.toLocaleString()} tokens</dd></div>
+        <div class="kv"><dt>Deadline</dt><dd>{r().timeoutMs / MS_PER_SECOND} s</dd></div>
+        <div class="kv kv-wide"><dt>Destination</dt><dd class="selectable">{r().destination || '—'}</dd></div>
+      </dl>
+      <For each={r().reasons}>{(reason) => <p class="notice inspect-notice">{shownText(reason)}</p>}</For>
+      <details class="inspect-details"><summary>Request</summary><pre class="archive-raw">{shownText(r().request ?? '')}</pre></details>
+    </div>}</Show>
+    <Show when={result()}>{(r) => <div class="eval-section" aria-live="polite">
+      <div class="panel-head"><h3 class="section-label">Result</h3>
+        <span class={`badge compact ${r().comparison === 'pass' ? 'green' : r().comparison === 'fail' ? 'red' : ''}`}>{r().comparison}</span>
+        <span class="panel-count">{r().state} · HTTP {r().httpStatus ?? '—'}</span>
+      </div>
+      <Show when={r().error}><p class="notice error inspect-notice">{shownText(r().error!)}</p></Show>
+      <pre class="archive-raw">{shownText(r().output)}</pre>
+      <div class="tag-row"><For each={r().checks}>{(check) => <span class={`badge ${check.passed ? 'green' : 'red'}`}>{check.assertion.kind}: {shownText(check.assertion.value)}</span>}</For></div>
+    </div>}</Show>
+    <Show when={error()}>{(e) => <p class="notice error inspect-notice">{shownText(e())}</p>}</Show>
+    <Show when={message()}>{(m) => <p class="notice info inspect-notice">{shownText(m())}</p>}</Show>
   </section>;
 }

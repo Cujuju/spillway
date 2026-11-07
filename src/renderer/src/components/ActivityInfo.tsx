@@ -1,13 +1,11 @@
-import { Info } from 'lucide-solid';
 import { createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { dateTime, pct } from '../lib/format';
-import { HoverTip, type TipRow } from './ChartTip';
+import { InfoTip, type TipRow } from './ChartTip';
 
 /** Date the price table in src/shared/modelPrices.ts was checked. */
 const PRICES_CHECKED = 'Oct 26, 2026';
 /** Coverage changes slowly; a minute keeps it current without re-querying every request burst. */
 const COVERAGE_REFRESH_MS = 60_000;
-const ICON_PX = 14;
 const COST_NOTE = 'API cost is what the same tokens would cost on the pay-as-you-go API, not what a subscription charges.';
 const COVERAGE_NOTE = 'Coverage matches Claude Code and Codex logs to proxy requests by session or response ID.';
 
@@ -35,9 +33,6 @@ export function ActivityInfo(props: { unpriced: string[] }) {
   });
 
   return (
-    <HoverTip title="About these numbers" rows={rows()}
-      note={`${COST_NOTE}${clients().length ? ` ${COVERAGE_NOTE}` : ''}`}>
-      <span class="activity-info" aria-label="About these numbers"><Info size={ICON_PX} /></span>
-    </HoverTip>
+    <InfoTip title="About these numbers" rows={rows()} note={`${COST_NOTE}${clients().length ? ` ${COVERAGE_NOTE}` : ''}`} />
   );
 }

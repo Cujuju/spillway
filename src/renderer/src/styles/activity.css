@@ -336,7 +336,7 @@ th[aria-sort] .sort-btn {
   padding: var(--spacing-2_5);
   text-align: center;
 }
-/* Info icon beside the time frame; its tooltip explains API cost and proxy coverage. */
+/* Info icon (InfoTip): its tooltip holds explanations too long for the page. */
 .activity-info {
   display: inline-flex;
   color: var(--color-text-muted);

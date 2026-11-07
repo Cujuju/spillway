@@ -48,6 +48,15 @@ export function usd(v: number): string {
   return v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2, minimumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2 });
 }
 
+const MS_PER_SECOND = 1000;
+/** Below this, show milliseconds; above, seconds with one decimal. */
+const SHOW_SECONDS_FROM_MS = 1000;
+/** "840 ms", "15.2 s"; "—" when not measured. */
+export function msDuration(ms: number | null): string {
+  if (ms === null) return '—';
+  return ms < SHOW_SECONDS_FROM_MS ? `${Math.round(ms)} ms` : `${(ms / MS_PER_SECOND).toFixed(1)} s`;
+}
+
 /** "1.2M", "34K", "980" for token counts. */
 export function compactNumber(v: number): string {
   return v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 });

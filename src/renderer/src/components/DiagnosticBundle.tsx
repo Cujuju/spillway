@@ -1,10 +1,12 @@
 import { createSignal, For, onCleanup, Show, untrack } from 'solid-js';
 import { DIAGNOSTIC_LIMITS, DIAGNOSTIC_WARNING, type DiagnosticPreview } from '@shared/diagnosticBundle';
 import { shownText } from '../store';
+import { InfoTip } from './ChartTip';
 import { Dialog } from './ui';
 import '../styles/diagnosticBundle.css';
 
 const PAGE = 32 * 1024;
+const SCOPE_NOTE = `Selected requests only, at most ${DIAGNOSTIC_LIMITS.records}. Nothing is uploaded. The preview is the exact file content and ignores the email display setting; account and conversation IDs become bundle-local aliases.`;
 export function DiagnosticBundle(props: { traceIds: string[]; onClose: () => void }) {
   const candidates = untrack(() => [...props.traceIds]);
   const [selected, setSelected] = createSignal(candidates);
@@ -47,28 +49,30 @@ export function DiagnosticBundle(props: { traceIds: string[]; onClose: () => voi
   };
   const close = () => { if (saving()) cancel(); else props.onClose(); };
   return <Dialog title="Local diagnostic bundle" onClose={close} actions={<>
-    <button class="btn" type="button" onClick={close}>{saving() ? 'Cancel save' : 'Close / cancel'}</button>
-    <button class="btn primary" type="button" disabled={busy() || !selected().length} onClick={() => void prepare()}>Prepare preview</button>
-    <button class="btn primary" type="button" disabled={busy() || !preview() || !reviewed()} onClick={() => void save()}>Save inspected JSON…</button>
+    <button class="btn" type="button" onClick={close}>{saving() ? 'Cancel save' : 'Close'}</button>
+    <button class="btn primary" type="button" disabled={busy() || !selected().length} onClick={() => void prepare()}>Preview</button>
+    <button class="btn primary" type="button" disabled={busy() || !preview() || !reviewed()} onClick={() => void save()}>Save…</button>
   </>}>
     <div class="diagnostic-bundle">
-      <p>{DIAGNOSTIC_WARNING}</p>
-      <p class="muted">Selected requests only, at most {DIAGNOSTIC_LIMITS.records}. No upload or issue posting. Preview JSON is exact export content and does not use the email display toggle. Account and conversation identifiers become bundle-local aliases.</p>
+      <p class="diagnostic-warning">Redaction can miss secrets in prompts. Review the JSON before sharing. <InfoTip title="What is collected" note={`${DIAGNOSTIC_WARNING} ${SCOPE_NOTE}`} /></p>
       <div class="diagnostic-selection"><For each={candidates}>{(id) => <label><input type="checkbox" disabled={busy()} checked={selected().includes(id)} onChange={(e) => { invalidate(); setSelected((old) => e.currentTarget.checked ? [...old, id] : old.filter((x) => x !== id)); }} />{shownText(id)}</label>}</For></div>
-      <label><input type="checkbox" checked={settings()} disabled={busy()} onChange={(e) => { invalidate(); setSettings(e.currentTarget.checked); }} /> Include allowlisted settings</label>
-      <label><input type="checkbox" checked={logs()} disabled={busy()} onChange={(e) => { invalidate(); setLogs(e.currentTarget.checked); }} /> Include limited supervisor summary (recent app events, up to 100; no raw messages)</label>
-      <label><input type="checkbox" checked={bodies()} disabled={busy()} onChange={(e) => { invalidate(); setBodies(e.currentTarget.checked); }} /> Include retained structured bodies (requires inspection; never enables capture)</label>
-      <label><input type="checkbox" checked={messages()} disabled={busy()} onChange={(e) => { invalidate(); setMessages(e.currentTarget.checked); }} /> Include redacted error messages{logs() ? ' and supervisor app messages' : ''} (requires inspection)</label>
-      <Show when={busy()}><p role="status">Preparing or saving… <button type="button" class="btn ghost" onClick={cancel}>Cancel operation</button></p></Show>
+      <label><input type="checkbox" checked={settings()} disabled={busy()} onChange={(e) => { invalidate(); setSettings(e.currentTarget.checked); }} /> Allowlisted settings</label>
+      <label><input type="checkbox" checked={logs()} disabled={busy()} onChange={(e) => { invalidate(); setLogs(e.currentTarget.checked); }} /> Supervisor summary (last 100 app events)</label>
+      <label><input type="checkbox" checked={bodies()} disabled={busy()} onChange={(e) => { invalidate(); setBodies(e.currentTarget.checked); }} /> Retained bodies (review required)</label>
+      <label><input type="checkbox" checked={messages()} disabled={busy()} onChange={(e) => { invalidate(); setMessages(e.currentTarget.checked); }} /> Redacted error{logs() ? ' and app' : ''} messages (review required)</label>
+      <Show when={busy()}><p role="status" class="muted">Working… <button type="button" class="btn ghost" onClick={cancel}>Cancel</button></p></Show>
       <Show when={error()}>{(e) => <p role="alert" class="notice">{shownText(e())}</p>}</Show>
       <Show when={status()}>{(s) => <p role="status">{s()}</p>}</Show>
       <Show when={preview()}>{(p) => <>
-        <p>{p().counts.selected} selected · {p().counts.included} included · {p().counts.unavailable} unavailable · {p().counts.partial} partial · {p().counts.redacted} redacted · {p().counts.omitted} omitted records. Counts overlap.</p>
-        <p>Bodies: {p().counts.bodiesIncluded} included · {p().counts.bodiesUnavailable} unavailable in capture · {p().counts.bodiesOmitted} omitted by export policy or format/size limits.</p>
-        <p class="muted">{p().bytes.toLocaleString()} UTF-8 bytes · preview expires {new Date(p().expiresAt).toLocaleTimeString()}. The frozen snapshot survives subsequent capture expiry; preparing again collects current availability. The save dialog requires a new .json filename.</p>
-        <div class="diagnostic-pages"><button class="btn ghost" type="button" disabled={!page()} onClick={() => setPage((n) => n - 1)}>Previous</button><span>Characters {(page() * PAGE + 1).toLocaleString()}–{Math.min((page() + 1) * PAGE, p().json.length).toLocaleString()} of {p().json.length.toLocaleString()}</span><button class="btn ghost" type="button" disabled={(page() + 1) * PAGE >= p().json.length} onClick={() => setPage((n) => n + 1)}>Next 32 KiB</button></div>
+        <div class="stat-strip inset">
+          <div class="stat-cell"><div class="stat-label">Records</div><div class="stat-value">{p().counts.included} / {p().counts.selected}</div><div class="stat-sub">{p().counts.unavailable} unavailable · {p().counts.partial} partial</div></div>
+          <div class="stat-cell"><div class="stat-label">Bodies</div><div class="stat-value">{p().counts.bodiesIncluded}</div><div class="stat-sub">{p().counts.bodiesUnavailable} missing · {p().counts.bodiesOmitted} omitted</div></div>
+          <div class="stat-cell"><div class="stat-label">Redacted</div><div class="stat-value">{p().counts.redacted}</div><div class="stat-sub">{p().counts.omitted} omitted</div></div>
+          <div class="stat-cell"><div class="stat-label">Size</div><div class="stat-value">{(p().bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB</div><div class="stat-sub">expires {new Date(p().expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</div></div>
+        </div>
+        <div class="diagnostic-pages"><button class="btn ghost" type="button" disabled={!page()} onClick={() => setPage((n) => n - 1)}>Previous</button><span class="muted">{(page() * PAGE + 1).toLocaleString()}–{Math.min((page() + 1) * PAGE, p().json.length).toLocaleString()} of {p().json.length.toLocaleString()} chars</span><button class="btn ghost" type="button" disabled={(page() + 1) * PAGE >= p().json.length} onClick={() => setPage((n) => n + 1)}>Next</button></div>
         <pre class="diagnostic-json" tabIndex={0}>{p().json.slice(page() * PAGE, (page() + 1) * PAGE)}</pre>
-        <label><input type="checkbox" checked={reviewed()} onChange={(e) => setReviewed(e.currentTarget.checked)} /> I inspected the export content, including any optional bodies and messages.</label>
+        <label><input type="checkbox" checked={reviewed()} onChange={(e) => setReviewed(e.currentTarget.checked)} /> I reviewed this content.</label>
       </>}</Show>
     </div>
   </Dialog>;

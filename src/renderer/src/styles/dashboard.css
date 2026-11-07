@@ -1,6 +1,7 @@
 /* Dashboard layout after Theo's "Quota Management" page. */
 
 .dash-header {
+  --header-rule-gap: var(--spacing-2_5);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -11,10 +12,17 @@
 .dash-header.tabbed {
   justify-content: flex-start;
   gap: var(--spacing-6);
+}
+/* The rule under the header; `ruled` keeps the tabbed title's gap above it (Providers). */
+.dash-header.tabbed,
+.dash-header.ruled {
   border-bottom: var(--border-width) solid var(--color-divider);
 }
 .dash-header.tabbed .dash-title {
-  margin-bottom: var(--spacing-2_5);
+  margin-bottom: var(--header-rule-gap);
+}
+.dash-header.ruled {
+  padding-bottom: var(--header-rule-gap);
 }
 .header-status {
   margin-left: auto;

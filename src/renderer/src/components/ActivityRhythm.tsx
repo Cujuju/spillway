@@ -17,6 +17,8 @@ const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 /** Tallest bar as a share of the sky above the horizon, leaving room for the peak label. */
 const BAR_MAX = 0.8;
+/** Shortest non-empty bar: twice --radius-xs, so a tiny hour keeps its rounded top and lit edge instead of collapsing to a line. */
+const MIN_BAR_PX = 6;
 /** Axis keeps midnight and noon, dropping either when a sunrise or sunset label is this close. */
 const AXIS_HOURS = [0, 12, 24];
 const AXIS_GAP_HOURS = 2;
@@ -48,6 +50,8 @@ export function ActivityRhythm(props: {
   const scene = createMemo(() => (size().width > 0 && size().height > 0 ? rhythmScene(size().width, size().height, props.now, coordinates()) : null));
   const stats = createMemo(() => hourOfDay(props.rows, props.span, props.metric));
   const share = (h: number) => (stats().max > 0 ? metricValue(stats().hours[h]!, props.metric) / stats().max : 0);
+  /** Bar height: its share of the sky, at least MIN_BAR_PX when the hour has any activity. */
+  const barHeight = (h: number) => (share(h) > 0 ? `max(${pct(share(h) * BAR_MAX)}, ${MIN_BAR_PX}px)` : '0');
   const currentHour = () => new Date(props.now).getHours();
   const upBody = () => { const s = scene(); return s?.sun.up ? 'sun' : s?.moon.up ? 'moon' : null; };
   const sunEvents = () => (polar() ? [] : [times().sunrise, times().sunset]);
@@ -78,7 +82,7 @@ export function ActivityRhythm(props: {
               role="listitem"
               tabindex="0"
               aria-label={`${hourLabel(h())}: ${props.format(s)}`}
-              style={{ height: pct(share(h()) * BAR_MAX), '--day': pct(dayWeight(h() + 0.5, times())) }}
+              style={{ height: barHeight(h()), '--day': pct(dayWeight(h() + 0.5, times())) }}
               onPointerEnter={(e) => show(e, h())}
               onFocus={(e) => show(e, h())}
               onBlur={() => setTip(null)}
@@ -90,7 +94,7 @@ export function ActivityRhythm(props: {
         <Show when={scene()}>{(s) => (
           <RhythmSkyFront scene={s()} phase={moonPhase(props.now)}
             sunEvents={sunEvents().map((h) => (h / HOURS_PER_DAY) * s().width)}
-            currentBarTop={s().horizon * (1 - share(currentHour()) * BAR_MAX)} />
+            currentBarTop={s().horizon - (share(currentHour()) > 0 ? Math.max(s().horizon * share(currentHour()) * BAR_MAX, MIN_BAR_PX) : 0)} />
         )}</Show>
       </div>
       <div class="rhythm-axis" aria-hidden="true">

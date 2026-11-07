@@ -6,14 +6,14 @@ import { ChoiceChip, ScopeChip, ScopeField } from './ScopeChip';
 export type TraceSort = 'cost' | 'failed' | 'recent';
 /** The Traces view's own filters; the usage source and time frame are the sentence's other phrases. */
 export interface TraceFilters { sort: TraceSort; text?: string; nodeId?: string; parentSessionId?: string }
-export const DEFAULT_TRACE_FILTERS: TraceFilters = { sort: 'cost' };
+export const DEFAULT_TRACE_FILTERS: TraceFilters = { sort: 'recent' };
 /** A patch that clears every filter; spreading DEFAULT_TRACE_FILTERS alone would keep set keys. */
 export const RESET_TRACE_FILTERS: Partial<TraceFilters> = { ...DEFAULT_TRACE_FILTERS, text: undefined, nodeId: undefined, parentSessionId: undefined };
 const SESSION_NODE = 'session:';
 const SORTS = [
+  { value: 'recent', label: 'Most recent', phrase: 'most recent' },
   { value: 'cost', label: 'Cost', phrase: 'cost' },
   { value: 'failed', label: 'Failures', phrase: 'failures' },
-  { value: 'recent', label: 'Most recent', phrase: 'most recent' },
 ] as const;
 
 export const traceFiltersNarrowed = (f: TraceFilters) => f.sort !== DEFAULT_TRACE_FILTERS.sort || !!f.text || !!f.nodeId || !!f.parentSessionId;

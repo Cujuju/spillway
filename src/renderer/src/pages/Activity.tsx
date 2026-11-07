@@ -45,24 +45,27 @@ export function Activity() {
 
   return (
     <>
-      <PageHeader class="title-row" tabs={
-        <Tabs class="page-tabs" label="Activity views" value={view()} options={VIEWS} onChange={setView}>
-          <Show when={view() === 'totals'}>
-            <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
-          </Show>
-          <Show when={view() === 'requests'}>
-            <Seg label="Requests shown" value={filter()} options={filterOptions()} onChange={setFilter} />
-          </Show>
-        </Tabs>
+      <PageHeader class="tabbed" below={
+        <Show when={view() !== 'archive'}>
+          <div class="scope-row">
+            <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
+              groups={groups()} accounts={accounts()} onAccounts={setAccounts}
+              clients={clientChoices()} clientScope={clients()} onClients={setClients}
+              efforts={efforts()} effort={effort()} onEffort={setEffort} />
+            <div class="scope-row-end">
+              <Show when={view() === 'totals'}>
+                <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
+              </Show>
+              <Show when={view() === 'requests'}>
+                <Seg label="Requests shown" value={filter()} options={filterOptions()} onChange={setFilter} />
+              </Show>
+            </div>
+          </div>
+        </Show>
       }>
         <h1 class="dash-title">Activity</h1>
-        <ActivityImport />
-        <Show when={view() !== 'archive'}>
-          <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
-            groups={groups()} accounts={accounts()} onAccounts={setAccounts}
-            clients={clientChoices()} clientScope={clients()} onClients={setClients}
-            efforts={efforts()} effort={effort()} onEffort={setEffort} />
-        </Show>
+        <Tabs class="header-tabs" label="Activity views" value={view()} options={VIEWS} onChange={setView} />
+        <span class="header-status"><ActivityImport /></span>
       </PageHeader>
 
       <Show when={proxyStatus()?.state !== 'running'}>

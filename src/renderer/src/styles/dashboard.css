@@ -7,6 +7,23 @@
   gap: var(--spacing-4);
   margin-bottom: var(--page-gap);
 }
+/* Title and view tabs share one underlined row (Activity). */
+.dash-header.tabbed {
+  justify-content: flex-start;
+  gap: var(--spacing-6);
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+.dash-header.tabbed .dash-title {
+  margin-bottom: var(--spacing-2_5);
+}
+.header-status {
+  margin-left: auto;
+  padding-bottom: var(--spacing-2_5);
+  font-size: var(--text-xs);
+}
+.header-status:empty {
+  display: none;
+}
 /* Actions share the title's row; a subtitle hangs below the title alone. */
 .dash-header.title-row {
   align-items: flex-start;

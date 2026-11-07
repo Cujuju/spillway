@@ -3,7 +3,9 @@ import { RequestArchive } from '../components/RequestArchive';
 import { SessionTraces } from '../components/SessionTraces';
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
-import { ActivityScopeLine, ANY_EFFORT } from '../components/ActivityScopeLine';
+import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE } from '../components/ActivityScopeLine';
+import { AddChartSelect, type PendingChart } from '../components/ActivityBoard';
+import { dayText, isCustomRange, RANGES, type CustomRange, type Range } from '../lib/activityRange';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
 import { ActivityTotals } from '../components/ActivityTotals';
@@ -12,11 +14,14 @@ import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
 import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
-import { activityBuckets, proxyStatus, snapshot } from '../store';
+import { activityBuckets, now, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
 const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Totals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
+/** Default custom span: the last 30 days. */
+const DEFAULT_CUSTOM_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function Activity() {
   const [view, setView] = persistedSignal('activity.view', 'overview', VIEWS.map((v) => v.value));
@@ -26,6 +31,10 @@ export function Activity() {
   const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
   const [period, setPeriod] = persistedSignal<TotalsPeriod>('activity.totalsPeriod', 'day', TOTALS_PERIODS.map((p) => p.value));
   const [effort, setEffort] = persistedSignal<string>('activity.effort', ANY_EFFORT, (v): v is string => typeof v === 'string');
+  const [range, setRange] = persistedSignal<Range>('activity.range', DEFAULT_RANGE, RANGES);
+  const [custom, setCustom] = persistedSignal<CustomRange>('activity.customRange',
+    { from: dayText(Date.now() - (DEFAULT_CUSTOM_DAYS - 1) * DAY_MS), to: dayText(Date.now()) }, isCustomRange);
+  const [placing, setPlacing] = createSignal<PendingChart | null>(null);
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
   const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
@@ -51,8 +60,10 @@ export function Activity() {
             <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
               groups={groups()} accounts={accounts()} onAccounts={setAccounts}
               clients={clientChoices()} clientScope={clients()} onClients={setClients}
-              efforts={efforts()} effort={effort()} onEffort={setEffort} />
+              efforts={efforts()} effort={effort()} onEffort={setEffort}
+              time={view() === 'overview' ? { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom } : undefined} />
             <div class="scope-row-end">
+              <Show when={view() === 'overview'}><AddChartSelect onPick={setPlacing} /></Show>
               <Show when={view() === 'totals'}>
                 <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
               </Show>
@@ -73,7 +84,7 @@ export function Activity() {
       </Show>
 
       <Show when={view() === 'overview'}>
-        <ActivityOverview scope={scope()} account={accountName} />
+        <ActivityOverview scope={scope()} account={accountName} range={range()} custom={custom()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
       </Show>
       <Show when={view() === 'archive'}><RequestArchive /></Show>
       <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} /></Show>

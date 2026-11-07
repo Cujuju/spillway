@@ -429,6 +429,17 @@ th[aria-sort] .sort-btn {
 .scope-chip-clear:hover {
   color: var(--color-text);
 }
+/* Custom dates sit under the time frame list, one per line. */
+.scope-dates {
+  display: grid;
+  gap: var(--spacing-1_5);
+  margin-top: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-2) var(--spacing-1);
+  border-top: var(--border-width) solid var(--color-border);
+}
+.scope-dates .input {
+  font-size: var(--text-body);
+}
 .scope-reset {
   height: var(--control-height);
 }

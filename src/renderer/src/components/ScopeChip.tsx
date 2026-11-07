@@ -28,11 +28,14 @@ export function ScopeChip(props: { label: string; value: string; active: boolean
   );
 }
 
-/** A scope phrase with one choice from a short list (usage source, effort). */
-export function ChoiceChip<T extends string>(props: { label: string; value: T; initial: T; options: readonly { value: T; label: string; phrase: string }[]; onChange: (v: T) => void }) {
+/** One choice from a short list. Picking closes the menu, except `opensMore`, whose fields (`extra`) follow the list. `phrase` overrides the option's. */
+export function ChoiceChip<T extends string>(props: {
+  label: string; value: T; initial: T; options: readonly { value: T; label: string; phrase: string }[]; onChange: (v: T) => void;
+  phrase?: string; opensMore?: T; extra?: JSX.Element;
+}) {
   const current = () => props.options.find((o) => o.value === props.value) ?? props.options[0]!;
   return (
-    <ScopeChip label={props.label} value={current().phrase} active={props.value !== props.initial} onClear={() => props.onChange(props.initial)} menuClass="choice-menu">
+    <ScopeChip label={props.label} value={props.phrase ?? current().phrase} active={props.value !== props.initial} onClear={() => props.onChange(props.initial)} menuClass="choice-menu">
       <For each={props.options}>
         {(o) => (
           <label class="account-menu-row">
@@ -40,12 +43,13 @@ export function ChoiceChip<T extends string>(props: { label: string; value: T; i
               // Look up the menu first: a new option list can replace this input.
               const menu = e.currentTarget.closest<HTMLElement>('[popover]');
               props.onChange(o.value);
-              menu?.hidePopover();
+              if (o.value !== props.opensMore) menu?.hidePopover();
             }} />
             <span>{o.label}</span>
           </label>
         )}
       </For>
+      {props.extra}
     </ScopeChip>
   );
 }

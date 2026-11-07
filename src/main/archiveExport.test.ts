@@ -216,7 +216,7 @@ it('keeps new attempt provenance after Activity retention/body expiry and cancel
     log.prune(); log.archivePolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: false, retentionDays: 1 });
     expect(log.archiveDetail('full-trace-1')).toMatchObject({ state: 'expired', attempts: [{ provenance: { model: 'alias', effectiveModel: 'upstream', reasoningEffort: 'high' } }] });
     const preview = log.archiveExportPrepare({ includeRecordedBodies: true }); log.archiveClear();
-    expect(log.archiveExportStatus(preview.id).state).toBe('canceled'); expect(log.archiveQuery({}).entries).toHaveLength(0);
+    expect(log.archiveExportStatus(preview.id).state).toBe('canceled'); expect(log.archiveStatus().entries).toBe(0);
   } finally { await log.archiveExportDispose(); log.close(); }
 });
 

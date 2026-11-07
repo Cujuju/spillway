@@ -3,6 +3,7 @@ import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
 import { AboutSection } from '../components/AboutSection';
 import { ClickHouseSettings } from '../components/ClickHouseSettings';
+import { RequestCaptureSettings } from '../components/RequestCapture';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { SectionedPage, type NavGroup } from '../components/SectionedPage';
 import { ThemePicker } from '../components/ThemePicker';
@@ -19,7 +20,7 @@ const ICON_PX = 14;
 const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Rolling windows' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'Data', items: [{ id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
+  { group: 'Data', items: [{ id: 'capture', label: 'Request capture' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About', gapBefore: true }] },
 ];
 
@@ -247,6 +248,7 @@ export function Settings() {
         <Match when={section() === 'dashboard'}><DashboardSection /></Match>
         <Match when={section() === 'notifications'}><NotificationSettings /></Match>
         <Match when={section() === 'updates'}><UpdateSettings /></Match>
+        <Match when={section() === 'capture'}><RequestCaptureSettings /></Match>
         <Match when={section() === 'clickhouse'}><ClickHouseSettings /></Match>
         <Match when={section() === 'advanced'}><Advanced /></Match>
         <Match when={section() === 'about'}><AboutSection /></Match>

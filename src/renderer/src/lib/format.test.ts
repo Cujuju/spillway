@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactDuration, quotaPercent } from './format';
+import { byteSize, compactDuration, quotaPercent } from './format';
 
 const H = 3_600_000;
 
@@ -26,5 +26,13 @@ describe('quotaPercent', () => {
     expect(quotaPercent(56.99999999999999)).toBe('57%');
     expect(quotaPercent(100 - 42.99999999999999)).toBe('57%');
     expect(quotaPercent(7.000000000000001)).toBe('7%');
+  });
+});
+
+describe('byteSize', () => {
+  it('reads small stores in KiB and larger ones in MiB', () => {
+    expect(byteSize(0)).toBe('0 KiB');
+    expect(byteSize(1536)).toBe('1.5 KiB');
+    expect(byteSize(100 * 1024 * 1024)).toBe('100 MiB');
   });
 });

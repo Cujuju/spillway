@@ -30,7 +30,7 @@ export function TraceLimitNote(props: { limit: number }) {
   );
 }
 
-/** "in [session] matching [text] ranked by [sort]": the Traces filters as sentence phrases. */
+/** "in [session] matching [text] ranked by [sort]": the Traces filters as sentence phrases. Text also searches recorded request and response bodies. */
 export function TraceScopeParts(props: { value: TraceFilters; onChange: (patch: Partial<TraceFilters>) => void }) {
   const sessionId = () => (props.value.nodeId?.startsWith(SESSION_NODE) ? props.value.nodeId.slice(SESSION_NODE.length) : '');
   const session = () => {
@@ -50,7 +50,7 @@ export function TraceScopeParts(props: { value: TraceFilters; onChange: (patch: 
       <span>matching</span>
       <ScopeChip label="Search" value={props.value.text ? `“${props.value.text}”` : 'anything'} active={!!props.value.text}
         onClear={() => props.onChange({ text: undefined })}>
-        <ScopeField label="Sessions, models or effort" placeholder="Search" search first value={props.value.text ?? ''}
+        <ScopeField label="Sessions, models, effort or recorded text" placeholder="Search" search first value={props.value.text ?? ''}
           onInput={(v) => props.onChange({ text: v || undefined })} />
       </ScopeChip>
       <span>ranked by</span>

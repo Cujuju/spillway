@@ -4,6 +4,7 @@ import type { EvalAnnotation, EvalCase, EvalCaseSummary, EvalExportPreview, Eval
 import { shownText } from '../store';
 import { InfoTip } from './ChartTip';
 import { SettingRow, Toggle } from './ui';
+import '../styles/archive.css';
 
 const ICON_PX = 14;
 /** A running replay reports its result this often. */
@@ -11,13 +12,14 @@ const REPLAY_POLL_MS = 400;
 /** Characters of a pinned snapshot rendered inline; the export preview has the rest. */
 const SNAPSHOT_PREVIEW_CHARS = 32 * 1024;
 const MS_PER_SECOND = 1000;
-const CASES_NOTE = 'Pinned, encrypted snapshots that outlive archive expiry and deletion. Each save is a new immutable revision. Limits: 200 cases, 8 revisions and 8 MiB per case, 64 MiB total. Deleting all Activity deletes cases too.';
+const CASES_NOTE = 'Pinned, encrypted snapshots that outlive body expiry and Delete recorded bodies. Each save is a new immutable revision. Limits: 200 cases, 8 revisions and 8 MiB per case, 64 MiB total. Deleting all Activity deletes cases too.';
 const REPLAY_NOTE = 'Replay supports self-contained text-only POST /v1/chat/completions and /v1/messages. Responses/Codex, WebSocket, tools and attachments stay inspect-only. Full agent-task replay needs a reproducible workspace this app does not provide.';
 const ASSERT_NOTE = 'JSON array of {kind, value}; kinds: contains, not-contains, equals. Exact, case-sensitive matches on model output. All must pass; nothing executes.';
 const EXPORT_NOTE = 'Exports are unencrypted. Known credential patterns and app secrets are redacted; review prose yourself. Redaction can change replay input, and the file records its policy.';
 
 const blank = (): EvalAnnotation => ({ title: '', notes: '', expectedOutcome: '', assertions: [], context: { repository: '', revision: '', workspace: 'unknown', notes: '' } });
-export function EvalCases(props: { traceId?: string }) {
+/** Pinned eval cases. `traceId` is the exchange a new case starts from (New eval case in Traces); `onSourceUsed` drops it once created or canceled. */
+export function EvalCases(props: { traceId?: string; onSourceUsed: () => void }) {
   const [list, setList] = createSignal<EvalCaseSummary[]>([]);
   const [selected, setSelected] = createSignal<EvalCase>();
   const [draft, setDraft] = createSignal(blank());
@@ -38,7 +40,7 @@ export function EvalCases(props: { traceId?: string }) {
     setBusy(true); setError(undefined); setMessage(undefined);
     try { await fn(); } catch (e) { if (!disposed) setError(String(e)); } finally { if (!disposed) setBusy(false); }
   };
-  onMount(() => void run(refresh));
+  onMount(() => void run(async () => { await refresh(); if (props.traceId) setEditing(true); }));
   const forget = async () => {
     const r = replay(); if (r) await window.api.evalReplayCancel(r.id);
     await window.api.evalExportDiscard(); setPreview(undefined); setReplay(undefined); setResult(undefined);
@@ -52,6 +54,7 @@ export function EvalCases(props: { traceId?: string }) {
   const save = async () => {
     const c = selected(); await forget();
     const saved = c ? await window.api.evalRevise(c.id, c.revision, annotation()) : await window.api.evalCreate(props.traceId!, annotation(), bodies());
+    if (!c) props.onSourceUsed();
     setSelected(saved); setDraft(saved.annotation); await refresh();
   };
   const prepareReplay = async () => {
@@ -92,11 +95,11 @@ export function EvalCases(props: { traceId?: string }) {
       </div>
     </Show>
 
-    <Show when={!editing()}><p class="empty-note">{list().length ? 'Choose a case, or select a record and press New.' : 'No cases yet. Select a record, then press New.'}</p></Show>
+    <Show when={!editing()}><p class="empty-note">{list().length ? 'Choose a case to edit or replay it.' : 'No cases yet. Open an exchange in Traces and choose New eval case.'}</p></Show>
     <Show when={editing()}>
     <div class="panel-head eval-editor-head">
       <h3 class="section-label">{selected() ? `Revision ${selected()!.revision}` : 'New case'}</h3>
-      <Show when={!selected()}><span class="panel-count">{props.traceId ? 'from the selected record' : 'select a record first'}</span></Show>
+      <Show when={!selected()}><span class="panel-count">{props.traceId ? 'from the opened exchange' : 'open an exchange in Traces first'}</span></Show>
     </div>
     <div class="form-grid">
       <label class="form-field"><span>Title</span><input class="input" maxLength={160} value={draft().title} onInput={(e) => field('title', e.currentTarget.value)} /></label>
@@ -120,7 +123,7 @@ export function EvalCases(props: { traceId?: string }) {
         <button class="btn ghost" type="button" disabled={busy() || c().revision <= 1} onClick={() => void run(() => choose(c().id, c().revision - 1))}>Previous</button>
         <button class="btn ghost" type="button" disabled={busy()} onClick={() => void run(() => choose(c().id))}>Latest</button>
       </>}</Show>
-      <Show when={!selected()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => setEditing(false)}>Cancel</button></Show>
+      <Show when={!selected()}><button class="btn ghost" type="button" disabled={busy()} onClick={() => { setEditing(false); props.onSourceUsed(); }}>Cancel</button></Show>
       <button class="btn primary" type="button" disabled={busy() || !selected() && !props.traceId} onClick={() => void run(save)}>{selected() ? 'Save revision' : 'Create case'}</button>
     </div>
     </Show>

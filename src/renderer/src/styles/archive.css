@@ -1,4 +1,4 @@
-/* Activity → Traces and Archive: card heads, filter bars, key-value grids, record tables, body viewers. */
+/* Activity → Traces and Evals, and their dialogs: card heads, key-value grids, record tables, body viewers. */
 
 .inspect {
   display: grid;
@@ -37,44 +37,6 @@
   flex-shrink: 0;
 }
 
-/* ── Filter bar: one wrapping row of controls ── */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-.filter-bar .input,
-.filter-bar .select {
-  font-size: var(--text-xs);
-}
-.filter-grow {
-  --filter-grow-min: 160px;
-  flex: 1 1 var(--filter-grow-min);
-}
-.filter-narrow {
-  --filter-narrow-width: 100px;
-  width: var(--filter-narrow-width);
-}
-.date-range {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1);
-  color: var(--color-text-muted);
-}
-.date-range .input {
-  --filter-date-width: 150px;
-  width: var(--filter-date-width);
-}
-.filter-coverage {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1_5);
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
 .inspect-notice {
   margin: var(--spacing-3) 0 0;
 }
@@ -209,7 +171,7 @@
   color: var(--color-text-muted);
 }
 
-/* ── Exchange: a side panel over the list card's right side, or a row under its record ── */
+/* ── Exchange: a side panel over the Traces columns, or a row under its request ── */
 .exchange-panel {
   --exchange-panel-width: 640px;
   position: absolute;
@@ -256,9 +218,6 @@
   background: var(--color-surface-sunken);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-btn);
-}
-.archive-no-text .danger-text {
-  color: var(--color-red-light);
 }
 .archive-bodies {
   display: grid;
@@ -345,93 +304,8 @@ textarea.archive-raw {
 .export-job .stat-strip.inset {
   margin-bottom: 0;
 }
-
-/* ── Archive: the Records card takes the space below the scope sentence and scrolls inside ── */
-/* Sized by the page, not its content: export and eval cases overflow below, so the page scrolls to them. */
-.archive-view {
-  /* Below this the page scrolls instead of squeezing the list. */
-  --archive-records-min: 480px;
-  flex: 1 0 0;
-  min-height: var(--archive-records-min);
-  /* A fixed track: a minmax() row would shrink to leave the overflowing cards room. */
-  grid-template-rows: max(var(--archive-records-min), 100%);
-}
-/* The overflowing last card keeps the page's bottom inset. */
-.archive-view > :last-child {
-  margin-bottom: var(--page-pad);
-}
-.archive-records {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-/* The table, and the exchange panel over its right side; the card head stays reachable above both. */
-.archive-list {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  margin-inline: calc(-1 * var(--card-pad));
-}
-.archive-list .archive-table {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  margin-inline: 0;
-}
-.archive-list .exchange-panel {
-  border-radius: 0;
-  border-block-end: 0;
-  border-inline-end: 0;
-}
-.capture-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1_5);
-  min-width: 0;
-}
-.capture-status-line {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1_5);
+.export-path {
+  margin: var(--spacing-2) 0 0;
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.capture-status .badge {
-  cursor: help;
-}
-
-/* ── Capture menu: the policy rows under the Capture button ── */
-.account-menu.capture-menu {
-  --account-menu-width: 360px;
-  padding: var(--spacing-2) var(--spacing-3);
-}
-.capture-menu-head {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-1_5);
-  padding-top: var(--spacing-1);
-}
-.capture-menu-head .section-label {
-  margin: 0;
-}
-.capture-menu-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--spacing-1_5);
-  padding-block: var(--spacing-2) var(--spacing-1);
-  border-top: var(--border-width) solid var(--color-divider);
-}
-.capture-menu-confirm {
-  flex: 1 1 100%;
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-}
-.btn.ghost.capture-delete {
-  color: var(--color-red-light);
+  overflow-wrap: anywhere;
 }

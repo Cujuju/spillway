@@ -211,7 +211,6 @@ const handlers: Handlers = {
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
   activityTotals: () => activityLog.call('totalsList'),
   activityCoverage: () => activityLog.call('coverage'),
-  archiveQuery: (q) => activityLog.call('archiveQuery', q ?? {}),
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
   traceAttempts: (q) => activityLog.call('traceAttempts', q),
   archiveDetail: (id) => activityLog.call('archiveDetail', id),

@@ -3,14 +3,21 @@ import type { TraceAttempt, TraceCoverage, TraceNode, TraceQuery, TraceSource } 
 import { shownText } from '../store';
 import { persistedSignal } from '../lib/persisted';
 import { traceViewQuery, type TraceWindow } from '../lib/traceViewQuery';
-import { EXCHANGE_LAYOUTS, type ExchangeLayout } from '../lib/traceFormat';
+import { EXCHANGE_LAYOUTS, nodeLabel, type ExchangeLayout } from '../lib/traceFormat';
 import { createExchangeSteps } from '../lib/exchangeNav';
+import type { ArchiveExportOptions } from '@shared/archiveExport';
+import { DiagnosticBundle } from './DiagnosticBundle';
+import { PortableExportDialog } from './PortableExport';
 import { RequestInspector } from './RequestInspector';
 import { TraceBranches } from './TraceBranches';
 import { TraceDetail } from './TraceDetail';
 import { sessionNode, type TraceFilters } from './TraceScopeParts';
 import '../styles/archive.css';
 import '../styles/sessionTraces.css';
+
+/** Node IDs of unassigned exchanges; the same `trace:<id>` form as their archive ID. */
+const TRACE_NODE = 'trace:';
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 /** Typing settles before a query runs. */
 const QUERY_DEBOUNCE_MS = 200;
@@ -21,6 +28,8 @@ export function SessionTraces(props: {
   filters: TraceFilters; onFilters: (patch: Partial<TraceFilters>) => void;
   /** The row cap when the time frame holds more requests; the page shows it in the scope row. */
   onLimit: (limit: number | undefined) => void;
+  /** Starts an eval case from an exchange. */
+  onEval: (traceId: string) => void;
 }) {
   const query = createMemo<TraceQuery>(() => ({ ...props.filters, source: props.source }));
   const [layout, setLayout] = persistedSignal<ExchangeLayout>('activity.exchangeLayout', 'panel', EXCHANGE_LAYOUTS);
@@ -30,6 +39,8 @@ export function SessionTraces(props: {
   const [attempts, setAttempts] = createSignal<TraceAttempt[]>([]), [attemptNext, setAttemptNext] = createSignal<string | null>(null);
   const [attemptBusy, setAttemptBusy] = createSignal(false), [attemptError, setAttemptError] = createSignal<string | null>(null);
   const [inspected, setInspected] = createSignal<string>();
+  const [picked, setPicked] = createSignal<string[]>([]), [bundle, setBundle] = createSignal<string[]>();
+  const [exporting, setExporting] = createSignal<{ selection: Pick<ArchiveExportOptions, 'query' | 'ids'>; subject: string }>();
   let listGeneration = 0, attemptGeneration = 0;
   const load = async (q: TraceQuery, frame: TraceWindow, before?: string) => {
     const gen = ++listGeneration; setBusy(true); setError(null);
@@ -64,10 +75,22 @@ export function SessionTraces(props: {
   const navigate = (sessionId: string) => props.onFilters({ nodeId: sessionNode(sessionId), parentSessionId: undefined, text: undefined });
   const refresh = () => { setSelected(undefined); setInspected(undefined); attemptGeneration++; void load(query(), props.window); };
 
+  const pick = (traceId: string, on: boolean) => setPicked((old) => on ? [...old, traceId] : old.filter((id) => id !== traceId));
+  /** A session's exchanges in the shown time frame, or an unassigned exchange by its archive ID (the node ID); attempts without a trace have none. */
+  const exportSession = (sessionId: string, label: string) => {
+    const c = coverage(); if (!c) return;
+    setExporting({ selection: { query: { sessionId, from: c.from, to: c.to } }, subject: `${label}, ${day(c.from)} – ${day(c.to)}` });
+  };
+  const exportFor = (n: TraceNode) => {
+    if (n.sessionId && coverage()) return () => exportSession(n.sessionId!, nodeLabel(n));
+    if (n.kind === 'unassigned' && n.id.startsWith(TRACE_NODE)) return () => setExporting({ selection: { ids: [n.id] }, subject: nodeLabel(n) });
+    return undefined;
+  };
+
   // The open exchange steps through the attempts that have one.
   const step = createExchangeSteps(createMemo(() => attempts().flatMap((a) => (a.traceId ? [a.traceId] : []))), inspected, setInspected);
   const exchange = (traceId: string) => (
-    <RequestInspector traceId={traceId} onConversation={navigate} onClose={() => setInspected(undefined)} step={step()} />
+    <RequestInspector traceId={traceId} onConversation={navigate} onClose={() => setInspected(undefined)} step={step()} onEval={props.onEval} />
   );
 
   return <div class="inspect trace-view">
@@ -78,9 +101,12 @@ export function SessionTraces(props: {
         <TraceDetail n={n()} attempts={attempts()} busy={attemptBusy()} more={!!attemptNext()} error={attemptError()} account={props.account}
           inspected={inspected()} layout={layout()} onLayout={setLayout} exchange={layout() === 'inline' ? exchange : undefined}
           onInspect={(id) => setInspected((old) => (old === id ? undefined : id))} onNavigate={navigate} onMore={() => void loadAttempts(n(), query(), attemptNext()!)}
-          onChildren={(id) => props.onFilters({ nodeId: undefined, text: undefined, parentSessionId: id })} />
+          onChildren={(id) => props.onFilters({ nodeId: undefined, text: undefined, parentSessionId: id })}
+          picks={{ picked: picked(), onPick: pick }} onClearPicks={() => setPicked([])} onBundle={() => setBundle([...picked()])} onExport={exportFor(n())} />
       )}</Show>
       <Show when={layout() === 'panel' && inspected()}>{(trace) => <aside class="card exchange-panel" aria-label="Exchange">{exchange(trace())}</aside>}</Show>
     </div>
+    <Show when={bundle()}>{(ids) => <DiagnosticBundle traceIds={ids()} onClose={() => setBundle(undefined)} />}</Show>
+    <Show when={exporting()}>{(e) => <PortableExportDialog selection={e().selection} subject={e().subject} onClose={() => setExporting(undefined)} />}</Show>
   </div>;
 }

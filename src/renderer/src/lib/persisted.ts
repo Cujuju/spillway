@@ -9,6 +9,11 @@ export type Accepts<T> = readonly T[] | ((v: unknown) => v is T);
 const accepted = <T,>(v: unknown, accepts: Accepts<T>): v is T =>
   typeof accepts === 'function' ? accepts(v) : (accepts as readonly unknown[]).includes(v);
 
+/** Keys of removed views, deleted at startup so stale state never lingers. */
+const RETIRED_KEYS = ['activity.archiveRange', 'activity.archiveCustomRange'];
+try { for (const key of RETIRED_KEYS) localStorage.removeItem(KEY_PREFIX + key); }
+catch { /* Storage unavailable: nothing is stored to delete. */ }
+
 function read<T>(key: string, initial: T, accepts: Accepts<T>): T {
   try {
     const raw = localStorage.getItem(KEY_PREFIX + key);

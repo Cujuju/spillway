@@ -1,5 +1,5 @@
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
-import type { ArchiveDetail, ArchivePage, ArchivePolicy, ArchiveQuery, ArchiveStatus } from './archive';
+import type { ArchiveDetail, ArchivePolicy, ArchiveStatus } from './archive';
 import type { ArchiveExportJob, ArchiveExportOptions } from './archiveExport';
 import type { EvalAnnotation, EvalCase, EvalCaseSummary, EvalExportPreview, EvalReplayPreview, EvalReplayResult } from './evalCase';
 import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from './clickhouse';
@@ -43,7 +43,6 @@ export interface DesktopApi {
   diagnosticPrepare(selection: DiagnosticSelection): Promise<DiagnosticPreview>;
   diagnosticSave(token: string): Promise<DiagnosticSaveResult>;
   diagnosticDiscard(tokenOrOperationId: string): Promise<void>;
-  archiveQuery(query: ArchiveQuery): Promise<ArchivePage>;
   archiveDetail(traceId: string): Promise<ArchiveDetail | null>;
   archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
   archivePolicy(policy: ArchivePolicy): Promise<ArchiveStatus>;
@@ -182,7 +181,7 @@ export const INVOKE = {
   archiveExportPrepare: 'archive:export-prepare', archiveExportStatus: 'archive:export-status', archiveExportSave: 'archive:export-save', archiveExportCancel: 'archive:export-cancel',
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',
   diagnosticPrepare: 'diagnostic:prepare', diagnosticSave: 'diagnostic:save', diagnosticDiscard: 'diagnostic:discard',
-  archiveQuery: 'archive:query', archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
+  archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
   traceQuery: 'trace:query', traceAttempts: 'trace:attempts',
   appBuild: 'app:build',
   getSettings: 'settings:get',

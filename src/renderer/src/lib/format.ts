@@ -61,3 +61,11 @@ export function msDuration(ms: number | null): string {
 export function compactNumber(v: number): string {
   return v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 }
+
+const KIB = 1024;
+const MIB = KIB * KIB;
+/** Stored sizes: KiB below a mebibyte, so small stores never read as 0 MiB. */
+export function byteSize(bytes: number): string {
+  const [value, unit] = bytes < MIB ? [bytes / KIB, 'KiB'] : [bytes / MIB, 'MiB'];
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}`;
+}

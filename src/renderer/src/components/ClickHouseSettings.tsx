@@ -50,7 +50,7 @@ export function ClickHouseSettings() {
       <SettingRow label="Source label" help="Optional name for this install, sent with every row so a shared table shows who sent it. Empty sends only the random source ID.">
         <input class="input" aria-label="ClickHouse source label" maxLength={CLICKHOUSE_SOURCE_LABEL_MAX} value={draft().sourceLabel} onInput={(e) => update('sourceLabel', e.currentTarget.value)} />
       </SettingRow>
-      <SettingRow label="Include captured content" help="Separate opt-in. Also needs archive body capture on. Without it, rows carry metadata only, no body text or WebSocket frames.">
+      <SettingRow label="Include captured content" help="Separate opt-in. Also needs Record bodies on (Request capture). Without it, rows carry metadata only, no body text or WebSocket frames.">
         <Toggle value={draft().includeBodies} onChange={(v) => update('includeBodies', v)} />
       </SettingRow>
       <SettingRow label="Username" help={status()?.hasCredentials ? 'Credentials are saved; leave fields empty to keep them. Saved credentials never return to this view.' : 'Empty uses the ClickHouse default user without a password.'}>

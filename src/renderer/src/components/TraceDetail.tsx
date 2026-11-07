@@ -1,15 +1,18 @@
-import { CornerLeftUp, ListTree } from 'lucide-solid';
+import { CornerLeftUp, FileArchive, FileDown, ListTree } from 'lucide-solid';
 import { For, Show, type JSX } from 'solid-js';
 import type { TraceAttempt, TraceNode } from '@shared/sessionTrace';
+import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
 import { shownText } from '../store';
 import { compactNumber, dateTime } from '../lib/format';
 import { conversationLabel } from '../lib/conversationNames';
 import { costText, EXCHANGE_LAYOUT_OPTIONS, KIND_BADGE, meanText, modelLabel, nodeLabel, ORIGIN_BADGE, PARENT_LINK, type ExchangeLayout } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
-import { TraceAttempts } from './TraceAttempts';
+import { TraceAttempts, type BundlePicks } from './TraceAttempts';
 import { CopyButton, Seg } from './ui';
 
 const ICON_PX = 14;
+const EXPORT_NOTE = 'Recorded exchanges of this branch in the time frame, as a portable JSON Lines file.';
+const BUNDLE_NOTE = `The picked requests, with metadata and logs, as one file for a bug report. Picks stay while you switch branches; at most ${DIAGNOSTIC_LIMITS.records}.`;
 const OWN_USAGE_NOTE = 'Totals cover this node only; parent and child costs are never added together. Cost is a list-price estimate.';
 
 function Stats(props: { n: TraceNode }) {
@@ -40,12 +43,13 @@ function Stats(props: { n: TraceNode }) {
   );
 }
 
-/** One node: identity, own-usage stats, models, parent links and its attempts. `exchange` renders an inspected attempt under its row. */
+/** One node: identity, own-usage stats, models, parent links and its attempts. `exchange` renders an inspected attempt under its row; `onExport` is set when the node has exchanges to export. */
 export function TraceDetail(props: {
   n: TraceNode; attempts: TraceAttempt[]; busy: boolean; more: boolean; error: string | null;
   account: (id: string | null) => string; onInspect: (traceId: string) => void; onNavigate: (sessionId: string) => void;
   onChildren: (sessionId: string) => void; onMore: () => void;
   inspected?: string; layout: ExchangeLayout; onLayout: (v: ExchangeLayout) => void; exchange?: (traceId: string) => JSX.Element;
+  picks: BundlePicks; onClearPicks: () => void; onBundle: () => void; onExport?: () => void;
 }) {
   const kind = () => KIND_BADGE[props.n.kind];
   return (
@@ -57,6 +61,11 @@ export function TraceDetail(props: {
         <InfoTip title="Own usage" note={OWN_USAGE_NOTE} />
         <div class="panel-head-end">
           <Seg label="Open exchanges" value={props.layout} options={EXCHANGE_LAYOUT_OPTIONS} onChange={props.onLayout} />
+          <Show when={props.onExport}>{(open) => (
+            <HoverTip title="Export" rows={[]} note={EXPORT_NOTE} layout="contents">
+              <button class="btn ghost" type="button" onClick={() => open()()}><FileDown size={ICON_PX} />Export</button>
+            </HoverTip>
+          )}</Show>
           <Show when={props.n.sessionId}>{(id) => <>
             <CopyButton value={id()} what="session ID" label="Copy ID" ghost />
             <button class="btn ghost" type="button" onClick={() => props.onChildren(id())}><ListTree size={ICON_PX} />Children</button>
@@ -88,9 +97,18 @@ export function TraceDetail(props: {
       <div class="panel-head trace-attempts-head">
         <h3 class="section-label">Attempts</h3>
         <span class="panel-count">{props.attempts.length.toLocaleString()}{props.more ? '+' : ''}</span>
+        <Show when={props.picks.picked.length}>{(n) => (
+          <div class="panel-head-end">
+            <span class="panel-count">{n()} of {DIAGNOSTIC_LIMITS.records} picked</span>
+            <button class="btn ghost" type="button" onClick={() => props.onClearPicks()}>Clear</button>
+            <HoverTip title="Diagnostic bundle" rows={[]} note={BUNDLE_NOTE} layout="contents">
+              <button class="btn" type="button" onClick={() => props.onBundle()}><FileArchive size={ICON_PX} />Diagnostic bundle</button>
+            </HoverTip>
+          </div>
+        )}</Show>
       </div>
       <Show when={props.error}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
-      <TraceAttempts attempts={props.attempts} busy={props.busy} account={props.account} onInspect={props.onInspect} inspected={props.inspected} exchange={props.exchange} />
+      <TraceAttempts attempts={props.attempts} busy={props.busy} account={props.account} onInspect={props.onInspect} inspected={props.inspected} exchange={props.exchange} picks={props.picks} />
       <Show when={props.more}><button class="btn ghost list-more" type="button" disabled={props.busy} onClick={() => props.onMore()}>Load more</button></Show>
     </section>
   );

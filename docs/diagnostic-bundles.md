@@ -2,7 +2,7 @@
 
 Implements item 4 of [#112](https://github.com/Cujuju/spillway/issues/112), `arc/request-observability`. This is a diagnostic snapshot, not portable interaction history. It has no importer, upload, issue posting, configuration transfer or archive-wide export.
 
-Open a request inspector from Activity and choose **Prepare diagnostic bundle**, or select up to 20 archive results and choose **Diagnostic bundle from selected**. Filter the archive by Conversation to select related exchanges. Archive paging continues to use the durable `[at,id]` cursor. Selection retains full trace identities across pages, even if retention subsequently removes them. The dialog permits deselection before collection.
+Open an exchange in Activity → Traces and choose the bundle icon, or tick up to 20 request rows in Traces and choose **Diagnostic bundle**. Picks keep full trace identities across branches and pages, even if retention subsequently removes them. The dialog permits deselection before collection.
 
 ## Inclusion and privacy policy
 

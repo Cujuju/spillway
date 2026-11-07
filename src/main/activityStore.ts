@@ -3,7 +3,7 @@ import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
 import type { ClickHouseConfig } from '@shared/clickhouse';
 import { diagnosticSnapshot } from './diagnosticSnapshot';
-import type { ArchivePolicy, ArchiveQuery, CapturePage } from '@shared/archive';
+import type { ArchivePolicy, CapturePage } from '@shared/archive';
 import type { ArchiveExportOptions } from '@shared/archiveExport';
 import { ArchiveExporter } from './archiveExport';
 import type { TraceQuery, TraceAttemptQuery } from '@shared/sessionTrace';
@@ -99,7 +99,6 @@ export class ActivityLog {
   private get archive() { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact) }); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
-  archiveQuery(q: ArchiveQuery) { return this.archive.query(q); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
   archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }

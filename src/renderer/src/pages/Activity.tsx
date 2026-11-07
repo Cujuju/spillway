@@ -1,11 +1,10 @@
 import { ActivityImport } from '../components/ActivityImport';
-import { RequestArchive } from '../components/RequestArchive';
+import { EvalCases } from '../components/EvalCases';
 import { SessionTraces } from '../components/SessionTraces';
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE, type TimeFrame } from '../components/ActivityScopeLine';
 import { DEFAULT_TRACE_FILTERS, TraceLimitNote, type TraceFilters } from '../components/TraceScopeParts';
-import type { ArchiveFilters } from '../lib/archiveViewQuery';
 import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
 import { AddChartSelect, type PendingChart } from '../components/ActivityBoard';
 import { dayText, isCustomRange, RANGES, type CustomRange, type Range } from '../lib/activityRange';
@@ -20,7 +19,7 @@ import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
 import { activityBuckets, now, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'archive', label: 'Archive' }, { value: 'traces', label: 'Traces' }, { value: 'totals', label: 'Totals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'totals', label: 'Totals' }, { value: 'evals', label: 'Evals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 /** Default custom span: the last 30 days. */
 const DEFAULT_CUSTOM_DAYS = 30;
@@ -28,8 +27,6 @@ const DEFAULT_CUSTOM_DAYS = 30;
 const DEFAULT_TRACE_CUSTOM_DAYS = 7;
 /** Presets within TRACE_MAX_DAYS. */
 const TRACE_RANGES: readonly Range[] = ['24h', '7d', '30d', '90d', 'custom'];
-/** The Archive opens on every record it holds; retention and the byte budget already bound it. */
-const ARCHIVE_DEFAULT_RANGE: Range = 'all';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const lastDays = (days: number): CustomRange => ({ from: dayText(Date.now() - (days - 1) * DAY_MS), to: dayText(Date.now()) });
 
@@ -48,10 +45,9 @@ export function Activity() {
   const [traceFilters, setTraceFilters] = createSignal<TraceFilters>(DEFAULT_TRACE_FILTERS);
   const filterTraces = (patch: Partial<TraceFilters>) => setTraceFilters((f) => ({ ...f, ...patch }));
   const [traceLimit, setTraceLimit] = createSignal<number>();
-  const [archiveRange, setArchiveRange] = persistedSignal<Range>('activity.archiveRange', ARCHIVE_DEFAULT_RANGE, RANGES);
-  const [archiveCustom, setArchiveCustom] = persistedSignal<CustomRange>('activity.archiveCustomRange', lastDays(DEFAULT_TRACE_CUSTOM_DAYS), isCustomRange);
-  const [archiveFilters, setArchiveFilters] = createSignal<ArchiveFilters>({});
-  const filterArchive = (patch: Partial<ArchiveFilters>) => setArchiveFilters((f) => ({ ...f, ...patch }));
+  /** The exchange a new eval case starts from: New eval case in Traces sets it and opens Evals. */
+  const [evalSource, setEvalSource] = createSignal<string>();
+  const startEval = (traceId: string) => { setEvalSource(traceId); setView('evals'); };
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
@@ -72,20 +68,18 @@ export function Activity() {
   const timeFrame = (): TimeFrame | undefined => {
     if (view() === 'overview') return { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom };
     if (view() === 'traces') return { range: traceRange(), custom: traceCustom(), today: dayText(now()), onRange: setTraceRange, onCustom: setTraceCustom, ranges: TRACE_RANGES, maxDays: TRACE_MAX_DAYS };
-    if (view() === 'archive') return { range: archiveRange(), custom: archiveCustom(), today: dayText(now()), onRange: setArchiveRange, onCustom: setArchiveCustom, initial: ARCHIVE_DEFAULT_RANGE };
     return undefined;
   };
 
   return (
     <>
       <PageHeader class="tabbed" below={
-        <div class="scope-row">
-          <ActivityScopeLine full={view() !== 'traces' && view() !== 'archive'} source={source()} onSource={setSource}
+        <Show when={view() !== 'evals'}><div class="scope-row">
+          <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
             groups={groups()} accounts={accounts()} onAccounts={setAccounts}
             clients={clientChoices()} clientScope={clients()} onClients={setClients}
             efforts={efforts()} effort={effort()} onEffort={setEffort}
-            traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined}
-            archive={view() === 'archive' ? { value: archiveFilters(), onChange: filterArchive } : undefined} time={timeFrame()} />
+            traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined} time={timeFrame()} />
           <div class="scope-row-end">
             <Show when={view() === 'overview'}><AddChartSelect onPick={setPlacing} /></Show>
             <Show when={view() === 'traces' && traceLimit()}>{(n) => <TraceLimitNote limit={n()} />}</Show>
@@ -96,7 +90,7 @@ export function Activity() {
               <Seg label="Requests shown" value={filter()} options={filterOptions()} onChange={setFilter} />
             </Show>
           </div>
-        </div>
+        </div></Show>
       }>
         <h1 class="dash-title">Activity</h1>
         <Tabs class="header-tabs" label="Activity views" value={view()} options={VIEWS} onChange={setView} />
@@ -110,14 +104,14 @@ export function Activity() {
       <Show when={view() === 'overview'}>
         <ActivityOverview scope={scope()} account={accountName} range={range()} custom={custom()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
       </Show>
-      <Show when={view() === 'archive'}><RequestArchive filters={archiveFilters()} onFilters={filterArchive} window={{ range: archiveRange(), custom: archiveCustom() }} /></Show>
-      <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} onLimit={setTraceLimit} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
+      <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} onLimit={setTraceLimit} onEval={startEval} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
       <Show when={view() === 'totals'}>
         <ActivityTotals account={accountName} scope={scope()} period={period()} />
       </Show>
       <Show when={view() === 'requests'}>
         <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />
       </Show>
+      <Show when={view() === 'evals'}><EvalCases traceId={evalSource()} onSourceUsed={() => setEvalSource(undefined)} /></Show>
     </>
   );
 }

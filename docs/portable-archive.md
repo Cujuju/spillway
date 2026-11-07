@@ -4,11 +4,11 @@ Implements item 3 of [#112](https://github.com/Cujuju/spillway/issues/112). The 
 
 ## Selecting and saving
 
-In Activity's Local request archive, set conversation, date range or other archive filters, then choose **Preview filtered export**. This selects all matching pages. **Preview selected capture** exports the inspector's stable trace identity independently of filters. Optional `ids` in the API intersects a filter and reports unmatched IDs in `manifest.unresolvedIds`. Dates are inclusive UTC ISO instants after conversion from the UI's local date/time inputs. The saved manifest records the normalized selection and snapshot time. Search uses the archive's existing literal keyword/FTS behavior.
+In Activity → Traces, choose **Export** on a branch's card. A session exports every archive entry with its exact session ID in the shown time frame (all matching pages); an unassigned exchange exports its own stable trace identity. Optional `ids` in the API intersects a filter and reports unmatched IDs in `manifest.unresolvedIds`. Dates are inclusive UTC ISO instants after conversion from the UI's local date/time inputs. The saved manifest records the normalized selection and snapshot time. Search uses the archive's existing literal keyword/FTS behavior.
 
 Raw payloads default off. **Include previously recorded raw bodies and WebSocket messages** applies to the next preview. It exports only payloads already recorded under the archive opt-in policy, including saved bodies retained after recording was disabled. Export never turns recording on, reconstructs expired bodies, reads auth/config files, or imports prompts from client logs. Original metadata and optionally bodies may contain private text or user-supplied secrets; files are unencrypted and screen email masking does not redact them. Headers, query strings, provider-hidden content and upstream executor bodies are outside capture/export's boundary.
 
-Preview shows counts by capture state, snapshot bytes, payload policy and exact frozen selection. Save opens a native local file dialog. Progress, cancellation and errors remain in the archive UI. Changing filters or the raw-payload checkbox does not change an existing preview. Prepare a new preview to use those changes. Navigating away cancels an unfinished export.
+Preview shows counts by capture state, snapshot bytes, payload policy and exact frozen selection. Save opens a native local file dialog. Progress, cancellation and errors stay in the Export dialog. Changing the raw-payload toggle does not change an existing preview. Prepare a new preview to use it. Closing the dialog cancels an unsaved preview or unfinished write.
 
 ## Stream and integrity contract
 

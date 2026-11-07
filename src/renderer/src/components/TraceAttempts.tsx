@@ -2,9 +2,10 @@ import { createEffect, For, Show, type JSX } from 'solid-js';
 import { transportRows } from '@shared/activityTransport';
 import { promptTokens } from '@shared/modelPrices';
 import type { TraceAttempt } from '@shared/sessionTrace';
+import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
 import { shownText } from '../store';
 import { compactNumber, dateTime, msDuration } from '../lib/format';
-import { attemptStatus, CAPTURE_LABEL, captureReasonText, costText, SESSION_KIND_LABEL } from '../lib/traceFormat';
+import { attemptStatus, CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, costText, SESSION_KIND_LABEL } from '../lib/traceFormat';
 import { onRowActivate, REVEAL_ROW } from '../lib/exchangeNav';
 import { HoverTip, type TipRow } from './ChartTip';
 import { ProviderGlyph } from './ui';
@@ -23,12 +24,24 @@ function identityRows(a: TraceAttempt, account: string, movedFrom: string | null
     { label: 'Trace', value: or(a.traceId) },
     { label: 'Session kind', value: a.sessionKind ? SESSION_KIND_LABEL[a.sessionKind] : '—' },
     { label: 'Parent session', value: or(a.parentSessionId) },
-    { label: 'Capture', value: CAPTURE_LABEL[a.captureState] },
     ...transportRows(a),
   ];
 }
 
-function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void; inspected: boolean }) {
+/** A badge where text was kept (captured, partial, pending); a muted dash where none was. Hover gives the state and why. */
+function CaptureBadge(props: { a: TraceAttempt }) {
+  const state = () => props.a.captureState;
+  return (
+    <HoverTip title="Capture" rows={[{ label: 'State', value: CAPTURE_LABEL[state()] }]} note={props.a.captureReason ? shownText(captureReasonText(props.a.captureReason)) : undefined}>
+      <Show when={CAPTURE_TONE[state()]} fallback={<span class="muted">—</span>}>{(tone) => <span class={`badge compact ${tone()}`}>{CAPTURE_LABEL[state()]}</span>}</Show>
+    </HoverTip>
+  );
+}
+
+/** Requests picked for a diagnostic bundle, by trace ID. */
+export interface BundlePicks { picked: readonly string[]; onPick: (traceId: string, on: boolean) => void }
+
+function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void; inspected: boolean; picks: BundlePicks }) {
   const a = () => props.a;
   const account = () => (a().authIndex ? shownText(props.account(a().authIndex)) : '—');
   const status = () => attemptStatus(a());
@@ -41,8 +54,15 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       onClick={() => { const t = a().traceId; if (t) props.onInspect(t); }}
       ref={row}
       onKeyDown={(e) => onRowActivate(e, () => { const t = a().traceId; if (t) props.onInspect(t); })}>
+      <td class="col-check" onClick={(e) => e.stopPropagation()}>
+        <Show when={a().traceId}>{(t) => {
+          const picked = () => props.picks.picked.includes(t());
+          return <input type="checkbox" aria-label="Add to diagnostic bundle" checked={picked()}
+            disabled={!picked() && props.picks.picked.length >= DIAGNOSTIC_LIMITS.records} onChange={(e) => props.picks.onPick(t(), e.currentTarget.checked)} />;
+        }}</Show>
+      </td>
       <td class="tabular">
-        <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)} note={a().captureReason ? shownText(captureReasonText(a().captureReason)) : undefined}>{dateTime(a().at)}</HoverTip>
+        <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)}>{dateTime(a().at)}</HoverTip>
       </td>
       <td class="fill">
         <div class="cell-name">
@@ -56,6 +76,7 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       <td>{a().reasoningEffort ?? <span class="muted">—</span>}</td>
       <td class="trace-account">{account()}<Show when={a().movedFrom}> <span class="badge compact amber">Moved</span></Show></td>
       <td><span class={`badge compact ${status().tone}`}>{status().label}</span></td>
+      <td><CaptureBadge a={a()} /></td>
       <td class="num tabular">
         <Show when={tokens()} fallback={<span class="muted">—</span>}>{(t) => (
           <HoverTip title="Tokens" rows={[
@@ -74,19 +95,19 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
 }
 
 /** Columns in an attempt row; an inline exchange spans them all. */
-const COLUMNS = 9;
+const COLUMNS = 11;
 
-/** A node's own attempts, newest first. Hover the time for IDs and transport; clicking a row opens its captured exchange, under the row when `exchange` is set. */
+/** A node's attempts, newest first. Hover the time for IDs; a row click opens its exchange (under the row when `exchange` is set); checkboxes pick bundle rows. */
 export function TraceAttempts(props: {
   attempts: TraceAttempt[]; busy: boolean; account: (id: string | null) => string; onInspect: (traceId: string) => void;
-  inspected?: string; exchange?: (traceId: string) => JSX.Element;
+  inspected?: string; exchange?: (traceId: string) => JSX.Element; picks: BundlePicks;
 }) {
   return (
     <div class="trace-table">
       <table class="table dense">
         <thead>
           <tr>
-            <th>Time</th><th>Model</th><th>Effort</th><th>Account</th><th>Status</th>
+            <th class="col-check" /><th>Time</th><th>Model</th><th>Effort</th><th>Account</th><th>Status</th><th>Capture</th>
             <th class="num" title="Prompt / output tokens">Tokens</th><th class="num">Cost</th><th class="num">TTFT</th><th class="num">Total</th>
           </tr>
         </thead>
@@ -95,7 +116,7 @@ export function TraceAttempts(props: {
             {(a) => {
               const open = () => !!a.traceId && a.traceId === props.inspected;
               return <>
-                <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} />
+                <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} picks={props.picks} />
                 <Show when={open() && props.exchange}>{(render) => <tr class="row-exchange"><td colSpan={COLUMNS}>{render()(a.traceId!)}</td></tr>}</Show>
               </>;
             }}

@@ -117,13 +117,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.trace-inspect {
-  width: var(--control-height);
+.trace-table tr.inspectable {
+  cursor: pointer;
 }
-.trace-inspect .chip-btn {
-  height: calc(var(--control-height) - 2 * var(--border-width));
-  border: 0;
-  border-radius: var(--radius-btn);
+.trace-table tr.inspectable:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent-border);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
 /* ── Exchange: a side panel over the session card's right side, or a row under its attempt ── */

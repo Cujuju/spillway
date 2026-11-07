@@ -1,4 +1,3 @@
-import { ScanSearch } from 'lucide-solid';
 import { For, Show, type JSX } from 'solid-js';
 import { transportRows } from '@shared/activityTransport';
 import { promptTokens } from '@shared/modelPrices';
@@ -9,7 +8,8 @@ import { attemptStatus, CAPTURE_LABEL, costText, SESSION_KIND_LABEL } from '../l
 import { HoverTip, type TipRow } from './ChartTip';
 import { ProviderGlyph } from './ui';
 
-const ICON_PX = 14;
+/** Keys that open or close a focused row's exchange, like a button. */
+const ACTIVATE_KEYS = new Set(['Enter', ' ']);
 const or = (v: string | null | undefined) => (v ? shownText(v) : '—');
 
 function identityRows(a: TraceAttempt, account: string, movedFrom: string | null): TipRow[] {
@@ -35,7 +35,10 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
   const status = () => attemptStatus(a());
   const tokens = () => a().tokens;
   return (
-    <tr classList={{ selected: props.inspected }}>
+    <tr classList={{ selected: props.inspected, inspectable: !!a().traceId }} tabIndex={a().traceId ? 0 : undefined}
+      aria-expanded={a().traceId ? props.inspected : undefined}
+      onClick={() => { const t = a().traceId; if (t) props.onInspect(t); }}
+      onKeyDown={(e) => { const t = a().traceId; if (t && e.target === e.currentTarget && ACTIVATE_KEYS.has(e.key)) { e.preventDefault(); props.onInspect(t); } }}>
       <td class="tabular">
         <HoverTip title="Attempt" rows={identityRows(a(), account(), a().movedFrom ? shownText(props.account(a().movedFrom)) : null)} note={a().captureReason ? shownText(a().captureReason) : undefined}>{dateTime(a().at)}</HoverTip>
       </td>
@@ -64,19 +67,14 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       <td class="num tabular">{costText(a().costUsd)}</td>
       <td class="num tabular">{msDuration(a().ttftMs)}</td>
       <td class="num tabular">{msDuration(a().latencyMs)}</td>
-      <td class="trace-inspect">
-        <Show when={a().traceId}>{(trace) => (
-          <button type="button" class="chip-btn" title="Inspect exchange" aria-label="Inspect exchange" aria-pressed={props.inspected} onClick={() => props.onInspect(trace())}><ScanSearch size={ICON_PX} /></button>
-        )}</Show>
-      </td>
     </tr>
   );
 }
 
 /** Columns in an attempt row; an inline exchange spans them all. */
-const COLUMNS = 10;
+const COLUMNS = 9;
 
-/** A node's own attempts, newest first. Hover the time for IDs and transport; the icon opens the captured exchange, under its row when `exchange` is set. */
+/** A node's own attempts, newest first. Hover the time for IDs and transport; clicking a row opens its captured exchange, under the row when `exchange` is set. */
 export function TraceAttempts(props: {
   attempts: TraceAttempt[]; busy: boolean; account: (id: string | null) => string; onInspect: (traceId: string) => void;
   inspected?: string; exchange?: (traceId: string) => JSX.Element;
@@ -87,7 +85,7 @@ export function TraceAttempts(props: {
         <thead>
           <tr>
             <th>Time</th><th>Model</th><th>Effort</th><th>Account</th><th>Status</th>
-            <th class="num" title="Prompt / output tokens">Tokens</th><th class="num">Cost</th><th class="num">TTFT</th><th class="num">Total</th><th />
+            <th class="num" title="Prompt / output tokens">Tokens</th><th class="num">Cost</th><th class="num">TTFT</th><th class="num">Total</th>
           </tr>
         </thead>
         <tbody aria-busy={props.busy}>

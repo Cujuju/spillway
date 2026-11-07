@@ -38,7 +38,8 @@ function object(raw: string | null): Record<string, unknown> {
 function observation(r: Raw): TraceAttempt | null {
   const e = object(r.event);
   if (!text(e.requestId) || !date(e.at) || e.at !== r.at) return null;
-  let p = e;
+  let p = e, usage = e, authIndex = text(e.authIndex);
+  const ledger = object(r.accounting);
   if (r.origin === 'archive') {
     const provenance = e.provenance;
     p = provenance && typeof provenance === 'object' && !Array.isArray(provenance) ? provenance as Record<string, unknown> : {};
@@ -47,22 +48,26 @@ function observation(r: Raw): TraceAttempt | null {
     try {
       const identity: unknown = JSON.parse(r.identity ?? 'null');
       if (!Array.isArray(identity) || identity.length !== 3 || identity[0] !== e.requestId || identity[1] !== e.at || !(identity[2] === null || text(identity[2]))) return null;
+      authIndex = text(identity[2]);
     } catch { return null; }
+    // Usage comes only from the ledger row with this exact attempt identity; legacy rows lack cache writes.
+    usage = { ...ledger, cacheWriteTokens: ledger.cacheWriteTokens ?? 0 };
   }
   const source = r.origin === 'archive' || e.source !== 'client-log' ? 'proxy' : 'client-log';
   const keys = ['inputTokens', 'outputTokens', 'cachedTokens', 'cacheWriteTokens'] as const;
-  const tokens = r.origin === 'activity' && keys.every((k) => number(e[k]) !== null)
-    ? Object.fromEntries(keys.map((k) => [k, e[k]])) as unknown as TokenCounts : null;
-  const model = text(p.model), effectiveModel = text(p.effectiveModel), provider = text(p.provider);
-  const recordedCost = number(object(r.accounting).costUsd);
+  const tokens = keys.every((k) => number(usage[k]) !== null)
+    ? Object.fromEntries(keys.map((k) => [k, usage[k]])) as unknown as TokenCounts : null;
+  // Token conventions need the provider; legacy archive links take it from their exact ledger row.
+  const model = text(p.model), effectiveModel = text(p.effectiveModel), provider = text(p.provider) ?? (r.origin === 'archive' ? text(ledger.provider) : null);
+  const recordedCost = number(ledger.costUsd);
   const price = tokens ? tokenCost(provider ?? '', effectiveModel ?? model ?? '', tokens) : null;
   // The ledger also stores zero for unpriced models; that zero is not a known price.
   const priceKnown = price ?? tokenCost(provider ?? '', effectiveModel ?? model ?? '', { inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 });
-  const costUsd = r.origin === 'activity' && recordedCost !== null && (recordedCost > 0 || priceKnown) ? recordedCost : price?.usd ?? null;
+  const costUsd = recordedCost !== null && (recordedCost > 0 || priceKnown) ? recordedCost : price?.usd ?? null;
   return { id: r.id, at: new Date(r.at).toISOString(), requestId: text(e.requestId)!, selectionId: text(e.selectionId),
     traceId: text(r.trace_id), origin: r.origin, source, sessionId: text(p.sessionId), parentSessionId: text(p.parentSessionId),
     model, effectiveModel, reasoningEffort: text(p.reasoningEffort), provider, client: text(p.client),
-    authIndex: r.origin === 'activity' ? text(e.authIndex) : null, movedFrom: r.origin === 'activity' ? text(e.movedFrom) : null,
+    authIndex, movedFrom: r.origin === 'activity' ? text(e.movedFrom) : null,
     failed: typeof p.failed === 'boolean' ? p.failed : null, statusCode: number(p.statusCode),
     latencyMs: source === 'proxy' ? number(p.latencyMs) : null, ttftMs: source === 'proxy' ? number(p.ttftMs) : null,
     tokens, costUsd, ...normalizeTransport(p), captureState: r.capture_state ?? 'unknown', captureReason: r.capture_reason ?? '',
@@ -119,7 +124,8 @@ export class TraceStore {
             (SELECT state FROM archive_entries a WHERE a.trace_id=json_extract(event,'$.traceId')) AS capture_state,
             (SELECT reason FROM archive_entries a WHERE a.trace_id=json_extract(event,'$.traceId')) AS capture_reason,
             (SELECT path FROM archive_entries a WHERE a.trace_id=json_extract(event,'$.traceId')) AS path FROM requests`
-        : `SELECT substr(${id},1,2049) AS id,substr(json_extract(${ARCHIVE_DETAIL},'$.at'),1,513) AS at,'archive' AS origin,${metadata(ARCHIVE_DETAIL, true)} AS event,NULL AS accounting,trace_id,substr(identity,1,8193) AS identity,
+        : `SELECT substr(${id},1,2049) AS id,substr(json_extract(${ARCHIVE_DETAIL},'$.at'),1,513) AS at,'archive' AS origin,${metadata(ARCHIVE_DETAIL, true)} AS event,
+            (SELECT json_set(u.event,'$.provider',u.provider) FROM usage_identities u WHERE u.key=(${ARCHIVE_IDENTITY.replaceAll('identity', 'aa.identity')})) AS accounting,trace_id,substr(identity,1,8193) AS identity,
             (SELECT state FROM archive_entries a WHERE a.trace_id=aa.trace_id) AS capture_state,
             (SELECT reason FROM archive_entries a WHERE a.trace_id=aa.trace_id) AS capture_reason,
             (SELECT path FROM archive_entries a WHERE a.trace_id=aa.trace_id) AS path FROM archive_attempts aa`;

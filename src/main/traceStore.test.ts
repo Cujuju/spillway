@@ -83,7 +83,25 @@ it('normalizes legacy absent cache writes and preserves exact retained-ledger co
   expect(log.traceQuery(query).nodes[0]?.metrics).toMatchObject({ usageKnown: 0, missingUsage: 1, tokens: null, costUsd: 0.42 });
 });
 
-it('keeps retained-provenance-only parents navigable without tokens, cost, account, or silent summary attribution', () => {
+it('keeps archive-only links attributed from their exact identity and ledger row, and unknown without one', () => {
+  const { log, observe, edit } = setup();
+  const a = observe(event({ sessionId: 'claude:retained', authIndex: 'account-b' }));
+  const before = log.traceAttempts({ ...query, nodeId: `session:${a.sessionId}` }).attempts[0]!;
+  edit((db) => db.exec('DELETE FROM requests'));
+  const nodeId = `session:${a.sessionId}`;
+  expect(log.traceAttempts({ ...query, nodeId }).attempts[0]).toMatchObject({ origin: 'archive', authIndex: 'account-b', tokens: before.tokens, costUsd: before.costUsd });
+  expect(log.traceQuery(query).nodes[0]?.metrics).toMatchObject({ usageKnown: 1, missingUsage: 0, costUsd: before.costUsd });
+  edit((db) => db.exec("UPDATE usage_identities SET event=json_remove(event,'$.cacheWriteTokens')"));
+  expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.tokens).toEqual({ ...before.tokens, cacheWriteTokens: 0 });
+  // Legacy links lack provenance; the ledger's provider keeps Claude's separate cache reads in the total.
+  edit((db) => db.exec("UPDATE archive_attempts SET detail=json_remove(detail,'$.provenance')"));
+  const { inputTokens, cachedTokens, outputTokens } = before.tokens!;
+  expect(log.traceQuery(query).nodes[0]).toMatchObject({ id: `trace:${a.traceId}`, metrics: { tokens: inputTokens + cachedTokens + outputTokens } });
+  edit((db) => db.exec('DELETE FROM usage_identities'));
+  expect(log.traceAttempts({ ...query, nodeId: `trace:${a.traceId}` }).attempts[0]).toMatchObject({ authIndex: 'account-b', tokens: null, costUsd: null });
+});
+
+it('keeps retained-provenance-only parents navigable without a ledger row or silent summary attribution', () => {
   const { log, observe, edit } = setup();
   const child = observe(event({ sessionId: 'codex:fork-child', parentSessionId: 'codex:parent', reasoningEffort: 'medium',
     upstreamTransport: 'websocket', failed: false }));
@@ -94,7 +112,7 @@ it('keeps retained-provenance-only parents navigable without tokens, cost, accou
     for (const e of [child, parent]) db.prepare("UPDATE archive_attempts SET detail=json_set(detail,'$.provenance',json(?)) WHERE json_extract(detail,'$.requestId')=?")
       .run(JSON.stringify({ ...e, source: 'proxy' }), e.requestId);
     db.prepare("UPDATE archive_attempts SET detail=json_remove(detail,'$.provenance') WHERE json_extract(detail,'$.requestId')=?").run(legacy.requestId);
-    db.exec('DELETE FROM requests');
+    db.exec('DELETE FROM requests; DELETE FROM usage_identities');
   });
   const nodes = log.traceQuery(query).nodes;
   const node = nodes.find((n) => n.sessionId === child.sessionId)!;
@@ -102,7 +120,7 @@ it('keeps retained-provenance-only parents navigable without tokens, cost, accou
   expect(nodes.some((n) => n.sessionId === legacy.sessionId)).toBe(false);
   expect(nodes.find((n) => n.id === `trace:${legacy.traceId}`)?.kind).toBe('unassigned');
   const attempts = log.traceAttempts({ ...query, nodeId: node.id }).attempts;
-  expect(attempts[0]).toMatchObject({ origin: 'archive', parentSessionId: parent.sessionId, reasoningEffort: 'medium', upstreamTransport: 'websocket', tokens: null, costUsd: null, authIndex: null });
+  expect(attempts[0]).toMatchObject({ origin: 'archive', parentSessionId: parent.sessionId, reasoningEffort: 'medium', upstreamTransport: 'websocket', tokens: null, costUsd: null, authIndex: 'account-a' });
   expect(log.traceQuery({ ...query, parentSessionId: parent.sessionId! }).nodes.map((n) => n.id)).toEqual([node.id]);
 });
 
@@ -124,7 +142,7 @@ it('ignores malformed or non-proxy archive provenance, never borrowing an entry 
   const { log, observe, edit } = setup();
   const a = observe(event());
   edit((db) => {
-    db.exec('DELETE FROM requests');
+    db.exec('DELETE FROM requests; DELETE FROM usage_identities');
     db.prepare("UPDATE archive_attempts SET detail=json_set(detail,'$.provenance',json(?))").run(JSON.stringify({ source: 'client-log', sessionId: 'invented', parentSessionId: 'invented-parent', failed: 'false' }));
   });
   expect(log.traceQuery(query).nodes[0]).toMatchObject({ id: `trace:${a.traceId}`, sessionId: null, parents: [], metrics: { unknownOutcomes: 1, missingUsage: 1 } });

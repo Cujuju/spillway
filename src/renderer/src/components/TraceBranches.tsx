@@ -6,7 +6,7 @@ import { compactNumber, dateTime } from '../lib/format';
 import { costText, KIND_BADGE, nodeLabel } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
 
-const EVIDENCE_NOTE = 'Parents come only from proxy parent-session metadata; subagents carry a claude:/codex: …:agent: ID. Retention removes old attempts: archived links keep session, effort and transport, not tokens, cost or account. Pages are a live read; refresh after new traffic. Range: up to 90 days, 7 by default.';
+const EVIDENCE_NOTE = 'Parents come only from proxy parent-session metadata; subagents carry a claude:/codex: …:agent: ID. Retention removes old attempts: archived links keep session, effort, transport and account; tokens and cost come from the matching usage record while it lasts. Pages are a live read; refresh after new traffic. Range: up to 90 days, 7 by default.';
 
 const ICON_PX = 14;
 const shortDay = (at: string) => new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

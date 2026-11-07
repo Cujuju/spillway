@@ -30,7 +30,7 @@ function identityRows(a: TraceAttempt, account: string, movedFrom: string | null
 
 function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void }) {
   const a = () => props.a;
-  const account = () => (a().origin === 'archive' ? '—' : shownText(props.account(a().authIndex)));
+  const account = () => (a().authIndex ? shownText(props.account(a().authIndex)) : '—');
   const status = () => attemptStatus(a());
   const tokens = () => a().tokens;
   return (

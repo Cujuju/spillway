@@ -1,6 +1,6 @@
 import { X } from 'lucide-solid';
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
-import type { TraceAttempt, TraceCoverage, TraceNode, TraceQuery } from '@shared/sessionTrace';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import type { TraceAttempt, TraceCoverage, TraceNode, TraceQuery, TraceSource } from '@shared/sessionTrace';
 import { shownText } from '../store';
 import { conversationLabel } from '../lib/conversationNames';
 import { traceViewQuery } from '../lib/traceViewQuery';
@@ -15,13 +15,14 @@ const ICON_PX = 14;
 /** Typing settles before a query runs. */
 const QUERY_DEBOUNCE_MS = 200;
 const SORTS = [{ value: 'cost', label: 'Cost' }, { value: 'failed', label: 'Failures' }, { value: 'recent', label: 'Recent' }] as const;
-const SOURCES = [{ value: 'proxy', label: 'Via proxy' }, { value: 'all', label: 'All usage' }] as const;
 
 const localInput = (at: string | undefined) => at ? new Date(Date.parse(at) - new Date(at).getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : '';
 const fromLocal = (value: string) => (value ? new Date(value).toISOString() : undefined);
 
-export function SessionTraces(props: { account: (id: string | null) => string }) {
-  const [query, setQuery] = createSignal<TraceQuery>({ sort: 'cost', source: 'proxy' });
+/** `source` is the page header's Via proxy / All usage choice. */
+export function SessionTraces(props: { account: (id: string | null) => string; source: TraceSource }) {
+  const [local, setLocal] = createSignal<Omit<TraceQuery, 'source'>>({ sort: 'cost' });
+  const query = createMemo<TraceQuery>(() => ({ ...local(), source: props.source }));
   const [sessionInput, setSessionInput] = createSignal('');
   const [nodes, setNodes] = createSignal<TraceNode[]>([]), [coverage, setCoverage] = createSignal<TraceCoverage>();
   const [next, setNext] = createSignal<string | null>(null), [busy, setBusy] = createSignal(false);
@@ -58,7 +59,7 @@ export function SessionTraces(props: { account: (id: string | null) => string })
     onCleanup(() => clearTimeout(timer));
   });
   onCleanup(() => { listGeneration++; attemptGeneration++; });
-  const filter = (patch: Partial<TraceQuery>) => setQuery((q) => ({ ...q, ...patch, before: undefined }));
+  const filter = (patch: Partial<Omit<TraceQuery, 'source'>>) => setLocal((q) => ({ ...q, ...patch, before: undefined }));
   const choose = (n: TraceNode) => { setSelected(n); setAttempts([]); setAttemptNext(null); setInspected(undefined); void loadAttempts(n, query()); };
   const navigate = (sessionId: string) => { setSessionInput(''); filter({ nodeId: `session:${sessionId}`, parentSessionId: undefined, text: undefined }); };
   const refresh = () => { const q = query(); setSelected(undefined); setInspected(undefined); attemptGeneration++; void load({ ...q, before: undefined }); };
@@ -71,7 +72,6 @@ export function SessionTraces(props: { account: (id: string | null) => string })
         <input class="input filter-grow" type="search" placeholder="Search sessions, models, effort" aria-label="Search" value={query().text ?? ''} onInput={(e) => filter({ text: e.currentTarget.value })} />
         <input class="input filter-narrow" placeholder="Exact session ID" aria-label="Exact session ID" value={sessionInput()} onInput={(e) => { setSessionInput(e.currentTarget.value); filter({ nodeId: e.currentTarget.value ? `session:${e.currentTarget.value}` : undefined, parentSessionId: undefined }); }} />
         <Seg label="Rank by" value={query().sort ?? 'cost'} options={SORTS} onChange={(sort) => filter({ sort })} />
-        <Seg label="Usage" value={query().source ?? 'proxy'} options={SOURCES} onChange={(source) => filter({ source })} />
         <span class="date-range">
           <input class="input" type="datetime-local" aria-label="From" title="From (blank: 7 days ago)" value={localInput(query().from)} onChange={(e) => filter({ from: fromLocal(e.currentTarget.value) })} />
           <span aria-hidden="true">–</span>

@@ -48,7 +48,8 @@ export function Activity() {
         <h1 class="dash-title">Activity</h1>
         <ActivityImport />
         <div class="dash-actions card-spaced">
-          <Show when={view() !== 'archive' && view() !== 'traces'}><Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} />
+          <Show when={view() !== 'archive'}><Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} /></Show>
+          <Show when={view() !== 'archive' && view() !== 'traces'}>
           <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
           <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
           <select class="input" aria-label="Effective reasoning effort" value={effort()} onChange={(e) => setEffort(e.currentTarget.value)}>
@@ -72,7 +73,7 @@ export function Activity() {
         <ActivityOverview scope={scope()} account={accountName} />
       </Show>
       <Show when={view() === 'archive'}><RequestArchive /></Show>
-      <Show when={view() === 'traces'}><SessionTraces account={accountName} /></Show>
+      <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} /></Show>
       <Show when={view() === 'totals'}>
         <ActivityTotals account={accountName} scope={scope()} />
       </Show>

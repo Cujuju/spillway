@@ -99,6 +99,7 @@
   background: var(--color-surface-input);
   color: var(--color-text-secondary);
   cursor: pointer;
+  white-space: nowrap;
 }
 /* last-of-type: a tooltip's hidden description may follow the final button. */
 .seg button:last-of-type {

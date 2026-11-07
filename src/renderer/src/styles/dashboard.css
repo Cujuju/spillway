@@ -34,6 +34,10 @@
   display: flex;
   gap: var(--spacing-2_5);
   align-items: center;
+  /* Too many controls for the row wrap onto another, right-aligned, instead of squashing labels. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 /* Separate control groups (a filter beside the view tabs) sit a card gap apart. */
 .dash-actions.card-spaced {

@@ -125,6 +125,14 @@ a {
 .page-inner.fill > * {
   flex-shrink: 0;
 }
+/* A fill page's own bottom padding sits below its 100%-high box, so taller content ran flush to the window. The spacer ends the content instead. */
+.page:has(> .page-inner.fill) {
+  padding-bottom: 0;
+}
+.page-inner.fill::after {
+  content: '';
+  flex: 0 0 var(--page-pad);
+}
 
 .titlebar {
   display: flex;

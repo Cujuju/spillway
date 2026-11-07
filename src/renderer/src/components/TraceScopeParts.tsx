@@ -1,5 +1,6 @@
 import { shownText } from '../store';
 import { conversationLabel } from '../lib/conversationNames';
+import { HoverTip } from './ChartTip';
 import { ChoiceChip, ScopeChip } from './ScopeChip';
 
 export type TraceSort = 'cost' | 'failed' | 'recent';
@@ -22,6 +23,16 @@ export const sessionNode = (sessionId: string) => `${SESSION_NODE}${sessionId}`;
 const closeOnEnter = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
   if (e.key === 'Enter') e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
 };
+
+/** The Traces row cap, beside the sentence; hover explains it. */
+export function TraceLimitNote(props: { limit: number }) {
+  return (
+    <HoverTip title="Request limit" rows={[{ label: 'Shown', value: `Newest ${props.limit.toLocaleString()}` }, { label: 'Totals', value: 'Partial' }]}
+      note="Narrow the time frame or pick one session for complete totals.">
+      <span class="badge compact amber trace-limit">Newest {props.limit.toLocaleString()} only</span>
+    </HoverTip>
+  );
+}
 
 /** "in [session] matching [text] ranked by [sort]": the Traces filters as sentence phrases. */
 export function TraceScopeParts(props: { value: TraceFilters; onChange: (patch: Partial<TraceFilters>) => void }) {

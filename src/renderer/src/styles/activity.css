@@ -363,6 +363,9 @@ th[aria-sort] .sort-btn {
   gap: var(--spacing-2);
   margin-left: auto;
 }
+.trace-limit {
+  cursor: help;
+}
 .scope-line {
   display: flex;
   flex-wrap: wrap;

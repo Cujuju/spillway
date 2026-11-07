@@ -21,6 +21,8 @@ const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isConte
 export function SessionTraces(props: {
   account: (id: string | null) => string; source: TraceSource; window: TraceWindow;
   filters: TraceFilters; onFilters: (patch: Partial<TraceFilters>) => void;
+  /** The row cap when the time frame holds more requests; the page shows it in the scope row. */
+  onLimit: (limit: number | undefined) => void;
 }) {
   const query = createMemo<TraceQuery>(() => ({ ...props.filters, source: props.source }));
   const [layout, setLayout] = persistedSignal<ExchangeLayout>('activity.exchangeLayout', 'panel', EXCHANGE_LAYOUTS);
@@ -58,7 +60,8 @@ export function SessionTraces(props: {
     const timer = setTimeout(() => void load(q, frame), QUERY_DEBOUNCE_MS);
     onCleanup(() => clearTimeout(timer));
   });
-  onCleanup(() => { listGeneration++; attemptGeneration++; });
+  onCleanup(() => { listGeneration++; attemptGeneration++; props.onLimit(undefined); });
+  createEffect(() => { const c = coverage(); props.onLimit(c?.limited ? c.limit : undefined); });
   const choose = (n: TraceNode) => { setSelected(n); setAttempts([]); setAttemptNext(null); setInspected(undefined); void loadAttempts(n, query()); };
   const navigate = (sessionId: string) => props.onFilters({ nodeId: sessionNode(sessionId), parentSessionId: undefined, text: undefined });
   const refresh = () => { setSelected(undefined); setInspected(undefined); attemptGeneration++; void load(query(), props.window); };
@@ -84,7 +87,6 @@ export function SessionTraces(props: {
   );
 
   return <div class="inspect trace-view">
-    <Show when={coverage()?.limited}><p class="notice">Showing the newest {coverage()!.limit.toLocaleString()} requests only. Narrow the time frame or pick one session for complete totals.</p></Show>
     <Show when={error()}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
     <div class="trace-columns">
       <TraceBranches coverage={coverage()} onRefresh={refresh} nodes={nodes()} busy={busy()} more={!!next()} selected={selected()?.id} onSelect={choose} onMore={() => void load(query(), props.window, next()!)} />

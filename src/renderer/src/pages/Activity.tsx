@@ -4,7 +4,7 @@ import { SessionTraces } from '../components/SessionTraces';
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
 import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE, type TimeFrame } from '../components/ActivityScopeLine';
-import { DEFAULT_TRACE_FILTERS, type TraceFilters } from '../components/TraceScopeParts';
+import { DEFAULT_TRACE_FILTERS, TraceLimitNote, type TraceFilters } from '../components/TraceScopeParts';
 import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
 import { AddChartSelect, type PendingChart } from '../components/ActivityBoard';
 import { dayText, isCustomRange, RANGES, type CustomRange, type Range } from '../lib/activityRange';
@@ -44,6 +44,7 @@ export function Activity() {
   const [traceCustom, setTraceCustom] = persistedSignal<CustomRange>('activity.traceCustomRange', lastDays(DEFAULT_TRACE_CUSTOM_DAYS), isCustomRange);
   const [traceFilters, setTraceFilters] = createSignal<TraceFilters>(DEFAULT_TRACE_FILTERS);
   const filterTraces = (patch: Partial<TraceFilters>) => setTraceFilters((f) => ({ ...f, ...patch }));
+  const [traceLimit, setTraceLimit] = createSignal<number>();
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
@@ -79,6 +80,7 @@ export function Activity() {
               traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined} time={timeFrame()} />
             <div class="scope-row-end">
               <Show when={view() === 'overview'}><AddChartSelect onPick={setPlacing} /></Show>
+              <Show when={view() === 'traces' && traceLimit()}>{(n) => <TraceLimitNote limit={n()} />}</Show>
               <Show when={view() === 'totals'}>
                 <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
               </Show>
@@ -102,7 +104,7 @@ export function Activity() {
         <ActivityOverview scope={scope()} account={accountName} range={range()} custom={custom()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
       </Show>
       <Show when={view() === 'archive'}><RequestArchive /></Show>
-      <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
+      <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} onLimit={setTraceLimit} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
       <Show when={view() === 'totals'}>
         <ActivityTotals account={accountName} scope={scope()} period={period()} />
       </Show>

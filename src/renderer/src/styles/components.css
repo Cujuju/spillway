@@ -249,6 +249,11 @@
   text-box: trim-both cap alphabetic;
   height: round(1cap, 1px);
 }
+/* A truncating title clips at its box, so it keeps the full line box or descenders get cut. */
+.card .card-title.truncate {
+  text-box: normal;
+  height: auto;
+}
 .section-label {
   font-size: var(--text-xxs);
   font-weight: 600;

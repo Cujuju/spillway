@@ -50,7 +50,7 @@ export function TraceDetail(props: {
   return (
     <section class="card trace-detail">
       <div class="panel-head">
-        <h2 class="card-title trace-title">{shownText(nodeLabel(props.n))}</h2>
+        <h2 class="card-title trace-title truncate">{shownText(nodeLabel(props.n))}</h2>
         <span class={`badge ${kind().tone}`}>{kind().label}</span>
         <Show when={props.n.sessionKind && ORIGIN_BADGE[props.n.sessionKind]}>{(o) => <span class={`badge ${o().tone}`}>{o().label}</span>}</Show>
         <InfoTip title="Own usage" note={OWN_USAGE_NOTE} />

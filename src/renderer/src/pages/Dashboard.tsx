@@ -3,6 +3,7 @@ import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
 import { AccountPanel } from '../components/AccountPanel';
+import { HoverTip } from '../components/ChartTip';
 import { AccountRow } from '../components/AccountRow';
 import { PoolPanel } from '../components/PoolPanel';
 import { createProviderPools } from '../components/poolModel';
@@ -128,18 +129,18 @@ export function Dashboard() {
 
   return (
     <>
-      <PageHeader>
-        <div>
+      <PageHeader class="single-row">
+        <div class="title-line">
           <h1 class="dash-title">Quota Management</h1>
-          <div class="dash-sub">
-            {creds().length} credentials · <span class="loaded">{loaded()} with quota data</span>
-          </div>
+          <span class="dash-meta">{creds().length} credentials · <span class="loaded">{loaded()} with quota data</span></span>
         </div>
         <div class="dash-actions">
-          <ShowEmailsButton class="btn page-action" />
-          <button class="btn page-action solid" disabled={refreshing() || proxyState() !== 'running'} onClick={() => void refreshAll()}>
-            <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} /> Refresh all credentials
-          </button>
+          <ShowEmailsButton class="btn ghost icon-btn" iconOnly />
+          <HoverTip title="Refresh all credentials" rows={[]} note={proxyState() === 'running' ? undefined : 'Start the proxy to refresh.'} layout="contents">
+            <button type="button" class="btn ghost icon-btn" aria-label="Refresh all credentials" disabled={refreshing() || proxyState() !== 'running'} onClick={() => void refreshAll()}>
+              <RefreshCw size={ICON_PX} class={refreshing() ? 'spin' : undefined} />
+            </button>
+          </HoverTip>
         </div>
       </PageHeader>
 

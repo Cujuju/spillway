@@ -43,19 +43,6 @@
   color: var(--color-text);
   background: var(--color-surface-input);
 }
-/* Page header actions: standard buttons, one text step larger. */
-.btn.page-action {
-  font-size: var(--text-body);
-  background: transparent;
-}
-.btn.page-action.solid {
-  background: var(--color-text);
-  color: var(--color-background);
-  border-color: var(--color-text);
-}
-.btn.page-action.solid:hover:not(:disabled) {
-  background: var(--color-text-soft);
-}
 .icon-btn {
   width: var(--icon-btn-size);
   height: var(--icon-btn-size);

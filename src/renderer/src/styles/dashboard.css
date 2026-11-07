@@ -24,6 +24,25 @@
 .header-status:empty {
   display: none;
 }
+/* Title, a short summary beside it and icon actions, all on one row (Dashboard). */
+.dash-header.single-row {
+  align-items: center;
+}
+.title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  min-width: 0;
+}
+.dash-meta {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+.dash-meta .loaded {
+  color: var(--color-green);
+}
 /* Actions share the title's row; a subtitle hangs below the title alone. */
 .dash-header.title-row {
   align-items: flex-start;
@@ -43,9 +62,6 @@
   color: var(--color-text-secondary);
   padding-left: var(--spacing-2_5);
   border-left: var(--border-width-accent) solid var(--color-green);
-}
-.dash-sub .loaded {
-  color: var(--color-green);
 }
 .dash-actions {
   display: flex;

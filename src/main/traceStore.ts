@@ -1,3 +1,4 @@
+import { sessionKind } from '@shared/types';
 import type { Db } from './activityDb';
 import { normalizeTransport } from '@shared/activityTransport';
 import { tokenCost, type TokenCounts } from '@shared/modelPrices';
@@ -17,7 +18,7 @@ CREATE INDEX IF NOT EXISTS archive_attempt_session ON archive_attempts (json_ext
 type Raw = { id: string; at: string; origin: 'activity' | 'archive'; event: string; accounting: string | null;
   trace_id: string | null; capture_state: TraceAttempt['captureState'] | null; capture_reason: string | null; path: string | null; identity: string | null };
 const DAY = 86_400_000;
-const TEXT_FIELDS = ['source', 'sessionId', 'parentSessionId', 'model', 'effectiveModel', 'reasoningEffort', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
+const TEXT_FIELDS = ['source', 'sessionId', 'parentSessionId', 'sessionKind', 'model', 'effectiveModel', 'reasoningEffort', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
 function metadata(column: string, archive: boolean): string {
   const strings = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE WHEN json_type(${column},'$.${k}')='text' THEN substr(json_extract(${column},'$.${k}'),1,513) END`]);
   const numbers = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE ${k === 'cacheWriteTokens' ? `WHEN json_type(${column},'$.${k}') IS NULL OR json_type(${column},'$.${k}')='null' THEN 0 ` : ''}WHEN json_type(${column},'$.${k}') IN ('integer','real') THEN json_extract(${column},'$.${k}') END`]);
@@ -66,6 +67,7 @@ function observation(r: Raw): TraceAttempt | null {
   const costUsd = recordedCost !== null && (recordedCost > 0 || priceKnown) ? recordedCost : price?.usd ?? null;
   return { id: r.id, at: new Date(r.at).toISOString(), requestId: text(e.requestId)!, selectionId: text(e.selectionId),
     traceId: text(r.trace_id), origin: r.origin, source, sessionId: text(p.sessionId), parentSessionId: text(p.parentSessionId),
+    sessionKind: sessionKind(p.sessionKind),
     model, effectiveModel, reasoningEffort: text(p.reasoningEffort), provider, client: text(p.client),
     authIndex, movedFrom: r.origin === 'activity' ? text(e.movedFrom) : null,
     failed: typeof p.failed === 'boolean' ? p.failed : null, statusCode: number(p.statusCode),

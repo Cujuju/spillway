@@ -1,4 +1,4 @@
-import type { ActivityEvent } from '@shared/types';
+import { sessionKind, type ActivityEvent } from '@shared/types';
 import { clientName } from '@shared/activityScope';
 import { activityTransport, transportReason } from '@shared/activityTransport';
 
@@ -81,6 +81,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     cacheWriteTokens: n(r.cache_creation_tokens),
     sessionId: s(r.session_id),
     parentSessionId: s(r.parent_session_id),
+    sessionKind: sessionKind(r.session_kind),
     userAgent,
     client: clientName(userAgent),
     // Set when stored (activityLog.append), which knows the conversation's earlier requests.

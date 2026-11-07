@@ -67,3 +67,11 @@ it('preserves the upstream response ID and tags live events as proxy usage', () 
     .toMatchObject({ upstreamId: 'msg_response', source: 'proxy' });
   expect(parseActivityEvent(JSON.stringify({ request_id: 'older_proxy' }))?.upstreamId).toBeNull();
 });
+
+it('parses observed success status and only supported session kinds', () => {
+  for (const kind of ['root', 'subagent', 'fork', 'compaction']) {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'success', failed: false, status_code: 201, session_kind: kind })))
+      .toMatchObject({ failed: false, statusCode: 201, sessionKind: kind });
+  }
+  for (const kind of [undefined, 'other', 1, ['root']]) expect(parseActivityEvent(JSON.stringify({ request_id: 'old', session_kind: kind }))?.sessionKind).toBeNull();
+});

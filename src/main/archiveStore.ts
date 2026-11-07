@@ -1,6 +1,6 @@
 import type { Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage } from '@shared/archive';
-import type { ActivityEvent } from '@shared/types';
+import { sessionKind, type ActivityEvent } from '@shared/types';
 import { archiveSearchText } from '@shared/archiveContent';
 import { normalizeTransport } from '@shared/activityTransport';
 
@@ -80,7 +80,7 @@ export class ArchiveStore {
       const text = (v: unknown) => typeof v === 'string' && v ? v.slice(0, 512) : null;
       const measured = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
       const provenance = { source: 'proxy', model: text(e.model), effectiveModel: text(e.effectiveModel), reasoningEffort: text(e.reasoningEffort),
-        provider: text(e.provider), client: text(e.client), sessionId: text(e.sessionId), parentSessionId: text(e.parentSessionId),
+        provider: text(e.provider), client: text(e.client), sessionId: text(e.sessionId), parentSessionId: text(e.parentSessionId), sessionKind: sessionKind(e.sessionKind),
         failed: typeof e.failed === 'boolean' ? e.failed : null, statusCode: measured(e.statusCode), latencyMs: measured(e.latencyMs), ttftMs: measured(e.ttftMs), ...normalizeTransport(e) };
       const attempt = { requestId: e.requestId, selectionId: e.selectionId, at: e.at, provenance };
       const inserted = this.db.prepare('INSERT OR IGNORE INTO archive_attempts SELECT ?,?,? WHERE (SELECT count(*) FROM archive_attempts WHERE trace_id=?) < 200').run(identity, e.traceId, JSON.stringify(attempt), e.traceId);

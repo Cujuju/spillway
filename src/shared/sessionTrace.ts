@@ -1,3 +1,4 @@
+import type { SessionKind } from './types';
 import type { CaptureState } from './archive';
 import type { TransportMetadata } from './activityTransport';
 import type { TokenCounts } from './modelPrices';
@@ -16,7 +17,7 @@ export interface TraceAttemptQuery extends TraceRange { nodeId: string; before?:
 export interface TraceAttempt extends Required<TransportMetadata> {
   id: string; at: string; requestId: string; selectionId: string | null; traceId: string | null;
   origin: 'activity' | 'archive'; source: 'proxy' | 'client-log';
-  sessionId: string | null; parentSessionId: string | null;
+  sessionId: string | null; parentSessionId: string | null; sessionKind: SessionKind | null;
   model: string | null; effectiveModel: string | null; reasoningEffort: string | null; provider: string | null; client: string | null;
   authIndex: string | null; movedFrom: string | null;
   failed: boolean | null; statusCode: number | null; latencyMs: number | null; ttftMs: number | null;
@@ -32,10 +33,10 @@ export interface TraceMetrics {
 }
 export interface TraceParent {
   sessionId: string; observed: boolean; cycle: boolean;
-  kind: 'subagent' | 'unknown';
+  kind: 'subagent' | 'fork' | 'compaction' | 'unknown';
 }
 export interface TraceNode {
-  id: string; sessionId: string | null; kind: 'session' | 'subagent' | 'unassigned';
+  id: string; sessionId: string | null; sessionKind: SessionKind | null; kind: 'session' | 'subagent' | 'unassigned';
   firstAt: string; lastAt: string; metrics: TraceMetrics;
   exchanges: number; attemptsWithoutTrace: number; archiveOnly: number;
   parents: TraceParent[]; parentCount: number; conflictingParents: boolean;

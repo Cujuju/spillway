@@ -99,7 +99,7 @@ export interface FakeEvent {
   downstream_transport?: 'http' | 'websocket'; upstream_transport?: 'http' | 'websocket' | 'websocket+http'; transport_fallback_reason?: string;
   at: string; request_id: string; upstream_id: string; selection_id: string; provider: string; model: string; auth_index: string;
   stream: boolean; failed: boolean; status_code: number; error?: string; latency_ms: number; ttft_ms: number;
-  input_tokens: number; output_tokens: number; cached_tokens: number; cache_creation_tokens: number; session_id: string; user_agent: string;
+  input_tokens: number; output_tokens: number; cached_tokens: number; cache_creation_tokens: number; session_id: string; session_kind: string; user_agent: string;
 }
 
 interface WindowState { used: number; resetsAt: number | null }
@@ -164,11 +164,11 @@ export function generate(now: number): DemoData {
           downstream_transport: account.provider === 'codex' && i % 7 !== 0 ? 'websocket' : 'http',
           upstream_transport: account.provider === 'codex' ? (i % 7 === 0 ? 'websocket+http' : 'websocket') : 'http',
           ...(account.provider === 'codex' && i % 7 === 0 ? { transport_fallback_reason: 'websocket_upgrade_426' } : {}),
-          status_code: failed ? 529 : 0, ...(failed ? { error: 'Overloaded' } : {}),
+          status_code: failed ? 529 : 200, ...(failed ? { error: 'Overloaded' } : {}),
           latency_ms: 2000 + Math.floor(rand() * 30_000), ttft_ms: 400 + Math.floor(rand() * 2500),
           input_tokens: input, output_tokens: failed ? 0 : 100 + Math.floor(rand() * 3000),
           cached_tokens: cached, cache_creation_tokens: failed || !apart ? 0 : Math.floor(rand() * 4000),
-          session_id: `${account.provider}:${session.id}`, user_agent: account.userAgent,
+          session_id: `${account.provider}:${session.id}`, session_kind: 'root', user_agent: account.userAgent,
         });
         if (failed) continue;
         lastUsed.set(account.authIndex, at);

@@ -31,7 +31,7 @@ interface RequestRow {
 function toStored(r: RequestRow): StoredActivityEvent {
   // Requests stored before conversations or clients were recorded lack these fields.
   const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
-  return { ...e, ...normalizeTransport(e), effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null,
+  return { ...e, ...normalizeTransport(e), effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null, sessionKind: e.sessionKind ?? null,
     latencyMs: e.source === 'client-log' ? null : e.latencyMs ?? null, ttftMs: e.source === 'client-log' ? null : e.ttftMs ?? null,
     source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
 }
@@ -198,7 +198,7 @@ export class ActivityLog {
     }
     const { costUsd, uncachedCostUsd, ...details } = event;
     const e = { ...details, ...normalizeTransport(event), effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
-      parentSessionId: event.parentSessionId ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
+      parentSessionId: event.parentSessionId ?? null, sessionKind: event.sessionKind ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
       ttftMs: event.source === 'client-log' ? null : event.ttftMs ?? null,
       source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const accounted = { ...e, costUsd, uncachedCostUsd };

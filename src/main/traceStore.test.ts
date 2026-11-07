@@ -240,3 +240,14 @@ it('returns no body text and labels compaction only from the captured endpoint, 
   expect(log.traceAttempts({ ...query, nodeId: 'session:claude:main' }).attempts[0]?.captureState).toBe('unknown');
   log.clear(); expect(log.traceQuery(query).nodes).toEqual([]);
 });
+
+it('projects validated kinds from activity and retained archive provenance', () => {
+  const { log, observe, edit } = setup();
+  const a = observe(event({ sessionId: 'codex:fork', parentSessionId: 'codex:parent', sessionKind: 'fork' }));
+  const nodeId = `session:${a.sessionId}`;
+  expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.sessionKind).toBe('fork');
+  edit((db) => db.exec('DELETE FROM requests'));
+  expect(log.traceAttempts({ ...query, nodeId }).attempts[0]).toMatchObject({ origin: 'archive', sessionKind: 'fork' });
+  edit((db) => db.exec("UPDATE archive_attempts SET detail=json_set(detail,'$.provenance.sessionKind','unsupported')"));
+  expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.sessionKind).toBeNull();
+});

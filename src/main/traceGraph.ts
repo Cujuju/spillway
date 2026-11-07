@@ -1,3 +1,4 @@
+import type { SessionKind } from '@shared/types';
 import { promptTokens } from '@shared/modelPrices';
 import { isSubagentSession, traceNodeId, type TraceAttempt, type TraceMetrics, type TraceNode } from '@shared/sessionTrace';
 
@@ -41,6 +42,7 @@ function components(parents: Map<string, Set<string>>): Map<string, number> {
 export function traceNodes(observations: TraceAttempt[]): TraceNode[] {
   const nodes = new Map<string, TraceNode>(), parents = new Map<string, Set<string>>();
   const traces = new Map<string, Set<string>>(), models = new Map<string, Set<string>>(), efforts = new Map<string, Set<string>>();
+  const kinds = new Map<string, Set<SessionKind>>();
   const seen = new Set<string>();
   for (const a of observations) {
     if (seen.has(a.id)) continue;
@@ -48,11 +50,13 @@ export function traceNodes(observations: TraceAttempt[]): TraceNode[] {
     const id = traceNodeId(a);
     let node = nodes.get(id);
     if (!node) {
-      node = { id, sessionId: a.sessionId, kind: a.sessionId ? isSubagentSession(a.sessionId) ? 'subagent' : 'session' : 'unassigned',
+      node = { id, sessionId: a.sessionId, sessionKind: null, kind: a.sessionId ? isSubagentSession(a.sessionId) ? 'subagent' : 'session' : 'unassigned',
         firstAt: a.at, lastAt: a.at, metrics: emptyMetrics(), exchanges: 0, attemptsWithoutTrace: 0, archiveOnly: 0,
         parents: [], parentCount: 0, conflictingParents: false, models: [], efforts: [], dimensionsTruncated: false };
+      kinds.set(id, new Set());
       nodes.set(id, node); traces.set(id, new Set()); models.set(id, new Set()); efforts.set(id, new Set());
     }
+    if (a.sessionKind) kinds.get(id)!.add(a.sessionKind);
     node.firstAt = node.firstAt < a.at ? node.firstAt : a.at;
     node.lastAt = node.lastAt > a.at ? node.lastAt : a.at;
     if (a.traceId) traces.get(id)!.add(a.traceId); else node.attemptsWithoutTrace++;
@@ -78,10 +82,12 @@ export function traceNodes(observations: TraceAttempt[]): TraceNode[] {
   }
   const groups = components(parents);
   for (const node of nodes.values()) {
+    const observedKinds = [...kinds.get(node.id)!];
+    node.sessionKind = observedKinds.length === 1 ? observedKinds[0]! : null;
     const ps = [...parents.get(node.sessionId ?? '') ?? []].sort();
     node.parentCount = ps.length; node.conflictingParents = ps.length > 1;
     node.parents = ps.slice(0, 50).map((p) => ({ sessionId: p, observed: nodes.has(`session:${p}`),
-      cycle: groups.get(p) === groups.get(node.sessionId!), kind: node.kind === 'subagent' ? 'subagent' : 'unknown' }));
+      cycle: groups.get(p) === groups.get(node.sessionId!), kind: node.sessionKind === 'fork' || node.sessionKind === 'compaction' || node.sessionKind === 'subagent' ? node.sessionKind : node.kind === 'subagent' ? 'subagent' : 'unknown' }));
     node.exchanges = traces.get(node.id)!.size;
     const ms = [...models.get(node.id)!].sort(), es = [...efforts.get(node.id)!].sort();
     node.models = ms.slice(0, 12); node.efforts = es.slice(0, 12); node.dimensionsTruncated = ms.length > 12 || es.length > 12;

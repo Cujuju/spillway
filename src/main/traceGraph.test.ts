@@ -4,7 +4,7 @@ import { traceNodes } from './traceGraph';
 
 function attempt(id: string, sessionId: string | null, parentSessionId: string | null = null, patch: Partial<TraceAttempt> = {}): TraceAttempt {
   return { id, at: '2026-11-05T12:00:00.000Z', requestId: id, selectionId: `selection-${id}`, traceId: `trace-${id}`,
-    origin: 'activity', source: 'proxy', sessionId, parentSessionId, model: 'coding', effectiveModel: 'claude-opus-5-5', reasoningEffort: 'high', provider: 'claude', client: 'Claude Code', authIndex: 'account-a', movedFrom: null,
+    origin: 'activity', source: 'proxy', sessionId, parentSessionId, sessionKind: null, model: 'coding', effectiveModel: 'claude-opus-5-5', reasoningEffort: 'high', provider: 'claude', client: 'Claude Code', authIndex: 'account-a', movedFrom: null,
     failed: false, statusCode: null, latencyMs: 1000, ttftMs: 100, tokens: { inputTokens: 1000, outputTokens: 100, cachedTokens: 500, cacheWriteTokens: 200 }, costUsd: 0.01,
     downstreamTransport: 'http', upstreamTransport: 'http', transportFallbackReason: null,
     captureState: 'missing', captureReason: 'metadata-only', compactionEndpoint: false, ...patch };
@@ -62,4 +62,14 @@ it('bounds dimension and conflicting-parent output while preserving warning coun
   const nodes = traceNodes(Array.from({ length: 100 }, (_, i) => attempt(`request-${i}`, 'codex:conflict', `codex:parent-${i}`, { model: `alias-${i}`, reasoningEffort: `effort-${i}` })));
   expect(nodes[0]).toMatchObject({ parentCount: 100, conflictingParents: true, dimensionsTruncated: true });
   expect(nodes[0]?.parents).toHaveLength(50); expect(nodes[0]?.models).toHaveLength(12);
+});
+
+it('uses observed node kinds for parent edges and leaves conflicting kinds unknown', () => {
+  for (const sessionKind of ['root', 'subagent', 'fork', 'compaction'] as const) {
+    const [node] = traceNodes([attempt('a', 'codex:child', sessionKind === 'root' ? null : 'codex:parent', { sessionKind }), attempt('b', 'codex:child')]);
+    expect(node!.sessionKind).toBe(sessionKind);
+    if (sessionKind !== 'root') expect(node!.parents[0]!.kind).toBe(sessionKind);
+  }
+  const [node] = traceNodes([attempt('a', 'codex:child', 'codex:parent', { sessionKind: 'fork' }), attempt('b', 'codex:child', 'codex:parent', { sessionKind: 'compaction' })]);
+  expect(node!.sessionKind).toBeNull(); expect(node!.parents[0]!.kind).toBe('unknown');
 });

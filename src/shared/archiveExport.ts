@@ -1,3 +1,4 @@
+import type { SessionKind } from './types';
 import type { ArchiveDetail, ArchiveEntry, ArchivePolicy, ArchiveQuery, ArchiveStatus, CaptureState } from './archive';
 import type { TransportMetadata } from './activityTransport';
 
@@ -18,7 +19,7 @@ export interface ArchiveExportOptions {
 }
 export interface ArchiveAttemptProvenance extends Required<TransportMetadata> {
   source: 'proxy'; model: string | null; effectiveModel: string | null; reasoningEffort: string | null;
-  provider: string | null; client: string | null; sessionId: string | null; parentSessionId: string | null;
+  provider: string | null; client: string | null; sessionId: string | null; parentSessionId: string | null; sessionKind: SessionKind | null;
   failed: boolean | null; statusCode: number | null; latencyMs: number | null; ttftMs: number | null;
 }
 export type PortableAttempt = Omit<ArchiveDetail['attempts'][number], 'provenance'> & { provenance: ArchiveAttemptProvenance | null };

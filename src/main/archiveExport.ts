@@ -1,3 +1,4 @@
+import { sessionKind } from '@shared/types';
 import { createHash, randomUUID } from 'node:crypto';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
@@ -69,6 +70,7 @@ function attempts(raw: string): PortableAttempt[] {
     if (record(v.provenance)) {
       const p = v.provenance, fields: Record<string, unknown> = { source: 'proxy' };
       for (const k of ['model', 'effectiveModel', 'reasoningEffort', 'provider', 'client', 'sessionId', 'parentSessionId']) fields[k] = text(p[k], 512) ? p[k] : null;
+      fields.sessionKind = sessionKind(p.sessionKind);
       Object.assign(fields, normalizeTransport(p));
       for (const k of ['statusCode', 'latencyMs', 'ttftMs']) fields[k] = typeof p[k] === 'number' && Number.isFinite(p[k]) && p[k] >= 0 ? p[k] : null;
       fields.failed = typeof p.failed === 'boolean' ? p.failed : null;

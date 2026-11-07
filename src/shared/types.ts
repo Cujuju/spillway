@@ -194,6 +194,10 @@ export const ACTIVITY_PAGE_SIZE = 500;
 /** Long enough to average out an odd week, short enough to follow a schedule change within weeks. */
 export const RHYTHM_LOOKBACK_DAYS = 21;
 
+export const SESSION_KINDS = ['root', 'subagent', 'fork', 'compaction'] as const;
+export type SessionKind = typeof SESSION_KINDS[number];
+export const sessionKind = (v: unknown): SessionKind | null => typeof v === 'string' && SESSION_KINDS.includes(v as SessionKind) ? v as SessionKind : null;
+
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent extends TransportMetadata {
   /** Full inbound identity; absent on historical and metadata-only client imports. */
@@ -213,7 +217,7 @@ export interface ActivityEvent extends TransportMetadata {
   authIndex: string | null;
   stream: boolean;
   failed: boolean;
-  /** Upstream HTTP status of a failed attempt; null on success. */
+  /** Upstream HTTP status of the attempt when the proxy reported one, failed or successful. */
   statusCode: number | null;
   error: string | null;
   latencyMs: number | null;
@@ -228,6 +232,7 @@ export interface ActivityEvent extends TransportMetadata {
   /** The client conversation as the proxy keys it ("claude:<session uuid>"); null when the client sent none. */
   sessionId: string | null;
   parentSessionId?: string | null;
+  sessionKind?: SessionKind | null;
   /** Account of this conversation's previous attempt on the same model, when it was another one: the prompt cache started over. */
   movedFrom: string | null;
   /** The client's User-Agent header, naming the program that sent the request; null when it sent none. */

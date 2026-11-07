@@ -1,7 +1,7 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
 import { createMemo, createSignal, For, Show, untrack } from 'solid-js';
-import { ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
+import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
 import { appendRow } from '../lib/boardGrow';
 import { settings, updateSettings } from '../store';
 import { ADD_CHOICES, PANELS, type ActivityData } from './activityPanels';
@@ -63,7 +63,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     if (added) next[added.id] = added.spec;
     const revision = ++saveRevision;
     setPending({ tiles, panels: next });
-    saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { tiles: tiles ?? null, panels: next }; }));
+    saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { version: ACTIVITY_BOARD_VERSION, tiles: tiles ?? null, panels: next }; }));
     return saveQueue.finally(() => { if (revision === saveRevision) setPending(null); });
   };
   /** Appends a full-width row; the board keeps the page's height, so rows share it until their minimums make the page scroll. */
@@ -121,6 +121,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
                       </For>
                     </select>
                   </Show>
+                  <Show when={def.info}>{(info) => info()()}</Show>
                   <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
                   <span class="spacer" />
                   <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>

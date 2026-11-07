@@ -4,12 +4,13 @@ import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard
 import { accountKey, clientKey } from '@shared/activityScope';
 import { clientLabel } from '../lib/accountScope';
 import type { ActivityBucket } from '@shared/types';
-import { metricValue, type AccountRow, type ClientRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
+import { metricValue, type AccountRow, type ClientRow, type ModelEffortRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { settings } from '../store';
 import { pct } from '../lib/format';
 import type { Span } from '../lib/activityRange';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { ActivityRhythm } from './ActivityRhythm';
+import { EffortsInfo, EffortsTable } from './ActivityEfforts';
 import { axisMetric, countRows, formatMetric, metricLabel } from './activityFormat';
 import type { TipRow } from './ChartTip';
 import { BreakdownTable } from './BreakdownTable';
@@ -21,6 +22,8 @@ const CACHE_Y_TICKS = 2;
 const TILE_CHROME_PX = 52;
 /** A trend tile is as short as its chart allows. */
 const TREND_TILE_MIN_HEIGHT_PX = TILE_CHROME_PX + TREND_MIN_HEIGHT_PX;
+/** A table tile: its header and two rows; wider tables scroll sideways. */
+const TABLE_TILE_MIN: TileSize = { width: 420, height: 170 };
 
 /** Everything the Overview's charts read, for the selected range. */
 export interface ActivityData {
@@ -31,6 +34,7 @@ export interface ActivityData {
   span: () => Span;
   now: () => number;
   models: () => ModelRow[];
+  efforts: () => ModelEffortRow[];
   accounts: () => AccountRow[];
   clients: () => ClientRow[];
   /** Display name for an account, masked when "Show emails" is off. */
@@ -45,6 +49,8 @@ export interface ActivityData {
 interface PanelDef {
   title: (spec: ActivityPanelSpec) => string;
   note?: (data: ActivityData) => string;
+  /** An info icon after the title, for a tile that needs more than a note. */
+  info?: () => JSX.Element;
   /** The title is a menu switching the tile's metric; each option is the title for that metric. Tables show every metric as a column, so they have none. */
   switchesMetric: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
@@ -97,7 +103,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   models: {
     title: () => 'Models',
     switchesMetric: false,
-    minSize: { width: 420, height: 170 },
+    minSize: TABLE_TILE_MIN,
     body: (spec, data) => (
       <BreakdownTable heading="Model" metric={spec().metric} total={data.total()}
         rows={data.models().map((m) => ({ key: `${m.provider}|${m.model}`, provider: m.provider, name: m.model, summary: m.summary }))} />
@@ -106,7 +112,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   accounts: {
     title: () => 'Accounts',
     switchesMetric: false,
-    minSize: { width: 420, height: 170 },
+    minSize: TABLE_TILE_MIN,
     body: (spec, data) => (
       <BreakdownTable heading="Account" metric={spec().metric} total={data.total()}
         rows={data.accounts().map((a) => ({ key: accountKey(a.authIndex), provider: a.provider, name: data.account(a.authIndex), summary: a.summary }))} />
@@ -115,11 +121,18 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   clients: {
     title: () => 'Clients',
     switchesMetric: false,
-    minSize: { width: 420, height: 170 },
+    minSize: TABLE_TILE_MIN,
     body: (spec, data) => (
       <BreakdownTable heading="Client" metric={spec().metric} total={data.total()}
         rows={data.clients().map((c) => ({ key: clientKey(c.client), name: clientLabel(c.client), summary: c.summary }))} />
     ),
+  },
+  efforts: {
+    title: () => 'Model and effort',
+    info: EffortsInfo,
+    switchesMetric: false,
+    minSize: TABLE_TILE_MIN,
+    body: (_spec, data) => <EffortsTable rows={data.efforts()} />,
   },
 };
 
@@ -134,4 +147,5 @@ export const ADD_CHOICES: { label: string; spec: ActivityPanelSpec }[] = [
   { label: 'Models', spec: { kind: 'models', metric: 'cost' } },
   { label: 'Accounts', spec: { kind: 'accounts', metric: 'cost' } },
   { label: 'Clients', spec: { kind: 'clients', metric: 'cost' } },
+  { label: 'Model and effort', spec: { kind: 'efforts', metric: 'cost' } },
 ];

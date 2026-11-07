@@ -3,12 +3,11 @@ import { inScope, type ActivityScope } from '@shared/activityScope';
 import {
   axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, rangeSpan, UNIT_NOTE, type CustomRange, type Range,
 } from '../lib/activityRange';
-import { byAccount, byClient, byModel, series, summarize } from '../lib/activityStats';
+import { byAccount, byClient, byModel, byModelEffort, series, summarize } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
 import { activityBuckets, holdActivityDays, now } from '../store';
 import { ActivityBoard, type PendingChart } from './ActivityBoard';
 import { ActivityInfo } from './ActivityInfo';
-import { ActivityEfforts } from './ActivityEfforts';
 import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
 
@@ -40,6 +39,7 @@ export function ActivityOverview(props: {
   const total = createMemo(() => summarize(scoped()));
   const points = createMemo(() => series(scoped(), starts(), span().to));
   const models = createMemo(() => byModel(scoped()));
+  const efforts = createMemo(() => byModelEffort(scoped()));
   const accountRows = createMemo(() => byAccount(scoped()));
   const clientRows = createMemo(() => byClient(scoped()));
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
@@ -49,6 +49,7 @@ export function ActivityOverview(props: {
     span,
     now,
     models,
+    efforts,
     accounts: accountRows,
     clients: clientRows,
     account: (authIndex) => props.account(authIndex),
@@ -69,7 +70,6 @@ export function ActivityOverview(props: {
       </div>
 
       <ActivityBoard data={data} placing={props.placing} onPlacingEnd={props.onPlacingEnd} />
-      <ActivityEfforts rows={scoped()} />
     </>
   );
 }

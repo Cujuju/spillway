@@ -81,8 +81,17 @@ function groupSummaries(rows: ActivityBucket[], keyOf: (r: ActivityBucket) => st
 export const byModel = (rows: ActivityBucket[]): ModelRow[] =>
   groupSummaries(rows, (r) => `${r.provider}|${r.model}`).map(({ first, summary }) => ({ provider: first.provider, model: first.model, summary }));
 
+/** One effective model at one reasoning effort; `effectiveKnown` is false when only the requested model was logged. */
+export interface ModelEffortRow {
+  provider: string;
+  model: string;
+  effectiveKnown: boolean;
+  effort: string | null;
+  summary: Summary;
+}
+
 /** Unknown effective models remain distinct from observed ones, even if the requested name matches. */
-export const byModelEffort = (rows: ActivityBucket[]) =>
+export const byModelEffort = (rows: ActivityBucket[]): ModelEffortRow[] =>
   groupSummaries(rows, (r) => JSON.stringify([r.provider, r.effectiveModel ?? null, r.effectiveModel ? null : r.model, r.reasoningEffort ?? null]))
     .map(({ first, summary }) => ({ provider: first.provider, model: first.effectiveModel ?? first.model,
       effectiveKnown: !!first.effectiveModel, effort: first.reasoningEffort ?? null, summary }));

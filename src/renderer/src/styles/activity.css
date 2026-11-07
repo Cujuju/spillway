@@ -168,10 +168,6 @@
   padding: 0;
   overflow-x: auto;
 }
-/* The card has no padding, so its head insets to the table's first column. */
-.table-card > .panel-head {
-  padding: var(--spacing-3) var(--spacing-3) 0;
-}
 .table.dense {
   font-size: var(--text-xs);
 }

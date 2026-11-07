@@ -1,10 +1,10 @@
 /* ── Activity Overview: chart tiles in the toolkit's TilingWorkspace ── */
-/* Fills the page below the stat strip; grows past it (page scrolls) when the tiles' minimums need the room. Not a .card, so it sets its own card gap both ways. */
+/* Fills the page below the stat strip; grows past it (page scrolls) when the tiles' minimums need the room. Not a .card, so it sets its own gap above. */
 .board-area {
   display: flex;
   flex: 1 0 0;
   flex-direction: column;
-  margin-block: var(--card-gap);
+  margin-top: var(--card-gap);
 }
 .activity-board {
   flex: 1 0 0;

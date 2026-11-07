@@ -12,10 +12,11 @@ import { Notice, Seg } from '../components/ui';
 import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
+import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
 import { activityBuckets, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Daily totals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'archive', label: 'Archive' }, { value: 'totals', label: 'Totals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 
 export function Activity() {
@@ -24,6 +25,7 @@ export function Activity() {
   const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isKeyScope);
   const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
   const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
+  const [period, setPeriod] = persistedSignal<TotalsPeriod>('activity.totalsPeriod', 'day', TOTALS_PERIODS.map((p) => p.value));
   const [effort, setEffort] = persistedSignal<string>('activity.effort', '*', (v): v is string => typeof v === 'string');
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
@@ -58,6 +60,9 @@ export function Activity() {
             <For each={efforts()}>{(value) => <option value={value}>{value}</option>}</For>
           </select>
           </Show>
+          <Show when={view() === 'totals'}>
+            <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
+          </Show>
           <Show when={view() === 'requests'}>
             <Seg value={filter()} options={filterOptions()} onChange={setFilter} />
           </Show>
@@ -75,7 +80,7 @@ export function Activity() {
       <Show when={view() === 'archive'}><RequestArchive /></Show>
       <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} /></Show>
       <Show when={view() === 'totals'}>
-        <ActivityTotals account={accountName} scope={scope()} />
+        <ActivityTotals account={accountName} scope={scope()} period={period()} />
       </Show>
       <Show when={view() === 'requests'}>
         <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />

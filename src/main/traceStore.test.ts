@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, type TraceAttemptQuery, type TraceQuery } from '@shared/sessionTrace';
+import type { CaptureRecord } from '@shared/archive';
 import type { ActivityEvent } from '@shared/types';
 import { ActivityLog } from './activityStore';
 import { openActivityDb } from './activityDb';
@@ -250,4 +251,29 @@ it('projects validated kinds from activity and retained archive provenance', () 
   expect(log.traceAttempts({ ...query, nodeId }).attempts[0]).toMatchObject({ origin: 'archive', sessionKind: 'fork' });
   edit((db) => db.exec("UPDATE archive_attempts SET detail=json_set(detail,'$.provenance.sessionKind','unsupported')"));
   expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.sessionKind).toBeNull();
+});
+
+it('matches recorded request and response text through the archive search, for observed exchanges only', () => {
+  const { log, observe } = setup();
+  log.archivePolicy({ captureBodies: true, retentionDays: 7, maxBytes: 100 * 1024 * 1024 });
+  const hit = observe(event({ sessionId: 'claude:hit', traceId: 'full-body-hit' }));
+  const miss = observe(event({ sessionId: 'claude:miss', traceId: 'full-body-miss' }));
+  observe(event({ sessionId: 'claude:untraced', traceId: null }));
+  const capture = (seq: number, traceId: string, request: string, response: string): CaptureRecord => ({ id: `capture-${seq}`, traceId, epoch: 'epoch-a', sequence: seq, startedAt: at,
+    method: 'POST', path: '/v1/messages', status: 200, state: 'complete', reason: '', request, response,
+    requestType: 'application/json', responseType: 'text/event-stream', requestEncoding: '', responseEncoding: '' });
+  log.archiveIngest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [
+    capture(1, hit.traceId!, '{"prompt":"find the needle"}', 'data: {"delta":{"text":"in the haystack"}}\n\n'),
+    capture(2, miss.traceId!, '{"prompt":"only haystack"}', ''),
+    // Recorded text with no observed attempt stays out of Traces.
+    capture(3, 'full-body-orphan', '{"prompt":"needle"}', ''),
+  ] });
+  const ids = (text: string) => log.traceQuery({ ...query, text }).nodes.map((n) => n.id).sort();
+  expect(ids('needle')).toEqual(['session:claude:hit']);
+  expect(ids('haystack NEEDLE')).toEqual(['session:claude:hit']);
+  expect(ids('haystack')).toEqual(['session:claude:hit', 'session:claude:miss']);
+  expect(ids('needle absent')).toEqual([]);
+  expect(ids('opus')).toHaveLength(3);
+  log.archiveClear();
+  expect(ids('needle')).toEqual([]);
 });

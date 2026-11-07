@@ -27,6 +27,14 @@ const entry = (r: Row): ArchiveEntry => ({ schemaVersion: 1, captureEpoch: r.cap
 const validDate = (s: unknown): s is string => typeof s === 'string' && Number.isFinite(Date.parse(s));
 const TRACE = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_METADATA = 20_000;
+/** Longest search text; longer input is cut. */
+const SEARCH_MAX_CHARS = 256;
+/** Entries (`archive_entries`) whose recorded text has every whitespace-separated keyword, literally; null for blank text. */
+export function archiveTextMatch(text: unknown): { sql: string; args: [string] } | null {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const terms = text.slice(0, SEARCH_MAX_CHARS).trim().split(/\s+/).map((t) => `"${t.replaceAll('"', '""')}"`).join(' AND ');
+  return { sql: 'id IN (SELECT id FROM archive_fts WHERE archive_fts MATCH ?)', args: [terms] };
+}
 const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType: '', requestEncoding: '', responseEncoding: '', format: 'http', requestDecoded: false, responseDecoded: false, frames: [] };
 
 /** Sole owner is the Activity worker. Body data and FTS live inside the keyed database. */
@@ -165,10 +173,8 @@ export class ArchiveStore {
       if (!Array.isArray(cursor) || cursor.length !== 2 || !validDate(cursor[0]) || typeof cursor[1] !== 'string' || cursor[1].length > 140) throw new Error('Invalid archive cursor');
       clauses.push('(at,id)<(?,?)'); args.push(cursor[0], cursor[1]);
     }
-    if (typeof q.text === 'string' && q.text.trim()) {
-      const terms = q.text.slice(0, 256).trim().split(/\s+/).map((t) => `"${t.replaceAll('"', '""')}"`).join(' AND ');
-      clauses.push('id IN (SELECT id FROM archive_fts WHERE archive_fts MATCH ?)'); args.push(terms);
-    }
+    const match = archiveTextMatch(q.text);
+    if (match) { clauses.push(match.sql); args.push(...match.args); }
     const rows = this.db.prepare(`SELECT ${ENTRY_COLUMNS} FROM archive_entries ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY at DESC,id DESC LIMIT ?`).all(...args, ARCHIVE_PAGE_SIZE + 1) as Row[];
     return { entries: rows.slice(0, ARCHIVE_PAGE_SIZE).map(entry), more: rows.length > ARCHIVE_PAGE_SIZE };
   }

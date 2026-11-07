@@ -4,6 +4,7 @@ import { normalizeTransport } from '@shared/activityTransport';
 import { tokenCost, type TokenCounts } from '@shared/modelPrices';
 import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_MAX_DAYS, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, traceNodeId, type TraceAttempt, type TraceAttemptPage, type TraceAttemptQuery, type TraceCoverage, type TracePage, type TraceQuery, type TraceRange } from '@shared/sessionTrace';
 import { traceNodes } from './traceGraph';
+import { archiveTextMatch } from './archiveStore';
 
 const REQUEST_IDENTITY = `CASE WHEN json_extract(event,'$.source')='client-log' THEN 'client-log:'||json_extract(event,'$.requestId') ELSE 'proxy:'||json_extract(event,'$.requestId')||':'||coalesce(json_extract(event,'$.authIndex'),'')||':'||json_extract(event,'$.at') END`;
 const ARCHIVE_IDENTITY = `CASE WHEN json_valid(identity) AND json_array_length(identity)=3 THEN 'proxy:'||json_extract(identity,'$[0]')||':'||coalesce(json_extract(identity,'$[2]'),'')||':'||json_extract(identity,'$[1]') ELSE 'archive:'||identity END`;
@@ -135,6 +136,16 @@ export class TraceStore {
     };
     return [...select('activity'), ...select('archive')].sort((a, b) => a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0).slice(0, limit);
   }
+  /** Nodes with an observed exchange whose recorded request or response text matches; the archive's full-text search, limited to these observations. */
+  private recordedTextNodes(text: unknown, observations: (TraceAttempt | null)[]): Set<string> {
+    const match = archiveTextMatch(text);
+    const traced = observations.filter((a): a is TraceAttempt & { traceId: string } => !!a?.traceId);
+    if (!match || !traced.length) return new Set();
+    const ids = JSON.stringify([...new Set(traced.map((a) => a.traceId))]);
+    const hits = new Set((this.db.prepare(`SELECT trace_id FROM archive_entries WHERE trace_id IN (SELECT value FROM json_each(?)) AND ${match.sql}`)
+      .all(ids, ...match.args) as { trace_id: string }[]).map((r) => r.trace_id));
+    return new Set(traced.filter((a) => hits.has(a.traceId)).map(traceNodeId));
+  }
   query(q: TraceQuery = {}): TracePage {
     for (const [v, max] of [[q.parentSessionId, 512], [q.text, 256]] as const) if (v !== undefined && (typeof v !== 'string' || v.length > max)) throw new Error('Invalid trace filter');
     const c = cursor(q.before), bounds = range({ from: q.from ?? c?.range.from, to: q.to ?? c?.range.to, source: q.source ?? c?.range.source });
@@ -145,12 +156,13 @@ export class TraceStore {
     const observations = raw.slice(0, TRACE_SCAN_LIMIT).map(observation);
     const coverage: TraceCoverage = { ...bounds, scanned: observations.length, limit: TRACE_SCAN_LIMIT, limited, rejected: observations.filter((a) => !a).length };
     const needle = (typeof q.text === 'string' ? q.text.slice(0, 256) : '').toLowerCase();
+    const recorded = this.recordedTextNodes(q.text, observations);
     const children = new Set(observations.filter((a) => a?.parentSessionId === q.parentSessionId && a?.sessionId).map((a) => a!.sessionId));
     const score = (n: ReturnType<typeof traceNodes>[number]): number | string => sort === 'recent' ? n.lastAt : sort === 'failed' ? n.metrics.failed : n.metrics.costUsd ?? -1;
     const nodes = traceNodes(observations.filter((a): a is TraceAttempt => a !== null))
       .filter((n) => !q.nodeId || n.id === q.nodeId)
       .filter((n) => !q.parentSessionId || children.has(n.sessionId))
-      .filter((n) => !needle || [n.id, ...n.models, ...n.efforts].some((s) => s.toLowerCase().includes(needle)))
+      .filter((n) => !needle || recorded.has(n.id) || [n.id, ...n.models, ...n.efforts].some((s) => s.toLowerCase().includes(needle)))
       .sort((a, b) => score(a) < score(b) ? 1 : score(a) > score(b) ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
       .filter((n) => !c || score(n) < c.after[0] || score(n) === c.after[0] && n.id < c.after[1]);
     const page = nodes.slice(0, TRACE_PAGE_SIZE), last = page.at(-1), more = nodes.length > TRACE_PAGE_SIZE;

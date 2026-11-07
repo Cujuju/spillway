@@ -344,19 +344,86 @@ th[aria-sort] .sort-btn {
 }
 .activity-info:hover { color: var(--color-text); }
 
-/* ── Account filter: a header button and the popover list under it ── */
-.account-filter-btn {
-  /* Long account names truncate rather than push the view tabs off the row. */
-  --account-filter-max-width: 220px;
-  anchor-name: --account-filter;
-  max-width: var(--account-filter-max-width);
-  font-size: var(--text-body);
+/* ── Scope sentence: "Showing [proxy traffic] for [all accounts] …"; each chip opens its popover list ── */
+.scope-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.scope-chip {
+  /* Long account names truncate rather than push the sentence onto more rows. */
+  --scope-chip-max-width: 200px;
+  /* The clear button is a square inset inside the highlight. */
+  --scope-clear-size: calc(var(--control-height) - var(--spacing-2));
+  anchor-name: var(--scope-anchor);
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
+  max-width: var(--scope-chip-max-width);
+  border-radius: var(--radius-btn);
+  color: var(--color-text);
+}
+/* A narrowed scope is highlighted; the default reads as underlined words. */
+.scope-chip.active {
+  background: var(--color-accent-subtle);
+}
+.scope-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  height: 100%;
+  min-width: 0;
+  padding: 0 var(--spacing-1_5);
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scope-chip:not(.active) .scope-chip-btn .truncate {
+  text-decoration: underline dotted var(--color-text-muted);
+  text-underline-offset: var(--spacing-1);
+}
+.scope-chip:not(.active) .scope-chip-btn:hover {
+  background: var(--color-row-hover);
+}
+.scope-chip-btn svg {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+.scope-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--scope-clear-size);
+  height: 100%;
+  margin-right: var(--spacing-0_5);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.scope-chip-btn:hover,
+.scope-chip-clear:hover {
+  color: var(--color-text);
+}
+.scope-reset {
+  height: var(--control-height);
 }
 .account-menu {
   /* Wide enough for an email; tall enough for about a dozen accounts before it scrolls. */
   --account-menu-width: 280px;
+  /* Its chip names the anchor (ScopeChip.tsx). */
   --account-menu-max-height: 420px;
-  position-anchor: --account-filter;
+  position-anchor: var(--scope-anchor);
   position-area: bottom span-left;
   position-try-fallbacks: flip-block;
   inset: auto;
@@ -412,13 +479,15 @@ th[aria-sort] .sort-btn {
 .account-menu-only {
   visibility: hidden;
 }
-/* The client filter: its own anchor, and a flat list without provider indents. */
-.client-filter-btn {
-  anchor-name: --client-filter;
+/* Single-choice lists (usage source, effort) are short words. */
+.account-menu.choice-menu {
+  --account-menu-width: 180px;
 }
-.account-menu.client-menu {
-  position-anchor: --client-filter;
+.account-menu input[type='radio'] {
+  margin: 0;
+  accent-color: var(--color-accent);
 }
+/* The client list is flat: no provider indents. */
 .client-menu .account-menu-account {
   padding-left: var(--spacing-2);
 }

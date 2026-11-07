@@ -54,6 +54,24 @@ export function Seg<T extends string | number>(props: { label?: string; compact?
   );
 }
 
+/** Underlined view tabs. `children` sit at the row's right end: a legend, or the current view's own controls. */
+export function Tabs<T extends string>(props: { label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (v: T) => void; class?: string; children?: JSX.Element }) {
+  return (
+    <div class={props.class ? `tabs ${props.class}` : 'tabs'}>
+      <div class="tabs-list" role="tablist" aria-label={props.label}>
+        <For each={props.options}>
+          {(o) => (
+            <button type="button" role="tab" aria-selected={props.value === o.value} classList={{ active: props.value === o.value }} onClick={() => props.onChange(o.value)}>
+              {o.label}
+            </button>
+          )}
+        </For>
+      </div>
+      <div class="tabs-end">{props.children}</div>
+    </div>
+  );
+}
+
 /** Text on the left, control right-aligned. `stacked` puts a wide control (picker, path) under the text. */
 export function SettingRow(props: { label: string; help?: string; nested?: boolean; stacked?: boolean; children: JSX.Element }) {
   return (

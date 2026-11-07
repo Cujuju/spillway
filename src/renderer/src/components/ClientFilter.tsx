@@ -1,31 +1,22 @@
-import { ChevronDown, SquareTerminal } from 'lucide-solid';
-import { createMemo, createUniqueId, For } from 'solid-js';
+import { createMemo, For } from 'solid-js';
 import type { ClientScope } from '@shared/activityScope';
 import { setScopeKeys, type ClientOption } from '../lib/accountScope';
 import { Check } from './AccountFilter';
-
-const ICON_PX = 14;
+import { ScopeChip } from './ScopeChip';
 
 /** Picks which clients (programs, by User-Agent) the Activity page shows. */
 export function ClientFilter(props: { options: ClientOption[]; value: ClientScope; onChange: (next: ClientScope) => void }) {
-  const menuId = createUniqueId();
   const all = createMemo(() => props.options.map((o) => o.key));
   const shown = (key: string) => props.value === null || props.value.includes(key);
   const label = () => {
     const v = props.value;
-    if (v === null) return 'All clients';
+    if (v === null) return 'all clients';
     if (v.length === 1) return props.options.find((o) => o.key === v[0])?.label ?? '1 client';
-    return v.length ? `${v.length} clients` : 'No clients';
+    return v.length ? `${v.length} clients` : 'no clients';
   };
 
   return (
-    <>
-      <button type="button" class="btn account-filter-btn client-filter-btn" popovertarget={menuId} title="Clients shown">
-        <SquareTerminal size={ICON_PX} />
-        <span class="truncate">{label()}</span>
-        <ChevronDown size={ICON_PX} />
-      </button>
-      <div id={menuId} popover class="account-menu client-menu" aria-label="Clients shown">
+    <ScopeChip label="Clients" value={label()} active={props.value !== null} onClear={() => props.onChange(null)} menuClass="client-menu">
         <label class="account-menu-row account-menu-all">
           <Check checked={props.value === null} mixed={props.value !== null && props.value.length > 0} onChange={(on) => props.onChange(on ? null : [])} />
           <span>All clients</span>
@@ -45,7 +36,6 @@ export function ClientFilter(props: { options: ClientOption[]; value: ClientScop
             )}
           </For>
         </div>
-      </div>
-    </>
+    </ScopeChip>
   );
 }

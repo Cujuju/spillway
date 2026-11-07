@@ -1,14 +1,13 @@
 import { ActivityImport } from '../components/ActivityImport';
 import { RequestArchive } from '../components/RequestArchive';
 import { SessionTraces } from '../components/SessionTraces';
-import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
-import { AccountFilter } from '../components/AccountFilter';
+import { ActivityScopeLine, ANY_EFFORT } from '../components/ActivityScopeLine';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
 import { ActivityTotals } from '../components/ActivityTotals';
-import { ClientFilter } from '../components/ClientFilter';
-import { Notice, Seg } from '../components/ui';
+import { Notice, Seg, Tabs } from '../components/ui';
 import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
@@ -26,11 +25,11 @@ export function Activity() {
   const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
   const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
   const [period, setPeriod] = persistedSignal<TotalsPeriod>('activity.totalsPeriod', 'day', TOTALS_PERIODS.map((p) => p.value));
-  const [effort, setEffort] = persistedSignal<string>('activity.effort', '*', (v): v is string => typeof v === 'string');
+  const [effort, setEffort] = persistedSignal<string>('activity.effort', ANY_EFFORT, (v): v is string => typeof v === 'string');
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
-  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === '*' ? null : [effort()] }));
-  const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === '*' ? [] : [effort()])])].filter(Boolean).sort());
+  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
+  const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
@@ -46,28 +45,24 @@ export function Activity() {
 
   return (
     <>
-      <PageHeader class="title-row">
-        <h1 class="dash-title">Activity</h1>
-        <ActivityImport />
-        <div class="dash-actions card-spaced">
-          <Show when={view() !== 'archive'}><Seg value={source()} options={[{ value: 'proxy' as const, label: 'Via proxy' }, { value: 'all' as const, label: 'All usage' }]} onChange={setSource} /></Show>
-          <Show when={view() !== 'archive' && view() !== 'traces'}>
-          <AccountFilter groups={groups()} value={accounts()} onChange={setAccounts} />
-          <ClientFilter options={clientChoices()} value={clients()} onChange={setClients} />
-          <select class="input" aria-label="Effective reasoning effort" value={effort()} onChange={(e) => setEffort(e.currentTarget.value)}>
-            <option value="*">All efforts</option>
-            <option value="">Unknown effort</option>
-            <For each={efforts()}>{(value) => <option value={value}>{value}</option>}</For>
-          </select>
-          </Show>
+      <PageHeader class="title-row" tabs={
+        <Tabs class="page-tabs" label="Activity views" value={view()} options={VIEWS} onChange={setView}>
           <Show when={view() === 'totals'}>
             <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
           </Show>
           <Show when={view() === 'requests'}>
-            <Seg value={filter()} options={filterOptions()} onChange={setFilter} />
+            <Seg label="Requests shown" value={filter()} options={filterOptions()} onChange={setFilter} />
           </Show>
-          <Seg value={view()} options={VIEWS} onChange={setView} />
-        </div>
+        </Tabs>
+      }>
+        <h1 class="dash-title">Activity</h1>
+        <ActivityImport />
+        <Show when={view() !== 'archive'}>
+          <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
+            groups={groups()} accounts={accounts()} onAccounts={setAccounts}
+            clients={clientChoices()} clientScope={clients()} onClients={setClients}
+            efforts={efforts()} effort={effort()} onEffort={setEffort} />
+        </Show>
       </PageHeader>
 
       <Show when={proxyStatus()?.state !== 'running'}>

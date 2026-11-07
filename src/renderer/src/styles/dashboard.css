@@ -76,23 +76,8 @@
   margin-bottom: var(--spacing-3);
 }
 .summary-tabs {
-  display: flex;
-  gap: var(--spacing-4_5);
-  border-bottom: var(--border-width) solid var(--color-divider);
+  --tab-color: var(--pool-color, var(--color-accent-light));
   margin: 0 0 var(--spacing-2);
-}
-.summary-tabs > button {
-  background: none;
-  border: 0;
-  border-bottom: var(--border-width-strong) solid transparent;
-  padding: 0 var(--spacing-0_5) var(--spacing-2);
-  color: var(--color-text-secondary);
-  font-size: var(--text-md);
-  cursor: pointer;
-}
-.summary-tabs > button.active {
-  color: var(--pool-color, var(--color-accent-light));
-  border-bottom-color: var(--pool-color, var(--color-accent-light));
 }
 .legend {
   padding-bottom: var(--spacing-2);

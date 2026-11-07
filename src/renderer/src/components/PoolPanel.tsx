@@ -6,7 +6,7 @@ import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
 import { QuotaChart } from './QuotaChart';
 import type { TipRow } from './ChartTip';
-import { Seg } from './ui';
+import { Seg, Tabs } from './ui';
 
 const HOURS_PER_DAY = 24;
 /** Forecast lengths in hours: short ones for 5-hour windows, then days for weekly ones. */
@@ -18,7 +18,8 @@ const MIN_DRAIN_AXIS = 5;
 /** Pool figures are percent of the whole pool. */
 const POOL_FULL = 100;
 
-const POOL_TABS = ['remaining', 'drain'] as const;
+const POOL_TAB_OPTIONS = [{ value: 'remaining', label: 'Remaining quota' }, { value: 'drain', label: 'Drain rate' }] as const;
+const POOL_TABS = POOL_TAB_OPTIONS.map((t) => t.value);
 const hours = () => settings().dashboard.forecastHours;
 const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 const lengthText = (h: number) => (h % HOURS_PER_DAY ? plural(h, 'hour') : plural(h / HOURS_PER_DAY, 'day'));
@@ -92,10 +93,7 @@ export function PoolPanel(props: {
   return (
     <section class="summary" style={{ '--pool-color': color() }}>
       <Show when={shown().length} fallback={<div class="muted">No limit data for these accounts yet.</div>}>
-        <div class="summary-tabs">
-          <button classList={{ active: tab() === 'remaining' }} onClick={() => setTab('remaining')}>Remaining quota</button>
-          <button classList={{ active: tab() === 'drain' }} onClick={() => setTab('drain')}>Drain rate</button>
-          <span class="spacer" />
+        <Tabs class="summary-tabs" label="Pool chart" value={tab()} options={POOL_TAB_OPTIONS} onChange={setTab}>
           <div class="legend">
             <For each={props.providers}>
               {(id) => (
@@ -119,7 +117,7 @@ export function PoolPanel(props: {
               <For each={FORECAST_HOUR_CHOICES}>{(n) => <option value={n}>Next {lengthText(n)}</option>}</For>
             </select>
           </div>
-        </div>
+        </Tabs>
         <div class="pool-charts">
           <div class="pool-stack" ref={measure}>
             <Show when={stacked()} fallback={<For each={lines()}>{(line) => chart(line)}</For>}>

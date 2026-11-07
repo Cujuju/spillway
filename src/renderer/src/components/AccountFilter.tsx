@@ -1,11 +1,10 @@
-import { ChevronDown, Users } from 'lucide-solid';
-import { createEffect, createMemo, createUniqueId, For } from 'solid-js';
+import { createEffect, createMemo, For } from 'solid-js';
 import type { AccountScope } from '@shared/activityScope';
 import { providerLabel } from '@shared/trayValues';
 import { setScopeKeys, type AccountGroup } from '../lib/accountScope';
+import { ScopeChip } from './ScopeChip';
 import { ProviderGlyph } from './ui';
 
-const ICON_PX = 14;
 const OTHER_GROUP = 'Other accounts';
 
 /** A checkbox that can show "some ticked": `indeterminate` is a DOM property with no attribute. */
@@ -18,25 +17,18 @@ export function Check(props: { checked: boolean; mixed?: boolean; onChange: (on:
 
 /** Picks which accounts the Activity page shows: every account, whole providers, or single accounts. */
 export function AccountFilter(props: { groups: AccountGroup[]; value: AccountScope; onChange: (next: AccountScope) => void }) {
-  const menuId = createUniqueId();
   const all = createMemo(() => props.groups.flatMap((g) => g.accounts.map((a) => a.key)));
   const shown = (key: string) => props.value === null || props.value.includes(key);
   const label = () => {
     const v = props.value;
-    if (v === null) return 'All accounts';
+    if (v === null) return 'all accounts';
     if (v.length === 1) return props.groups.flatMap((g) => g.accounts).find((a) => a.key === v[0])?.label ?? '1 account';
-    return v.length ? `${v.length} accounts` : 'No accounts';
+    return v.length ? `${v.length} accounts` : 'no accounts';
   };
   const set = (keys: string[], on: boolean) => props.onChange(setScopeKeys(props.value, keys, on, all()));
 
   return (
-    <>
-      <button type="button" class="btn account-filter-btn" popovertarget={menuId} title="Accounts shown">
-        <Users size={ICON_PX} />
-        <span class="truncate">{label()}</span>
-        <ChevronDown size={ICON_PX} />
-      </button>
-      <div id={menuId} popover class="account-menu" aria-label="Accounts shown">
+    <ScopeChip label="Accounts" value={label()} active={props.value !== null} onClear={() => props.onChange(null)}>
         <label class="account-menu-row account-menu-all">
           <Check checked={props.value === null} mixed={props.value !== null && props.value.length > 0} onChange={(on) => props.onChange(on ? null : [])} />
           <span>All accounts</span>
@@ -69,7 +61,6 @@ export function AccountFilter(props: { groups: AccountGroup[]; value: AccountSco
             );
           }}
         </For>
-      </div>
-    </>
+    </ScopeChip>
   );
 }

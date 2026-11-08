@@ -29,24 +29,19 @@ function statusBadge(c: Credential, at: number) {
   }
 }
 
-/** Login state and actions, shared by the page header's buttons (`LoginActions`) and the Logins table. */
-export function createLogins() {
+/** Signed-in subscription accounts (the proxy's login files), which the proxy rotates between. */
+export function LoginsSection() {
   const [adding, setAdding] = createSignal(false);
+  const [deleting, setDeleting] = createSignal<Credential | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [info, setInfo] = createSignal<string | null>(null);
-  const [renewingAll, setRenewingAll] = createSignal(false);
   const running = () => proxyStatus()?.state === 'running';
+  const creds = () =>
+    (snapshot()?.credentials ?? []).filter((c) => !c.apiKey).sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
+
   const report = (m: string) => { setError(null); setInfo(m); };
   const fail = (m: string) => { setInfo(null); setError(m); };
-  const act = async (fn: () => Promise<void>) => {
-    setError(null);
-    setInfo(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
+  const [renewingAll, setRenewingAll] = createSignal(false);
   const renewAll = async () => {
     setRenewingAll(true);
     await act(async () => {
@@ -67,33 +62,16 @@ export function createLogins() {
       if (r.failed.length) fail([...parts, `Could not import: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`].join(' '));
       else report(parts.join(' ') || 'Nothing imported.');
     });
-  return { adding, setAdding, error, info, renewingAll, running, report, fail, act, renewAll, importFiles };
-}
-export type Logins = ReturnType<typeof createLogins>;
 
-/** The Logins buttons, placed in the page header's row. */
-export function LoginActions(props: { logins: Logins }) {
-  return (
-    <div class="dash-actions">
-      <ShowEmailsButton />
-      <button class="btn" disabled={!props.logins.running() || props.logins.renewingAll()} title="Refresh every account's login token now" onClick={() => void props.logins.renewAll()}>
-        <KeyRound size={ICON_PX} class={props.logins.renewingAll() ? 'spin' : undefined} /> Renew logins
-      </button>
-      <button class="btn" disabled={!props.logins.running()} title="Add accounts from saved login files (.json)" onClick={() => void props.logins.importFiles()}>
-        <Upload size={ICON_PX} /> Import
-      </button>
-      <button class="btn primary" disabled={!props.logins.running()} title={props.logins.running() ? undefined : 'Start the proxy first'} onClick={() => props.logins.setAdding(true)}>
-        <Plus size={ICON_PX} /> Add account
-      </button>
-    </div>
-  );
-}
-
-/** Signed-in subscription accounts (the proxy's login files), which the proxy rotates between. */
-export function LoginsSection(props: { logins: Logins }) {
-  const [deleting, setDeleting] = createSignal<Credential | null>(null);
-  const creds = () =>
-    (snapshot()?.credentials ?? []).filter((c) => !c.apiKey).sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
+  const act = async (fn: () => Promise<void>) => {
+    setError(null);
+    setInfo(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   return (
     <section class="page-section">
@@ -102,19 +80,31 @@ export function LoginsSection(props: { logins: Logins }) {
           <h2 class="card-title">Logins</h2>
           <div class="list-row-help">{creds().length} signed in · the proxy rotates between enabled accounts</div>
         </div>
+        <div class="dash-actions">
+          <ShowEmailsButton />
+          <button class="btn" disabled={!running() || renewingAll()} title="Refresh every account's login token now" onClick={() => void renewAll()}>
+            <KeyRound size={ICON_PX} class={renewingAll() ? 'spin' : undefined} /> Renew logins
+          </button>
+          <button class="btn" disabled={!running()} title="Add accounts from saved login files (.json)" onClick={() => void importFiles()}>
+            <Upload size={ICON_PX} /> Import
+          </button>
+          <button class="btn primary" disabled={!running()} title={running() ? undefined : 'Start the proxy first'} onClick={() => setAdding(true)}>
+            <Plus size={ICON_PX} /> Add account
+          </button>
+        </div>
       </div>
 
-      <Show when={!props.logins.running()}>
+      <Show when={!running()}>
         <Notice>
           <span class="spacer">Accounts are managed through the proxy, which is {proxyStatus()?.state ?? 'stopped'}.</span>
           <button class="btn" onClick={() => void window.api.proxyStart()}>Start proxy</button>
         </Notice>
       </Show>
-      <Show when={props.logins.error()}>
-        <Notice tone="error">{shownText(props.logins.error()!)}</Notice>
+      <Show when={error()}>
+        <Notice tone="error">{shownText(error()!)}</Notice>
       </Show>
-      <Show when={props.logins.info()}>
-        <Notice tone="info">{shownText(props.logins.info()!)}</Notice>
+      <Show when={info()}>
+        <Notice tone="info">{shownText(info()!)}</Notice>
       </Show>
 
       <div class="card flush">
@@ -145,7 +135,7 @@ export function LoginsSection(props: { logins: Logins }) {
                           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                           onBlur={(e) => {
                             const v = e.currentTarget.value.trim();
-                            if (v !== (c.note ?? '')) void props.logins.act(() => window.api.setCredentialNote(c.id, v));
+                            if (v !== (c.note ?? '')) void act(() => window.api.setCredentialNote(c.id, v));
                           }}
                         />
                         <HoverTip title="Account login" layout="block" rows={[
@@ -165,23 +155,23 @@ export function LoginsSection(props: { logins: Logins }) {
                       <Show when={c.resetCredits?.available}>
                         <ResetCreditButton
                           credential={c}
-                          disabled={!props.logins.running()}
-                          onDone={props.logins.report}
-                          onError={props.logins.fail}
+                          disabled={!running()}
+                          onDone={(m) => { setError(null); setInfo(m); }}
+                          onError={(m) => { setInfo(null); setError(m); }}
                         />
                       </Show>
                     </div>
                   </td>
                   <td>{statusBadge(c, now())}</td>
                   <td>
-                    <NumberField value={c.priority} narrow onCommit={(v) => void props.logins.act(() => window.api.setCredentialPriority(c.id, v))} />
+                    <NumberField value={c.priority} narrow onCommit={(v) => void act(() => window.api.setCredentialPriority(c.id, v))} />
                   </td>
                   <td class="col-enabled">
-                    <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void props.logins.act(() => window.api.setCredentialDisabled(c.id, !on))} />
+                    <Toggle value={!c.disabled} label="Enabled" onChange={(on) => void act(() => window.api.setCredentialDisabled(c.id, !on))} />
                   </td>
                   <td class="row-actions">
                     <div class="row-actions-bar">
-                      <CredentialActions credential={c} disabled={!props.logins.running()} onDone={props.logins.report} onError={props.logins.fail} />
+                      <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} />
                       <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
                         <Trash2 size={ICON_PX} />
                       </button>
@@ -194,8 +184,8 @@ export function LoginsSection(props: { logins: Logins }) {
         </table>
       </div>
 
-      <Show when={props.logins.adding()}>
-        <AddAccountDialog onClose={() => props.logins.setAdding(false)} />
+      <Show when={adding()}>
+        <AddAccountDialog onClose={() => setAdding(false)} />
       </Show>
       <Show when={deleting()}>
         {(c) => (
@@ -210,7 +200,7 @@ export function LoginsSection(props: { logins: Logins }) {
                   onClick={() => {
                     const target = c();
                     setDeleting(null);
-                    void props.logins.act(() => window.api.deleteCredential(target.id));
+                    void act(() => window.api.deleteCredential(target.id));
                   }}
                 >
                   Remove

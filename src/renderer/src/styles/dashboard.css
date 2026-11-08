@@ -41,21 +41,6 @@
   height: 0;
   align-content: center;
 }
-/* Above a rule, buttons centre on the title's capitals and the rule keeps its gap below the buttons (Providers).
-   The title's font size makes `cap` the title's cap height; children set their own sizes. */
-.dash-header.single-row.ruled {
-  --title-overhang: calc((var(--control-height) - 1cap) / 2);
-  font-size: var(--text-title);
-  align-items: last baseline;
-  padding-bottom: calc(var(--header-rule-gap) + var(--title-overhang));
-}
-/* Layout containment drops the actions' own baseline, so their bottom edge sits on the title's; then they drop to centre. */
-.dash-header.single-row.ruled > .dash-actions {
-  align-content: flex-end;
-  contain: layout;
-  position: relative;
-  top: var(--title-overhang);
-}
 .title-line {
   display: flex;
   align-items: baseline;

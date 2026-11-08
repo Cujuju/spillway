@@ -2,7 +2,7 @@ import { HoverTip } from '../components/ChartTip';
 import { Pencil, Plus, Trash2 } from 'lucide-solid';
 import { createResource, createSignal, For, Show } from 'solid-js';
 import { FAMILY_INFO, type ApiProviderGroup, type ApiProviderTarget } from '@shared/apiProviders';
-import { createLogins, LoginActions, LoginsSection } from '../components/LoginsSection';
+import { LoginsSection } from '../components/LoginsSection';
 import { ProviderDialog } from '../components/ProviderDialog';
 import { Dialog, Notice, ProviderGlyph, Toggle } from '../components/ui';
 import { providerVar } from '../lib/providers';
@@ -19,7 +19,6 @@ export function Providers() {
   const [toggling, setToggling] = createSignal(false);
   const groups = () => list()?.groups ?? [];
   const fileError = () => list()?.error ?? null;
-  const logins = createLogins();
 
   const toggleKey = async (g: ApiProviderGroup, id: string, enabled: boolean) => {
     setToggling(true);
@@ -52,10 +51,9 @@ export function Providers() {
           <h1 class="dash-title">AI Providers</h1>
           <span class="dash-meta">Signed-in accounts and API keys the proxy routes requests to</span>
         </div>
-        <LoginActions logins={logins} />
       </PageHeader>
 
-      <LoginsSection logins={logins} />
+      <LoginsSection />
 
       <section class="page-section">
         <div class="section-head">

@@ -41,6 +41,15 @@
   height: 0;
   align-content: center;
 }
+/* Above a rule, buttons stand on the title's baseline, so both keep the same gap to the rule (Providers).
+   Layout containment drops the actions' own baseline, so their bottom edge is the one aligned. */
+.dash-header.single-row.ruled {
+  align-items: last baseline;
+}
+.dash-header.single-row.ruled > .dash-actions {
+  align-content: flex-end;
+  contain: layout;
+}
 .title-line {
   display: flex;
   align-items: baseline;

@@ -8,8 +8,8 @@ import { Seg } from './ui';
 
 /** Raw characters laid out per step; a 256 KiB body never renders at once. */
 const RENDER_CHUNK = 32 * 1024;
-/** Messages rendered per step in the readable view. */
-const MESSAGE_PAGE = 50;
+/** Messages rendered per step; 50 long messages measured ~20 ms of layout, 20 stay within one frame. */
+const MESSAGE_PAGE = 20;
 /** Characters of one message part shown before its own expander. */
 const PART_PREVIEW = 2 * 1024;
 

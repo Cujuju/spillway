@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, FileArchive, FlaskConical, MessagesSquare, RefreshCw, Settings2, X } from 'lucide-solid';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
-import type { ArchiveDetail } from '@shared/archive';
+import type { ArchiveDetail, CaptureState } from '@shared/archive';
 import { exchangeSide } from '@shared/exchangeBody';
 import { openSettings, shownText } from '../store';
 import { CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, RECORDING_OFF_REASONS } from '../lib/traceFormat';
@@ -13,6 +13,10 @@ import '../styles/archive.css';
 
 /** A pending capture's open WebSocket messages arrive while it is shown. */
 const LIVE_REFRESH_MS = 3_000;
+/** Settled captures change only by expiry or a late capture; manual Refresh covers both, so polling stops. */
+const SETTLED: ReadonlySet<CaptureState> = new Set(['complete', 'partial', 'missing', 'expired']);
+/** An open WebSocket reports partial once a frame is cut and keeps recording, so it never counts as settled. */
+const settled = (d: ArchiveDetail | null) => !!d && SETTLED.has(d.state) && !(d.format === 'websocket' && d.state === 'partial');
 const ICON_PX = 14;
 /** Newest upstream attempts listed in the hover readout; the count shows them all. */
 const ATTEMPT_TIP_ROWS = 8;
@@ -54,7 +58,7 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   };
   createEffect(() => {
     const trace = props.traceId; void load(trace);
-    const timer = setInterval(() => void load(trace, true), LIVE_REFRESH_MS);
+    const timer = setInterval(() => { if (!settled(detail())) void load(trace, true); }, LIVE_REFRESH_MS);
     onCleanup(() => { clearInterval(timer); generation++; });
   });
   return <div class="request-inspector">

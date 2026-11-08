@@ -1,6 +1,6 @@
 import type { ActivityLog, ActivityConfig } from './activityStore';
 import type { conversationNames } from './conversationNames';
-import type { ActivityImportState } from '@shared/ipc';
+import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
 export type ActivityMethods = Pick<ActivityLog, 'append' | 'page' | 'day' | 'days' | 'daySummaries' | 'totalsList' | 'buckets' | 'bucketSnapshot' | 'coverage' | 'clear' | 'prune' | 'setRetention' | 'archiveObserve' | 'archiveIngest' | 'archiveDetail' | 'archiveStatus' | 'archivePolicy' | 'archiveClear' | 'archiveExportPrepare' | 'archiveExportStatus' | 'archiveExportStart' | 'archiveExportCancel' | 'clickhouseStatus' | 'clickhouseConfigure' | 'clickhousePrepare' | 'clickhouseAcknowledge' | 'clickhouseFail' | 'clickhouseRetry' | 'clickhouseClear' | 'diagnosticSnapshot' | 'traceQuery' | 'traceAttempts'> & {
   names: typeof conversationNames.names;
   close(): Promise<void>;
@@ -9,5 +9,5 @@ export type EvalMethods = Pick<ActivityLog, 'evalList' | 'evalGet' | 'evalCreate
 export type Method = keyof (ActivityMethods & EvalMethods);
 export type Request = { [K in Method]: { id: number; method: K; args: Parameters<(ActivityMethods & EvalMethods)[K]> } }[Method];
 export type Reply = { id: number; value?: unknown; error?: string };
-export type WorkerMessage = Reply | { event: 'progress'; value: ActivityImportState } | { event: 'reset' };
+export type WorkerMessage = Reply | { event: 'progress'; value: ActivityImportState } | { event: 'migration'; value: ArchiveMigrationState } | { event: 'reset' };
 export type WorkerConfig = ActivityConfig;

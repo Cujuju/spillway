@@ -142,7 +142,8 @@ describe('forecast activity evidence', () => {
     let reset = () => {};
     const subscribe = () => () => {};
     Object.assign(api, {
-      onOpenSettings: subscribe, onOpenProxy: subscribe, onActivityImport: subscribe,
+      onOpenSettings: subscribe, onOpenProxy: subscribe, onActivityImport: subscribe, onArchiveMigration: subscribe,
+      archiveMigrationState: async () => ({ state: 'idle', done: 0, total: 0 }),
       activityImportState: async () => ({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null }),
       getSettings: async () => structuredClone(unwrap(settings())), usageLatest: async () => ({ snapshot: null, error: null }),
       proxyStatus: async () => null, usageHistory: async () => [], usageWindowSummaries: async () => [], usageObservedSpans: async () => [],

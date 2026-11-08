@@ -1,8 +1,8 @@
 import { HoverTip } from './ChartTip';
-import { importLabel } from './ActivityImport';
+import { importLabel, migrating, migrationLabel, MIGRATION_NOTE } from './ActivityImport';
 import { Activity as ActivityIcon, ChevronLeft, ChevronRight, CircleHelp, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { activityImport, page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
+import { activityImport, archiveMigration, page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { isMac } from '../lib/platform';
 import { BuildCard } from './BuildCard';
 import { ProxyStateIcon, proxyStatusText } from './ProxyState';
@@ -57,6 +57,11 @@ export function Sidebar() {
   const toggleLabel = () => `${collapsed() ? 'Expand' : 'Collapse'} sidebar (${TOGGLE_SHORTCUT})`;
   const rows = (item: NavItem) => item.id === 'proxy'
     ? [{ label: 'Status', value: proxyStatusText() }]
+    : item.id === 'activity' && migrating()
+      ? [
+        { label: 'Upgraded requests', value: archiveMigration().done.toLocaleString() },
+        { label: 'Total requests', value: archiveMigration().total.toLocaleString() },
+      ]
     : item.id === 'activity' && activityImport().state === 'importing'
       ? [
         { label: 'Completed files', value: activityImport().filesDone.toLocaleString() },
@@ -86,7 +91,7 @@ export function Sidebar() {
                   onDblClick={toggle}
                 >
                   {item.icon()}
-                  <Show when={item.id === 'activity' && activityImport().state === 'importing'}><span class="badge" aria-label={importLabel()}>•</span></Show>
+                  <Show when={item.id === 'activity' && (migrating() || activityImport().state === 'importing')}><span class="badge" aria-label={migrating() ? migrationLabel() : importLabel()}>•</span></Show>
                   <Show when={!collapsed()}>
                     <span class="spacer">{item.label}</span>
                   </Show>
@@ -102,7 +107,7 @@ export function Sidebar() {
                   <div class="sidebar-divider" role="separator" />
                 </Show>
                 <Show when={rows(item).length} fallback={button()}>
-                  <HoverTip title={item.label} rows={rows(item)} layout="contents">{button()}</HoverTip>
+                  <HoverTip title={item.id === 'activity' && migrating() ? 'Upgrading recorded bodies' : item.label} rows={rows(item)} note={item.id === 'activity' && migrating() ? MIGRATION_NOTE : undefined} layout="contents">{button()}</HoverTip>
                 </Show>
                 </>;
               }}

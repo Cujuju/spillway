@@ -4,7 +4,7 @@ import { conversationNames } from './conversationNames';
 import { startClientLogSync } from './clientLogSync';
 import type { ActivityMethods, EvalMethods, Request, WorkerConfig } from './activityProtocol';
 const port = parentPort!;
-const log = new ActivityLog(workerData as WorkerConfig);
+const log = new ActivityLog(workerData as WorkerConfig, (value) => port.postMessage({ event: 'migration', value }));
 log.prune();
 try { log.archiveExportReset(); }
 catch (error) { log.archiveExportStartupError(`Portable export startup cleanup failed: ${String(error)}`); }

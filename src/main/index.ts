@@ -67,6 +67,7 @@ async function startNormalApp(): Promise<void> {
     });
     activityLog.on('reset', () => send(EVENTS.onActivityReset, undefined));
     activityLog.on('progress', (state) => send(EVENTS.onActivityImport, state));
+    activityLog.on('migration', (state) => send(EVENTS.onArchiveMigration, state));
     activity.on('reset', () => send(EVENTS.onActivityReset, undefined));
     activity.on('event', (e) => send(EVENTS.onActivity, e));
     proxy.on('log', (l) => send(EVENTS.onProxyLog, l));

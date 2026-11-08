@@ -1,3 +1,4 @@
+import type { ArchiveMigrationState } from '@shared/ipc';
 import type { Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage } from '@shared/archive';
 import { sessionKind, type ActivityEvent } from '@shared/types';
@@ -41,8 +42,8 @@ const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType:
 export class ArchiveStore {
   private policy: ArchivePolicy;
   private lastPruned = 0;
-  constructor(private db: Db, private sink?: ArchiveFactSink) {
-    migratePieces(this.db);
+  constructor(private db: Db, private sink?: ArchiveFactSink, progress?: (state: ArchiveMigrationState) => void) {
+    migratePieces(this.db, progress);
     this.policy = normalizeArchivePolicy(this.read('policy', {}));
     this.settle('archive-reopened-before-finalization');
     this.prune(Date.now(), true);

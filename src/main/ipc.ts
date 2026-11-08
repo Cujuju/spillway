@@ -6,7 +6,7 @@ import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
 import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
-import { activityLog, activityImportState } from './activityService';
+import { activityLog, activityImportState, archiveMigrationState } from './activityService';
 import { archiveSync } from './archiveSync';
 import { clickhouseStatus, saveClickHouse, diagnoseClickHouse, retryClickHouse, clearClickHouse, cancelClickHouse, withClickHousePaused } from './clickhouseService';
 import { diagnosticExporter } from './diagnosticService';
@@ -206,6 +206,7 @@ const handlers: Handlers = {
   usageObservedSpans: () => history.observed(),
   clearHistory: () => history.clear(),
   activityImportState: () => activityImportState(),
+  archiveMigrationState: () => archiveMigrationState(),
   activityPage: (query) => activityLog.call('page', query),
   activityDay: (day, failedOnly, scope) => activityLog.call('day', day, failedOnly, scope),
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),

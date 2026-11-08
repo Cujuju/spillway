@@ -1,4 +1,4 @@
-import type { ActivityImportState } from '@shared/ipc';
+import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
 import { batch, createComputed, createRoot, createSignal } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
@@ -68,6 +68,8 @@ export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket
 /** Fixed forecast evidence, independent of the Activity page's chosen range. */
 export const [forecastBuckets, setForecastBuckets] = createSignal<ActivityBucket[]>([]);
 export const [activityImport, setActivityImport] = createSignal<ActivityImportState>({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null });
+/** One-time re-encoding of recorded bodies; the Activity worker answers nothing else meanwhile. */
+export const [archiveMigration, setArchiveMigration] = createSignal<ArchiveMigrationState>({ state: 'idle', done: 0, total: 0 });
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
 
@@ -135,9 +137,11 @@ export async function initStore(): Promise<void> {
   api.onOpenProxy(() => setPage('proxy'));
   let receivedImportEvent = false;
   api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
-  const initialImport = await api.activityImportState();
+  let receivedMigrationEvent = false;
+  api.onArchiveMigration((state) => { receivedMigrationEvent = true; setArchiveMigration(state); });
+  const [initialImport, initialMigration] = await Promise.all([api.activityImportState(), api.archiveMigrationState()]);
   if (!receivedImportEvent) setActivityImport(initialImport);
-  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
+  if (!receivedMigrationEvent) setArchiveMigration(initialMigration);  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
     api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.usageObservedSpans(), api.proxyLogs(), api.taskbarDark(),
   ]);
   setTaskbarDark(dark);

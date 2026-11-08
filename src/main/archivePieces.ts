@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants, zstdCompressSync, zstdDecompressSync } from 'node:zlib';
+import type { ArchiveMigrationState } from '@shared/ipc';
 import type { Db } from './activityDb';
 import type { ArchiveDetail } from '@shared/archive';
 import { archiveSearchText } from '@shared/archiveContent';
@@ -107,12 +108,17 @@ export function storeBody(db: Db, id: string, body: Body, bases?: Map<string, { 
 export function refreshThread(db: Db, thread: string): void {
   db.prepare('UPDATE archive_threads SET stored_bytes=(SELECT coalesce(sum(length(bytes)),0) FROM archive_pieces WHERE thread_id=?)+(SELECT coalesce(sum(stored_bytes),0) FROM archive_entries WHERE thread_id=?),logical_bytes=(SELECT coalesce(sum(bytes),0) FROM archive_entries WHERE thread_id=?) WHERE id=?').run(thread, thread, thread, thread);
 }
-export function migratePieces(db: Db): void {
+export function migratePieces(db: Db, progress?: (state: ArchiveMigrationState) => void): void {
   db.exec(PIECE_SCHEMA);
   const columns = db.prepare('PRAGMA table_info(archive_entries)').all() as { name: string }[];
   for (const [name, type] of [['thread_id', 'TEXT'], ['stored_bytes', 'INTEGER NOT NULL DEFAULT 0'], ['search_key', 'INTEGER']] as const) if (!columns.some((c) => c.name === name)) db.exec(`ALTER TABLE archive_entries ADD COLUMN ${name} ${type}`);
   db.exec('CREATE INDEX IF NOT EXISTS archive_entry_thread ON archive_entries(thread_id)');
   if (db.prepare("SELECT 1 FROM archive_meta WHERE key='piecesMigrated'").get()) return;
+  const savedCursor = db.prepare("SELECT value FROM archive_meta WHERE key='pieceCursor'").get() as { value: string } | undefined;
+  const [startAt, startId] = savedCursor ? JSON.parse(savedCursor.value) : ['', ''];
+  const { total } = db.prepare('SELECT count(*) AS total FROM archive_entries WHERE (at,id)>(?,?) AND bytes>0 AND thread_id IS NULL').get(startAt, startId) as { total: number };
+  let done = 0;
+  if (total) progress?.({ state: 'migrating', done, total });
   const bases = new Map<string, { detail: string; request: Buffer }>();
   for (;;) {
     const cursor = db.prepare("SELECT value FROM archive_meta WHERE key='pieceCursor'").get() as { value: string } | undefined;
@@ -124,8 +130,11 @@ export function migratePieces(db: Db): void {
       const last = rows.at(-1)!;
       db.prepare("INSERT OR REPLACE INTO archive_meta VALUES('pieceCursor',?)").run(JSON.stringify([last.at, last.id]));
     })();
+    done += rows.length;
+    progress?.({ state: 'migrating', done, total });
   }
   db.exec("DROP TABLE IF EXISTS archive_fts; PRAGMA incremental_vacuum; INSERT OR REPLACE INTO archive_meta VALUES('piecesMigrated','true')");
+  if (total) progress?.({ state: 'idle', done: total, total });
 }
 export const collectPieces = (db: Db): void => { db.exec('DELETE FROM archive_pieces WHERE (thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)) AND id NOT IN (SELECT piece_id FROM archive_pins)'); };
 export const storedBytes = (db: Db): number => (db.prepare('SELECT coalesce(sum(stored_bytes),0) AS n FROM archive_threads').get() as { n: number }).n;

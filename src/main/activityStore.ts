@@ -1,3 +1,4 @@
+import type { ArchiveMigrationState } from '@shared/ipc';
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
@@ -96,7 +97,7 @@ export class ActivityLog {
   archiveExportCancel(id: string) { return this.exports.cancel(id); }
   async archiveExportDispose(): Promise<void> { await this.exporter?.dispose(); }
   private archiveStore: ArchiveStore | null = null;
-  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact) }); }
+  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact) }, this.migrationProgress); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
@@ -114,7 +115,7 @@ export class ActivityLog {
   diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
   traceQuery(q: TraceQuery) { this.archive.prune(); return new TraceStore(this.db).query(q); }
   traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }
-  constructor(private config: ActivityConfig) {}
+  constructor(private config: ActivityConfig, private migrationProgress?: (state: ArchiveMigrationState) => void) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   revision = 0;
   private conn: Db | null = null;

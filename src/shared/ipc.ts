@@ -1,3 +1,4 @@
+export interface ArchiveMigrationState { state: 'idle' | 'migrating'; done: number; total: number }
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
 import type { ArchiveDetail, ArchivePolicy, ArchiveStatus } from './archive';
 import type { ArchiveExportJob, ArchiveExportOptions } from './archiveExport';
@@ -105,6 +106,7 @@ export interface DesktopApi {
   activityTotals(): Promise<ActivityDayTotal[]>;
   /** Share of local client usage that went through the proxy. */
   activityImportState(): Promise<ActivityImportState>;
+  archiveMigrationState(): Promise<ArchiveMigrationState>;
   activityCoverage(): Promise<ProxyCoverage>;
   /** Activity and fixed forecast ranges from the same totals and local-day boundary; null holds all activity. */
   activityBucketSnapshot(days: number | null): Promise<ActivityBucketSnapshot>;
@@ -167,6 +169,7 @@ export interface DesktopApi {
   onClientSetupChanged(cb: () => void): () => void;
   onSettings(cb: (s: AppSettings) => void): () => void;
   onActivityImport(cb: (state: ActivityImportState) => void): () => void;
+  onArchiveMigration(cb: (state: ArchiveMigrationState) => void): () => void;
   onActivityReset(cb: () => void): () => void;
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
@@ -218,6 +221,7 @@ export const INVOKE = {
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
   activityImportState: 'activity:import-state',
+  archiveMigrationState: 'archive:migration-state',
   activityCoverage: 'activity:coverage',
   activityBucketSnapshot: 'activity:bucket-snapshot',
   clearActivity: 'activity:clear',
@@ -269,6 +273,7 @@ export const EVENTS = {
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
   onActivityImport: 'activity:import',
+  onArchiveMigration: 'archive:migration',
   onActivityReset: 'activity:reset',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',

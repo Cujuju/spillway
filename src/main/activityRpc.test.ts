@@ -109,3 +109,19 @@ it('does not move an overflowing backlog into a stalled worker port', async () =
   rpc.cancel();
   await Promise.all(writes);
 });
+
+it('forwards migration progress while a worker request is waiting', async () => {
+  const port = new Port();
+  const rpc = new ActivityRpc(() => port);
+  const migration = vi.fn();
+  rpc.on('migration', migration);
+  rpc.start();
+  const waiting = rpc.call('days');
+  const value = { state: 'migrating', done: 0, total: 19 };
+  port.emit('message', { event: 'migration', value });
+  expect(migration).toHaveBeenCalledWith(value);
+  expect(port.sent).toHaveLength(1);
+  port.reply([]);
+  expect(await waiting).toEqual([]);
+  rpc.cancel();
+});

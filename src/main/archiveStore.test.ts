@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
+import { migratePieces } from './archivePieces';
 import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [];
@@ -157,13 +158,27 @@ it('migrates existing full details in batches and resumes after its persisted cu
     }
     return statement;
   });
-  try { expect(() => new ArchiveStore(db)).toThrow('migration interrupted'); } finally { spy.mockRestore(); }
+  const progress = vi.fn();
+  try { expect(() => new ArchiveStore(db, undefined, progress)).toThrow('migration interrupted'); } finally { spy.mockRestore(); }
   expect(db.prepare("SELECT value FROM archive_meta WHERE key='pieceCursor'").get()).toEqual({ value: JSON.stringify([at, 'trace:legacy-07']) });
-  const migrated = new ArchiveStore(db);
+  expect(progress.mock.calls.map(([state]) => state)).toEqual([
+    { state: 'migrating', done: 0, total: 19 },
+    { state: 'migrating', done: 8, total: 19 },
+  ]);
+  progress.mockClear();
+  const migrated = new ArchiveStore(db, undefined, progress);
+  expect(progress.mock.calls.map(([state]) => state)).toEqual([
+    { state: 'migrating', done: 0, total: 11 },
+    { state: 'migrating', done: 8, total: 11 },
+    { state: 'migrating', done: 11, total: 11 },
+    { state: 'idle', done: 11, total: 11 },
+  ]);
   expect(migrated.status()).toMatchObject({ bodies: 19, threads: 1, diffFallbacks: 0 });
   expect(migrated.detail('legacy-18')?.request).toBe(body.request);
   expect(migrated.query({ text: 'legacy' }).entries).toHaveLength(1);
-  expect(new ArchiveStore(db).status().storedBytes).toBe(migrated.status().storedBytes);
+  progress.mockClear();
+  expect(new ArchiveStore(db, undefined, progress).status().storedBytes).toBe(migrated.status().storedBytes);
+  expect(progress).not.toHaveBeenCalled();
 });
 it('evicts whole threads and stops an over-budget thread until the policy changes', async () => {
   const { randomBytes } = await import('node:crypto');
@@ -226,4 +241,12 @@ it('keeps thread totals exact after bodyless revisions and metadata pruning', ()
   })();
   store.prune(Date.now(), true);
   expect(store.status()).toMatchObject({ entries: 20_000, bytes: 0, storedBytes: allPieces });
+});
+
+it('does not report migration progress for an empty archive', () => {
+  const { db } = setup();
+  db.prepare("DELETE FROM archive_meta WHERE key='piecesMigrated'").run();
+  const progress = vi.fn();
+  migratePieces(db, progress);
+  expect(progress).not.toHaveBeenCalled();
 });

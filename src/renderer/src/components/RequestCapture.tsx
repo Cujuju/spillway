@@ -3,6 +3,7 @@ import type { ArchivePolicy, ArchiveStatus } from '@shared/archive';
 import { shownText } from '../store';
 import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
+import { migrating, migrationLabel, MIGRATION_NOTE } from './ActivityImport';
 import { Dialog, Notice, NumberField, SettingRow, SettingsGroup, Toggle } from './ui';
 
 const MiB = 1024 * 1024;
@@ -63,7 +64,7 @@ export function RequestCaptureSettings() {
   };
   return (
     <SettingsGroup>
-      <Show when={status()} fallback={<p class="empty-note">Loading…</p>}>{(s) => <>
+      <Show when={status()} fallback={<p class="empty-note" role="status" title={migrating() ? MIGRATION_NOTE : undefined}>{migrating() ? migrationLabel() : 'Loading…'}</p>}>{(s) => <>
         <SettingRow label="Record bodies" help="Keep the text of requests and responses from now on. Time, model, account and status are always kept.">
           <Toggle value={s().policy.captureBodies} disabled={busy()} label="Record bodies" onChange={(captureBodies) => save({ captureBodies })} />
         </SettingRow>

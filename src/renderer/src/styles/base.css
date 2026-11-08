@@ -203,7 +203,8 @@ a {
   letter-spacing: var(--tracking-section);
   color: var(--color-text-disabled);
 }
-.sidebar-group:first-child {
+.sidebar-group:first-child,
+.sidebar-divider + .sidebar-group {
   margin-top: var(--spacing-1);
 }
 .sidebar-divider {
@@ -271,14 +272,6 @@ a {
   justify-content: center;
   width: var(--nav-btn-size);
   padding: 0;
-}
-.sidebar.collapsed .sidebar-group {
-  height: var(--border-width);
-  margin: var(--spacing-2) var(--spacing-1);
-  background: var(--color-border);
-}
-.sidebar.collapsed .sidebar-group:first-child {
-  display: none;
 }
 /* Inside the button's own box, so it never reaches the buttons above or below. */
 .sidebar.collapsed .nav-btn .badge {

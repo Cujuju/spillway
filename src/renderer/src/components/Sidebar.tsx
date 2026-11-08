@@ -65,9 +65,15 @@ export function Sidebar() {
   return (
     <nav class="sidebar" classList={{ collapsed: collapsed() }}>
       <For each={NAV}>
-        {(group) => (
+        {(group, i) => (
           <>
-            <div class="sidebar-group">{collapsed() ? '' : group.group}</div>
+            {/* Groups are ruled apart in both modes; collapsed drops only the heading text. */}
+            <Show when={i() > 0}>
+              <div class="sidebar-divider" role="separator" />
+            </Show>
+            <Show when={!collapsed()}>
+              <div class="sidebar-group">{group.group}</div>
+            </Show>
             <For each={group.items}>
               {(item) => {
                 const button = () => (

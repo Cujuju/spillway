@@ -43,10 +43,8 @@ export function Proxy() {
 
   return (
     <>
-      <PageHeader>
-        <div>
-          <h1 class="dash-title">Proxy</h1>
-        </div>
+      <PageHeader class="single-row">
+        <h1 class="dash-title">Proxy</h1>
         <div class="dash-actions">
           <Show
             when={running() || state() === 'starting'}

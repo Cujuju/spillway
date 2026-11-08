@@ -32,9 +32,14 @@
 .header-status:empty {
   display: none;
 }
-/* Title, a short summary beside it and icon actions, all on one row (Dashboard). */
+/* Title, a short summary beside it and actions, all on one row (Dashboard, Providers, Proxy). */
 .dash-header.single-row {
   align-items: center;
+}
+/* Zero height, so the row is the title's and every page's title sits at the page inset; buttons centre on it. */
+.dash-header.single-row > .dash-actions {
+  height: 0;
+  align-content: center;
 }
 .title-line {
   display: flex;
@@ -50,10 +55,6 @@
 }
 .dash-meta .loaded {
   color: var(--color-green);
-}
-/* Actions share the title's row; a subtitle hangs below the title alone. */
-.dash-header.title-row {
-  align-items: flex-start;
 }
 /* Top trimmed to the capitals, so the page inset above the title is the visible gap, like the other sides. */
 .dash-title {

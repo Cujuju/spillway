@@ -6,7 +6,8 @@ import { Dialog, SettingRow, SettingsGroup, Toggle } from './ui';
 const MIB = 1024 * 1024, GIB = 1024 * MIB;
 const STATUS_POLL_MS = 3_000;
 const mib = (bytes: number) => `${(bytes / MIB).toFixed(1)} MiB`;
-const BACKLOG_HELP = `Up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} rows / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB per upload. Unsent rows wait in the encrypted local outbox, up to ${CLICKHOUSE_OUTBOX_BYTES / GIB} GiB; the oldest are dropped beyond that.`;
+const BACKLOG_HELP = `Up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} rows / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB per upload. Unsent rows wait in the encrypted local outbox, up to ${CLICKHOUSE_OUTBOX_BYTES / GIB} GiB; the oldest are dropped beyond that. Rows point to recorded text instead of copying it; text is read when sent.`;
+const EXPIRED_HELP = 'Rows whose conversation text was removed locally (Keep bodies or Body budget) before upload. They were sent without content.';
 
 export function ClickHouseSettings() {
   const [draft, setDraft] = createSignal<ClickHouseConfig>({ ...DEFAULT_CLICKHOUSE_CONFIG });
@@ -46,7 +47,9 @@ export function ClickHouseSettings() {
         <input class="input wide" aria-label="ClickHouse endpoint" value={draft().endpoint} onInput={(e) => update('endpoint', e.currentTarget.value)} />
       </SettingRow>
       <SettingRow label="Database"><input class="input" aria-label="ClickHouse database" value={draft().database} onInput={(e) => update('database', e.currentTarget.value)} /></SettingRow>
-      <SettingRow label="Table (schema v2)"><input class="input" aria-label="ClickHouse table" value={draft().table} onInput={(e) => update('table', e.currentTarget.value)} /></SettingRow>
+      <SettingRow label="Table prefix (schema v1)" help={`Rows go to ${draft().tablePrefix || '<prefix>'}_facts; request text goes to ${draft().tablePrefix || '<prefix>'}_pieces.`}>
+        <input class="input" aria-label="ClickHouse table prefix" value={draft().tablePrefix} onInput={(e) => update('tablePrefix', e.currentTarget.value)} />
+      </SettingRow>
       <SettingRow label="Source label" help="Optional name for this install, sent with every row so a shared table shows who sent it. Empty sends only the random source ID.">
         <input class="input" aria-label="ClickHouse source label" maxLength={CLICKHOUSE_SOURCE_LABEL_MAX} value={draft().sourceLabel} onInput={(e) => update('sourceLabel', e.currentTarget.value)} />
       </SettingRow>
@@ -63,13 +66,16 @@ export function ClickHouseSettings() {
       </SettingRow>
     </SettingsGroup>
     <SettingsGroup title="Delivery">
-      <SettingRow label="Connection & schema" help="Uses saved settings. Check is read-only; Create table creates schema v2 in an existing database. No database is deployed.">
+      <SettingRow label="Connection & schema" help="Uses saved settings. Check is read-only; Create table creates both schema v1 tables in an existing database. No database is deployed.">
         <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(false)))}>Check</button>
         <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(true)))}>Create table</button>
       </SettingRow>
       <SettingRow label="Upload status" help="Counts rows, not requests, task successes or billable usage. Retries can store a row twice; use FINAL or count distinct (source_id, seq) for exact counts.">
         <span class="secondary">{state()} · {status()?.acknowledged ?? 0} rows acknowledged · {status()?.discarded ?? 0} discarded ({status()?.oversized ?? 0} oversized)</span>
       </SettingRow>
+      <Show when={status()?.contentExpired}>{(n) => (
+        <SettingRow label="Sent without content" help={EXPIRED_HELP}><span class="secondary">{n().toLocaleString()} rows</span></SettingRow>
+      )}</Show>
       <SettingRow label="Backlog" help={`${BACKLOG_HELP} Oldest: ${status()?.oldestQueuedAt ?? 'none'}`}>
         <span class="secondary">{status()?.queued ?? 0} queued ({mib(status()?.queuedBytes ?? 0)}) · {status()?.attempts ?? 0} retries · next {status()?.nextAttemptAt ? new Date(status()!.nextAttemptAt).toLocaleString() : 'when ready'}</span>
       </SettingRow>

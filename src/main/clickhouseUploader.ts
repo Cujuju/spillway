@@ -58,7 +58,8 @@ export class ClickHouseUploader {
         if (controller.signal.aborted) return false;
         this.verifiedDestination = destination;
       }
-      await insertClickHouse(state.config, this.credentials(state.config), batch.payload, controller.signal);
+      if (batch.pieces) await insertClickHouse(state.config, this.credentials(state.config), batch.pieces, controller.signal, 'pieces');
+      await insertClickHouse(state.config, this.credentials(state.config), batch.facts, controller.signal);
       if (controller.signal.aborted) return false;
       await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);
       this.error = null;
@@ -78,9 +79,9 @@ export class ClickHouseUploader {
     if (this.controller) throw new Error('ClickHouse operation already running');
     const controller = new AbortController(); this.controller = controller;
     try {
-      if (create && (await clickhouseRequest(config, this.credentials(config), clickhouseDDL(config), controller.signal)).trim()) throw new Error('ClickHouse schema creation returned an unexpected response');
+      if (create) for (const kind of ['pieces', 'facts']) if ((await clickhouseRequest(config, this.credentials(config), clickhouseDDL(config, kind), controller.signal)).trim()) throw new Error('ClickHouse schema creation returned an unexpected response');
       await checkClickHouseSchema(config, this.credentials(config), controller.signal);
-      this.error = null; return 'Connected; archive schema v2 is compatible. Insert permission is checked on delivery.';
+      this.error = null; return 'Connected; archive schema v1 is compatible. Insert permission is checked on delivery.';
     } catch (e) { this.error = e instanceof Error ? e.message : 'ClickHouse diagnostic failed'; throw new Error(this.error); }
     finally { this.controller = null; }
   }

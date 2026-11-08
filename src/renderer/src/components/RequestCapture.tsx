@@ -12,7 +12,9 @@ const BUDGET_MIB = { min: 1, max: 1024 };
 /** Store health (drops, bytes) changes as traffic arrives. */
 const STATUS_POLL_MS = 3_000;
 const LIMITS_NOTE = 'Exchanges counts every request seen, with or without text. HTTP: the first 256 KiB of each request and response (gzip, zstd decoded). Codex WebSocket: 128 messages, 64 KiB each, 256 KiB per direction. Truncation is marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.';
-const DELETE_NOTE = 'Deletes every recorded request and response and turns Record bodies off. Activity history and eval cases stay.';
+const OVER_BUDGET_NOTE = 'Conversations larger than the whole body budget. Their new requests keep metadata only until the conversation is removed or the budget changes.';
+const STORED_NOTE = 'Each request stores only what changed since the previous request in its conversation, compressed. The budget counts stored bytes.';
+const DELETE_NOTE ='Deletes every recorded request and response and turns Record bodies off. Activity history and eval cases stay.';
 
 /** Drops, sequence gaps and rejections, shown only when any happened. A restart alone loses nothing. */
 function Losses(props: { status: ArchiveStatus }) {
@@ -22,6 +24,11 @@ function Losses(props: { status: ArchiveStatus }) {
       <HoverTip title="Dropped" rows={[{ label: 'Dropped', value: s().dropped.toLocaleString() }, { label: 'Sequence gaps', value: s().gaps.toLocaleString() }, { label: 'Proxy restarts', value: s().restarts.toLocaleString() }]}
         note="Captures the proxy could not hand over, from overflow, disconnects or crashes. Gaps overlap drops; don't add them.">
         <span class="badge compact red">{s().dropped ? `${s().dropped.toLocaleString()} dropped` : `${s().gaps.toLocaleString()} gaps`}</span>
+      </HoverTip>
+    </Show>
+    <Show when={s().overBudgetThreads > 0}>
+      <HoverTip title="Over budget" rows={[{ label: 'Conversations', value: s().overBudgetThreads.toLocaleString() }]} note={OVER_BUDGET_NOTE}>
+        <span class="badge compact amber">{s().overBudgetThreads.toLocaleString()} over budget</span>
       </HoverTip>
     </Show>
     <Show when={s().rejected > 0}>
@@ -60,10 +67,10 @@ export function RequestCaptureSettings() {
         <SettingRow label="Record bodies" help="Keep the text of requests and responses from now on. Time, model, account and status are always kept.">
           <Toggle value={s().policy.captureBodies} disabled={busy()} label="Record bodies" onChange={(captureBodies) => save({ captureBodies })} />
         </SettingRow>
-        <SettingRow label="Keep bodies" help="Older text is removed; the request stays in Activity.">
+        <SettingRow label="Keep bodies" help="A conversation's text is removed once its newest request is older than this; the requests stay in Activity.">
           <NumberField value={s().policy.retentionDays} {...RETENTION_DAYS} unit="days" onCommit={(retentionDays) => save({ retentionDays })} />
         </SettingRow>
-        <SettingRow label="Body budget" help="When full, the oldest text is removed first.">
+        <SettingRow label="Body budget" help="Counts stored text. When full, the conversation used least recently is removed first.">
           <NumberField value={s().policy.maxBytes / MiB} {...BUDGET_MIB} unit="MiB" onCommit={(n) => save({ maxBytes: n * MiB })} />
         </SettingRow>
         <SettingRow label="Storage">
@@ -71,11 +78,14 @@ export function RequestCaptureSettings() {
           <HoverTip title="Storage" rows={[
             { label: 'Exchanges', value: s().entries.toLocaleString() },
             { label: 'With text', value: s().bodies.toLocaleString() },
-            { label: 'Text stored', value: byteSize(s().bytes) },
+            { label: 'Conversations', value: s().threads.toLocaleString() },
+            { label: 'Text size', value: byteSize(s().bytes) },
+            { label: 'Stored', value: byteSize(s().storedBytes) },
+            ...s().diffFallbacks ? [{ label: 'Full copies', value: s().diffFallbacks.toLocaleString() }] : [],
             { label: 'Budget', value: byteSize(s().policy.maxBytes) },
             { label: 'Keep bodies', value: `${s().policy.retentionDays} days` },
-          ]} note={LIMITS_NOTE}>
-            <span class="tabular secondary">{s().bodies.toLocaleString()} with text · {byteSize(s().bytes)} of {byteSize(s().policy.maxBytes)}</span>
+          ]} note={`${STORED_NOTE} ${LIMITS_NOTE}`}>
+            <span class="tabular secondary">{s().bodies.toLocaleString()} with text · {byteSize(s().bytes)} text · {byteSize(s().storedBytes)} of {byteSize(s().policy.maxBytes)} stored</span>
           </HoverTip>
         </SettingRow>
         <SettingRow label="Delete recorded bodies" help={DELETE_NOTE}>

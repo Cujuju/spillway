@@ -1,7 +1,7 @@
 import type { Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage } from '@shared/archive';
 import { sessionKind, type ActivityEvent } from '@shared/types';
-import { archiveSearchText } from '@shared/archiveContent';
+import { PIECE_SCHEMA, migratePieces, storeBody, readBody, expireThread, storedBytes, refreshThread } from './archivePieces';
 import { normalizeTransport } from '@shared/activityTransport';
 
 export const ARCHIVE_SCHEMA = `
@@ -16,9 +16,9 @@ CREATE INDEX IF NOT EXISTS archive_session ON archive_entries(session_id, at, id
 CREATE INDEX IF NOT EXISTS archive_expiry ON archive_entries(at, id) WHERE bytes > 0;
 CREATE TABLE IF NOT EXISTS archive_attempts (identity TEXT PRIMARY KEY, trace_id TEXT NOT NULL, detail TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
-CREATE VIRTUAL TABLE IF NOT EXISTS archive_fts USING fts5(id UNINDEXED, text);
+
 CREATE TABLE IF NOT EXISTS archive_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-`;
+` + PIECE_SCHEMA;
 export interface ArchiveFactSink { append(fact: ArchiveFact): void }
 export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot'; traceId: string; at: string; captureState: string; record: object; content: object | null };
 type Row = { id: string; trace_id: string; at: string; state: ArchiveEntry['state']; reason: string; session_id: string | null; model: string; provider: string; client: string | null; capture_id: string | null; capture_epoch: string | null; capture_sequence: number | null; method: string; path: string; status: number; bytes: number; detail: string };
@@ -33,7 +33,7 @@ const SEARCH_MAX_CHARS = 256;
 export function archiveTextMatch(text: unknown): { sql: string; args: [string] } | null {
   if (typeof text !== 'string' || !text.trim()) return null;
   const terms = text.slice(0, SEARCH_MAX_CHARS).trim().split(/\s+/).map((t) => `"${t.replaceAll('"', '""')}"`).join(' AND ');
-  return { sql: 'id IN (SELECT id FROM archive_fts WHERE archive_fts MATCH ?)', args: [terms] };
+  return { sql: 'search_key IN (SELECT rowid FROM archive_search WHERE archive_search MATCH ?)', args: [terms] };
 }
 const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType: '', requestEncoding: '', responseEncoding: '', format: 'http', requestDecoded: false, responseDecoded: false, frames: [] };
 
@@ -42,20 +42,10 @@ export class ArchiveStore {
   private policy: ArchivePolicy;
   private lastPruned = 0;
   constructor(private db: Db, private sink?: ArchiveFactSink) {
+    migratePieces(this.db);
     this.policy = normalizeArchivePolicy(this.read('policy', {}));
     this.settle('archive-reopened-before-finalization');
     this.prune(Date.now(), true);
-    if (this.read('indexFormat', 0) < 2) this.db.transaction(() => {
-      this.db.exec('DELETE FROM archive_fts');
-      let after = '';
-      for (;;) {
-        const rows = this.db.prepare('SELECT id,detail FROM archive_entries WHERE id>? AND bytes>0 ORDER BY id LIMIT 8').all(after) as { id: string; detail: string }[];
-        if (!rows.length) break;
-        for (const r of rows) { const d = JSON.parse(r.detail) as ArchiveDetail; this.db.prepare('INSERT INTO archive_fts VALUES(?,?)').run(r.id, archiveSearchText(d.request, d.response, d.frames)); }
-        after = rows.at(-1)!.id;
-      }
-      this.write('indexFormat', 2);
-    })();
   }
   private settle(reason: string, before?: string): void {
     this.db.transaction(() => {
@@ -71,6 +61,7 @@ export class ArchiveStore {
   private write(key: string, value: unknown): void { this.db.prepare('INSERT INTO archive_meta VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
   setPolicy(raw: ArchivePolicy): ArchiveStatus {
     return this.db.transaction(() => {
+      if (this.policy.maxBytes !== normalizeArchivePolicy(raw).maxBytes) this.db.exec("UPDATE archive_threads SET over_budget=0");
       this.policy = normalizeArchivePolicy(raw);
       this.write('policy', this.policy);
       if (!this.policy.captureBodies) this.settle('capture-disabled');
@@ -116,16 +107,42 @@ export class ArchiveStore {
           && (['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= 8192)
           && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= 64 * 1024 * 3) && r.frames.reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 6);
         if (!valid) { this.write('rejected', this.read('rejected', 0) + 1); continue; }
-        const captured = { request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' : 'http', requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
+        const captured = { request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' as const : 'http' as const, requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
         const detail = JSON.stringify(captured);
         const { request, response, frames, ...metadata } = captured;
-        this.sink?.append({ kind: 'capture', traceId: r.traceId, at: r.startedAt, captureState: r.state, record: { ...metadata, captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason, startedAt: r.startedAt, frameCount: frames.length }, content: request || response || frames.length ? { request, response, frames } : null });
+
         const id = `trace:${r.traceId}`;
         this.db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,bytes,detail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(trace_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,method=excluded.method,path=excluded.path,status=excluded.status,bytes=excluded.bytes,detail=excluded.detail`)
           .run(id, r.traceId, r.startedAt, r.state, r.reason, r.id, r.epoch, r.sequence, r.method.slice(0, 16), r.path.slice(0, 2048), Number.isSafeInteger(r.status) ? r.status : 0, r.request || r.response || r.frames?.length ? Buffer.byteLength(detail) : 0, detail);
-        this.db.prepare('DELETE FROM archive_fts WHERE id=?').run(id);
-        this.db.prepare('INSERT INTO archive_fts VALUES(?,?)').run(id, archiveSearchText(r.request, r.response, r.frames));
+        let refs: object | null = null;
+        if (request || response || frames.length) {
+          const existing = this.db.prepare('SELECT thread_id,session_id,model FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null; session_id: string | null; model: string };
+          const thread = existing.thread_id ?? JSON.stringify(existing.session_id ? [existing.session_id, existing.model] : [id]);
+          const flagged = this.db.prepare('SELECT over_budget FROM archive_threads WHERE id=?').get(thread) as { over_budget: number } | undefined;
+          this.db.exec('SAVEPOINT capture_pieces');
+          if (!flagged?.over_budget) refs = storeBody(this.db, id, captured);
+          while (refs && storedBytes(this.db) > this.policy.maxBytes) {
+            const oldest = this.db.prepare('SELECT id FROM archive_threads WHERE id<>? ORDER BY last_at,id LIMIT 1').get(thread) as { id: string } | undefined;
+            if (!oldest) break;
+            expireThread(this.db, oldest.id);
+          }
+          if (!refs || storedBytes(this.db) > this.policy.maxBytes) {
+            this.db.exec('ROLLBACK TO capture_pieces'); refs = null;
+            this.db.prepare('INSERT INTO archive_threads(id,first_at,last_at,over_budget) VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET over_budget=1,last_at=max(last_at,excluded.last_at)').run(thread, r.startedAt, r.startedAt);
+            this.db.prepare("UPDATE archive_entries SET state='missing',reason='thread-over-budget',bytes=0,stored_bytes=0,detail='{}',thread_id=? WHERE id=?").run(thread, id);
+            this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
+          }
+          this.db.exec('RELEASE capture_pieces');
+        } else {
+          this.db.prepare('UPDATE archive_entries SET stored_bytes=0 WHERE id=?').run(id);
+          this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
+        }
+        if (!refs) {
+          const owner = this.db.prepare('SELECT thread_id FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null };
+          if (owner.thread_id) refreshThread(this.db, owner.thread_id);
+        }
+        this.sink?.append({ kind: 'capture', traceId: r.traceId, at: r.startedAt, captureState: (this.db.prepare('SELECT state FROM archive_entries WHERE id=?').get(id) as { state: string }).state, record: { ...metadata, captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason, startedAt: r.startedAt, frameCount: frames.length }, content: refs });
       }
       this.write('epoch', page.epoch); this.write('sequence', sequence);
       const drops = Number.isSafeInteger(page.dropped) && page.dropped >= 0 ? page.dropped : 0;
@@ -137,24 +154,21 @@ export class ArchiveStore {
     if (!force && now - this.lastPruned < 60_000) return;
     const cutoff = new Date(now - this.policy.retentionDays * 86_400_000).toISOString();
     this.db.transaction(() => {
-      const expire = (id: string) => {
-        this.db.prepare("UPDATE archive_entries SET state='expired', reason='retention-or-byte-budget', bytes=0, detail='{}' WHERE id=?").run(id);
-        this.db.prepare('DELETE FROM archive_fts WHERE id=?').run(id);
-      };
-      for (const r of this.db.prepare('SELECT id FROM archive_entries WHERE at < ? AND bytes > 0').all(cutoff) as { id: string }[]) expire(r.id);
-      let bytes = (this.db.prepare('SELECT coalesce(sum(bytes),0) AS n FROM archive_entries').get() as { n: number }).n;
-      while (bytes > this.policy.maxBytes) {
-        const oldest = this.db.prepare('SELECT id,bytes FROM archive_entries WHERE bytes>0 ORDER BY at,id LIMIT 128').all() as { id: string; bytes: number }[];
-        if (!oldest.length) break;
-        for (const r of oldest) { if (bytes <= this.policy.maxBytes) break; expire(r.id); bytes -= r.bytes; }
+      for (const r of this.db.prepare('SELECT id FROM archive_threads WHERE last_at < ?').all(cutoff) as { id: string }[]) expireThread(this.db, r.id);
+      while (storedBytes(this.db) > this.policy.maxBytes) {
+        const oldest = this.db.prepare('SELECT id FROM archive_threads ORDER BY last_at,id LIMIT 1').get() as { id: string } | undefined;
+        if (!oldest) break;
+        expireThread(this.db, oldest.id);
       }
       this.settle('capture-unavailable-or-interrupted', new Date(now - 10 * 60_000).toISOString());
       const count = (this.db.prepare('SELECT count(*) AS n FROM archive_entries').get() as { n: number }).n;
-      const obsolete = count > MAX_METADATA ? this.db.prepare('SELECT id, trace_id FROM archive_entries ORDER BY at,id LIMIT ?').all(count - MAX_METADATA) as { id: string; trace_id: string }[] : [];
+      const obsolete = count > MAX_METADATA ? this.db.prepare('SELECT id,trace_id,thread_id,stored_bytes,bytes FROM archive_entries ORDER BY at,id LIMIT ?').all(count - MAX_METADATA) as { id: string; trace_id: string; thread_id: string | null; stored_bytes: number; bytes: number }[] : [];
       for (const r of obsolete) {
+        this.db.prepare('UPDATE archive_threads SET stored_bytes=stored_bytes-?,logical_bytes=logical_bytes-? WHERE id=?').run(r.stored_bytes, r.bytes, r.thread_id);
         this.db.prepare('DELETE FROM archive_attempts WHERE trace_id=?').run(r.trace_id);
-        this.db.prepare('DELETE FROM archive_fts WHERE id=?').run(r.id);
+        this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(r.id);
         this.db.prepare('DELETE FROM archive_entries WHERE id=?').run(r.id);
+        this.db.prepare('DELETE FROM archive_search_keys WHERE entry_id=?').run(r.id);
       }
     })();
     this.lastPruned = now;
@@ -184,11 +198,12 @@ export class ArchiveStore {
     const r = this.db.prepare('SELECT * FROM archive_entries WHERE trace_id=?').get(traceId) as Row | undefined;
     if (!r) return null;
     const attempts = (this.db.prepare("SELECT detail FROM archive_attempts WHERE trace_id=? ORDER BY json_extract(detail, '$.at'),identity LIMIT 200").all(traceId) as { detail: string }[]).map((a) => JSON.parse(a.detail) as ArchiveDetail['attempts'][number]);
-    return { ...entry(r), ...EMPTY_DETAIL, ...JSON.parse(r.detail), attempts };
+    return { ...entry(r), ...EMPTY_DETAIL, ...readBody(this.db, r.detail), attempts };
   }
   status(): ArchiveStatus {
     const totals = this.db.prepare('SELECT count(*) AS entries, coalesce(sum(bytes),0) AS bytes, count(CASE WHEN bytes>0 THEN 1 END) AS bodies FROM archive_entries').get() as { entries: number; bytes: number; bodies: number };
-    return { policy: this.policy, ...totals, epoch: this.read('epoch', null), sequence: this.read('sequence', 0), dropped: this.read('dropped', 0), gaps: this.read('gaps', 0), restarts: this.read('restarts', 0), rejected: this.read('rejected', 0) };
+    const threads = this.db.prepare('SELECT count(CASE WHEN base IS NOT NULL THEN 1 END) AS threads,coalesce(sum(over_budget),0) AS overBudgetThreads FROM archive_threads').get() as { threads: number; overBudgetThreads: number };
+    return { policy: this.policy, ...totals, ...threads, storedBytes: storedBytes(this.db), diffFallbacks: this.read('diffFallbacks', 0), epoch: this.read('epoch', null), sequence: this.read('sequence', 0), dropped: this.read('dropped', 0), gaps: this.read('gaps', 0), restarts: this.read('restarts', 0), rejected: this.read('rejected', 0) };
   }
   clear(): void {
     this.db.transaction(() => {
@@ -198,6 +213,7 @@ export class ArchiveStore {
   }
 }
 export const ARCHIVE_CLEAR_SQL = `UPDATE clickhouse_export SET discarded=discarded+queued_rows,backfill_cursor=NULL; DELETE FROM clickhouse_outbox;
-DELETE FROM archive_fts; DELETE FROM archive_entries; DELETE FROM archive_attempts;
+DROP TABLE IF EXISTS archive_fts; DELETE FROM archive_search; DELETE FROM archive_search_keys; DELETE FROM archive_entries; DELETE FROM archive_attempts; UPDATE archive_pieces SET thread_id=NULL; DELETE FROM archive_threads;
+DELETE FROM archive_pieces WHERE id NOT IN (SELECT piece_id FROM archive_pins);
 INSERT OR REPLACE INTO archive_meta VALUES ('dropBaseline', coalesce((SELECT value FROM archive_meta WHERE key='proxyDropped'),'0'));
-DELETE FROM archive_meta WHERE key IN ('dropped','gaps','restarts','rejected');`;
+DELETE FROM archive_meta WHERE key IN ('dropped','gaps','restarts','rejected','diffFallbacks');`;

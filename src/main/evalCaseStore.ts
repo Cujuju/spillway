@@ -1,3 +1,4 @@
+import { collectPieces, rebuild, type PieceDetail } from './archivePieces';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { EVAL_LIMITS, type EvalAnnotation, type EvalCase, type EvalCaseSummary } from '@shared/evalCase';
@@ -22,27 +23,51 @@ export class EvalCaseStore {
   get(id: string, revision?: number): EvalCase {
     const row = this.db.prepare('SELECT snapshot FROM eval_cases WHERE id=? AND (? IS NULL OR revision=?) ORDER BY revision DESC LIMIT 1').get(id, revision ?? null, revision ?? null) as { snapshot: string } | undefined;
     if (!row) throw new Error('Eval case revision not found');
-    return JSON.parse(row.snapshot) as EvalCase;
+    return this.decode(row.snapshot);
+  }
+  private decode(snapshot: string): EvalCase {
+    const saved = JSON.parse(snapshot);
+    if (saved.pieceRefs) {
+      saved.capture.payload.data = portableCapture(saved.capture.entry, JSON.stringify(rebuild(this.db, saved.pieceRefs)), '[]', true).payload.data;
+      delete saved.pieceRefs;
+    }
+    return saved as EvalCase;
   }
   private insert(c: EvalCase, operation: string | null): void {
     validateCase(c);
-    const snapshot = JSON.stringify(c), bytes = Buffer.byteLength(snapshot);
+    let snapshot = JSON.stringify(c); const bytes = Buffer.byteLength(snapshot);
     const existing = this.db.prepare('SELECT snapshot FROM eval_cases WHERE id=? AND revision=?').get(c.id, c.revision) as { snapshot: string } | undefined;
-    if (existing) { if (existing.snapshot !== snapshot) throw new Error('Case identity/revision conflicts with an existing immutable snapshot'); return; }
+    if (existing) { if (JSON.stringify(this.decode(existing.snapshot)) !== snapshot) throw new Error('Case identity/revision conflicts with an existing immutable snapshot'); return; }
     const latest = this.db.prepare('SELECT snapshot FROM eval_cases WHERE id=? ORDER BY revision DESC LIMIT 1').get(c.id) as { snapshot: string } | undefined;
     if (latest) {
-      const parent = JSON.parse(latest.snapshot) as EvalCase;
+      const parent = this.decode(latest.snapshot);
       if (c.revision !== parent.revision + 1 || JSON.stringify(c.capture) !== JSON.stringify(parent.capture) || c.provenance.archiveId !== parent.provenance.archiveId) throw new Error('Case revision conflicts with the existing immutable capture or revision sequence');
     }
     const totals = this.db.prepare('SELECT coalesce(sum(bytes),0) AS bytes,count(DISTINCT id) AS cases FROM eval_cases').get() as { bytes: number; cases: number };
     const family = this.db.prepare('SELECT coalesce(sum(bytes),0) AS bytes,count(*) AS revisions FROM eval_cases WHERE id=?').get(c.id) as { bytes: number; revisions: number };
     if (totals.bytes + bytes > EVAL_LIMITS.totalBytes || family.bytes + bytes > EVAL_LIMITS.caseBytes || family.revisions >= EVAL_LIMITS.revisions || !family.revisions && totals.cases >= EVAL_LIMITS.cases) throw new Error('Pinned eval storage limit reached. Delete cases explicitly before adding more.');
+    if (c.provenance.source === 'local-archive' && c.capture.payload.state === 'included') {
+      const previous = this.db.prepare('SELECT snapshot FROM eval_cases WHERE id=? ORDER BY revision DESC LIMIT 1').get(c.id) as { snapshot: string } | undefined;
+      const row = this.db.prepare('SELECT detail FROM archive_entries WHERE id=? AND bytes>0').get(c.provenance.archiveId) as { detail: string } | undefined;
+      const refs: PieceDetail | undefined = previous ? JSON.parse(previous.snapshot).pieceRefs : row ? JSON.parse(row.detail) : undefined;
+      let matches = false;
+      if (refs) {
+        try {
+          const payload = portableCapture(c.capture.entry, JSON.stringify(rebuild(this.db, refs)), '[]', true).payload;
+          matches = payload.sha256 === c.capture.payload.sha256;
+        } catch { /* Unavailable pieces retain the inline snapshot. */ }
+      }
+      if (refs && matches) {
+        snapshot = JSON.stringify({ ...c, capture: { ...c.capture, payload: { ...c.capture.payload, data: null } }, pieceRefs: refs });
+        for (const [id] of [...refs.request, ...refs.response, ...refs.frames]) this.db.prepare('INSERT OR IGNORE INTO archive_pins VALUES(?,?)').run(id, c.id);
+      }
+    }
     this.db.prepare('INSERT INTO eval_cases VALUES(?,?,?,?,?,?,?)').run(c.id, c.revision, c.createdAt, c.annotation.title, bytes, snapshot, operation);
   }
   private repeated(operation: string): EvalCase | null {
     if (!/^[a-f0-9-]{36}$/.test(operation)) throw new Error('Invalid case operation identity');
     const row = this.db.prepare('SELECT snapshot FROM eval_cases WHERE operation=?').get(operation) as { snapshot: string } | undefined;
-    return row ? JSON.parse(row.snapshot) as EvalCase : null;
+    return row ? this.decode(row.snapshot) : null;
   }
   create(operation: string, traceId: string, annotation: EvalAnnotation, includeBodies: boolean): EvalCase {
     return this.db.transaction(() => {
@@ -66,8 +91,8 @@ export class EvalCaseStore {
       this.insert(c, operation); return c;
     })();
   }
-  delete(id: string): void { this.db.prepare('DELETE FROM eval_cases WHERE id=?').run(id); }
-  clear(): void { this.db.exec('DELETE FROM eval_cases'); }
+  delete(id: string): void { this.db.transaction(() => { this.db.prepare('DELETE FROM eval_cases WHERE id=?').run(id); this.db.prepare('DELETE FROM archive_pins WHERE case_id=?').run(id); collectPieces(this.db); })(); }
+  clear(): void { this.db.transaction(() => { this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins'); collectPieces(this.db); })(); }
   export(id: string, revision: number, includeBodies: boolean): string { return encodeCaseFile(redactExport(this.get(id, revision), includeBodies === true)); }
   import(bytes: Buffer): EvalCaseSummary[] {
     const parsed = decodeCaseFile(bytes);

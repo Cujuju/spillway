@@ -16,7 +16,7 @@ const selection: DiagnosticSelection = { operationId: 'operation-one', traceIds:
 const missing: DiagnosticSource = { detail: null, attempts: [], attemptsUnavailable: 0, attemptsOmitted: 0 };
 function context(): DiagnosticContext {
   return { app: { version: '1', build: null, modified: false, builtAt: null }, proxy: { state: 'stopped', pid: null, port: 8317, startedAt: null, lastError: null, executablePath: null, endpoint: '', userConfigError: null, build: null }, settings: structuredClone(DEFAULT_SETTINGS),
-    archive: { policy: { ...DEFAULT_ARCHIVE_POLICY }, entries: 0, bodies: 0, bytes: 0, epoch: null, sequence: 0, dropped: 0, gaps: 0, restarts: 0, rejected: 0 }, logs: [], knownSecrets: [] };
+    archive: { policy: { ...DEFAULT_ARCHIVE_POLICY }, entries: 0, bodies: 0, bytes: 0, epoch: null, sequence: 0, dropped: 0, gaps: 0, restarts: 0, storedBytes: 0, threads: 0, overBudgetThreads: 0, diffFallbacks: 0, rejected: 0 }, logs: [], knownSecrets: [] };
 }
 function setup(overrides: Partial<DiagnosticDependencies> = {}) {
   let time = Date.parse('2026-11-05T12:00:00Z');

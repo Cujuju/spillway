@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
@@ -57,10 +57,10 @@ it('deletes body and FTS on expiry, preserving identities independent of reused 
 it('evicts oldest bodies by byte budget, bounds queries and treats keywords as literals', () => {
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 });
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 2, records: [1, 2, 3].map((n) => record(n, { request: 'a'.repeat(250_000), response: 'b'.repeat(250_000) })) });
-  expect(store.detail('inbound-full-1')?.state).toBe('expired');
-  expect(store.status().bytes).toBeLessThanOrEqual(1024 * 1024);
+  expect(store.detail('inbound-full-1')?.state).toBe('complete');
+  expect(store.status().storedBytes).toBeLessThanOrEqual(1024 * 1024);
   expect(() => store.query({ text: '" OR * NOT (broken' })).not.toThrow();
-  expect(store.query({ state: 'complete' }).entries).toHaveLength(2);
+  expect(store.query({ state: 'complete' }).entries).toHaveLength(3);
 });
 it('records gaps/restarts and skips malformed records with a trustworthy cursor', () => {
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); observe(store);
@@ -111,4 +111,119 @@ it('clears index and bodies and makes timed-out pending states explicit', () => 
   expect(store.detail('inbound-full-1')?.state).toBe('missing');
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record()] }); store.clear();
   expect(store.query({ text: 'needle' }).entries).toEqual([]); expect(store.status().entries).toBe(0);
+});
+
+it('round trips thread diffs across gaps, revisions, truncation and UTF-8 cut points', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  const requests = ['{"text":"😀alpha海tail"}', '{"text":"😁beta海tail"}', '{"text":"😁beta海', '', '{"text":"new\\nword"}'];
+  for (const [i, request] of requests.entries()) {
+    observe(store, `diff-trace-${i}`);
+    store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(i * 2 + 1, { traceId: `diff-trace-${i}`, request })] });
+    expect(store.detail(`diff-trace-${i}`)?.request).toBe(request);
+  }
+  observe(store, 'diff-trace-0');
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(12, { traceId: 'diff-trace-0', request: 'revision 😀' })] });
+  expect(store.detail('diff-trace-0')?.request).toBe('revision 😀');
+  expect(store.status()).toMatchObject({ threads: 1, diffFallbacks: 0, gaps: 6 });
+  const refs = db.prepare('SELECT detail FROM archive_entries WHERE bytes>0').all() as { detail: string }[];
+  for (const r of refs) expect(Array.isArray(JSON.parse(r.detail).request)).toBe(true);
+});
+it('indexes only new request text and keeps thread ownership fixed after observe changes', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  observe(store); observe(store, 'inbound-full-2');
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(), record(2, { request: '{"input":"needle private prompt plus novelty"}' })] });
+  expect(store.query({ text: 'needle' }).entries.map((e) => e.traceId)).toEqual(['inbound-full-1']);
+  expect(store.query({ text: 'novelty' }).entries).toHaveLength(1);
+  store.observe(parseActivityEvent('{"request_id":"changed","trace_id":"inbound-full-2","session_id":"elsewhere","model":"other"}')!);
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(3, { traceId: 'inbound-full-2', request: 'final' })] });
+  expect(store.status().threads).toBe(1);
+  expect(db.prepare("SELECT sql FROM sqlite_master WHERE name='archive_search'").get()).toMatchObject({ sql: expect.stringContaining("contentless_delete=1") });
+});
+it('migrates existing full details in batches and resumes after its persisted cursor', () => {
+  const { db } = setup();
+  const body = { request: 'legacy 😀', response: 'reply', requestType: '', responseType: '', requestEncoding: '', responseEncoding: '', format: 'http', requestDecoded: false, responseDecoded: false, frames: [] };
+  const at = new Date().toISOString();
+  db.prepare("DELETE FROM archive_meta WHERE key='piecesMigrated'").run();
+  db.transaction(() => { for (let i = 0; i < 19; i++) db.prepare("INSERT INTO archive_entries(id,trace_id,at,state,reason,session_id,model,bytes,detail) VALUES(?,?,?,'complete','','legacy','model',?,?)").run(`trace:legacy-${i.toString().padStart(2, '0')}`, `legacy-${i.toString().padStart(2, '0')}`, at, Buffer.byteLength(JSON.stringify(body)), JSON.stringify(body)); })();
+  const prepare = db.prepare.bind(db);
+  const spy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+    const statement = prepare(sql);
+    if (sql === 'SELECT at,session_id,model,thread_id FROM archive_entries WHERE id=?') {
+      const get = statement.get.bind(statement);
+      vi.spyOn(statement, 'get').mockImplementation((...args: unknown[]) => {
+        if (args[0] === 'trace:legacy-08') throw new Error('migration interrupted');
+        return get(...args);
+      });
+    }
+    return statement;
+  });
+  try { expect(() => new ArchiveStore(db)).toThrow('migration interrupted'); } finally { spy.mockRestore(); }
+  expect(db.prepare("SELECT value FROM archive_meta WHERE key='pieceCursor'").get()).toEqual({ value: JSON.stringify([at, 'trace:legacy-07']) });
+  const migrated = new ArchiveStore(db);
+  expect(migrated.status()).toMatchObject({ bodies: 19, threads: 1, diffFallbacks: 0 });
+  expect(migrated.detail('legacy-18')?.request).toBe(body.request);
+  expect(migrated.query({ text: 'legacy' }).entries).toHaveLength(1);
+  expect(new ArchiveStore(db).status().storedBytes).toBe(migrated.status().storedBytes);
+});
+it('evicts whole threads and stops an over-budget thread until the policy changes', async () => {
+  const { randomBytes } = await import('node:crypto');
+  const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 });
+  const noisy = () => randomBytes(350_000).toString('base64');
+  observe(store); observe(store, 'inbound-full-2');
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: noisy(), response: noisy() }), record(2, { request: noisy(), response: noisy() })] });
+  expect(store.detail('inbound-full-1')?.state).toBe('complete');
+  expect(store.detail('inbound-full-2')).toMatchObject({ state: 'missing', reason: 'thread-over-budget', bytes: 0 });
+  expect(store.status().overBudgetThreads).toBe(1);
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(3, { traceId: 'inbound-full-2', request: 'tiny' })] });
+  expect(store.detail('inbound-full-2')?.state).toBe('missing');
+  store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 2 * 1024 * 1024 });
+  expect(store.status().overBudgetThreads).toBe(0);
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(4, { traceId: 'inbound-full-2', request: 'tiny' })] });
+  expect(store.detail('inbound-full-2')?.request).toBe('tiny');
+  store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(5, { request: noisy(), response: noisy() })] });
+  expect(store.detail('inbound-full-1')?.state).toBe('expired');
+  expect(store.detail('inbound-full-2')?.state).toBe('expired');
+});
+it('falls back to a verified full copy when the proposed ranges rebuild incorrectly', async () => {
+  const { zstdCompressSync } = await import('node:zlib');
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  const prepare = db.prepare.bind(db); let corrupt = true;
+  const spy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+    const statement = prepare(sql);
+    if (sql === 'SELECT bytes FROM archive_pieces WHERE id=?' && corrupt) {
+      vi.spyOn(statement, 'get').mockImplementation(() => { corrupt = false; return { bytes: zstdCompressSync(Buffer.from('incorrect bytes')) }; });
+    }
+    return statement;
+  });
+  try { store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record()] }); } finally { spy.mockRestore(); }
+  expect(store.status().diffFallbacks).toBe(1);
+  expect(store.detail('inbound-full-1')?.request).toBe(record().request);
+});
+it('uses a full copy when the thread base cannot be read', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  observe(store); observe(store, 'inbound-full-2');
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record()] });
+  db.exec("UPDATE archive_threads SET base='invalid-json'");
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(2, { request: 'replacement 😀' })] });
+  expect(store.detail('inbound-full-2')?.request).toBe('replacement 😀');
+  expect(store.detail('inbound-full-1')?.request).toBe(record().request);
+  expect(store.status().diffFallbacks).toBe(0);
+});
+it('keeps thread totals exact after bodyless revisions and metadata pruning', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  observe(store);
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record()] });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(2, { traceId: 'inbound-full-1', request: '', response: '' })] });
+  const pieces = (db.prepare('SELECT sum(length(bytes)) AS n FROM archive_pieces').get() as { n: number }).n;
+  expect(store.status().storedBytes).toBe(pieces);
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(3, { traceId: 'inbound-full-1' })] });
+  const allPieces = (db.prepare('SELECT sum(length(bytes)) AS n FROM archive_pieces').get() as { n: number }).n;
+  const at = new Date(Date.now() + 1000).toISOString();
+  db.transaction(() => {
+    const insert = db.prepare("INSERT INTO archive_entries(id,trace_id,at,state,reason) VALUES(?,?,?,'missing','metadata-only')");
+    for (let i = 0; i < 20_000; i++) insert.run(`metadata-${i}`, `metadata-${i}`, at);
+  })();
+  store.prune(Date.now(), true);
+  expect(store.status()).toMatchObject({ entries: 20_000, bytes: 0, storedBytes: allPieces });
 });

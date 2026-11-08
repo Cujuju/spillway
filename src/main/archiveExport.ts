@@ -1,3 +1,4 @@
+import { readBody } from './archivePieces';
 import { sessionKind } from '@shared/types';
 import { createHash, randomUUID } from 'node:crypto';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
@@ -159,12 +160,15 @@ export class ArchiveExporter {
           const links = (this.db.prepare('SELECT detail FROM archive_attempts WHERE trace_id=? ORDER BY identity LIMIT 200').all(e.traceId) as { detail: string }[]).map((a) => a.detail);
           const joined = `[${links.join(',')}]`;
           const body = selection.includeRecordedBodies && e.bytes > 0;
-          const size = (this.db.prepare('SELECT length(CAST(detail AS BLOB)) AS n FROM archive_entries WHERE id=?').get(e.id) as { n: number }).n;
+          const saved = this.db.prepare('SELECT detail FROM archive_entries WHERE id=?').get(e.id) as { detail: string };
+          let rebuilt = body ? saved.detail : '{}';
+          if (body) try { rebuilt = JSON.stringify(readBody(this.db, saved.detail)); } catch { /* Preserve the malformed payload marker. */ }
+          const size = Buffer.byteLength(rebuilt);
           const added = Buffer.byteLength(meta) + Buffer.byteLength(joined) + (body ? size : 2);
           if (body && size > recordBytes || added > recordBytes) throw new Error(`Archived record exceeds the ${mib(recordBytes)} export limit`);
           if (++count > records || bytes + added > limit) throw new Error(`Export snapshot limit reached (up to ${mib(snapshotBytes)} / ${records.toLocaleString('en-US')} records). Select a smaller date range or omit bodies.`);
           bytes += added; states[e.state]++; found.add(e.id);
-          this.db.prepare(`INSERT INTO ${SNAPSHOT} SELECT ?,?,CASE WHEN ? THEN detail ELSE '{}' END,? FROM archive_entries WHERE id=?`).run(count, meta, body ? 1 : 0, joined, e.id);
+          this.db.prepare(`INSERT INTO ${SNAPSHOT} VALUES(?,?,?,?)`).run(count, meta, rebuilt, joined);
         }
         if (!page.more) break;
         before = archiveCursor(page.entries.at(-1)!);

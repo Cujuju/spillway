@@ -365,7 +365,7 @@ export class ActivityLog {
     this.db.transaction(() => {
       this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
-      this.db.exec('DELETE FROM eval_cases');
+      this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins; DELETE FROM archive_pieces WHERE thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)');
     })();
     this.totals = new Map();
     this.conversationAccounts.clear();

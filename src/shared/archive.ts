@@ -37,6 +37,7 @@ export interface ArchivePage { entries: ArchiveEntry[]; more: boolean }
 export interface ArchiveStatus {
   exportWarning?: string | null;
   policy: ArchivePolicy; bytes: number; entries: number; bodies: number; epoch: string | null; sequence: number; dropped: number; gaps: number; restarts: number;
+  storedBytes: number; threads: number; overBudgetThreads: number; diffFallbacks: number;
   rejected: number;
 }
 export const archiveCursor = (entry: Pick<ArchiveEntry, 'at' | 'id'>): string => JSON.stringify([entry.at, entry.id]);

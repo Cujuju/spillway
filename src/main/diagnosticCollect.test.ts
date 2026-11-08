@@ -16,7 +16,7 @@ export function source(extra: Partial<ArchiveDetail> = {}): DiagnosticSource {
 }
 export function context(): DiagnosticContext {
   return { app: { version: '1.2.3', build: 'abc123', builtAt: null, modified: false }, proxy: { state: 'running', pid: 123, port: 8317, startedAt: null, lastError: 'private error', executablePath: 'C:\\private\\proxy.exe', endpoint: 'http://private:8317?token=secret', userConfigError: null, build: null },
-    settings: structuredClone(DEFAULT_SETTINGS), archive: { policy: { ...DEFAULT_ARCHIVE_POLICY }, bytes: 1, entries: 1, bodies: 1, epoch: 'epoch', sequence: 1, dropped: 3, gaps: 2, restarts: 1, rejected: 0 },
+    settings: structuredClone(DEFAULT_SETTINGS), archive: { policy: { ...DEFAULT_ARCHIVE_POLICY }, bytes: 1, entries: 1, bodies: 1, epoch: 'epoch', sequence: 1, dropped: 3, gaps: 2, restarts: 1, storedBytes: 0, threads: 0, overBudgetThreads: 0, diffFallbacks: 0, rejected: 0 },
     logs: [{ at: '2026-11-05T12:00:00Z', stream: 'app', text: 'spawn failed: password=log-secret C:\\Users\\private\\proxy.exe person@example.com' }, { at: '2026-11-05T12:00:00Z', stream: 'stdout', text: 'access_token=never-export' }], knownSecrets: ['literal-key-123456789'] };
 }
 it('defaults to useful allowlisted metadata with local correlation and no body/message text', () => {

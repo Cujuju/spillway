@@ -89,6 +89,9 @@ export function openActivityDb(file: string, hexKey: string): Db {
       db.exec(SCHEMA);
       db.exec(ARCHIVE_SCHEMA);
       for (const row of db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'clickhouse_*'").all() as { name: string }[]) db.exec(`DROP TRIGGER "${row.name.replaceAll('"', '""')}"`);
+      if (!db.prepare("SELECT 1 FROM archive_meta WHERE key='clickhouseV1'").get()) {
+        db.exec("DROP TABLE IF EXISTS clickhouse_export; DROP TABLE IF EXISTS clickhouse_outbox; INSERT INTO archive_meta VALUES('clickhouseV1','true')");
+      }
       db.exec(CLICKHOUSE_SCHEMA);
       db.exec(TRACE_SCHEMA);
       db.exec(EVAL_SCHEMA);

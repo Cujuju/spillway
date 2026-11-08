@@ -33,6 +33,8 @@ it('pins encrypted immutable snapshots through expiry, archive deletion, close a
   const { store, archive, db, file } = setup();
   const op = randomUUID(), c = store.create(op, 'trace-synthetic-001', annotation(), true);
   expect(store.create(op, 'trace-synthetic-001', annotation(), true)).toEqual(c);
+  expect((db.prepare('SELECT snapshot FROM eval_cases').get() as { snapshot: string }).snapshot).not.toContain('Say hello');
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pins').get()).toMatchObject({ n: expect.any(Number) });
   archive.prune(Date.now() + 30 * 86_400_000, true); archive.clear();
   expect(store.get(c.id)).toEqual(c);
   const next = store.revise(randomUUID(), c.id, 1, { ...annotation(), notes: 'new notes' });
@@ -42,7 +44,8 @@ it('pins encrypted immutable snapshots through expiry, archive deletion, close a
   expect(readFileSync(file).includes(Buffer.from('Say hello'))).toBe(false);
   const reopened = openActivityDb(file, 'ab'.repeat(32)); dbs.push(reopened);
   const restored = new EvalCaseStore(reopened, new ArchiveStore(reopened)); expect(restored.get(c.id)).toEqual(next);
-  restored.delete(c.id); expect(restored.list()).toEqual([]); expect(() => restored.get(c.id, 1)).toThrow();
+  restored.delete(c.id); expect(restored.list()).toEqual([]);
+  expect(reopened.prepare('SELECT count(*) AS n FROM archive_pieces').get()).toEqual({ n: 0 }); expect(() => restored.get(c.id, 1)).toThrow();
 });
 it('metadata snapshots preserve omitted state and missing source fails without creating a case', () => {
   const { store } = setup();
@@ -173,3 +176,39 @@ it('enforces 200 pinned identities without eviction and explicit deletion frees 
 });
 
 const viWait = (fn: () => boolean) => vi.waitFor(() => expect(fn()).toBe(true));
+it('keeps an inline parent capture when the trace receives a newer body', () => {
+  const { store, archive, db } = setup();
+  const original = store.create(randomUUID(), 'trace-synthetic-001', annotation(), true);
+  db.prepare('UPDATE eval_cases SET snapshot=? WHERE id=?').run(JSON.stringify(original), original.id);
+  db.exec('DELETE FROM archive_pins');
+  archive.ingest({ version: 1, epoch: 'test-epoch', dropped: 0, records: [captureRecord({ sequence: 2, request: 'new capture' })] });
+  store.revise(randomUUID(), original.id, 1, annotation());
+  expect(store.get(original.id).capture).toEqual(original.capture);
+  expect(store.get(original.id, 1)).toEqual(original);
+  expect((db.prepare('SELECT snapshot FROM eval_cases WHERE revision=2').get() as { snapshot: string }).snapshot).not.toContain('pieceRefs');
+});
+it.each(['expiry', 'archive-clear'] as const)('detaches pinned pieces after %s before the thread key is reused', (mode) => {
+  const { store, archive, db } = setup();
+  const original = store.create(randomUUID(), 'trace-synthetic-001', annotation(), true);
+  if (mode === 'expiry') archive.prune(Date.now() + 30 * 86_400_000, true); else archive.clear();
+  expect(archive.status().storedBytes).toBe(0);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE thread_id IS NOT NULL').get()).toEqual({ n: 0 });
+  archive.ingest({ version: 1, epoch: 'test-epoch', dropped: 0, records: [captureRecord({ sequence: 2, request: 'replacement body' })] });
+  const live = archive.status().storedBytes;
+  store.delete(original.id);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE thread_id IS NULL').get()).toEqual({ n: 0 });
+  expect(archive.status().storedBytes).toBe(live);
+  expect(archive.detail('trace-synthetic-001')?.request).toBe('replacement body');
+});
+it('stores inline when the archive detail changes before case insertion', () => {
+  const { store, archive, db } = setup();
+  const detail = archive.detail('trace-synthetic-001')!;
+  archive.ingest({ version: 1, epoch: 'test-epoch', dropped: 0, records: [captureRecord({ sequence: 2, request: 'new capture' })] });
+  const spy = vi.spyOn(archive, 'detail').mockReturnValue(detail);
+  const original = store.create(randomUUID(), 'trace-synthetic-001', annotation(), true);
+  spy.mockRestore();
+  expect(store.get(original.id)).toEqual(original);
+  expect((db.prepare('SELECT snapshot FROM eval_cases').get() as { snapshot: string }).snapshot).not.toContain('pieceRefs');
+  store.revise(randomUUID(), original.id, 1, annotation());
+  expect(store.get(original.id).capture).toEqual(original.capture);
+});

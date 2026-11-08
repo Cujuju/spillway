@@ -29,7 +29,7 @@ function record(sequence = 1, extra: Partial<CaptureRecord> = {}): CaptureRecord
 function observe(archive: ArchiveStore, trace = 'full-trace-0001') { archive.observe(parseActivityEvent(JSON.stringify({ request_id: `execution-${trace}`, trace_id: trace, session_id: 'session-a', model: 'alias', provider: 'codex' }))!); }
 function ingest(archive: ArchiveStore, r = record()) { archive.ingest({ version: 1, epoch: r.epoch, dropped: 0, records: [r] }); }
 const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, endpoint: 'http://127.0.0.1:8123' };
-const lines = (payload: string) => payload.trim().split('\n').map((s) => JSON.parse(s));
+const lines = (facts: string) => facts.trim().split('\n').map((s) => JSON.parse(s));
 const fact = (n = 0): ArchiveFact => ({ kind: 'attempt', traceId: `trace-${n}`, at: new Date().toISOString(), captureState: '', record: { n }, content: null });
 function enable(store: ClickHouseStore) { store.configure(config); store.prepare(); }
 async function server() { const s = await startDemoClickHouse(); servers.push(s); return s; }
@@ -50,14 +50,14 @@ it('emits immutable facts transactionally, only while enabled and once per accep
   expect(() => db.transaction(() => { archive.observe(event); ingest(archive); throw new Error('rollback'); })()).toThrow();
   expect(store.status().queued).toBe(0); expect(archive.detail('transaction-trace')).toBeNull();
   archive.observe(event); archive.observe(event); ingest(archive); ingest(archive);
-  expect(lines(store.prepare()!.payload).map((r) => r.kind)).toEqual(['attempt', 'capture']);
+  expect(lines(store.prepare()!.facts).map((r) => r.kind)).toEqual(['attempt', 'capture']);
   store.configure({ ...config, enabled: false }); observe(archive, 'disabled-trace'); ingest(archive, record(2)); expect(store.status().queued).toBe(2);
 });
 it('keeps outbox facts when archive retention and the 20,000 metadata cap prune identities', () => {
   const { db, archive, store } = setup(); enable(store); observe(archive);
   db.transaction(() => { for (let n = 0; n < 20_001; n++) db.prepare("INSERT INTO archive_entries(id,trace_id,at,state,reason) VALUES(?,?,?,'missing','')").run(`trace:bulk-${n}`, `bulk-${n}`, new Date(Date.now() + n + 1).toISOString()); })();
   archive.prune(Date.now(), true); expect(archive.detail('full-trace-0001')).toBeNull(); expect(store.status().queued).toBe(1);
-  expect(lines(store.prepare()!.payload)[0].trace_id).toBe('full-trace-0001');
+  expect(lines(store.prepare()!.facts)[0].trace_id).toBe('full-trace-0001');
 });
 it('bounds bytes by dropping oldest rows and counts oversized metadata and invalid dates', () => {
   const { db, store } = setup(); enable(store); store.append(fact());
@@ -77,7 +77,7 @@ it('discards metadata made oversized by a new label and prepares the next row', 
   store.configure({ ...config, sourceLabel: 'x'.repeat(CLICKHOUSE_SOURCE_LABEL_MAX) });
   const batch = store.prepare();
   expect(batch).not.toBeNull(); expect(batch!.rows).toBe(1);
-  expect(lines(batch!.payload)[0].trace_id).toBe('trace-1');
+  expect(lines(batch!.facts)[0].trace_id).toBe('trace-1');
   expect(store.status()).toMatchObject({ queued: 1, discarded: 1, oversized: 1 });
   store.acknowledge(batch!.token, batch!.destination);
   expect(store.prepare()).toBeNull();
@@ -85,23 +85,23 @@ it('discards metadata made oversized by a new label and prepares the next row', 
 });
 it('retries identical bytes, preserves new rows during upload, and binds acknowledgments to destination', () => {
   const { store } = setup(); enable(store); store.append(fact()); const b = store.prepare()!;
-  store.fail(b.token, Date.now(), 'offline'); expect(store.prepare()).toBeNull(); store.retry(); expect(store.prepare()!.payload).toBe(b.payload);
+  store.fail(b.token, Date.now(), 'offline'); expect(store.prepare()).toBeNull(); store.retry(); expect(store.prepare()!.facts).toBe(b.facts);
   store.append(fact(1)); store.acknowledge(b.token, 'wrong'); expect(store.status().queued).toBe(2);
-  expect(() => store.configure({ ...config, table: 'other' })).toThrow(/Clear/);
+  expect(() => store.configure({ ...config, tablePrefix: 'other' })).toThrow(/Clear/);
   store.acknowledge(b.token, b.destination); expect(store.status()).toMatchObject({ queued: 1, acknowledged: 1, attempts: 0 });
 });
 it('applies current label and content policy at prepare time without changing stored content', () => {
   const { archive, store, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); enable(store); ingest(archive);
-  expect(lines(store.prepare()!.payload)[0].content_policy).toBe('metadata-only');
+  expect(lines(store.prepare()!.facts)[0].content_policy).toBe('metadata-only');
   store.configure({ ...config, includeBodies: true, sourceLabel: 'desk' }); store.clear(); ingest(archive, record(2));
-  let line = lines(store.prepare()!.payload)[0]; expect(line).toMatchObject({ content_policy: 'included', source_label: 'desk', schema_version: 2 });
+  let line = lines(store.prepare()!.facts)[0]; expect(line).toMatchObject({ content_policy: 'included', source_label: 'desk', schema_version: 1 });
   expect(line.at).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/);
-  archive.setPolicy(DEFAULT_ARCHIVE_POLICY); expect(lines(store.prepare()!.payload)[0].content_policy).toBe('source-unavailable');
-  expect((db.prepare('SELECT content FROM clickhouse_outbox LIMIT 1').get() as { content: string }).content).toContain('private-content');
+  archive.setPolicy(DEFAULT_ARCHIVE_POLICY); expect(lines(store.prepare()!.facts)[0].content_policy).toBe('source-unavailable');
+  expect((db.prepare('SELECT content FROM clickhouse_outbox LIMIT 1').get() as { content: string }).content).not.toContain('private-content');
   archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); store.clear();
-  store.append({ ...fact(), content: { request: 'x'.repeat(CLICKHOUSE_BATCH_BYTES) } });
-  expect(lines(store.prepare()!.payload)[0].content_policy).toBe('omitted-size-limit');
-  store.clear(); store.append(fact()); expect(lines(store.prepare()!.payload)[0].content_policy).toBe('source-unavailable');
+  ingest(archive, record(3, { response: '\\'.repeat(1_000_000) }));
+  expect(lines(store.prepare()!.facts)[0].content_policy).toBe('included');
+  store.clear(); store.append(fact()); expect(lines(store.prepare()!.facts)[0].content_policy).toBe('source-unavailable');
 });
 it.each(['reopen', 'disabled', 'restart', 'timeout'])('emits finalized facts on %s settlement', (mode) => {
   const { db, archive, store } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); enable(store); observe(archive); store.clear();
@@ -109,7 +109,7 @@ it.each(['reopen', 'disabled', 'restart', 'timeout'])('emits finalized facts on 
   if (mode === 'disabled') archive.setPolicy(DEFAULT_ARCHIVE_POLICY);
   if (mode === 'restart') { ingest(archive, record(1, { traceId: 'other-trace' })); ingest(archive, record(1, { epoch: 'epoch-b', traceId: 'third-trace' })); }
   if (mode === 'timeout') archive.prune(Date.now() + 11 * 60_000, true);
-  const finals = lines(store.prepare()!.payload).filter((r) => r.kind === 'finalized'); expect(finals).toHaveLength(1); expect(finals[0].trace_id).toBe('full-trace-0001');
+  const finals = lines(store.prepare()!.facts).filter((r) => r.kind === 'finalized'); expect(finals).toHaveLength(1); expect(finals[0].trace_id).toBe('full-trace-0001');
 });
 it('pages backfill within a batch budget and pauses at the outbox budget', () => {
   const { archive, store, db } = setup();
@@ -167,8 +167,8 @@ it.each([[false, true], [true, false]])('streams only metadata when includeBodie
   });
   const batch = store.prepare()!;
   expect(selected).toContain('NULL AS content'); expect(read).toBe(2); expect(batch.rows).toBe(1);
-  expect(lines(batch.payload)[0].content_policy).toBe(includeBodies ? 'source-unavailable' : 'metadata-only');
-  expect(Buffer.byteLength(batch.payload)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
+  expect(lines(batch.facts)[0].content_policy).toBe(includeBodies ? 'source-unavailable' : 'metadata-only');
+  expect(Buffer.byteLength(batch.facts)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
 });
 it('drops all v1 tables and triggers on open and preserves v2 rows', () => {
   const { db, store, file } = setup(); enable(store); store.append(fact());
@@ -180,7 +180,7 @@ it('drops all v1 tables and triggers on open and preserves v2 rows', () => {
 it('accepts unversioned plain/shared/replicated engines and validates exact schema keys', async () => {
   const s = await server(), c = { ...config, endpoint: s.endpoint }, signal = new AbortController().signal;
   for (const engine of ['ReplacingMergeTree', 'ReplacingMergeTree()', "SharedReplacingMergeTree('/path,comma','replica') ORDER BY (source_id, at, seq)", "ReplicatedReplacingMergeTree('/path','{replica}')"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).resolves.toBeUndefined(); }
-  for (const engine of ['MergeTree()', 'ReplacingMergeTree(revision)', "SharedReplacingMergeTree('/path','replica',seq)"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow(/schema v2/); }
+  for (const engine of ['MergeTree()', 'ReplacingMergeTree(revision)', "SharedReplacingMergeTree('/path','replica',seq)"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow(/schema v1/); }
   s.behavior.engine = 'ReplacingMergeTree'; s.behavior.partition = ''; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();
   s.behavior.partition = 'toYYYYMM(at)'; s.behavior.sorting = 'source_id,seq'; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();
   s.behavior.sorting = 'source_id,at,seq'; s.behavior.schema = false; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();
@@ -205,15 +205,15 @@ it('limits batches to 1000 rows and uses equal jitter state backoff', () => {
 });
 it('backfills retained content when enabled and when content export turns on', () => {
   const { archive, store } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); ingest(archive);
-  store.configure(config); const metadata = store.prepare()!; expect(lines(metadata.payload)[0].kind).toBe('snapshot'); expect(metadata.payload).not.toContain('private-content'); store.acknowledge(metadata.token, metadata.destination);
+  store.configure(config); const metadata = store.prepare()!; expect(lines(metadata.facts)[0].kind).toBe('snapshot'); expect(metadata.facts).not.toContain('private-content'); store.acknowledge(metadata.token, metadata.destination);
   store.configure({ ...config, includeBodies: true }); expect(store.status().backfilling).toBe(true);
-  const content = store.prepare()!; expect(content.payload).toContain('private-content'); store.acknowledge(content.token, content.destination);
+  const content = store.prepare()!; expect(content.pieces).toContain('private-content'); store.acknowledge(content.token, content.destination);
   archive.prune(Date.now() + 8 * 86_400_000, true); expect(store.status().queued).toBe(0);
 });
-it('retains captured content across retention expiry during an outage', () => {
+it('marks queued content expired during an outage', () => {
   const { archive, store } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); store.configure({ ...config, includeBodies: true }); store.prepare(); ingest(archive);
-  const first = store.prepare()!; archive.prune(Date.now() + 8 * 86_400_000, true);
-  expect(archive.detail('full-trace-0001')!.state).toBe('expired'); expect(store.prepare()!.payload).toBe(first.payload);
+  store.prepare(); archive.prune(Date.now() + 8 * 86_400_000, true);
+  expect(archive.detail('full-trace-0001')!.state).toBe('expired'); expect(lines(store.prepare()!.facts)[0].content_policy).toBe('source-expired'); expect(store.status().contentExpired).toBe(1);
 });
 it('keeps continuous drain and the rejected-run scheduling backstop', async () => {
   const s = await server(), { store, db } = setup(); store.configure({ ...config, endpoint: s.endpoint }); store.prepare();
@@ -223,4 +223,63 @@ it('keeps continuous drain and the rejected-run scheduling backstop', async () =
   expect(s.requests.filter((r) => r.sql.startsWith('INSERT'))).toHaveLength(2);
   vi.spyOn(upload, 'runOnce').mockRejectedValueOnce(new Error('escaped'));
   try { upload.start(); await vi.waitFor(() => expect(upload.error).toBe('ClickHouse delivery failed unexpectedly')); } finally { await upload.stop(); }
+});
+
+it('sends pieces before facts, resends after queue clear, and acknowledges only delivered pieces', async () => {
+  const s = await server(), { store, archive, db } = setup();
+  archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, endpoint: s.endpoint, includeBodies: true }); store.prepare(); ingest(archive);
+  const first = store.prepare()!; expect(lines(first.pieces)).toHaveLength(1);
+  expect(first.facts).not.toContain('private-content');
+  store.clear(); ingest(archive, record(2));
+  expect(store.prepare()!.pieces).toBe(first.pieces);
+  expect(await uploader(store).runOnce()).toBe(true);
+  const inserts = s.requests.filter((r) => r.sql.startsWith('INSERT'));
+  expect(inserts).toHaveLength(2); expect(inserts[0]!.sql).toContain('_pieces`'); expect(inserts[1]!.sql).toContain('_facts`');
+  expect(s.pieces.size).toBe(1); expect(s.rows.size).toBe(1);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get()).toEqual({ n: 1 });
+  ingest(archive, record(3)); expect(store.prepare()!.pieces).toBe('');
+  store.clear(); store.configure({ ...config, endpoint: s.endpoint, tablePrefix: 'changed', includeBodies: true });
+  expect(store.prepare()!.pieces).toContain('private-content');
+});
+it('resends an unacknowledged piece after the outbox budget drops its fact', () => {
+  const { store, archive, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, includeBodies: true }); store.prepare(); ingest(archive);
+  const first = store.prepare()!;
+  db.prepare('UPDATE clickhouse_outbox SET bytes=?').run(CLICKHOUSE_OUTBOX_BYTES);
+  db.prepare('UPDATE clickhouse_export SET queued_bytes=?').run(CLICKHOUSE_OUTBOX_BYTES);
+  ingest(archive, record(2));
+  expect(store.status().discarded).toBe(1);
+  expect(store.prepare()!.pieces).toBe(first.pieces);
+});
+it('omits oversized content without marking its request pieces sent', () => {
+  const { store, archive, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, includeBodies: true }); store.prepare();
+  ingest(archive, record(1, { request: '\\'.repeat(1_000_000), response: '\\'.repeat(1_000_000), frames: Array.from({ length: 8 }, (_, i) => ({ index: i, at: new Date().toISOString(), direction: 'response', type: 'text', truncated: false, payload: '\\'.repeat(190_000) })) }));
+  const batch = store.prepare()!; expect(batch.pieces).toBe('');
+  expect(lines(batch.facts)[0].content_policy).toBe('omitted-size-limit');
+  store.acknowledge(batch.token, batch.destination);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get()).toEqual({ n: 0 });
+});
+it('resets local v2 exporter state once and leaves the archive intact', () => {
+  const { db, store, file, archive } = setup(); enable(store); store.append(fact());
+  archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); ingest(archive);
+  const source = db.prepare('SELECT source_id FROM clickhouse_export').get();
+  db.exec("DELETE FROM archive_meta WHERE key='clickhouseV1'"); db.close();
+  const reopened = openActivityDb(file, 'ab'.repeat(32)); dbs.push(reopened);
+  const restored = new ArchiveStore(reopened), exporter = new ClickHouseStore(reopened, restored);
+  expect(exporter.status().queued).toBe(0); expect(exporter.config()).toEqual(DEFAULT_CLICKHOUSE_CONFIG);
+  expect(reopened.prepare('SELECT source_id FROM clickhouse_export').get()).not.toEqual(source);
+  expect(restored.detail('full-trace-0001')?.request).toBe(record().request);
+});
+it.each(['pieces', 'thread'] as const)('expires unavailable %s and continues delivering subsequent facts', (missing) => {
+  const { store, archive, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, includeBodies: true }); store.prepare(); ingest(archive);
+  db.exec(missing === 'pieces' ? 'DELETE FROM archive_pieces' : 'DELETE FROM archive_threads');
+  store.append(fact());
+  const batch = store.prepare()!;
+  expect(batch.pieces).toBe('');
+  expect(lines(batch.facts)[0]).toMatchObject({ content_policy: 'source-expired', request_pieces: [], response: '', frames_json: '' });
+  expect(lines(batch.facts)).toHaveLength(2);
+  store.acknowledge(batch.token, batch.destination); expect(store.status().queued).toBe(0);
 });

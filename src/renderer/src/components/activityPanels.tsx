@@ -1,5 +1,5 @@
 import type { TileSize } from '@cujuju/solidjs-tiling-window-manager';
-import type { JSX } from 'solid-js';
+import { createMemo, type JSX } from 'solid-js';
 import type { ActivityPanelKind, ActivityPanelSpec } from '@shared/activityBoard';
 import { accountKey, clientKey } from '@shared/activityScope';
 import { clientLabel } from '../lib/accountScope';
@@ -55,7 +55,8 @@ interface PanelDef {
   switchesMetric: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
   minSize: TileSize;
-  body: (spec: () => ActivityPanelSpec, data: ActivityData) => JSX.Element;
+  /** Builds the tile body once per tile; it reads `spec` inside its own JSX and memos. */
+  createBody: (spec: () => ActivityPanelSpec, data: ActivityData) => JSX.Element;
 }
 
 export const PANELS: Record<ActivityPanelKind, PanelDef> = {
@@ -64,29 +65,34 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     note: (data) => data.bucketNote(),
     switchesMetric: true,
     minSize: { width: 360, height: TREND_TILE_MIN_HEIGHT_PX },
-    body: (spec, data) => (
-      <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)}
-        points={data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) }))}
-        yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} tooltip={data.tip} />
-    ),
+    createBody: (spec, data) => {
+      // Built once per data or metric change, not on every read while the chart resizes.
+      const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) })));
+      return (
+        <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)} points={points()}
+          yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} tooltip={data.tip} />
+      );
+    },
   },
   cache: {
     title: () => 'Cache hit',
     note: () => 'Share of prompt tokens read from cache',
     switchesMetric: false,
     minSize: { width: 320, height: TREND_TILE_MIN_HEIGHT_PX },
-    body: (_spec, data) => (
-      <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS}
-        points={data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate }))}
-        yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} tooltip={data.tip} />
-    ),
+    createBody: (_spec, data) => {
+      const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate })));
+      return (
+        <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS} points={points()}
+          yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} tooltip={data.tip} />
+      );
+    },
   },
   heatmap: {
     title: (spec) => `Heatmap · ${metricLabel(spec.metric)}`,
     switchesMetric: true,
     // 34px labels + 24 × (10px cell + 3px gap) + 32px padding; 60px header + 18px hours + 7 × 13px rows + 26px legend.
     minSize: { width: 380, height: 200 },
-    body: (spec, data) => (
+    createBody: (spec, data) => (
       <ActivityHeatmap rows={data.rows()} span={data.span()} metric={spec().metric} format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),
   },
@@ -95,7 +101,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     note: () => 'Each hour of the day, summed',
     switchesMetric: true,
     minSize: { width: 380, height: 220 },
-    body: (spec, data) => (
+    createBody: (spec, data) => (
       <ActivityRhythm zipCode={settings().activity.zipCode} rows={data.rows()} span={data.span()} now={data.now()} metric={spec().metric}
         format={(s) => formatMetric(spec().metric)(s)} tooltip={countRows} />
     ),
@@ -104,7 +110,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'Models',
     switchesMetric: false,
     minSize: TABLE_TILE_MIN,
-    body: (spec, data) => (
+    createBody: (spec, data) => (
       <BreakdownTable heading="Model" metric={spec().metric} total={data.total()}
         rows={data.models().map((m) => ({ key: `${m.provider}|${m.model}`, provider: m.provider, name: m.model, summary: m.summary }))} />
     ),
@@ -113,7 +119,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'Accounts',
     switchesMetric: false,
     minSize: TABLE_TILE_MIN,
-    body: (spec, data) => (
+    createBody: (spec, data) => (
       <BreakdownTable heading="Account" metric={spec().metric} total={data.total()}
         rows={data.accounts().map((a) => ({ key: accountKey(a.authIndex), provider: a.provider, name: data.account(a.authIndex), summary: a.summary }))} />
     ),
@@ -122,7 +128,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     title: () => 'Clients',
     switchesMetric: false,
     minSize: TABLE_TILE_MIN,
-    body: (spec, data) => (
+    createBody: (spec, data) => (
       <BreakdownTable heading="Client" metric={spec().metric} total={data.total()}
         rows={data.clients().map((c) => ({ key: clientKey(c.client), name: clientLabel(c.client), summary: c.summary }))} />
     ),
@@ -132,7 +138,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     info: EffortsInfo,
     switchesMetric: false,
     minSize: TABLE_TILE_MIN,
-    body: (_spec, data) => <EffortsTable rows={data.efforts()} />,
+    createBody: (_spec, data) => <EffortsTable rows={data.efforts()} />,
   },
 };
 

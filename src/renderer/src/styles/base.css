@@ -113,6 +113,8 @@ a {
 }
 .page {
   overflow-y: auto;
+  /* A page that starts or stops scrolling (a growing chart board) keeps its width. */
+  scrollbar-gutter: stable;
   padding: var(--page-pad);
   min-width: 0;
 }

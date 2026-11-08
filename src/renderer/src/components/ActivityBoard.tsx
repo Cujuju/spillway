@@ -13,6 +13,8 @@ const TILE_GAP_TOKEN = '--card-gap';
 const ICON_PX = 12;
 /** Height asked for a chart added below the board: a header plus a readable chart. */
 const NEW_ROW_PX = 320;
+const sameSpec = (a: ActivityPanelSpec | undefined, b: ActivityPanelSpec | undefined) => a?.kind === b?.kind && a?.metric === b?.metric;
+
 /** A chart waiting to be placed. */
 export type PendingChart = Placing & { spec: ActivityPanelSpec };
 
@@ -73,7 +75,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   return (
     <div ref={area} class="board-area">
       <TilingWorkspace
-        class={heightPx() === null ? 'activity-board' : 'activity-board sized'}
+        class="activity-board"
         layout={layout()}
         onLayoutChange={(next, height) => void save(next, undefined, height ?? heightPx())}
         // A divider resizes the tile above it and moves the rest; the bottom edge resizes the bottom tiles.
@@ -94,10 +96,11 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
         empty={<div class="board-empty muted">No charts. Use “Add chart” to place one.</div>}
       >
         {(tile) => {
-          const spec = () => specFor(tile.id)!;
+          // Saving the layout rebuilds every spec object; equal specs must not redraw the chart.
+          const spec = createMemo(() => specFor(tile.id)!, undefined, { equals: sameSpec });
           // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
           const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
-          const body = def.body(spec, props.data);
+          const body = def.createBody(spec, props.data);
           return (
             <Show when={specFor(tile.id)}>
               <section class="card board-tile">

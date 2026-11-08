@@ -7,6 +7,7 @@
   margin-top: var(--card-gap);
 }
 .activity-board {
+  /* Fills the page until a vertical resize; then the workspace sets its own height. */
   flex: 1 0 0;
   /* The bottom-edge handle sits in the gap below the tiles. */
   margin-bottom: var(--card-gap);
@@ -23,10 +24,6 @@
   --twm-radius: var(--radius-card);
   /* Dividers grab wider than the card gap they sit in. */
   --twm-handle-grab: var(--spacing-3);
-}
-/* Once resized, the board is as tall as its tiles, not the page. */
-.activity-board.sized {
-  flex: none;
 }
 .board-tile {
   display: flex;

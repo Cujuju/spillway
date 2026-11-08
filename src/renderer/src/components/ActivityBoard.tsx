@@ -71,7 +71,9 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     const chart = props.placing;
     if (!chart) return;
     props.onPlacingEnd();
-    const size = { width: area!.clientWidth, height: area!.firstElementChild!.getBoundingClientRect().height };
+    // The workspace itself: the wrapper around it adds the bottom margin.
+    const board = area!.querySelector('.activity-board')!;
+    const size = { width: board.clientWidth, height: board.getBoundingClientRect().height };
     const addPx = Math.max(NEW_ROW_PX, PANELS[chart.spec.kind].minSize.height);
     void save(appendRow(layout(), chart.id, size, addPx, geometryOptions()), { id: chart.id, spec: chart.spec }, size.height + tileGapPx + addPx);
   };

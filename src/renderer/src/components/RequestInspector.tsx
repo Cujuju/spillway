@@ -1,16 +1,16 @@
 import { ChevronDown, ChevronUp, FileArchive, FlaskConical, MessagesSquare, RefreshCw, Settings2, X } from 'lucide-solid';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ArchiveDetail } from '@shared/archive';
-import { readableStreamText } from '@shared/archiveContent';
+import { exchangeSide } from '@shared/exchangeBody';
 import { openSettings, shownText } from '../store';
 import { CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, RECORDING_OFF_REASONS } from '../lib/traceFormat';
 import type { InspectorStep } from '../lib/exchangeNav';
 import { byteSize, dateTime } from '../lib/format';
 import { HoverTip, InfoTip } from './ChartTip';
 import { DiagnosticBundle } from './DiagnosticBundle';
+import { ExchangeBody } from './ExchangeBody';
 import '../styles/archive.css';
 
-const RENDER_CHUNK = 32 * 1024;
 /** A pending capture's open WebSocket messages arrive while it is shown. */
 const LIVE_REFRESH_MS = 3_000;
 const ICON_PX = 14;
@@ -22,20 +22,9 @@ const hasText = (d: ArchiveDetail) => !!(d.request || d.response || d.frames.len
 const STATUS_NOTE = 'What the proxy returned to the client. Each upstream try, retries included, is under Upstream attempts.';
 const FORMAT_NOTE = 'HTTP encodings are decoded when supported; WebSocket payloads are decoded messages. Headers are excluded; prompts and body secrets may be present. "Captured" means all observed bytes within limits, not upstream success.';
 
-function BodyText(props: { label: string; text: string; type: string; encoding: string }) {
-  const [limit, setLimit] = createSignal(RENDER_CHUNK);
-  const text = createMemo(() => {
-    const value = shownText(props.text);
-    if (value.length > RENDER_CHUNK) return value;
-    try { return JSON.stringify(JSON.parse(value), null, 2); }
-    catch { return value; /* SSE, plain text and binary wire bytes are displayed verbatim. */ }
-  });
-  return <section class="archive-body">
-    <div class="archive-body-head"><span class="section-label">{props.label}</span><span class="muted">{shownText([props.type, props.encoding].filter(Boolean).join(' · '))}</span></div>
-    <pre>{text().slice(0, limit()) || 'No body stored.'}</pre>
-    <Show when={text().length > limit()}><button class="btn ghost" type="button" onClick={() => setLimit((n) => n + RENDER_CHUNK)}>Show more</button></Show>
-  </section>;
-}
+/** Body inputs unchanged: live refreshes keep the parsed sides, their DOM and scroll. */
+const sameBodies = (a: ArchiveDetail | null, b: ArchiveDetail | null) => !!a && !!b && a.traceId === b.traceId && a.reason === b.reason
+  && a.request === b.request && a.response === b.response && a.frames.length === b.frames.length;
 
 /** Text never recorded because Record bodies was off: one line, linking to the setting. */
 function RecordBodiesOff() {
@@ -52,7 +41,7 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   const [detail, setDetail] = createSignal<ArchiveDetail | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
-  const readableResponse = createMemo(() => { const d = detail(); return d ? readableStreamText(d.response, d.frames.filter((f) => f.direction === 'response')) : ''; });
+  const bodies = createMemo(() => detail(), null, { equals: sameBodies });
   let generation = 0;
   const load = async (trace: string | null | undefined, quiet = false) => {
     const gen = ++generation;
@@ -121,11 +110,14 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
           <RecordBodiesOff />
         </Show>
       }>
-        <Show when={readableResponse()}><BodyText label="Response text" text={readableResponse()} type="Joined deltas" encoding="" /></Show>
-        <div class="archive-bodies">
-          <BodyText label="Request" text={d().request} type={d().requestType} encoding={d().requestEncoding} />
-          <BodyText label="Response" text={d().response} type={d().responseType} encoding={d().responseEncoding} />
-        </div>
+        {/* Keyed on unchanged bodies: each side parses once per capture, not on every prop read. */}
+        <Show when={bodies()} keyed>{(b) => {
+          const request = exchangeSide(b, 'request'), response = exchangeSide(b, 'response');
+          return <div class="archive-bodies">
+            <ExchangeBody label="Request" side={request} type={b.requestType} encoding={b.requestEncoding} />
+            <ExchangeBody label="Response" side={response} type={b.responseType} encoding={b.responseEncoding} />
+          </div>;
+        }}</Show>
       </Show>
     </>}</Show>
   </div>;

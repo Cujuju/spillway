@@ -2,6 +2,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { CAPTURE_BODY_LIMIT } from '../../src/shared/archive.ts';
 import { ACCOUNTS, usageWindows, type DemoData } from './fixtures.mts';
 
 const MANAGEMENT_PREFIX = '/v8/management';
@@ -13,6 +14,8 @@ const LOOPBACK = '127.0.0.1';
 /** Replay pace (500 requests/s): the app stores them faster, so its 4,000-entry queue (ACTIVITY_QUEUE_CAP) never fills. */
 const REPLAY_BATCH = 250;
 const REPLAY_PAUSE_MS = 500;
+const DEMO_HISTORY_TURNS = 96;
+const DEMO_TURN_REPEATS = 64;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -51,11 +54,25 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
   const demoTrace = (id: string) => `demo-inbound-${id}`;
   const demoCapture = () => {
     const e = data.events.at(-1)!;
+    const model = 'claude-sonnet-4-6';
+    const request = JSON.stringify({ model, max_tokens: 1024,
+      system: 'Help inspect the local request archive. Explain what was captured and what was truncated.',
+      tools: [{ name: 'inspect_archive', description: 'Read local archive totals.', input_schema: { type: 'object', properties: { scope: { type: 'string' } } } }],
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'Inspect the request archive for alex@example.com.' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'I will check the captured exchanges.' }, { type: 'tool_use', id: 'tool_demo_1', name: 'inspect_archive', input: { scope: 'today' } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool_demo_1', content: '12 exchanges captured; 2 request bodies reached the recording limit.' }] },
+        ...Array.from({ length: DEMO_HISTORY_TURNS }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: [{ type: 'text', text: `Earlier conversation turn ${index + 1}: ` + 'Captured exchanges keep the original protocol body for local inspection. '.repeat(DEMO_TURN_REPEATS) }] })),
+        { role: 'user', content: 'Summarize the large and truncated exchanges.' },
+      ],
+    });
     return { id: 'demo-capture-1', traceId: demoTrace(e.request_id), epoch: captureEpoch, sequence: 1, startedAt: e.at,
-      method: 'POST', path: '/v1/responses', status: 200, state: 'complete', reason: 'synthetic-demo',
-      request: JSON.stringify({ model: e.model, input: 'Summarize the local request archive for alex@example.com.' }),
-      response: 'data: {"output":"The archive keeps encrypted request and response text when explicitly enabled."}\n\ndata: [DONE]\n\n',
-      requestType: 'application/json', responseType: 'text/event-stream', requestEncoding: '', responseEncoding: '' };
+      method: 'POST', path: '/v1/messages', status: 200, state: 'partial', reason: 'byte-limit',
+      request: Buffer.from(request, 'utf8').subarray(0, CAPTURE_BODY_LIMIT).toString('utf8'),
+      response: JSON.stringify({ id: 'msg_demo_1', type: 'message', role: 'assistant', model,
+        content: [{ type: 'text', text: 'The archive contains 12 exchanges. Two request bodies were cut at 256 KiB; their captured conversation prefixes remain readable.' }, { type: 'tool_use', id: 'tool_demo_2', name: 'inspect_archive', input: { scope: 'truncated' } }],
+        stop_reason: 'tool_use', usage: { input_tokens: 70000, output_tokens: 80 } }),
+      requestType: 'application/json', responseType: 'application/json', requestEncoding: '', responseEncoding: '' };
   };
   const streams = new Set<ServerResponse>();
 

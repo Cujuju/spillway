@@ -238,9 +238,12 @@
 .archive-body-head .section-label {
   margin: 0;
 }
-.archive-body pre,
+.archive-body,
 .archive-raw {
   --body-view-max: 440px;
+}
+.archive-body pre,
+.archive-raw {
   max-height: var(--body-view-max);
   margin: 0;
   overflow: auto;
@@ -254,6 +257,90 @@
   font-size: var(--text-xs);
   line-height: var(--leading-log);
   user-select: text;
+}
+/* View switch at the head's right end; the head aligns on baselines, the switch centres itself. */
+.archive-body-view {
+  margin-left: auto;
+  align-self: center;
+}
+/* Readable view: one block per message, scrolled like the raw pane. */
+.exchange-messages {
+  max-height: var(--body-view-max);
+  overflow: auto;
+  background: var(--color-surface-sunken);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+  font-size: var(--text-xs);
+  line-height: var(--leading-log);
+  user-select: text;
+}
+.exchange-messages > .btn {
+  margin: var(--spacing-2) var(--spacing-3);
+}
+.exchange-message {
+  display: grid;
+  gap: var(--spacing-1_5);
+  padding: var(--spacing-2_5) var(--spacing-3);
+}
+.exchange-message + .exchange-message {
+  border-top: var(--border-width) solid var(--color-border);
+}
+.exchange-role,
+.exchange-part-label {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.exchange-role {
+  color: var(--color-text-secondary);
+}
+/* Tool names and call IDs keep their case. */
+.exchange-part-name {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.exchange-part {
+  display: grid;
+  gap: var(--spacing-1);
+  min-width: 0;
+}
+.exchange-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Tool traffic reads as data: framed like the raw pane. */
+.exchange-part:is(.tool-call, .tool-result) .exchange-text {
+  padding: var(--spacing-1_5) var(--spacing-2);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-btn);
+}
+.exchange-part.thinking .exchange-text {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.exchange-more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--text-xxs);
+  cursor: pointer;
+}
+/* Where the proxy stopped recording: the end of what exists, in amber. */
+.exchange-cut {
+  display: block;
+  margin-top: var(--spacing-2);
+  padding: var(--spacing-1_5) var(--spacing-3);
+  border-top: var(--border-width) dashed var(--color-amber-border);
+  color: var(--color-amber);
+  font-style: normal;
+}
+.exchange-messages > .exchange-cut {
+  margin-top: 0;
 }
 textarea.archive-raw {
   width: 100%;

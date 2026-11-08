@@ -92,6 +92,14 @@
 .trace-detail {
   min-width: 0;
 }
+/* Everything below the head; an open exchange panel overlays it, leaving the head's controls usable. */
+.trace-detail-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
 .trace-title {
   min-width: 0;
   max-width: 100%;

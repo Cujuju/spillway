@@ -11,17 +11,17 @@ const RETENTION_DAYS = { min: 1, max: 90 };
 const BUDGET_MIB = { min: 1, max: 1024 };
 /** Store health (drops, bytes) changes as traffic arrives. */
 const STATUS_POLL_MS = 3_000;
-const LIMITS_NOTE = 'HTTP: 256 KiB per request and response (gzip, zstd decoded). Codex WebSocket: 128 messages, 64 KiB each, 256 KiB per direction. Truncation is marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.';
+const LIMITS_NOTE = 'Exchanges counts every request seen, with or without text. HTTP: the first 256 KiB of each request and response (gzip, zstd decoded). Codex WebSocket: 128 messages, 64 KiB each, 256 KiB per direction. Truncation is marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.';
 const DELETE_NOTE = 'Deletes every recorded request and response and turns Record bodies off. Activity history and eval cases stay.';
 
-/** Drops and rejections, shown only when any happened. */
+/** Drops, sequence gaps and rejections, shown only when any happened. A restart alone loses nothing. */
 function Losses(props: { status: ArchiveStatus }) {
   const s = () => props.status;
   return <>
-    <Show when={s().dropped > 0}>
+    <Show when={s().dropped > 0 || s().gaps > 0}>
       <HoverTip title="Dropped" rows={[{ label: 'Dropped', value: s().dropped.toLocaleString() }, { label: 'Sequence gaps', value: s().gaps.toLocaleString() }, { label: 'Proxy restarts', value: s().restarts.toLocaleString() }]}
         note="Captures the proxy could not hand over, from overflow, disconnects or crashes. Gaps overlap drops; don't add them.">
-        <span class="badge compact red">{s().dropped.toLocaleString()} dropped</span>
+        <span class="badge compact red">{s().dropped ? `${s().dropped.toLocaleString()} dropped` : `${s().gaps.toLocaleString()} gaps`}</span>
       </HoverTip>
     </Show>
     <Show when={s().rejected > 0}>
@@ -69,12 +69,13 @@ export function RequestCaptureSettings() {
         <SettingRow label="Storage">
           <Losses status={s()} />
           <HoverTip title="Storage" rows={[
-            { label: 'Records', value: s().entries.toLocaleString() },
-            { label: 'Bodies stored', value: byteSize(s().bytes) },
+            { label: 'Exchanges', value: s().entries.toLocaleString() },
+            { label: 'With text', value: s().bodies.toLocaleString() },
+            { label: 'Text stored', value: byteSize(s().bytes) },
             { label: 'Budget', value: byteSize(s().policy.maxBytes) },
             { label: 'Keep bodies', value: `${s().policy.retentionDays} days` },
           ]} note={LIMITS_NOTE}>
-            <span class="tabular secondary">{s().entries.toLocaleString()} records · {byteSize(s().bytes)} of {byteSize(s().policy.maxBytes)}</span>
+            <span class="tabular secondary">{s().bodies.toLocaleString()} with text · {byteSize(s().bytes)} of {byteSize(s().policy.maxBytes)}</span>
           </HoverTip>
         </SettingRow>
         <SettingRow label="Delete recorded bodies" help={DELETE_NOTE}>

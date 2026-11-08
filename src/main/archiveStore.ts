@@ -187,7 +187,7 @@ export class ArchiveStore {
     return { ...entry(r), ...EMPTY_DETAIL, ...JSON.parse(r.detail), attempts };
   }
   status(): ArchiveStatus {
-    const totals = this.db.prepare('SELECT count(*) AS entries, coalesce(sum(bytes),0) AS bytes FROM archive_entries').get() as { entries: number; bytes: number };
+    const totals = this.db.prepare('SELECT count(*) AS entries, coalesce(sum(bytes),0) AS bytes, count(CASE WHEN bytes>0 THEN 1 END) AS bodies FROM archive_entries').get() as { entries: number; bytes: number; bodies: number };
     return { policy: this.policy, ...totals, epoch: this.read('epoch', null), sequence: this.read('sequence', 0), dropped: this.read('dropped', 0), gaps: this.read('gaps', 0), restarts: this.read('restarts', 0), rejected: this.read('rejected', 0) };
   }
   clear(): void {

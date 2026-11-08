@@ -62,7 +62,7 @@ export async function saveEvalExport(token: string): Promise<string | null> {
   } finally { if (owned) await unlink(temp); }
 }
 export async function importEvalFile() {
-  const r = await dialog.showOpenDialog({ title: 'Import eval cases or portable request archive', properties: ['openFile'], filters: [{ name: 'Portable JSON Lines', extensions: ['jsonl'] }] });
+  const r = await dialog.showOpenDialog({ title: 'Import eval cases or exported exchanges', properties: ['openFile'], filters: [{ name: 'Portable JSON Lines', extensions: ['jsonl'] }] });
   if (r.canceled || !r.filePaths[0]) return [];
   return activityLog.call('evalImport', r.filePaths[0]);
 }

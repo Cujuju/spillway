@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { DEFAULT_ARCHIVE_POLICY } from '@shared/archive';
+import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { diagnosticSnapshot } from './diagnosticSnapshot';
@@ -37,6 +38,23 @@ it('preserves observed provenance after Activity expiry and keeps legacy links a
   expect(diagnosticSnapshot(db, archive, 'trace-selected', false)).toMatchObject({ attempts: [{ requestId: 'lost-attempt', metadataSource: 'unavailable', model: null, failed: null }], attemptsUnavailable: 1 });
   archive.clear();
   expect(diagnosticSnapshot(db, archive, 'trace-selected', true)).toEqual({ detail: null, attempts: [], attemptsOmitted: 0, attemptsUnavailable: 0 });
+});
+it('retains bounded Activity proxy attempts when archive metadata is absent', () => {
+  const { db, archive } = setup();
+  const insert = db.prepare('INSERT INTO requests(day,failed,event) VALUES(?,?,?)');
+  const count = DIAGNOSTIC_LIMITS.attempts + 1;
+  db.transaction(() => {
+    for (let i = 0; i < count; i++) {
+      const event = parseActivityEvent(JSON.stringify({ trace_id: 'trace-selected', request_id: `retry-${i}`, model: 'real-model' }))!;
+      insert.run('2026-11-05', 0, JSON.stringify(event));
+      if (!i) insert.run('2026-11-05', 0, JSON.stringify({ ...event, source: 'client-log' }));
+    }
+  })();
+  const snapshot = diagnosticSnapshot(db, archive, 'trace-selected', false);
+  expect(snapshot.detail).toBeNull();
+  expect(snapshot.attempts).toHaveLength(DIAGNOSTIC_LIMITS.attempts);
+  expect(snapshot.attempts[0]).toMatchObject({ requestId: 'retry-0', metadataSource: 'activity', effectiveModel: 'real-model' });
+  expect(snapshot).toMatchObject({ attemptsOmitted: 1, attemptsUnavailable: 0 });
 });
 it('reports capture expiry at collection and permits retained bodies after capture opt-out without enabling capture', () => {
   const { db, archive } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });

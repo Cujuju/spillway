@@ -122,7 +122,7 @@ const handlers: Handlers = {
   archiveExportSave: async (id) => {
     const job = await activityLog.call('archiveExportStatus', id);
     if (job.state !== 'preview') throw new Error('Prepare a fresh export preview');
-    const opts: Electron.SaveDialogOptions = { title: 'Save portable request archive', defaultPath: 'spillway-archive.jsonl', filters: [{ name: 'Portable archive (JSON Lines)', extensions: ['jsonl'] }] };
+    const opts: Electron.SaveDialogOptions = { title: 'Save exported exchanges', defaultPath: 'spillway-exchanges.jsonl', filters: [{ name: 'Exported exchanges (JSON Lines)', extensions: ['jsonl'] }] };
     const w = mainWindow(), result = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
     return result.canceled || !result.filePath ? activityLog.call('archiveExportCancel', id) : activityLog.call('archiveExportStart', id, result.filePath);
   },

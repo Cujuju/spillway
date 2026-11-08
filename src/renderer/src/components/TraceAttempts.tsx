@@ -1,4 +1,4 @@
-import { createEffect, For, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
 import { transportRows } from '@shared/activityTransport';
 import { promptTokens } from '@shared/modelPrices';
 import type { TraceAttempt } from '@shared/sessionTrace';
@@ -41,7 +41,7 @@ function CaptureBadge(props: { a: TraceAttempt }) {
 /** Requests picked for a diagnostic bundle, by trace ID. */
 export interface BundlePicks { picked: readonly string[]; onPick: (traceId: string, on: boolean) => void }
 
-function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void; inspected: boolean; picks: BundlePicks }) {
+function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => string; onInspect: (traceId: string) => void; inspected: boolean; picks: BundlePicks; capture: boolean }) {
   const a = () => props.a;
   const account = () => (a().authIndex ? shownText(props.account(a().authIndex)) : '—');
   const status = () => attemptStatus(a());
@@ -67,16 +67,16 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       <td class="fill">
         <div class="cell-name">
           <Show when={a().provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show>
-          <span>{or(a().effectiveModel ?? a().model)}</span>
+          <span title={or(a().effectiveModel ?? a().model)}>{or(a().effectiveModel ?? a().model)}</span>
           <Show when={a().source === 'client-log'}><span class="badge compact">Imported</span></Show>
-          <Show when={a().origin === 'archive'}><span class="badge compact">Archived</span></Show>
+          <Show when={a().origin === 'archive'}><span class="badge compact">Capture only</span></Show>
           <Show when={a().compactionEndpoint}><span class="badge compact accent">Compact</span></Show>
         </div>
       </td>
       <td>{a().reasoningEffort ?? <span class="muted">—</span>}</td>
       <td class="trace-account">{account()}<Show when={a().movedFrom}> <span class="badge compact amber">Moved</span></Show></td>
       <td><span class={`badge compact ${status().tone}`}>{status().label}</span></td>
-      <td><CaptureBadge a={a()} /></td>
+      <Show when={props.capture}><td><CaptureBadge a={a()} /></td></Show>
       <td class="num tabular">
         <Show when={tokens()} fallback={<span class="muted">—</span>}>{(t) => (
           <HoverTip title="Tokens" rows={[
@@ -94,30 +94,38 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
   );
 }
 
-/** Columns in an attempt row; an inline exchange spans them all. */
-const COLUMNS = 11;
+/** Columns in an attempt row without Capture; an inline exchange spans them all. */
+const BASE_COLUMNS = 10;
 
-/** A node's attempts, newest first. Hover the time for IDs; a row click opens its exchange (under the row when `exchange` is set); checkboxes pick bundle rows. */
+/** A node's attempts, newest first. A row click opens its exchange, inline under its newest attempt when `exchange` is set. Capture shows only when some attempt kept text. */
 export function TraceAttempts(props: {
   attempts: TraceAttempt[]; busy: boolean; account: (id: string | null) => string; onInspect: (traceId: string) => void;
   inspected?: string; exchange?: (traceId: string) => JSX.Element; picks: BundlePicks;
 }) {
+  /** A retried exchange has several attempts; it opens under the first (newest) one. */
+  const firstAttempt = createMemo(() => {
+    const first = new Map<string, TraceAttempt>();
+    for (const a of props.attempts) if (a.traceId && !first.has(a.traceId)) first.set(a.traceId, a);
+    return first;
+  });
+  const capture = createMemo(() => props.attempts.some((a) => CAPTURE_TONE[a.captureState]));
+  const columns = () => BASE_COLUMNS + (capture() ? 1 : 0);
   return (
     <div class="trace-table">
       <table class="table dense">
         <thead>
           <tr>
-            <th class="col-check" /><th>Time</th><th>Model</th><th>Effort</th><th>Account</th><th>Status</th><th>Capture</th>
+            <th class="col-check" /><th>Time</th><th>Model</th><th>Effort</th><th>Account</th><th>Status</th><Show when={capture()}><th>Capture</th></Show>
             <th class="num" title="Prompt / output tokens">Tokens</th><th class="num">Cost</th><th class="num">TTFT</th><th class="num">Total</th>
           </tr>
         </thead>
         <tbody aria-busy={props.busy}>
-          <For each={props.attempts} fallback={<tr><td class="empty-row" colSpan={COLUMNS}>{props.busy ? 'Loading…' : 'No attempts in this range.'}</td></tr>}>
+          <For each={props.attempts} fallback={<tr><td class="empty-row" colSpan={columns()}>{props.busy ? 'Loading…' : 'No attempts in this range.'}</td></tr>}>
             {(a) => {
-              const open = () => !!a.traceId && a.traceId === props.inspected;
+              const open = () => !!a.traceId && a.traceId === props.inspected && firstAttempt().get(a.traceId) === a;
               return <>
-                <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} picks={props.picks} />
-                <Show when={open() && props.exchange}>{(render) => <tr class="row-exchange"><td colSpan={COLUMNS}>{render()(a.traceId!)}</td></tr>}</Show>
+                <AttemptRow a={a} account={props.account} onInspect={props.onInspect} inspected={open()} picks={props.picks} capture={capture()} />
+                <Show when={open() && props.exchange}>{(render) => <tr class="row-exchange"><td colSpan={columns()}>{render()(a.traceId!)}</td></tr>}</Show>
               </>;
             }}
           </For>

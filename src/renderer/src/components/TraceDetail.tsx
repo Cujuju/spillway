@@ -43,13 +43,13 @@ function Stats(props: { n: TraceNode }) {
   );
 }
 
-/** One node: identity, own-usage stats, models, parent links and its attempts. `exchange` renders an inspected attempt under its row; `onExport` is set when the node has exchanges to export. */
+/** One node: identity, stats, models, parents and attempts. `exchange` renders inline under a row; `panel` overlays the body below the head; `onExport` is set when it has exchanges. */
 export function TraceDetail(props: {
   n: TraceNode; attempts: TraceAttempt[]; busy: boolean; more: boolean; error: string | null;
   account: (id: string | null) => string; onInspect: (traceId: string) => void; onNavigate: (sessionId: string) => void;
   onChildren: (sessionId: string) => void; onMore: () => void;
   inspected?: string; layout: ExchangeLayout; onLayout: (v: ExchangeLayout) => void; exchange?: (traceId: string) => JSX.Element;
-  picks: BundlePicks; onClearPicks: () => void; onBundle: () => void; onExport?: () => void;
+  picks: BundlePicks; onClearPicks: () => void; onBundle: () => void; onExport?: () => void; panel?: JSX.Element;
 }) {
   const kind = () => KIND_BADGE[props.n.kind];
   return (
@@ -73,6 +73,7 @@ export function TraceDetail(props: {
         </div>
       </div>
 
+      <div class="trace-detail-body">
       <Stats n={props.n} />
 
       <dl class="kv-grid">
@@ -110,6 +111,8 @@ export function TraceDetail(props: {
       <Show when={props.error}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
       <TraceAttempts attempts={props.attempts} busy={props.busy} account={props.account} onInspect={props.onInspect} inspected={props.inspected} exchange={props.exchange} picks={props.picks} />
       <Show when={props.more}><button class="btn ghost list-more" type="button" disabled={props.busy} onClick={() => props.onMore()}>Load more</button></Show>
+      {props.panel}
+      </div>
     </section>
   );
 }

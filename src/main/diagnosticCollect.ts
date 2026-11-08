@@ -39,7 +39,8 @@ function attempt(e: DiagnosticAttempt, s: DiagnosticSanitizer, messages: boolean
   };
 }
 function body(source: DiagnosticSource, enabled: boolean, s: DiagnosticSanitizer) {
-  const d = source.detail!;
+  const d = source.detail;
+  if (!d) return { disposition: 'unavailable', reason: 'capture-unknown', partial: false };
   if (!d.bytes || ['missing', 'expired', 'unknown'].includes(d.state)) return { disposition: 'unavailable', reason: `capture-${d.state}`, partial: false };
   if (!enabled) return { disposition: 'omitted', reason: 'body-export-not-selected', partial: false };
   const parse = (raw: string, decoded: boolean) => !raw ? { reason: 'no-observed-content', partial: false }
@@ -73,24 +74,24 @@ export function buildDiagnosticBundle(selection: DiagnosticSelection, sources: D
   const counts: DiagnosticCounts = { selected: selection.traceIds.length, included: 0, unavailable: 0, partial: 0, redacted: 0, omitted: selection.excludedRecords ?? 0, bodiesIncluded: 0, bodiesUnavailable: 0, bodiesOmitted: 0 };
   const records = sources.map((source, index) => {
     const d = source.detail, traceId = selection.traceIds[index]!;
-    if (!d) { counts.unavailable++; counts.bodiesUnavailable++; return { id: `trace:${traceId}`, traceId, availability: 'unavailable', reason: 'identity-not-retained-at-collection', captureState: 'unknown' }; }
+    if (!d && !source.attempts.length) { counts.unavailable++; counts.bodiesUnavailable++; return { id: `trace:${traceId}`, traceId, availability: 'unavailable', reason: 'identity-not-retained-at-collection', captureState: 'unknown' }; }
     const start = s.changes, truncated = s.truncations;
     const bodies = body(source, selection.includeBodies, s);
     counts.included++;
     if (bodies.disposition === 'included') counts.bodiesIncluded++;
     else if (bodies.disposition === 'unavailable') counts.bodiesUnavailable++;
     else counts.bodiesOmitted++;
-    const partial = ['partial', 'pending'].includes(d.state) || bodies.partial || source.attemptsOmitted > 0 || source.attemptsUnavailable > 0 || d.attempts.length === DIAGNOSTIC_LIMITS.attempts;
+    const partial = ['partial', 'pending'].includes(d?.state ?? 'unknown') || bodies.partial || source.attemptsOmitted > 0 || source.attemptsUnavailable > 0 || d?.attempts.length === DIAGNOSTIC_LIMITS.attempts;
     if (partial) counts.partial++;
     const record = {
-      id: d.id, traceId: d.traceId, cursor: JSON.stringify([d.at, d.id]), at: at(d.at), availability: 'included', partial,
-      capture: { schemaVersion: d.schemaVersion, state: d.state, reason: code(d.reason), id: s.label(d.captureId), epoch: s.label(d.captureEpoch), sequence: number(d.captureSequence), storedBytes: number(d.bytes),
-        format: d.format, requestDecoded: d.requestDecoded, responseDecoded: d.responseDecoded, requestType: s.label(d.requestType), responseType: s.label(d.responseType), requestEncoding: s.label(d.requestEncoding), responseEncoding: s.label(d.responseEncoding) },
-      provider: s.label(d.provider), requestedModel: s.label(d.model), client: s.label(d.client), conversation: s.alias('conversation', d.sessionId),
-      method: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].includes(d.method) ? d.method : null,
-      route: ROUTES.has(d.path) ? d.path : null, downstreamStatus: number(d.status),
+      id: d?.id ?? `trace:${traceId}`, traceId: d?.traceId ?? traceId, cursor: d ? JSON.stringify([d.at, d.id]) : null, at: d ? at(d.at) : null, availability: 'included', partial,
+      capture: d ? { schemaVersion: d.schemaVersion, state: d.state, reason: code(d.reason), id: s.label(d.captureId), epoch: s.label(d.captureEpoch), sequence: number(d.captureSequence), storedBytes: number(d.bytes),
+        format: d.format, requestDecoded: d.requestDecoded, responseDecoded: d.responseDecoded, requestType: s.label(d.requestType), responseType: s.label(d.responseType), requestEncoding: s.label(d.requestEncoding), responseEncoding: s.label(d.responseEncoding) } : { state: 'unknown' },
+      provider: s.label(d?.provider), requestedModel: s.label(d?.model), client: s.label(d?.client), conversation: s.alias('conversation', d?.sessionId),
+      method: d && ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].includes(d.method) ? d.method : null,
+      route: d && ROUTES.has(d.path) ? d.path : null, downstreamStatus: number(d?.status),
       attempts: source.attempts.map((e) => attempt(e, s, selection.includeMessages)), attemptsOmitted: source.attemptsOmitted,
-      attemptsUnavailable: source.attemptsUnavailable, attemptLinksAtRetentionLimit: d.attempts.length === DIAGNOSTIC_LIMITS.attempts, bodies,
+      attemptsUnavailable: source.attemptsUnavailable, attemptLinksAtRetentionLimit: d?.attempts.length === DIAGNOSTIC_LIMITS.attempts, bodies,
     };
     if (s.truncations !== truncated && !record.partial) { record.partial = true; counts.partial++; }
     if (s.changes !== start) counts.redacted++;

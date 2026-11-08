@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ArchiveEntry } from '@shared/archive';
 import type { PortableCapture } from '@shared/archiveExport';
-import { EVAL_LIMITS, type EvalAnnotation, type EvalCase } from '@shared/evalCase';
+import { EVAL_ASSERTION_LIMITS, EVAL_LIMITS, type EvalAnnotation, type EvalCase } from '@shared/evalCase';
 import { portableCapture } from './archiveExport';
 
 export const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -14,7 +14,7 @@ const requireValid = (ok: unknown, label: string): void => { if (!ok) throw new 
 export function validateAnnotation(v: unknown): EvalAnnotation {
   requireValid(object(v), 'case annotation'); const a = v as EvalAnnotation;
   requireValid(str(a.title, 160) && a.title.trim() && str(a.notes, 8192) && str(a.expectedOutcome, 8192), 'annotation text');
-  requireValid(Array.isArray(a.assertions) && a.assertions.length <= 20 && a.assertions.every((x) => object(x) && ['contains', 'not-contains', 'equals'].includes(x.kind as string) && str(x.value, 4096) && x.value.length > 0), 'literal assertions');
+  requireValid(Array.isArray(a.assertions) && a.assertions.length <= EVAL_ASSERTION_LIMITS.count && a.assertions.every((x) => object(x) && ['contains', 'not-contains', 'equals'].includes(x.kind as string) && str(x.value, EVAL_ASSERTION_LIMITS.valueChars) && x.value.length > 0), 'literal assertions');
   requireValid(object(a.context) && str(a.context.repository, 2048) && str(a.context.revision, 128) && ['unknown', 'unavailable'].includes(a.context.workspace) && str(a.context.notes, 8192), 'context declaration');
   return { title: a.title, notes: a.notes, expectedOutcome: a.expectedOutcome, assertions: a.assertions.map((x) => ({ kind: x.kind, value: x.value })), context: { repository: a.context.repository, revision: a.context.revision, workspace: a.context.workspace, notes: a.context.notes } };
 }

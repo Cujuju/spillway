@@ -20,10 +20,10 @@ export function diagnosticSnapshot(db: Db, archive: ArchiveStore, traceId: strin
   if (typeof traceId !== 'string' || !/^[a-zA-Z0-9_-]{8,128}$/.test(traceId)) throw new Error('Invalid diagnostic trace identity');
   return db.transaction(() => {
     const detail = archive.detail(traceId);
-    if (!detail) return { detail: null, attempts: [], attemptsOmitted: 0, attemptsUnavailable: 0 };
     const where = "json_extract(event,'$.traceId')=? AND coalesce(json_extract(event,'$.source'),'proxy')='proxy'";
     const count = (db.prepare(`SELECT count(*) AS n FROM requests WHERE ${where}`).get(traceId) as { n: number }).n;
     const attempts: DiagnosticAttempt[] = (db.prepare(`SELECT event FROM requests WHERE ${where} ORDER BY id LIMIT ?`).all(traceId, DIAGNOSTIC_LIMITS.attempts) as { event: string }[]).map((r) => ({ ...JSON.parse(r.event) as ActivityEvent, metadataSource: 'activity' }));
+    if (!detail) return { detail: null, attempts, attemptsOmitted: Math.max(0, count - attempts.length), attemptsUnavailable: 0 };
     const identity = (a: { requestId: string; selectionId?: string | null; at: string }) => JSON.stringify([a.requestId, a.selectionId ?? null, a.at]);
     const linkKeys = detail.attempts.map(identity);
     const identitySql = "json_array(json_extract(event,'$.requestId'),json_extract(event,'$.selectionId'),json_extract(event,'$.at'))";

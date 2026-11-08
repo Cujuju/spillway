@@ -1,9 +1,9 @@
-import { Download, Plus, RefreshCw } from 'lucide-solid';
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import type { EvalAnnotation, EvalCase, EvalCaseSummary, EvalExportPreview, EvalReplayPreview, EvalReplayResult } from '@shared/evalCase';
+import { Download, Plus, RefreshCw, X } from 'lucide-solid';
+import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
+import { EVAL_ASSERTION_LIMITS, type EvalAnnotation, type EvalAssertion, type EvalCase, type EvalCaseSummary, type EvalExportPreview, type EvalReplayPreview, type EvalReplayResult } from '@shared/evalCase';
 import { shownText } from '../store';
 import { InfoTip } from './ChartTip';
-import { SettingRow, Toggle } from './ui';
+import { Seg, SettingRow, Toggle } from './ui';
 import '../styles/archive.css';
 
 const ICON_PX = 14;
@@ -14,7 +14,12 @@ const SNAPSHOT_PREVIEW_CHARS = 32 * 1024;
 const MS_PER_SECOND = 1000;
 const CASES_NOTE = 'Pinned, encrypted snapshots that outlive body expiry and Delete recorded bodies. Each save is a new immutable revision. Limits: 200 cases, 8 revisions and 8 MiB per case, 64 MiB total. Deleting all Activity deletes cases too.';
 const REPLAY_NOTE = 'Replay supports self-contained text-only POST /v1/chat/completions and /v1/messages. Responses/Codex, WebSocket, tools and attachments stay inspect-only. Full agent-task replay needs a reproducible workspace this app does not provide.';
-const ASSERT_NOTE = 'JSON array of {kind, value}; kinds: contains, not-contains, equals. Exact, case-sensitive matches on model output. All must pass; nothing executes.';
+const ASSERT_NOTE = 'Exact, case-sensitive checks on the replayed model output. All must pass; nothing executes.';
+const LABEL_NOTE = 'Labels for people reading the case. Replay never checks out code.';
+const ASSERTION_KINDS: readonly { value: EvalAssertion['kind']; label: string }[] = [
+  { value: 'contains', label: 'Contains' }, { value: 'not-contains', label: 'Excludes' }, { value: 'equals', label: 'Equals' },
+];
+const SOURCE_LABEL: Record<EvalCase['provenance']['source'], string> = { 'local-archive': 'Recorded exchange', 'portable-import': 'Imported file' };
 const EXPORT_NOTE = 'Exports are unencrypted. Known credential patterns and app secrets are redacted; review prose yourself. Redaction can change replay input, and the file records its policy.';
 
 const blank = (): EvalAnnotation => ({ title: '', notes: '', expectedOutcome: '', assertions: [], context: { repository: '', revision: '', workspace: 'unknown', notes: '' } });
@@ -23,7 +28,6 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
   const [list, setList] = createSignal<EvalCaseSummary[]>([]);
   const [selected, setSelected] = createSignal<EvalCase>();
   const [draft, setDraft] = createSignal(blank());
-  const [assertions, setAssertions] = createSignal('[]');
   const [bodies, setBodies] = createSignal(false);
   const [exportBodies, setExportBodies] = createSignal(false);
   const [preview, setPreview] = createSignal<EvalExportPreview>();
@@ -47,10 +51,13 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
   };
   const choose = async (id: string, revision?: number) => {
     await forget(); const c = await window.api.evalGet(id, revision); if (disposed) return;
-    setSelected(c); setDraft(c.annotation); setAssertions(JSON.stringify(c.annotation.assertions, null, 2)); setEditing(true);
+    setSelected(c); setDraft(c.annotation); setEditing(true);
   };
-  const reset = async () => { await forget(); setSelected(undefined); setDraft(blank()); setAssertions('[]'); };
-  const annotation = (): EvalAnnotation => ({ ...draft(), assertions: JSON.parse(assertions()) as EvalAnnotation['assertions'] });
+  const reset = async () => { await forget(); setSelected(undefined); setDraft(blank()); };
+  /** Rows left blank are dropped rather than rejected. */
+  const annotation = (): EvalAnnotation => ({ ...draft(), assertions: draft().assertions.filter((a) => a.value) });
+  const assertions = (next: (list: EvalAssertion[]) => EvalAssertion[]) => setDraft((d) => ({ ...d, assertions: next(d.assertions) }));
+  const assertion = (i: number, patch: Partial<EvalAssertion>) => assertions((list) => list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
   const save = async () => {
     const c = selected(); await forget();
     const saved = c ? await window.api.evalRevise(c.id, c.revision, annotation()) : await window.api.evalCreate(props.traceId!, annotation(), bodies());
@@ -103,13 +110,22 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
     </div>
     <div class="form-grid">
       <label class="form-field"><span>Title</span><input class="input" maxLength={160} value={draft().title} onInput={(e) => field('title', e.currentTarget.value)} /></label>
-      <label class="form-field"><span>Repository</span><input class="input" placeholder="Label only" value={draft().context.repository} onInput={(e) => context('repository', e.currentTarget.value)} /></label>
-      <label class="form-field"><span>Revision</span><input class="input" placeholder="Label only" value={draft().context.revision} onInput={(e) => context('revision', e.currentTarget.value)} /></label>
+      <label class="form-field"><span>Repository <InfoTip title="Repository and revision" note={LABEL_NOTE} /></span><input class="input" placeholder="owner/repo" value={draft().context.repository} onInput={(e) => context('repository', e.currentTarget.value)} /></label>
+      <label class="form-field"><span>Revision</span><input class="input" placeholder="Commit or branch" value={draft().context.revision} onInput={(e) => context('revision', e.currentTarget.value)} /></label>
       <label class="form-field wide"><span>Notes</span><textarea class="input" rows="2" value={draft().notes} onInput={(e) => field('notes', e.currentTarget.value)} /></label>
       <label class="form-field wide"><span>Expected outcome</span><textarea class="input" rows="2" placeholder="For human review" value={draft().expectedOutcome} onInput={(e) => field('expectedOutcome', e.currentTarget.value)} /></label>
       <label class="form-field wide"><span>Missing context</span><textarea class="input" rows="2" placeholder="Workspace, tools, files" value={draft().context.notes} onInput={(e) => context('notes', e.currentTarget.value)} /></label>
-      <label class="form-field wide"><span>Assertions <InfoTip title="Assertions" note={ASSERT_NOTE} /></span>
-        <textarea class="input" rows="3" spellcheck={false} value={assertions()} placeholder={'[{"kind":"contains","value":"expected text"}]'} onInput={(e) => setAssertions(e.currentTarget.value)} /></label>
+      <div class="form-field wide"><span>Assertions <InfoTip title="Assertions" note={ASSERT_NOTE} /></span>
+        <Index each={draft().assertions}>{(a, i) => (
+          <div class="assertion-row">
+            <Seg label="Check" value={a().kind} options={ASSERTION_KINDS} onChange={(kind) => assertion(i, { kind })} />
+            {/* A textarea, since an input drops line breaks the literal match needs. */}
+            <textarea class="input" rows="1" spellcheck={false} aria-label="Expected text" placeholder="Expected text" maxLength={EVAL_ASSERTION_LIMITS.valueChars} value={a().value} onInput={(e) => assertion(i, { value: e.currentTarget.value })} />
+            <button class="btn icon-btn ghost" type="button" aria-label="Remove assertion" onClick={() => assertions((list) => list.filter((_, j) => j !== i))}><X size={ICON_PX} /></button>
+          </div>
+        )}</Index>
+        <button class="btn ghost assertion-add" type="button" disabled={draft().assertions.length >= EVAL_ASSERTION_LIMITS.count} onClick={() => assertions((list) => [...list, { kind: 'contains', value: '' }])}><Plus size={ICON_PX} />Add assertion</button>
+      </div>
     </div>
     <Show when={!selected()}>
       <div class="inspect-rows"><SettingRow label="Pin bodies" help="Store recorded protocol bodies with the case. May contain private text.">
@@ -130,10 +146,10 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
 
     <Show when={selected()}>{(c) => <div class="eval-section">
       <dl class="kv-grid">
-        <div class="kv"><dt>Source</dt><dd>{shownText(c().provenance.source)}</dd></div>
+        <div class="kv"><dt>Source</dt><dd>{SOURCE_LABEL[c().provenance.source]}</dd></div>
         <div class="kv"><dt>Capture</dt><dd>{c().capture.entry.state}</dd></div>
         <div class="kv"><dt>Payload</dt><dd>{c().capture.payload.state}</dd></div>
-        <div class="kv kv-wide"><dt>Archive ID</dt><dd class="selectable">{shownText(c().provenance.archiveId)}</dd></div>
+        <div class="kv kv-wide"><dt>Exchange ID</dt><dd class="selectable">{shownText(c().provenance.archiveId)}</dd></div>
       </dl>
       <For each={c().missingContext}>{(reason) => <p class="notice info inspect-notice">{shownText(reason)}</p>}</For>
       <details class="inspect-details"><summary>Pinned snapshot</summary><pre class="archive-raw">{shownText(JSON.stringify(c().capture, null, 2).slice(0, SNAPSHOT_PREVIEW_CHARS))}</pre></details>

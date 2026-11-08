@@ -171,7 +171,7 @@
   color: var(--color-text-muted);
 }
 
-/* ── Exchange: a side panel over the Traces columns, or a row under its request ── */
+/* ── Exchange: a side panel over the selected node's body, or a row under its request ── */
 .exchange-panel {
   --exchange-panel-width: 640px;
   position: absolute;
@@ -292,6 +292,24 @@ textarea.archive-raw {
   padding-block: var(--spacing-1_5);
   resize: vertical;
   font-family: inherit;
+}
+.assertion-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+}
+.assertion-row .input {
+  flex: 1;
+  min-width: 0;
+}
+/* Grows with multi-line values instead of clipping them. */
+.form-grid .assertion-row textarea.input {
+  field-sizing: content;
+  min-height: var(--control-height);
+  resize: none;
+}
+.assertion-add {
+  align-self: flex-start;
 }
 .eval-section {
   margin-top: var(--spacing-4);

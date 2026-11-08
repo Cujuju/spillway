@@ -57,7 +57,7 @@ export function ClickHouseSettings() {
         <input class="input" aria-label="ClickHouse username" autocomplete="off" value={username()} onInput={(e) => setUsername(e.currentTarget.value)} />
       </SettingRow>
       <SettingRow label="Password"><input class="input" aria-label="ClickHouse password" type="password" autocomplete="new-password" value={password()} onInput={(e) => setPassword(e.currentTarget.value)} /></SettingRow>
-      <SettingRow label="Apply settings" help="Turning export on, or changing destination, first sends a snapshot of requests the archive still holds. Disabling pauses delivery and keeps the outbox. Clear the outbox before changing destination.">
+      <SettingRow label="Apply settings" help="Turning export on, or changing destination, first sends a snapshot of the requests still kept locally. Disabling pauses delivery and keeps the outbox. Clear the outbox before changing destination.">
         <button class="btn primary" disabled={busy() || !status()} onClick={() => void save()}>Save</button>
         <button class="btn" disabled={busy() || !status()?.hasCredentials} onClick={() => void save(true)}>Forget credentials</button>
       </SettingRow>
@@ -84,6 +84,6 @@ export function ClickHouseSettings() {
     <Show when={confirming()}><Dialog title="Discard unsent rows?" onClose={() => setConfirming(false)} actions={<>
       <button class="btn" onClick={() => setConfirming(false)}>Cancel</button>
       <button class="btn danger" onClick={() => void action(async () => { await window.api.clickhouseClear(); setConfirming(false); })}>Discard rows</button>
-    </>}><p class="secondary">The local archive and remote data stay. Rows already sent may still commit. Re-enabling export sends a fresh snapshot of retained requests.</p></Dialog></Show>
+    </>}><p class="secondary">Local and remote data stay. Rows already sent may still commit. Re-enabling export sends a fresh snapshot of retained requests.</p></Dialog></Show>
   </>;
 }

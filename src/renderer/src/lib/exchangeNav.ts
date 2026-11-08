@@ -16,8 +16,9 @@ const modalOpen = () => document.querySelector('.dialog-backdrop, :popover-open'
  * Returns the inspector's step readout.
  */
 export function createExchangeSteps(ids: Accessor<readonly string[]>, open: Accessor<string | undefined>, setOpen: (id: string | undefined) => void): Accessor<InspectorStep> {
-  const position = createMemo(() => ids().indexOf(open() ?? ''));
-  const onStep = (delta: -1 | 1) => { const id = ids()[position() + delta]; if (id) setOpen(id); };
+  const exchanges = createMemo(() => [...new Set(ids())]);
+  const position = createMemo(() => exchanges().indexOf(open() ?? ''));
+  const onStep = (delta: -1 | 1) => { const id = exchanges()[position() + delta]; if (id) setOpen(id); };
   createEffect(() => {
     if (!open()) return;
     const onKey = (e: KeyboardEvent) => {
@@ -29,7 +30,7 @@ export function createExchangeSteps(ids: Accessor<readonly string[]>, open: Acce
     document.addEventListener('keydown', onKey);
     onCleanup(() => document.removeEventListener('keydown', onKey));
   });
-  return () => ({ index: position(), count: ids().length, onStep });
+  return () => ({ index: position(), count: exchanges().length, onStep });
 }
 
 /** A row's keydown that toggles its exchange: Enter or Space on the focused row itself. */

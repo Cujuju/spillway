@@ -229,7 +229,7 @@ function Advanced() {
             </>
           }
         >
-          <p class="secondary">Every stored request, daily total, archive capture and pinned eval case (all revisions) is deleted. Pending eval exports and replays are canceled. Accounts and settings are kept.</p>
+          <p class="secondary">Every stored request, daily total, recorded body and pinned eval case (all revisions) is deleted. Pending eval exports and replays are canceled. Accounts and settings are kept.</p>
         </Dialog>
       </Show>
     </>

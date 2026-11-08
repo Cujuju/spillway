@@ -102,9 +102,9 @@ export function SessionTraces(props: {
           inspected={inspected()} layout={layout()} onLayout={setLayout} exchange={layout() === 'inline' ? exchange : undefined}
           onInspect={(id) => setInspected((old) => (old === id ? undefined : id))} onNavigate={navigate} onMore={() => void loadAttempts(n(), query(), attemptNext()!)}
           onChildren={(id) => props.onFilters({ nodeId: undefined, text: undefined, parentSessionId: id })}
-          picks={{ picked: picked(), onPick: pick }} onClearPicks={() => setPicked([])} onBundle={() => setBundle([...picked()])} onExport={exportFor(n())} />
+          picks={{ picked: picked(), onPick: pick }} onClearPicks={() => setPicked([])} onBundle={() => setBundle([...picked()])} onExport={exportFor(n())}
+          panel={<Show when={layout() === 'panel' && inspected()}>{(trace) => <aside class="card exchange-panel" aria-label="Exchange">{exchange(trace())}</aside>}</Show>} />
       )}</Show>
-      <Show when={layout() === 'panel' && inspected()}>{(trace) => <aside class="card exchange-panel" aria-label="Exchange">{exchange(trace())}</aside>}</Show>
     </div>
     <Show when={bundle()}>{(ids) => <DiagnosticBundle traceIds={ids()} onClose={() => setBundle(undefined)} />}</Show>
     <Show when={exporting()}>{(e) => <PortableExportDialog selection={e().selection} subject={e().subject} onClose={() => setExporting(undefined)} />}</Show>

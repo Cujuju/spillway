@@ -30,7 +30,7 @@ Content is selected at send time using current settings:
 
 `record_json` contains fact metadata merged with request, response and frames only when included. Original timestamps stay in the record. Exported metadata is original data, independent of UI email masking. Client-log prompts and provider-hidden content are not exported.
 
-Unsent rows outlive archive retention. Disabling capture or content export stops sending content, but queued rows keep their content locally until sent, cleared or dropped by budget. Disabling export pauses delivery and new fact collection while preserving queued rows. Archive clear and Activity clear also empty the outbox and count discarded rows. Clear queue leaves the archive intact. These actions never retract remote copies; cancellation cannot recall an already received insert.
+Unsent rows outlive body retention (Request capture). Disabling capture or content export stops sending content, but queued rows keep their content locally until sent, cleared or dropped by budget. Disabling export pauses delivery and new fact collection while preserving queued rows. Delete recorded bodies and Activity clear also empty the outbox and count discarded rows. Clear queue leaves recorded bodies intact. These actions never retract remote copies; cancellation cannot recall an already received insert.
 
 ## Remote schema
 

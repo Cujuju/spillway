@@ -85,12 +85,16 @@ it('indexes JSON escapes and joins Claude/Codex stream deltas and WebSocket frag
   expect(store.query({ text: 'second third archive' }).entries).toHaveLength(1);
   expect(store.query({ text: 'websocket' }).entries).toHaveLength(1);
 });
-it('keeps empty missing records out of expiry and byte accounting, and resets diagnostic counters', () => {
+it('counts only retained non-empty bodies, keeps empty records out of expiry, and resets diagnostic counters', () => {
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
-  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 4, records: [record(3, { state: 'missing', request: '', response: '' })] });
+  expect(store.status()).toMatchObject({ entries: 0, bodies: 0 });
+  observe(store, 'metadata-only-trace');
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 4, records: [record(1), record(2, { request: '', response: '' }), record(3, { state: 'missing', request: '', response: '' })] });
+  expect(store.status()).toMatchObject({ entries: 4, bodies: 1 });
   store.prune(Date.now() + 10 * 86_400_000);
   expect(store.detail('inbound-full-3')).toMatchObject({ state: 'missing', bytes: 0 });
-  store.clear(); expect(store.status()).toMatchObject({ entries: 0, dropped: 0, gaps: 0, restarts: 0, rejected: 0 });
+  expect(store.status()).toMatchObject({ entries: 4, bodies: 0 });
+  store.clear(); expect(store.status()).toMatchObject({ entries: 0, bodies: 0, dropped: 0, gaps: 0, restarts: 0, rejected: 0 });
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 4, records: [] });
   expect(store.status().dropped).toBe(0);
 });

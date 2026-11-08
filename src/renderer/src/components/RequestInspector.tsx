@@ -5,7 +5,7 @@ import { readableStreamText } from '@shared/archiveContent';
 import { openSettings, shownText } from '../store';
 import { CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, RECORDING_OFF_REASONS } from '../lib/traceFormat';
 import type { InspectorStep } from '../lib/exchangeNav';
-import { dateTime } from '../lib/format';
+import { byteSize, dateTime } from '../lib/format';
 import { HoverTip, InfoTip } from './ChartTip';
 import { DiagnosticBundle } from './DiagnosticBundle';
 import '../styles/archive.css';
@@ -14,12 +14,12 @@ const RENDER_CHUNK = 32 * 1024;
 /** A pending capture's open WebSocket messages arrive while it is shown. */
 const LIVE_REFRESH_MS = 3_000;
 const ICON_PX = 14;
-const KIB = 1024;
 /** Newest upstream attempts listed in the hover readout; the count shows them all. */
 const ATTEMPT_TIP_ROWS = 8;
 const EVAL_NOTE = 'Pin this exchange as a new eval case, under Activity → Evals.';
 const BUNDLE_NOTE = 'Save this exchange with its metadata and logs as a file to attach to a bug report.';
 const hasText = (d: ArchiveDetail) => !!(d.request || d.response || d.frames.length);
+const STATUS_NOTE = 'What the proxy returned to the client. Each upstream try, retries included, is under Upstream attempts.';
 const FORMAT_NOTE = 'HTTP encodings are decoded when supported; WebSocket payloads are decoded messages. Headers are excluded; prompts and body secrets may be present. "Captured" means all observed bytes within limits, not upstream success.';
 
 function BodyText(props: { label: string; text: string; type: string; encoding: string }) {
@@ -104,12 +104,13 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
     <Show when={!loading() && !error() && !detail()}><p class="empty-note">No capture for this request. Imported and older requests have no capture ID.</p></Show>
     <Show when={detail()}>{(d) => <>
       <dl class="kv-grid">
-        <div class="kv"><dt>Request</dt><dd>{shownText([d().method, d().path].filter(Boolean).join(' ')) || '—'}</dd></div>
-        <div class="kv"><dt>Status</dt><dd>{d().status || '—'}</dd></div>
-        <div class="kv"><dt>Stored</dt><dd>{(d().bytes / KIB).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB</dd></div>
-        <div class="kv"><dt>Format</dt><dd>{d().format}<InfoTip title="Format" note={FORMAT_NOTE} /></dd></div>
+        {/* A metadata-only record has no request line, status or format; its attempts still say what happened. */}
+        <Show when={d().method || d().path}><div class="kv"><dt>Request</dt><dd>{shownText([d().method, d().path].filter(Boolean).join(' '))}</dd></div></Show>
+        <Show when={d().status}><div class="kv"><dt>Status</dt><dd>{d().status}<InfoTip title="Status" note={STATUS_NOTE} /></dd></div></Show>
+        <Show when={d().bytes}><div class="kv"><dt>Stored</dt><dd>{byteSize(d().bytes)}</dd></div></Show>
+        <Show when={hasText(d())}><div class="kv"><dt>Format</dt><dd>{d().format}<InfoTip title="Format" note={FORMAT_NOTE} /></dd></div></Show>
         <div class="kv"><dt>Upstream attempts</dt><dd>
-          <HoverTip title="Upstream attempts" rows={d().attempts.slice(0, ATTEMPT_TIP_ROWS).map((a) => ({ label: dateTime(a.at), value: shownText(a.selectionId ?? a.requestId) }))} note={d().attempts.length > ATTEMPT_TIP_ROWS ? `First ${ATTEMPT_TIP_ROWS} of ${d().attempts.length}; up to 200 retained.` : 'Up to 200 retained.'}>
+          <HoverTip title="Upstream attempts" rows={d().attempts.slice(0, ATTEMPT_TIP_ROWS).map((a) => ({ label: dateTime(a.at), value: shownText([a.provenance?.statusCode, a.selectionId ?? a.requestId].filter(Boolean).join(' · ')) }))} note={d().attempts.length > ATTEMPT_TIP_ROWS ? `First ${ATTEMPT_TIP_ROWS} of ${d().attempts.length}; up to 200 retained.` : 'Up to 200 retained.'}>
             <span>{d().attempts.length}</span>
           </HoverTip>
         </dd></div>

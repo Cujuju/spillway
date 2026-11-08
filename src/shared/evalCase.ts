@@ -1,6 +1,8 @@
 import type { PortableCapture } from './archiveExport';
 
 export const EVAL_LIMITS = { snapshotBytes: 4 * 1024 * 1024, caseBytes: 8 * 1024 * 1024, totalBytes: 64 * 1024 * 1024, cases: 200, revisions: 8, fileBytes: 64 * 1024 * 1024, requestBytes: 256 * 1024, outputBytes: 64 * 1024, responseBytes: 256 * 1024, timeoutMs: 60_000 };
+/** Shared bounds for literal assertion counts and value lengths. */
+export const EVAL_ASSERTION_LIMITS = { count: 20, valueChars: 4096 } as const;
 export type EvalAssertion = { kind: 'contains' | 'not-contains' | 'equals'; value: string };
 export interface EvalAnnotation {
   title: string; notes: string; expectedOutcome: string; assertions: EvalAssertion[];

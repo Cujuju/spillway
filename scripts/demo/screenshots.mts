@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, freePort, sleep, until } from './cdp.mts';
-import { DEMO_WINDOW, launchDemo } from './launch.mts';
+import { DARK_THEME, DEMO_WINDOW, launchDemo } from './launch.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const IMAGES_DIR = path.join(ROOT, 'docs', 'images');
@@ -15,7 +15,7 @@ const PAGES = ['Dashboard', 'Activity', 'Providers'];
 const FIT_PAGE = 'Dashboard';
 /** Pixels hidden below the fold in the page's scroll areas. */
 const OVERFLOW_JS = `Math.max(0, ...[...document.querySelectorAll('*')].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => e.scrollHeight - e.clientHeight))`;
-const THEMES = [{ scheme: 'dark', theme: 'dracula' }, { scheme: 'light', theme: 'light' }];
+const THEMES = [{ scheme: 'dark', theme: DARK_THEME }, { scheme: 'light', theme: 'light' }];
 /** Charts and lists finish drawing well inside this after a page or theme change. */
 const SETTLE_MS = 2_000;
 
@@ -41,7 +41,14 @@ async function capture(): Promise<string[]> {
       for (const page of PAGES) {
         await open(cdp, page);
         await sleep(SETTLE_MS);
+        // A resized Activity board can be taller than any window; grow the viewport so the whole page shows.
+        const below = await cdp.eval<number>(OVERFLOW_JS);
+        if (below > 0) {
+          await cdp.send('Emulation.setDeviceMetricsOverride', { ...VIEWPORT, height: VIEWPORT.height + below });
+          await sleep(SETTLE_MS);
+        }
         const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
+        if (below > 0) await cdp.send('Emulation.setDeviceMetricsOverride', VIEWPORT);
         const file = path.join(IMAGES_DIR, `${page.toLowerCase()}-${scheme}.png`);
         writeFileSync(file, Buffer.from(data, 'base64'));
         written.push(file);

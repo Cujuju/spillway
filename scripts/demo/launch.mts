@@ -11,9 +11,29 @@ import { startDemoProxy, type DemoProxy } from './server.mts';
 import { startDemoClickHouse } from './clickhouse.mts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const DARK_THEME = 'dracula';
-/** The app's default width (window.ts); tall enough for the Dashboard to show all five demo accounts. */
-export const DEMO_WINDOW = { width: 1280, height: 970 };
+/** The maintainer's own theme and window size: the demo shows the app as it is used. */
+export const DARK_THEME = 'tonal';
+export const DEMO_WINDOW = { width: 1842, height: 1179 };
+
+const tile = (id: string) => ({ kind: 'tile', id });
+const split = (dir: 'row' | 'column', sizes: number[], ...children: unknown[]) => ({ kind: 'split', dir, sizes, children });
+/** The maintainer's Activity board (sizes in px where resized): Rhythm beside Tokens over Heatmap, Models beside Clients, then Model and effort. */
+const DEMO_BOARD = {
+  version: 2,
+  tiles: split('column', [432, 292, 593],
+    split('row', [1, 0.695], tile('rhythm'), split('column', [188, 236], tile('trend'), tile('heatmap'))),
+    split('row', [1, 1], tile('models'), tile('clients')),
+    tile('efforts')),
+  panels: {
+    rhythm: { kind: 'rhythm', metric: 'cost' },
+    trend: { kind: 'trend', metric: 'tokens' },
+    heatmap: { kind: 'heatmap', metric: 'tokens' },
+    models: { kind: 'models', metric: 'cost' },
+    clients: { kind: 'clients', metric: 'cost' },
+    efforts: { kind: 'efforts', metric: 'cost' },
+  },
+  heightPx: 1333,
+};
 
 export interface DemoApp {
   child: ChildProcess;
@@ -31,11 +51,13 @@ export interface DemoOptions {
   clickhouse?: boolean;
 }
 
+/** The maintainer's UI settings; behaviour that would reach past the throwaway profile (login item, tray, notifications, updates) stays off. */
 function writeProfile(dir: string, theme: string, data: DemoData): void {
   const settings = {
-    general: { theme, launchAtLogin: false, startMinimized: false, closeToTray: false },
+    general: { theme, launchAtLogin: false, startMinimized: false, closeToTray: false, sidebarCollapsed: false },
     proxy: { autoStart: true },
-    dashboard: { showEmails: true },
+    dashboard: { showEmails: false, forecastHours: 168, drainLookbackHours: 24, accountSort: 'reset' },
+    activity: { board: DEMO_BOARD },
     trayIcons: { enabled: false },
     notifications: { limitHit: false, limitReset: false, accountSwitched: false, proxyCrashed: false },
     updates: { autoCheck: false },

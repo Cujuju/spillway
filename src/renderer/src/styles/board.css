@@ -1,10 +1,25 @@
 /* ── Activity Overview: chart tiles in the toolkit's TilingWorkspace ── */
-/* Fills the page below the stat strip; grows past it (page scrolls) when the tiles' minimums need the room. Not a .card, so it sets its own gap above. */
+/*
+ * Exactly the page's height below the stat strip (min-height 0, so content never stretches it): the board's floor.
+ * A taller board overflows it and the page scrolls. Not a .card, so it sets its own gap above.
+ */
 .board-area {
   display: flex;
   flex: 1 0 0;
   flex-direction: column;
+  min-height: 0;
   margin-top: var(--card-gap);
+}
+/*
+ * The board and its bottom margin. The page's own end spacer sits at the area's bottom, so a taller board would lose
+ * it; this box carries the margin itself (padding) and pulls back over that spacer (negative margin) so it isn't doubled.
+ */
+.board-stack {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  padding-bottom: var(--page-pad);
+  margin-bottom: calc(-1 * var(--page-pad));
 }
 .activity-board {
   /* Fills the page until a vertical resize; then the workspace sets its own height. */

@@ -1,6 +1,6 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
 import { X } from 'lucide-solid';
-import { createMemo, createSignal, Show, untrack } from 'solid-js';
+import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Select } from './ui';
 import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
 import { appendRow } from '../lib/boardGrow';
@@ -31,6 +31,15 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   // Shown from the moment of an edit until the saved settings come back, so a resize never snaps back.
   const [pending, setPending] = createSignal<{ tiles: TileNode | undefined; panels: Record<string, ActivityPanelSpec>; heightPx: number | null } | null>(null);
   let area: HTMLDivElement | undefined;
+  /** The board's floor: the page's height below the stat strip, less the gap the bottom edge sits in. */
+  const [floorPx, setFloorPx] = createSignal(0);
+  onMount(() => {
+    const measure = () => setFloorPx(Math.round(area!.clientHeight - tileGapPx));
+    const observer = new ResizeObserver(measure);
+    observer.observe(area!);
+    measure();
+    onCleanup(() => observer.disconnect());
+  });
   const board = () => settings().activity.board;
   const panels = () => pending()?.panels ?? board().panels;
   const heightPx = () => { const local = pending(); return local ? local.heightPx : board().heightPx; };
@@ -74,58 +83,62 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
 
   return (
     <div ref={area} class="board-area">
-      <TilingWorkspace
-        class="activity-board"
-        layout={layout()}
-        onLayoutChange={(next, height) => void save(next, undefined, height ?? heightPx())}
-        // A divider resizes the tile above it and moves the rest; the bottom edge resizes the bottom tiles.
-        verticalResize="push"
-        heightPx={heightPx() ?? undefined}
-        gapPx={tileGapPx}
-        minSize={minFor}
-        // Tiles share the page's height; when their minimums need more, the board grows and the page scrolls.
-        placement="reflow"
-        growHeight
-        placing={props.placing}
-        onPlace={(id, next) => {
-          const spec = props.placing?.spec;
-          props.onPlacingEnd();
-          if (spec) void save(next, { id, spec });
-        }}
-        onPlacingCancel={props.onPlacingEnd}
-        empty={<div class="board-empty muted">No charts. Use “Add chart” to place one.</div>}
-      >
-        {(tile) => {
-          // Saving the layout rebuilds every spec object; equal specs must not redraw the chart.
-          const spec = createMemo(() => specFor(tile.id)!, undefined, { equals: sameSpec });
-          // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
-          const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
-          const body = def.createBody(spec, props.data);
-          return (
-            <Show when={specFor(tile.id)}>
-              <section class="card board-tile">
-                <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
-                  <Show when={def.switchesMetric} fallback={<div class="section-label">{def.title(spec())}</div>}>
-                    <Select class="section-label title-switch" label="Chart metric" title="Change metric" value={spec().metric}
-                      options={ACTIVITY_METRICS.map((m) => ({ value: m, label: def.title({ ...spec(), metric: m }) }))}
-                      onChange={(metric) => void setMetric(tile.id, metric)} />
-                  </Show>
-                  <Show when={def.info}>{(info) => info()()}</Show>
-                  <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
-                  <span class="spacer" />
-                  <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>
-                    <X size={ICON_PX} />
-                  </button>
-                </header>
-                <div class="board-tile-body">{body}</div>
-              </section>
-            </Show>
-          );
-        }}
-      </TilingWorkspace>
-      <Show when={props.placing && layout()}>
-        <button type="button" class="board-place-below" onClick={placeBelow}>Place below all charts</button>
-      </Show>
+      <div class="board-stack">
+        <TilingWorkspace
+          class="activity-board"
+          layout={layout()}
+          onLayoutChange={(next, height) => void save(next, undefined, height ?? heightPx())}
+          // A divider resizes the tile above it and moves the rest; the bottom edge resizes the bottom tiles.
+          verticalResize="push"
+          heightPx={heightPx() ?? undefined}
+          // Never shorter than the page: shrinking at the floor trades height with the bottom row.
+          minHeightPx={floorPx()}
+          gapPx={tileGapPx}
+          minSize={minFor}
+          // Tiles share the page's height; when their minimums need more, the board grows and the page scrolls.
+          placement="reflow"
+          growHeight
+          placing={props.placing}
+          onPlace={(id, next) => {
+            const spec = props.placing?.spec;
+            props.onPlacingEnd();
+            if (spec) void save(next, { id, spec });
+          }}
+          onPlacingCancel={props.onPlacingEnd}
+          empty={<div class="board-empty muted">No charts. Use “Add chart” to place one.</div>}
+        >
+          {(tile) => {
+            // Saving the layout rebuilds every spec object; equal specs must not redraw the chart.
+            const spec = createMemo(() => specFor(tile.id)!, undefined, { equals: sameSpec });
+            // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
+            const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
+            const body = def.createBody(spec, props.data);
+            return (
+              <Show when={specFor(tile.id)}>
+                <section class="card board-tile">
+                  <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
+                    <Show when={def.switchesMetric} fallback={<div class="section-label">{def.title(spec())}</div>}>
+                      <Select class="section-label title-switch" label="Chart metric" title="Change metric" value={spec().metric}
+                        options={ACTIVITY_METRICS.map((m) => ({ value: m, label: def.title({ ...spec(), metric: m }) }))}
+                        onChange={(metric) => void setMetric(tile.id, metric)} />
+                    </Show>
+                    <Show when={def.info}>{(info) => info()()}</Show>
+                    <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
+                    <span class="spacer" />
+                    <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>
+                      <X size={ICON_PX} />
+                    </button>
+                  </header>
+                  <div class="board-tile-body">{body}</div>
+                </section>
+              </Show>
+            );
+          }}
+        </TilingWorkspace>
+        <Show when={props.placing && layout()}>
+          <button type="button" class="board-place-below" onClick={placeBelow}>Place below all charts</button>
+        </Show>
+      </div>
     </div>
   );
 }

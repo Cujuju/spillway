@@ -8,6 +8,8 @@
 }
 .activity-board {
   flex: 1 0 0;
+  /* The bottom-edge handle sits in the gap below the tiles. */
+  margin-bottom: var(--card-gap);
   --twm-accent: var(--color-accent);
   --twm-accent-soft: var(--color-accent-subtle);
   --twm-danger: var(--color-red);
@@ -21,6 +23,10 @@
   --twm-radius: var(--radius-card);
   /* Dividers grab wider than the card gap they sit in. */
   --twm-handle-grab: var(--spacing-3);
+}
+/* Once resized, the board is as tall as its tiles, not the page. */
+.activity-board.sized {
+  flex: none;
 }
 .board-tile {
   display: flex;
@@ -101,7 +107,6 @@
 
 .board-place-below {
   flex-shrink: 0;
-  margin-top: var(--card-gap);
   padding: var(--spacing-3);
   border: var(--border-width) dashed var(--color-accent-border);
   border-radius: var(--radius-card);

@@ -28,6 +28,8 @@ export interface ActivityBoard {
   tiles: unknown;
   /** Tile id → chart. Ids missing from the tree are dropped when the tree changes. */
   panels: Record<string, ActivityPanelSpec>;
+  /** The board's height once a tile was resized vertically: the sum of its rows. Null fills the page. */
+  heightPx: number | null;
 }
 
 const tile = (id: string) => ({ kind: 'tile', id });
@@ -47,19 +49,21 @@ export const DEFAULT_ACTIVITY_BOARD: ActivityBoard = {
     models: { kind: 'models', metric: 'cost' },
     [EFFORTS_TILE_ID]: EFFORTS_PANEL,
   },
+  heightPx: null,
 };
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): v is T => typeof v === 'string' && (allowed as readonly string[]).includes(v);
 
-/** Version 1 → 2: Model and effort joins as a bottom row, unless the board already has one. */
+/** Version 1 → 2: Model and effort joins as a bottom row, unless the board already has one. Older heights described other layouts. */
 function upgrade(board: ActivityBoard): ActivityBoard {
-  if (Object.values(board.panels).some((panel) => panel.kind === EFFORTS_PANEL.kind)) return { ...board, version: ACTIVITY_BOARD_VERSION };
+  if (Object.values(board.panels).some((panel) => panel.kind === EFFORTS_PANEL.kind)) return { ...board, version: ACTIVITY_BOARD_VERSION, heightPx: null };
   return {
     version: ACTIVITY_BOARD_VERSION,
     tiles: board.tiles === null ? tile(EFFORTS_TILE_ID) : split('column', UPGRADE_SHARES, board.tiles, tile(EFFORTS_TILE_ID)),
     panels: { ...board.panels, [EFFORTS_TILE_ID]: EFFORTS_PANEL },
+    heightPx: null,
   };
 }
 
@@ -70,6 +74,7 @@ export function normalizeActivityBoard(raw: unknown): ActivityBoard {
     id && isObj(v) && oneOf(v.kind, ACTIVITY_PANEL_KINDS)
       ? [[id, { kind: v.kind, metric: oneOf(v.metric, ACTIVITY_METRICS) ? v.metric : 'cost' }]]
       : []));
-  const board = { version: ACTIVITY_BOARD_VERSION, tiles: raw.tiles, panels };
+  const heightPx = typeof raw.heightPx === 'number' && Number.isFinite(raw.heightPx) && raw.heightPx > 0 ? raw.heightPx : null;
+  const board = { version: ACTIVITY_BOARD_VERSION, tiles: raw.tiles, panels, heightPx };
   return raw.version === ACTIVITY_BOARD_VERSION ? board : upgrade(board);
 }

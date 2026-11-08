@@ -5,16 +5,23 @@ describe('normalizeActivityBoard', () => {
   it('keeps valid panels, defaults a bad metric and drops unknown kinds', () => {
     const tiles = { kind: 'tile', id: 'a' };
     expect(normalizeActivityBoard({ version: ACTIVITY_BOARD_VERSION, tiles, panels: { a: { kind: 'trend', metric: 'bytes' }, b: { kind: 'pie' } } }))
-      .toEqual({ version: ACTIVITY_BOARD_VERSION, tiles, panels: { a: { kind: 'trend', metric: 'cost' } } });
+      .toEqual({ version: ACTIVITY_BOARD_VERSION, tiles, panels: { a: { kind: 'trend', metric: 'cost' } }, heightPx: null });
   });
 
   it('keeps an emptied board instead of restoring the default', () => {
-    const empty = { version: ACTIVITY_BOARD_VERSION, tiles: null, panels: {} };
+    const empty = { version: ACTIVITY_BOARD_VERSION, tiles: null, panels: {}, heightPx: null };
     expect(normalizeActivityBoard(empty)).toEqual(empty);
   });
 
-  it('drops a height stored by older versions: the board always fills the page', () => {
-    expect(normalizeActivityBoard({ tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx: 900 })).not.toHaveProperty('heightPx');
+  it('drops a height stored by older versions: it described another layout', () => {
+    expect(normalizeActivityBoard({ tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx: 900 }).heightPx).toBeNull();
+  });
+
+  it('keeps a current board’s height and drops a bad one', () => {
+    const board = (heightPx: unknown) => ({ version: ACTIVITY_BOARD_VERSION, tiles: { kind: 'tile', id: 'a' }, panels: { a: { kind: 'trend' } }, heightPx });
+    expect(normalizeActivityBoard(board(900)).heightPx).toBe(900);
+    expect(normalizeActivityBoard(board(-1)).heightPx).toBeNull();
+    expect(normalizeActivityBoard(board('900')).heightPx).toBeNull();
   });
 
   it('adds Model and effort below an older board once, so removing it later sticks', () => {
@@ -24,15 +31,16 @@ describe('normalizeActivityBoard', () => {
       version: ACTIVITY_BOARD_VERSION,
       tiles: { kind: 'split', dir: 'column', sizes: [2, 1], children: [tiles, { kind: 'tile', id: 'efforts' }] },
       panels: { a: { kind: 'trend', metric: 'cost' }, efforts: { kind: 'efforts', metric: 'cost' } },
+      heightPx: null,
     });
-    const removed = { version: ACTIVITY_BOARD_VERSION, tiles, panels: { a: { kind: 'trend', metric: 'cost' } } };
+    const removed = { version: ACTIVITY_BOARD_VERSION, tiles, panels: { a: { kind: 'trend', metric: 'cost' } }, heightPx: null };
     expect(normalizeActivityBoard(removed)).toEqual(removed);
   });
 
   it('upgrades an emptied older board to Model and effort alone, and leaves a board that has one', () => {
     expect(normalizeActivityBoard({ tiles: null, panels: {} }).tiles).toEqual({ kind: 'tile', id: 'efforts' });
     const has = { tiles: { kind: 'tile', id: 'x' }, panels: { x: { kind: 'efforts', metric: 'cost' } } };
-    expect(normalizeActivityBoard(has)).toEqual({ version: ACTIVITY_BOARD_VERSION, ...has });
+    expect(normalizeActivityBoard(has)).toEqual({ version: ACTIVITY_BOARD_VERSION, ...has, heightPx: null });
   });
 
   it('falls back to the default for anything else', () => {

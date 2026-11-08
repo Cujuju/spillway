@@ -27,10 +27,11 @@ export function AddChartSelect(props: { onPick: (chart: PendingChart) => void })
 /** The Overview's charts as tiles filling the page: drag a header to move one, drag a gap to resize, place `placing` where clicked. */
 export function ActivityBoard(props: { data: ActivityData; placing: PendingChart | null; onPlacingEnd: () => void }) {
   // Shown from the moment of an edit until the saved settings come back, so a resize never snaps back.
-  const [pending, setPending] = createSignal<{ tiles: TileNode | undefined; panels: Record<string, ActivityPanelSpec> } | null>(null);
+  const [pending, setPending] = createSignal<{ tiles: TileNode | undefined; panels: Record<string, ActivityPanelSpec>; heightPx: number | null } | null>(null);
   let area: HTMLDivElement | undefined;
   const board = () => settings().activity.board;
   const panels = () => pending()?.panels ?? board().panels;
+  const heightPx = () => { const local = pending(); return local ? local.heightPx : board().heightPx; };
   const layout = createMemo(() => {
     const local = pending();
     return local ? local.tiles : normalize(board().tiles, new Set(Object.keys(board().panels)));
@@ -43,24 +44,25 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   let saveRevision = 0;
   let saveQueue = Promise.resolve();
 
-  /** Saves the tree and drops charts no longer in it, in one write. */
-  const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }) => {
+  /** Saves the tree and height and drops charts no longer in it, in one write. An emptied board fills the page again. */
+  const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }, height = heightPx()) => {
+    const h = tiles ? height : null;
     const kept = new Set(tileIds(tiles));
     const next = Object.fromEntries(Object.entries(panels()).filter(([id]) => kept.has(id)));
     if (added) next[added.id] = added.spec;
     const revision = ++saveRevision;
-    setPending({ tiles, panels: next });
-    saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { version: ACTIVITY_BOARD_VERSION, tiles: tiles ?? null, panels: next }; }));
+    setPending({ tiles, panels: next, heightPx: h });
+    saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { version: ACTIVITY_BOARD_VERSION, tiles: tiles ?? null, panels: next, heightPx: h }; }));
     return saveQueue.finally(() => { if (revision === saveRevision) setPending(null); });
   };
-  /** Appends a full-width row; the board keeps the page's height, so rows share it until their minimums make the page scroll. */
+  /** Appends a full-width row below the others, which keep their pixels; the board grows by the new row. */
   const placeBelow = () => {
     const chart = props.placing;
     if (!chart) return;
     props.onPlacingEnd();
     const size = { width: area!.clientWidth, height: area!.firstElementChild!.getBoundingClientRect().height };
     const addPx = Math.max(NEW_ROW_PX, PANELS[chart.spec.kind].minSize.height);
-    void save(appendRow(layout(), chart.id, size, addPx, geometryOptions()), { id: chart.id, spec: chart.spec });
+    void save(appendRow(layout(), chart.id, size, addPx, geometryOptions()), { id: chart.id, spec: chart.spec }, size.height + tileGapPx + addPx);
   };
   const setMetric = (id: string, metric: ActivityMetric) =>
     updateSettings((d) => {
@@ -71,9 +73,12 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   return (
     <div ref={area} class="board-area">
       <TilingWorkspace
-        class="activity-board"
+        class={heightPx() === null ? 'activity-board' : 'activity-board sized'}
         layout={layout()}
-        onLayoutChange={(next) => void save(next)}
+        onLayoutChange={(next, height) => void save(next, undefined, height ?? heightPx())}
+        // A divider resizes the tile above it and moves the rest; the bottom edge resizes the bottom tiles.
+        verticalResize="push"
+        heightPx={heightPx() ?? undefined}
         gapPx={tileGapPx}
         minSize={minFor}
         // Tiles share the page's height; when their minimums need more, the board grows and the page scrolls.

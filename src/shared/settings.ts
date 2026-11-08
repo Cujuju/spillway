@@ -322,7 +322,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       limitReset: bool(n.limitReset, d.notifications.limitReset),
       accountSwitched: bool(n.accountSwitched, d.notifications.accountSwitched),
       proxyCrashed: bool(n.proxyCrashed, d.notifications.proxyCrashed),
-      ...normalizeNoticeConfig({ ...n, delivery: n.delivery === 'spillway' ? 'overlay' : n.delivery }, d.notifications),
+      ...normalizeNoticeConfig({ ...n, delivery: n.delivery === 'spillway' ? 'overlay' : n.delivery }, { ...DEFAULT_NOTICE_CONFIG, ...d.notifications }),
     },
     updates: {
       autoCheck: bool(u.autoCheck, d.updates.autoCheck),

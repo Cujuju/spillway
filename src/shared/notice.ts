@@ -1,10 +1,10 @@
-import type { NoticeInput, NoticeTone, NoticeView } from '@cujuju/electron-notices';
+import { BASIC_TONES, DEFAULT_NOTICE_CONFIG, type NoticeInput, type NoticeView } from '@cujuju/electron-notices';
 import type { AppSettings } from './settings';
 import { darkTheme, resolveTheme, type Palette } from './themes';
 
 export type SpillwayNoticeKind = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyStopped' | 'updateFound' | 'clientDrift';
 export type SpillwayNoticeTarget = 'window' | 'proxy' | 'updates';
-export const NOTICE_KINDS: Record<SpillwayNoticeKind, { tone: NoticeTone; tag: string }> = {
+export const NOTICE_KINDS: Record<SpillwayNoticeKind, { tone: keyof typeof BASIC_TONES; tag: string }> = {
   limitHit: { tone: 'warn', tag: 'LIMIT' },
   limitReset: { tone: 'ok', tag: 'RESET' },
   accountSwitched: { tone: 'info', tag: 'SWITCH' },
@@ -25,6 +25,6 @@ const vars = (p: Palette): Record<string, string> => ({
 export function noticeView(settings: AppSettings, prefersDark: boolean): NoticeView {
   const theme = resolveTheme(settings.general.theme, prefersDark);
   const { delivery, style, dripLip, consoleLines } = settings.notifications;
-  return { config: { delivery, style, dripLip, consoleLines },
+  return { tones: BASIC_TONES, config: { ...DEFAULT_NOTICE_CONFIG, delivery, style, dripLip, consoleLines },
     appearance: { vars: vars(theme.palette), dripVars: vars(darkTheme(theme).palette), colorScheme: theme.scheme } };
 }

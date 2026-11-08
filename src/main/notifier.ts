@@ -16,6 +16,7 @@ export const noticeOverlay = createNoticeOverlay({
   primaryDisplay: () => screen.getPrimaryDisplay(),
   view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors),
   platform: process.platform,
+  onOpen: (n) => openNoticeTarget(n.target),
 });
 export function openNoticeTarget(target: string | undefined): void {
   if (target === 'proxy') showWindowAndSend(EVENTS.onOpenProxy);
@@ -32,9 +33,9 @@ const notifier = createNotifier({
     n.show();
   },
 });
-export function notify(input: NoticeInput): void { notifier.notify(input); }
+export function notify(input: NoticeInput): void { void notifier.notify(input); }
 export function startNotices(): void {
-  handleNoticeIpc(ipcMain, noticeOverlay, openNoticeTarget);
+  handleNoticeIpc(ipcMain, noticeOverlay);
   noticeOverlay.refresh();
   onSettingsChange(noticeOverlay.refresh);
   nativeTheme.on('updated', noticeOverlay.refresh);

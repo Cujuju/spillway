@@ -32,10 +32,10 @@ Logins: Claude (Pro/Max), Codex (ChatGPT Plus/Pro), Antigravity (Google), xAI (G
 | Page | What it does |
 |---|---|
 | **Dashboard** | Quota left per provider and account (5-hour, weekly and model limits), reset times, drain rate and a forecast chart. Refresh one account or all; spend a Codex reset credit. |
-| **Activity** | Cost at list prices, tokens, cache hits, a heatmap and per-model totals; every request live (**Requests**) and per day (**Daily totals**). **All usage** adds requests read from Claude Code's and Codex's local logs. |
+| **Activity** | **Overview**: cost at list prices, tokens, cache hits, heatmap, per-model and per-effort tables. **Requests**: every request, live. **Traces**, **Drift**, **Evals**: see [Request history](#request-history). **Totals**: per day, week or month. **All usage** adds requests read from Claude Code's and Codex's local logs. |
 | **Providers** | Add, import, export, renew, disable or remove logins; set priority and a note. Add API-key upstreams. |
 | **Proxy** | Endpoint and client key, **Apply**/**Undo** per client, custom proxy settings (`config.user.yaml`), management lockouts. |
-| **Logs** | The proxy's output. **Record all requests** saves full requests and responses, prompts included, until you turn it off. |
+| **Logs** | The proxy's output. **Record all requests** writes every request and response to log files, for debugging, until you turn it off. |
 | **Settings** | Startup, theme, tray icons, notifications, routing, rolling windows, updates, data folders and history. |
 | **Help** | The routing how-tos below. |
 
@@ -43,6 +43,47 @@ Logins: Claude (Pro/Max), Codex (ChatGPT Plus/Pro), Antigravity (Google), xAI (G
   <source media="(prefers-color-scheme: light)" srcset="docs/images/activity-light.png">
   <img alt="Activity page: cost, tokens, cache hit, heatmap and per-model totals" src="docs/images/activity-dark.png">
 </picture>
+
+## Request history
+
+Every request the proxy handles is recorded: time, model, effort, account, tokens, cost, timing, status and, where the provider reports it, thinking tokens. Claude Code's and Codex's local logs add the same facts for requests that skipped the proxy. Prompts and replies are kept only if you turn on **Record bodies**. Everything is stored encrypted on this computer.
+
+### What to turn on
+
+| For | Turn on | Default |
+|---|---|---|
+| Activity, Traces, Drift charts | Nothing. Keep the proxy running; local logs sync on their own | On |
+| A longer Drift baseline | Settings → Advanced → **Keep requests for** | 30 days (up to 365) |
+| Prompt and reply text: reading exchanges, text search, eval cases, exports with text | Settings → Data → Request capture → **Record bodies** | Off. Kept 7 days (up to 90), 100 MiB (up to 1 GiB) |
+| Canary probes | Activity → Drift → Canary probes → **Set up** | Off |
+| A copy in your own ClickHouse | Settings → Data → ClickHouse | Off |
+
+### Traces
+
+Activity → Traces groups requests by conversation. Subagents, forks and compactions appear as branches under the conversation that started them. Each branch shows its own cost, tokens and latency (never added to its parent's) and every attempt, including retries and account moves. Rank by most recent, cost or failures; search also matches recorded text. Open a request to read the exchange (needs Record bodies), step through the conversation, or start an eval case or diagnostic bundle from it.
+
+### Drift
+
+Activity → Drift answers "is this model behaving differently than it used to?" For each model and effort it charts, per day: thinking tokens per reply, output per reply, replies without thinking, time to first token and failure rate.
+
+- Each day is compared with the median of the 14 days before it. The shaded band is the normal range; days outside it are marked, and the summary at the top says which metrics moved.
+- Markers show when Claude Code or Codex updated, or when the settings it sends (thinking mode, output limit, beta flags) changed. Check these first: a shift that starts with a client change is probably the client, not the model.
+- A day needs 30 replies to count and five earlier days to be judged. The summary compares the last week with the two weeks before, so it needs about three weeks of kept requests.
+- Usage alone can't tell a weaker model from easier work. Canary probes can.
+
+**Canary probes** send six reasoning problems with known answers to the models and efforts you pick, every 6, 12 or 24 hours. The pass rate and thinking per probe, with the input held fixed, are the clearest sign of a change upstream. Each target costs six requests per run from your accounts' quota; probes stay out of Activity.
+
+### Evals
+
+From an exchange in Traces, **New eval case** pins it, with an expected outcome and text checks (contains, doesn't contain, equals). Activity → Evals edits cases and replays them through the proxy, then checks the reply. Replay supports text-only requests (no tools) and uses quota. Cases survive request retention and body deletion. [Details](docs/eval-cases.md).
+
+### Sharing and export
+
+- **Diagnostic bundle**: picked requests with their metadata and logs, as one file for a bug report. Text and error messages are separate opt-ins; review the file before sharing. [Details](docs/diagnostic-bundles.md).
+- **Export** (on a Traces branch): recorded exchanges as an unencrypted JSON Lines file for other tools. Known credentials are redacted. [Details](docs/portable-archive.md).
+- **ClickHouse**: sends request facts, and optionally recorded text, to a ClickHouse server you run. [Details](docs/clickhouse-export.md).
+
+Storage and limits: [Request capture](docs/request-archive.md), [Traces](docs/session-traces.md), [Retention](docs/activity-retention.md).
 
 ## Tray menu
 
@@ -80,7 +121,7 @@ GitHub Actions checks `main` every 3 hours and publishes signed nightly updates 
 
 ## Privacy
 
-**Show emails** off (Dashboard button, or Settings → Dashboard) hides every account's username (`•••@example.com`) in the window, tray and notifications. Request history keeps metadata only (account, model, tokens, timing); prompts are saved only for failed requests and while **Record all requests** is on. Folders and history: Settings → Advanced, or [Data](docs/data.md).
+**Show emails** off (Dashboard button, or Settings → Dashboard) hides every account's username (`•••@example.com`) in the window, tray and notifications. Request history keeps metadata only (account, model, tokens, timing). Prompts and replies are saved only while **Record bodies** is on (encrypted, in the app's database) or **Record all requests** is on (plain log files), and for failed requests in the proxy's logs. Folders and history: Settings → Advanced, or [Data](docs/data.md).
 
 ## Troubleshooting
 

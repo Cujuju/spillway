@@ -1,8 +1,9 @@
+import { zstdDecompressSync } from 'node:zlib';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { archiveCursor, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
+import { archiveCursor, CAPTURE_BODY_LIMIT, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { migratePieces } from './archivePieces';
@@ -67,7 +68,7 @@ it('records gaps/restarts and skips malformed records with a trustworthy cursor'
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); observe(store);
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(4)] });
   expect(store.status()).toMatchObject({ sequence: 4, gaps: 3, dropped: 3 });
-  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(5), record(6, { request: 'x'.repeat(1_100_000) }), record(7)] });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 3, records: [record(5), record(6, { request: 'x'.repeat(CAPTURE_BODY_LIMIT * 4 + 1) }), record(7)] });
   expect(store.status()).toMatchObject({ sequence: 7, rejected: 1 }); expect(store.detail('inbound-full-6')).toBeNull();
   expect(store.detail('inbound-full-7')?.state).toBe('complete');
   store.ingest({ version: 1, epoch: 'epoch-b', dropped: 0, records: [] });
@@ -249,4 +250,28 @@ it('does not report migration progress for an empty archive', () => {
   const progress = vi.fn();
   migratePieces(db, progress);
   expect(progress).not.toHaveBeenCalled();
+});
+
+it('validates per-side cuts and preserves complete versus legacy metadata', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: 'headtail', requestCut: { offset: 4, omitted: 20 } }), record(2, { request: 'headtail', requestCut: { offset: 9, omitted: null } }), record(3, { requestCut: { offset: 1, omitted: -1 } })] });
+  expect(store.status().rejected).toBe(2);
+  expect(store.detail('inbound-full-1')).toMatchObject({ request: 'headtail', requestCut: { offset: 4, omitted: 20 }, responseCut: null });
+  db.prepare("UPDATE archive_entries SET detail=json_remove(detail,'$.requestCut','$.responseCut') WHERE trace_id=?").run('inbound-full-1');
+  expect(store.detail('inbound-full-1')?.requestCut).toBeUndefined();
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(4, { requestCut: { offset: 0, omitted: null } })] });
+  expect(store.detail('inbound-full-4')?.requestCut).toEqual({ offset: 0, omitted: null });
+});
+it('diffs frame snapshots across websocket revisions with bounded growth', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  const frames: NonNullable<CaptureRecord['frames']> = [];
+  for (let n = 1; n <= 20; n++) {
+    frames.push({ index: n, direction: 'response', at: new Date().toISOString(), type: 'text', truncated: false, payload: Array.from({ length: 200 }, (_, i) => `${n}:${i}`).join(',') });
+    store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(n, { traceId: 'websocket-revisions', format: 'websocket', request: '', response: frames.map((f) => f.payload).join('\n'), frames: [...frames] })] });
+    expect(store.detail('websocket-revisions')?.frames).toEqual(frames);
+  }
+  const logical = Buffer.byteLength(JSON.stringify(frames));
+  const pieces = db.prepare('SELECT bytes FROM archive_pieces').all() as { bytes: Buffer }[];
+  expect(pieces.reduce((n, p) => n + zstdDecompressSync(p.bytes).length, 0)).toBeLessThan(logical * 3);
+  expect(store.status().diffFallbacks).toBe(0);
 });

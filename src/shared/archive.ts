@@ -2,7 +2,7 @@ export type CaptureState = 'unknown' | 'missing' | 'pending' | 'partial' | 'comp
 export interface ArchivePolicy { captureBodies: boolean; retentionDays: number; maxBytes: number }
 export const DEFAULT_ARCHIVE_POLICY: ArchivePolicy = { captureBodies: false, retentionDays: 7, maxBytes: 100 * 1024 * 1024 };
 export const ARCHIVE_MAX_BYTES = 1024 * 1024 * 1024;
-export const CAPTURE_BODY_LIMIT = 256 * 1024;
+export const CAPTURE_BODY_LIMIT = 8 * 1024 * 1024;
 export const ARCHIVE_PAGE_SIZE = 50;
 export function normalizeArchivePolicy(raw: unknown): ArchivePolicy {
   const r = raw && typeof raw === 'object' ? raw as Partial<ArchivePolicy> : {};
@@ -10,13 +10,15 @@ export function normalizeArchivePolicy(raw: unknown): ArchivePolicy {
   return { captureBodies: r.captureBodies === true, retentionDays: bounded(r.retentionDays, 7, 1, 90), maxBytes: bounded(r.maxBytes, DEFAULT_ARCHIVE_POLICY.maxBytes, 1024 * 1024, ARCHIVE_MAX_BYTES) };
 }
 /** Proxy spool v1: one downstream HTTP exchange; not one upstream attempt. */
+export interface CaptureCut { offset: number; omitted: number | null }
 export interface CaptureRecord {
+  requestCut?: CaptureCut; responseCut?: CaptureCut;
   id: string; traceId: string; epoch: string; sequence: number; startedAt: string;
   method: string; path: string; status: number; state: 'complete' | 'partial' | 'missing' | 'pending'; reason: string;
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;
   format?: 'http' | 'websocket'; requestDecoded?: boolean; responseDecoded?: boolean; frames?: CaptureFrame[];
 }
-export interface CaptureFrame { index: number; direction: 'request' | 'response'; at: string; type: 'text' | 'binary'; payload: string; truncated: boolean }
+export interface CaptureFrame { index: number; direction: 'request' | 'response'; at: string; type: 'text' | 'binary'; payload: string; truncated: boolean; cut?: CaptureCut }
 export interface CapturePage { version: number; epoch: string; dropped: number; records: CaptureRecord[] }
 export interface ArchiveEntry {
   schemaVersion: 1; captureEpoch: string | null; captureSequence: number | null;
@@ -25,6 +27,7 @@ export interface ArchiveEntry {
   method: string; path: string; status: number; bytes: number; captureId: string | null;
 }
 export interface ArchiveDetail extends ArchiveEntry {
+  requestCut?: CaptureCut | null; responseCut?: CaptureCut | null;
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;
   format: 'http' | 'websocket'; requestDecoded: boolean; responseDecoded: boolean; frames: CaptureFrame[];
   attempts: { requestId: string; selectionId: string | null; at: string; provenance?: import('./archiveExport').ArchiveAttemptProvenance }[];

@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import type { ArchivePolicy, ArchiveStatus } from '@shared/archive';
+import { CAPTURE_BODY_LIMIT, type ArchivePolicy, type ArchiveStatus } from '@shared/archive';
 import { shownText } from '../store';
 import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
@@ -12,7 +12,8 @@ const RETENTION_DAYS = { min: 1, max: 90 };
 const BUDGET_MIB = { min: 1, max: 1024 };
 /** Store health (drops, bytes) changes as traffic arrives. */
 const STATUS_POLL_MS = 3_000;
-const LIMITS_NOTE = 'Exchanges counts every request seen, with or without text. HTTP: the first 256 KiB of each request and response (gzip, zstd decoded). Codex WebSocket: 128 messages, 64 KiB each, 256 KiB per direction. Truncation is marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.';
+const LIMIT_TEXT = byteSize(CAPTURE_BODY_LIMIT), HALF_TEXT = byteSize(CAPTURE_BODY_LIMIT / 2);
+const LIMITS_NOTE = `Exchanges counts every request seen, with or without text. HTTP: up to ${LIMIT_TEXT} of each request and response (gzip, zstd decoded); a larger body keeps its first and last ${HALF_TEXT}. Codex WebSocket: up to ${LIMIT_TEXT} per message and per direction, keeping the earliest and latest messages. Gaps are marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.`;
 const OVER_BUDGET_NOTE = 'Conversations larger than the whole body budget. Their new requests keep metadata only until the conversation is removed or the budget changes.';
 const STORED_NOTE = 'Each request stores only what changed since the previous request in its conversation, compressed. The budget counts stored bytes.';
 const DELETE_NOTE ='Deletes every recorded request and response and turns Record bodies off. Activity history and eval cases stay.';

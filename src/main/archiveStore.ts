@@ -1,6 +1,6 @@
 import type { ArchiveMigrationState } from '@shared/ipc';
 import type { Db } from './activityDb';
-import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage } from '@shared/archive';
+import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage, type CaptureCut } from '@shared/archive';
 import { sessionKind, type ActivityEvent } from '@shared/types';
 import { PIECE_SCHEMA, migratePieces, storeBody, readBody, expireThread, storedBytes, refreshThread } from './archivePieces';
 import { normalizeTransport } from '@shared/activityTransport';
@@ -36,6 +36,14 @@ export function archiveTextMatch(text: unknown): { sql: string; args: [string] }
   const terms = text.slice(0, SEARCH_MAX_CHARS).trim().split(/\s+/).map((t) => `"${t.replaceAll('"', '""')}"`).join(' AND ');
   return { sql: 'search_key IN (SELECT rowid FROM archive_search WHERE archive_search MATCH ?)', args: [terms] };
 }
+export const validCaptureCut = (cut: unknown, body: string): cut is CaptureCut | undefined => {
+  if (cut === undefined) return true;
+  if (!cut || typeof cut !== 'object' || Array.isArray(cut)) return false;
+  const c = cut as CaptureCut, bytes = Buffer.from(body);
+  return Number.isSafeInteger(c.offset) && c.offset >= 0 && c.offset <= bytes.length
+    && (c.offset === bytes.length || (bytes[c.offset]! & 0xc0) !== 0x80)
+    && (c.omitted === null || Number.isSafeInteger(c.omitted) && c.omitted >= 0);
+};
 const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType: '', requestEncoding: '', responseEncoding: '', format: 'http', requestDecoded: false, responseDecoded: false, frames: [] };
 
 /** Sole owner is the Activity worker. Body data and FTS live inside the keyed database. */
@@ -105,10 +113,11 @@ export class ArchiveStore {
         sequence = r.sequence;
         const valid = typeof r.traceId === 'string' && TRACE.test(r.traceId) && typeof r.id === 'string' && r.id.length <= 128 && validDate(r.startedAt) && r.epoch === page.epoch && ['complete', 'partial', 'missing', 'pending'].includes(r.state)
           && (['request', 'response'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= CAPTURE_BODY_LIMIT * 4)
+          && validCaptureCut(r.requestCut, r.request) && validCaptureCut(r.responseCut, r.response)
           && (['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= 8192)
-          && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= 64 * 1024 * 3) && r.frames.reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 6);
+          && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= CAPTURE_BODY_LIMIT * 3) && r.frames.every((f) => validCaptureCut(f.cut, f.payload) && (f.cut === undefined || f.truncated)) && (['request', 'response'] as const).every((direction) => r.frames!.filter((f) => f.direction === direction).reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 3));
         if (!valid) { this.write('rejected', this.read('rejected', 0) + 1); continue; }
-        const captured = { request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' as const : 'http' as const, requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
+        const captured = { requestCut: r.requestCut ?? null, responseCut: r.responseCut ?? null, request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' as const : 'http' as const, requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
         const detail = JSON.stringify(captured);
         const { request, response, frames, ...metadata } = captured;
 

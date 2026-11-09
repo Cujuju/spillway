@@ -46,13 +46,13 @@ function body(source: DiagnosticSource, enabled: boolean, s: DiagnosticSanitizer
   const parse = (raw: string, decoded: boolean) => !raw ? { reason: 'no-observed-content', partial: false }
     : decoded ? s.payload(raw) : { reason: 'undecoded-content-omitted', partial: true };
   const content = d.format === 'websocket'
-    ? { frames: d.frames.map((f) => ({ index: f.index, direction: f.direction, at: at(f.at), type: f.type, truncated: f.truncated,
+    ? { frames: d.frames.map((f) => ({ index: f.index, direction: f.direction, at: at(f.at), type: f.type, truncated: f.truncated || !!f.cut,
       payload: f.type === 'text' ? s.payload(f.payload) : { reason: 'binary-frame-omitted', partial: true } })) }
     : { request: parse(d.request, d.requestDecoded), response: parse(d.response, d.responseDecoded) };
   if (Buffer.byteLength(JSON.stringify(content)) > DIAGNOSTIC_LIMITS.bodyBytes) return { disposition: 'omitted', reason: 'export-body-byte-limit', partial: true };
   const parts = content.frames ? content.frames.map((f) => f.payload) : [content.request!, content.response!];
   const any = parts.some((p) => p.content !== undefined);
-  const partial = parts.some((p) => p.partial) || d.state === 'pending' || d.state === 'partial' || d.frames.some((f) => f.truncated);
+  const partial = parts.some((p) => p.partial) || d.state === 'pending' || d.state === 'partial' || !!d.requestCut || !!d.responseCut || d.frames.some((f) => f.truncated || !!f.cut);
   return { disposition: any ? 'included' : 'omitted', reason: any ? 'structurally-redacted-user-inspected-content' : 'no-supported-structured-content', partial, content };
 }
 function logClass(text: string): string {

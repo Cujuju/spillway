@@ -15,7 +15,8 @@ const LOOPBACK = '127.0.0.1';
 const REPLAY_BATCH = 250;
 const REPLAY_PAUSE_MS = 500;
 const DEMO_HISTORY_TURNS = 96;
-const DEMO_TURN_REPEATS = 64;
+const DEMO_TURN_TEXT = 'Captured exchanges keep the original protocol body for local inspection. ';
+const DEMO_TURN_REPEATS = Math.ceil(CAPTURE_BODY_LIMIT / DEMO_HISTORY_TURNS / Buffer.byteLength(DEMO_TURN_TEXT));
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,15 +63,16 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
         { role: 'user', content: [{ type: 'text', text: 'Inspect the request archive for alex@example.com.' }] },
         { role: 'assistant', content: [{ type: 'text', text: 'I will check the captured exchanges.' }, { type: 'tool_use', id: 'tool_demo_1', name: 'inspect_archive', input: { scope: 'today' } }] },
         { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool_demo_1', content: '12 exchanges captured; 2 request bodies reached the recording limit.' }] },
-        ...Array.from({ length: DEMO_HISTORY_TURNS }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: [{ type: 'text', text: `Earlier conversation turn ${index + 1}: ` + 'Captured exchanges keep the original protocol body for local inspection. '.repeat(DEMO_TURN_REPEATS) }] })),
+        ...Array.from({ length: DEMO_HISTORY_TURNS }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: [{ type: 'text', text: `Earlier conversation turn ${index + 1}: ` + DEMO_TURN_TEXT.repeat(DEMO_TURN_REPEATS) }] })),
         { role: 'user', content: 'Summarize the large and truncated exchanges.' },
       ],
     });
     return { id: 'demo-capture-1', traceId: demoTrace(e.request_id), epoch: captureEpoch, sequence: 1, startedAt: e.at,
       method: 'POST', path: '/v1/messages', status: 200, state: 'partial', reason: 'byte-limit',
-      request: Buffer.from(request, 'utf8').subarray(0, CAPTURE_BODY_LIMIT).toString('utf8'),
+      request: request.slice(0, CAPTURE_BODY_LIMIT / 2) + request.slice(-CAPTURE_BODY_LIMIT / 2),
+      requestCut: { offset: CAPTURE_BODY_LIMIT / 2, omitted: Buffer.byteLength(request) - CAPTURE_BODY_LIMIT },
       response: JSON.stringify({ id: 'msg_demo_1', type: 'message', role: 'assistant', model,
-        content: [{ type: 'text', text: 'The archive contains 12 exchanges. Two request bodies were cut at 256 KiB; their captured conversation prefixes remain readable.' }, { type: 'tool_use', id: 'tool_demo_2', name: 'inspect_archive', input: { scope: 'truncated' } }],
+        content: [{ type: 'text', text: 'The archive contains 12 exchanges. Large request bodies retain their head and tail around an omitted middle.' }, { type: 'tool_use', id: 'tool_demo_2', name: 'inspect_archive', input: { scope: 'truncated' } }],
         stop_reason: 'tool_use', usage: { input_tokens: 70000, output_tokens: 80 } }),
       requestType: 'application/json', responseType: 'application/json', requestEncoding: '', responseEncoding: '' };
   };
@@ -119,7 +121,7 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
       case 'GET /server/lockouts': return json(res, { lockouts: [] });
       case 'PUT /observability/captures/lease': {
         captureEnabled = (await readBody(req)).enabled === true;
-        return json(res, { leaseSeconds: 60, bodyLimit: 262144 });
+        return json(res, { leaseSeconds: 60, bodyLimit: CAPTURE_BODY_LIMIT });
       }
       case 'GET /observability/captures': return json(res, { version: 1, epoch: captureEpoch, dropped: 0, records: captureEnabled && data.events.length && Number(url.searchParams.get('after') ?? 0) < 1 ? [demoCapture()] : [] });
       case 'DELETE /server/lockouts':

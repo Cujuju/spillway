@@ -15,10 +15,11 @@ class FakeWorker {
   }
 }
 
-const detail: ExchangeInput = { request: '{}', response: '{}', frames: [], format: 'http', reason: '' };
+// Cut fields are inputs too: without them every capture reads as a legacy start-only one.
+const detail: ExchangeInput = { request: '{}', response: '{}', frames: [], format: 'http', reason: '', requestCut: { offset: 1, omitted: 2 }, responseCut: null };
 const sides = (raw: string): ExchangeSides => ({
-  request: { raw, pretty: null, messages: null, cut: false },
-  response: { raw, pretty: null, messages: null, cut: false },
+  request: { raw, pretty: null, messages: null, cut: null, tail: '', gaps: 0 },
+  response: { raw, pretty: null, messages: null, cut: null, tail: '', gaps: 0 },
 });
 let parseExchange: typeof parse;
 

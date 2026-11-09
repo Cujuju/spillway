@@ -5,7 +5,7 @@ import type { Db } from './activityDb';
 import type { ArchiveDetail } from '@shared/archive';
 import { archiveSearchText } from '@shared/archiveContent';
 export type Range = [number, number, number];
-export type Body = Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'format' | 'requestDecoded' | 'responseDecoded'>;
+export type Body = Pick<ArchiveDetail, 'requestCut' | 'responseCut' | 'request' | 'response' | 'frames' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'format' | 'requestDecoded' | 'responseDecoded'>;
 export type PieceDetail = Omit<Body, 'request' | 'response' | 'frames'> & { thread: string; request: Range[]; response: Range[]; frames: Range[] };
 const MIGRATION_BATCH = 8;
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
@@ -61,27 +61,40 @@ export function storeBody(db: Db, id: string, body: Body, bases?: Map<string, { 
   const put = (bytes: Buffer): Range[] => bytes.length ? [[Number(db.prepare('INSERT INTO archive_pieces(thread_id,bytes) VALUES(?,?)').run(thread, zstdCompressSync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 3 } })).lastInsertRowid), 0, bytes.length]] : [];
   const request = Buffer.from(body.request), response = Buffer.from(body.response), frames = Buffer.from(JSON.stringify(body.frames));
   let base: PieceDetail | null = null;
-  let previous: Buffer = Buffer.alloc(0);
+  let previous: Buffer = Buffer.alloc(0), previousFrames: Buffer = Buffer.alloc(0), previousResponse: Buffer = Buffer.alloc(0);
   try {
     const row = db.prepare('SELECT base FROM archive_threads WHERE id=?').get(thread) as { base: string | null };
-    if (row.base) { base = JSON.parse(row.base); const cached = bases?.get(thread); previous = cached?.detail === row.base ? cached.request : Buffer.from(rebuild(db, base!, true).request); }
+    if (row.base) {
+      base = JSON.parse(row.base);
+      const cached = bases?.get(thread);
+      if (body.format === 'websocket') {
+        const restored = rebuild(db, base!);
+        previous = cached?.detail === row.base ? cached.request : Buffer.from(restored.request);
+        previousFrames = Buffer.from(JSON.stringify(restored.frames));
+        previousResponse = Buffer.from(restored.response);
+      } else {
+        previous = cached?.detail === row.base ? cached.request : Buffer.from(rebuild(db, base!, true).request);
+      }
+    }
   } catch { base = null; }
-  let prefix = 0, suffix = 0;
-  if (base) {
-    while (prefix < Math.min(request.length, previous.length) && request[prefix] === previous[prefix]) prefix++;
-    while (prefix && prefix < request.length && (request[prefix]! & 0xc0) === 0x80) prefix--;
-    while (suffix < Math.min(request.length, previous.length) - prefix && request[request.length - suffix - 1] === previous[previous.length - suffix - 1]) suffix++;
-    while (suffix && (request[request.length - suffix]! & 0xc0) === 0x80) suffix--;
-  }
-  const middle = request.subarray(prefix, request.length - suffix);
+  const diff = (value: Buffer, prior: Buffer, ranges: Range[]) => {
+    let prefix = 0, suffix = 0;
+    while (prefix < Math.min(value.length, prior.length) && value[prefix] === prior[prefix]) prefix++;
+    while (prefix && prefix < value.length && (value[prefix]! & 0xc0) === 0x80) prefix--;
+    while (suffix < Math.min(value.length, prior.length) - prefix && value[value.length - suffix - 1] === prior[prior.length - suffix - 1]) suffix++;
+    while (suffix && (value[value.length - suffix]! & 0xc0) === 0x80) suffix--;
+    const middle = value.subarray(prefix, value.length - suffix);
+    return { middle, refs: merge([...sliceRanges(ranges, 0, prefix), ...put(middle), ...sliceRanges(ranges, prior.length - suffix, suffix)]) };
+  };
+  const requestDiff = diff(request, previous, base?.request ?? []);
+  const framesDiff = diff(frames, previousFrames, base?.frames ?? []);
   const { request: _request, response: _response, frames: _frames, ...metadata } = body;
-  const combined = put(Buffer.concat([response, frames]));
-  let refs: PieceDetail = { ...metadata, thread, request: merge([...(base ? sliceRanges(base.request, 0, prefix) : []), ...put(middle), ...(base ? sliceRanges(base.request, previous.length - suffix, suffix) : [])]), response: sliceRanges(combined, 0, response.length), frames: sliceRanges(combined, response.length, frames.length) };
+  let refs: PieceDetail = { ...metadata, thread, request: requestDiff.refs, response: body.format === 'websocket' ? diff(response, previousResponse, base?.response ?? []).refs : put(response), frames: framesDiff.refs };
   const matches = (candidate: PieceDetail) => {
     const restored = rebuild(db, candidate);
     return ['request', 'response', 'frames'].every((k) => hash(JSON.stringify(restored[k as keyof Body])) === hash(JSON.stringify(body[k as keyof Body])));
   };
-  let indexRequest = middle;
+  let indexRequest = requestDiff.middle;
   let valid = false;
   try { valid = matches(refs); } catch { /* Full-copy fallback is verified below. */ }
   if (!valid) {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CAPTURE_BODY_LIMIT, type ArchiveDetail, type CaptureFrame } from './archive';
+import type { ArchiveDetail, CaptureFrame } from './archive';
 import { readableStreamText } from './archiveContent';
-import { exchangeSide } from './exchangeBody';
+import { exchangeSide, LEGACY_CAPTURE_BODY_LIMIT } from './exchangeBody';
 
-type Detail = Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'format' | 'reason'>;
+type Detail = Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'format' | 'reason' | 'requestCut' | 'responseCut'>;
 const detail = (patch: Partial<Detail> = {}): Detail => ({ request: '', response: '', frames: [], format: 'http', reason: '', ...patch });
 const request = (value: unknown) => exchangeSide(detail({ request: JSON.stringify(value) }), 'request');
 const response = (value: unknown) => exchangeSide(detail({ response: JSON.stringify(value) }), 'response');
@@ -17,7 +17,7 @@ describe('exchangeSide', () => {
     expect(side.raw).toBe(JSON.stringify(value));
     expect(side.pretty).toBe(JSON.stringify(value, null, 2));
     expect(side.messages).toEqual([{ role: 'user', parts: [text(value.messages[0]!.content)] }]);
-    expect(side.cut).toBe(false);
+    expect(side.cut).toBeNull();
   });
 
   it('reads Anthropic system blocks, thinking, calls, results and media; skips tool definitions', () => {
@@ -123,29 +123,29 @@ describe('exchangeSide', () => {
 
   it('recovers a full 256 KiB prefix with many earlier messages and a partial string', () => {
     const history = Array.from({ length: 100 }, () => ({ role: 'assistant', content: 'Earlier message' }));
-    const raw = JSON.stringify({ messages: [...history, { role: 'user', content: 'x'.repeat(CAPTURE_BODY_LIMIT) }] }).slice(0, CAPTURE_BODY_LIMIT);
+    const raw = JSON.stringify({ messages: [...history, { role: 'user', content: 'x'.repeat(LEGACY_CAPTURE_BODY_LIMIT) }] }).slice(0, LEGACY_CAPTURE_BODY_LIMIT);
     const side = exchangeSide(detail({ request: raw }), 'request');
-    expect(new TextEncoder().encode(side.raw).length).toBe(CAPTURE_BODY_LIMIT);
-    expect(side.cut).toBe(true);
+    expect(new TextEncoder().encode(side.raw).length).toBe(LEGACY_CAPTURE_BODY_LIMIT);
+    expect(side.cut).not.toBeNull();
     expect(side.pretty).toBeNull();
     expect(side.messages).toHaveLength(history.length + 1);
     expect(side.messages?.at(-1)?.parts[0]?.text).toBe('x'.repeat(raw.length - raw.indexOf('xxx')));
   });
 
   it('uses UTF-8 bytes per HTTP side, independent of record reason', () => {
-    const value = detail({ request: 'é'.repeat(CAPTURE_BODY_LIMIT / 2), response: '{}', reason: 'connection-cancelled' });
-    expect(exchangeSide(value, 'request').cut).toBe(true);
-    expect(exchangeSide(value, 'response').cut).toBe(false);
-    expect(exchangeSide(detail({ request: 'x'.repeat(CAPTURE_BODY_LIMIT - 1) }), 'request').cut).toBe(false);
-    expect(exchangeSide(detail({ request: 'x'.repeat(CAPTURE_BODY_LIMIT - 1) + '�' }), 'request').cut).toBe(true);
-    expect(exchangeSide(detail({ request: 'short', reason: 'byte-limit' }), 'request').cut).toBe(false);
+    const value = detail({ request: 'é'.repeat(LEGACY_CAPTURE_BODY_LIMIT / 2), response: '{}', reason: 'connection-cancelled' });
+    expect(exchangeSide(value, 'request').cut).not.toBeNull();
+    expect(exchangeSide(value, 'response').cut).toBeNull();
+    expect(exchangeSide(detail({ request: 'x'.repeat(LEGACY_CAPTURE_BODY_LIMIT - 1) }), 'request').cut).toBeNull();
+    expect(exchangeSide(detail({ request: 'x'.repeat(LEGACY_CAPTURE_BODY_LIMIT - 1) + '�' }), 'request').cut).not.toBeNull();
+    expect(exchangeSide(detail({ request: 'short', reason: 'byte-limit' }), 'request').cut).toBeNull();
   });
 
   it('counts decoded Base64 wire bytes, including padding', () => {
-    for (const bytes of [CAPTURE_BODY_LIMIT - 2, CAPTURE_BODY_LIMIT - 1, CAPTURE_BODY_LIMIT, CAPTURE_BODY_LIMIT + 1]) {
+    for (const bytes of [LEGACY_CAPTURE_BODY_LIMIT - 2, LEGACY_CAPTURE_BODY_LIMIT - 1, LEGACY_CAPTURE_BODY_LIMIT, LEGACY_CAPTURE_BODY_LIMIT + 1]) {
       const raw = 'Base64 wire body:\n' + btoa('x'.repeat(bytes));
       const side = exchangeSide(detail({ request: raw }), 'request');
-      expect(side.cut).toBe(bytes >= CAPTURE_BODY_LIMIT);
+      expect(side.cut !== null).toBe(bytes >= LEGACY_CAPTURE_BODY_LIMIT);
       expect(side.messages).toBeNull();
     }
   });
@@ -164,13 +164,53 @@ describe('exchangeSide', () => {
 
   it('detects WebSocket cuts per direction without counting separators', () => {
     const value = detail({ format: 'websocket', frames: [frame('request', 'small', true), frame('response', 'ok')] });
-    expect(exchangeSide(value, 'request').cut).toBe(true);
-    expect(exchangeSide(value, 'response').cut).toBe(false);
-    const frames = [frame('request', 'é'.repeat(CAPTURE_BODY_LIMIT / 4)), frame('request', 'x'.repeat(CAPTURE_BODY_LIMIT / 2 - 1))];
-    expect(exchangeSide(detail({ format: 'websocket', frames }), 'request').cut).toBe(false);
+    expect(exchangeSide(value, 'request').cut).not.toBeNull();
+    expect(exchangeSide(value, 'response').cut).toBeNull();
+    const frames = [frame('request', 'é'.repeat(LEGACY_CAPTURE_BODY_LIMIT / 4)), frame('request', 'x'.repeat(LEGACY_CAPTURE_BODY_LIMIT / 2 - 1))];
+    expect(exchangeSide(detail({ format: 'websocket', frames }), 'request').cut).toBeNull();
     frames.push(frame('request', 'x'));
-    expect(exchangeSide(detail({ format: 'websocket', frames }), 'request').cut).toBe(true);
-    for (const direction of ['request', 'response'] as const) expect(exchangeSide(detail({ format: 'websocket', reason: 'websocket-frame-count-limit' }), direction).cut).toBe(true);
+    expect(exchangeSide(detail({ format: 'websocket', frames }), 'request').cut).not.toBeNull();
+    for (const direction of ['request', 'response'] as const) expect(exchangeSide(detail({ format: 'websocket', reason: 'websocket-frame-count-limit' }), direction).cut).not.toBeNull();
+  });
+
+  it('splits a head + tail capture at the recorded byte offset and reads messages from the head', () => {
+    const head = '{"messages":[{"role":"user","content":"é first"},{"role":"assistant","content":"sec';
+    const tail = 'newest turn"}],"stream":true}';
+    const offset = new TextEncoder().encode(head).length;
+    const side = exchangeSide(detail({ request: head + tail, requestCut: { offset, omitted: 4096 }, responseCut: null }), 'request');
+    expect(side.cut).toEqual({ at: head.length, omitted: 4096 });
+    expect(side.tail).toBe(tail);
+    expect(side.pretty).toBeNull();
+    expect(side.messages).toEqual([{ role: 'user', parts: [text('é first')] }, { role: 'assistant', parts: [text('sec')] }]);
+  });
+
+  it('trusts recorded cuts over the legacy byte test once a row carries cut fields', () => {
+    const big = 'x'.repeat(LEGACY_CAPTURE_BODY_LIMIT + 1);
+    expect(exchangeSide(detail({ request: big, requestCut: null, responseCut: null }), 'request').cut).toBeNull();
+    const cut = exchangeSide(detail({ request: 'abc', requestCut: { offset: 3, omitted: null }, responseCut: null }), 'request');
+    expect(cut.cut).toEqual({ at: 3, omitted: null });
+    expect(cut.tail).toBe('');
+  });
+
+  it('reads a cut WebSocket frame up to its cut and marks skipped message indexes', () => {
+    const payload = '{"type":"response.create","input":"kept"}';
+    const cutFrame = { ...frame('request', payload + 'tail bytes'), truncated: true, cut: { offset: payload.length, omitted: 10 } };
+    const side = exchangeSide(detail({ format: 'websocket', frames: [cutFrame], requestCut: null, responseCut: null }), 'request');
+    expect(side.cut).not.toBeNull();
+    expect(side.messages).toEqual([{ role: 'user', parts: [text('kept')] }]);
+    const gap = [frame('request', 'a'), { ...frame('request', 'b'), index: 5 }];
+    expect(exchangeSide(detail({ format: 'websocket', frames: gap, requestCut: null, responseCut: null }), 'request')).toMatchObject({ cut: null, gaps: 1 });
+    expect(exchangeSide(detail({ format: 'websocket', frames: [frame('request', 'a'), { ...frame('response', 'b'), index: 2 }], requestCut: null, responseCut: null }), 'request')).toMatchObject({ cut: null, gaps: 0 });
+  });
+
+  it('never joins streamed text across dropped messages or a cut frame’s tail', () => {
+    const delta = (index: number, value: string) => ({ ...frame('response', { delta: value }), index });
+    const head = '{"delta":"HEAD', tail = 'TAIL"}';
+    const cutFrame = { ...frame('response', head + tail), index: 4, truncated: true, cut: { offset: head.length, omitted: 100 } };
+    const side = exchangeSide(detail({ format: 'websocket', frames: [delta(1, 'One'), delta(3, 'Three'), cutFrame, delta(5, 'Five')], requestCut: null, responseCut: null }), 'response');
+    expect(side.gaps).toBe(2);
+    expect(side.cut).toBeNull();
+    expect(side.messages?.map((m) => m.parts.map((p) => p.text).join(''))).toEqual(['One', 'Messages not recorded here.', 'Three', 'Messages not recorded here.', 'Five']);
   });
 
   it('reuses readableStreamText for SSE and response deltas without including request frames', () => {

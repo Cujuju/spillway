@@ -4,7 +4,7 @@ import type { Db } from './activityDb';
 import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore';
 import { rebuild, type PieceDetail } from './archivePieces';
 import { zstdDecompressSync } from 'node:zlib';
-import { encodeClickHouseLine, outboxBytes, type OutboxRow } from './clickhouseLine';
+import { encodeClickHouseLine, outboxBytes, CLICKHOUSE_SINGLE_FACT_BYTES, type OutboxRow } from './clickhouseLine';
 
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
 const RETRY_JITTER_FRACTION = 0.5;
@@ -117,16 +117,16 @@ export class ClickHouseStore implements ArchiveFactSink {
           } catch { unavailable = true; additions = ''; pieceRows = 0; ids.length = 0; resolved = undefined; }
         }
         let line = encodeClickHouseLine(unavailable ? { ...r, content: null, expired: 1 } : r, config, state.source_id, captureBodies, resolved);
-        if (Buffer.byteLength(line + additions) > CLICKHOUSE_BATCH_BYTES || pieceRows + 1 > CLICKHOUSE_BATCH_ROWS) { additions = ''; pieceRows = 0; ids.length = 0; line = encodeClickHouseLine({ ...r, content: null }, config, state.source_id, captureBodies, undefined, 'omitted-size-limit'); }
+        if (Buffer.byteLength(line + additions) > CLICKHOUSE_SINGLE_FACT_BYTES || pieceRows + 1 > CLICKHOUSE_BATCH_ROWS) { additions = ''; pieceRows = 0; ids.length = 0; line = encodeClickHouseLine({ ...r, content: null }, config, state.source_id, captureBodies, undefined, 'omitted-size-limit'); }
         if (JSON.parse(line).content_policy !== 'included') { additions = ''; pieceRows = 0; ids.length = 0; }
         const size = Buffer.byteLength(line + additions);
-        if (!rows && size > CLICKHOUSE_BATCH_BYTES) {
+        if (!rows && size > (JSON.parse(line).content_policy === 'included' ? CLICKHOUSE_SINGLE_FACT_BYTES : CLICKHOUSE_BATCH_BYTES)) {
           oversized.push(r.seq);
           continue;
         }
-        if (bytes + size > CLICKHOUSE_BATCH_BYTES || rows + pieceRows + 1 > CLICKHOUSE_BATCH_ROWS) break;
+        if (rows && bytes + size > CLICKHOUSE_BATCH_BYTES || rows + pieceRows + 1 > CLICKHOUSE_BATCH_ROWS) break;
         facts += line; pieces += additions; ids.forEach((id) => sent.add(id)); bytes += size; rows += pieceRows + 1; last = r.seq;
-        if (bytes === CLICKHOUSE_BATCH_BYTES) break;
+        if (bytes >= CLICKHOUSE_BATCH_BYTES) break;
       }
       for (const seq of oversized) this.db.prepare('DELETE FROM clickhouse_outbox WHERE seq=?').run(seq);
       if (oversized.length) this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,oversized=oversized+?').run(oversized.length, oversized.length);

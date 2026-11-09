@@ -1,7 +1,6 @@
-import type { ArchiveDetail } from '@shared/archive';
-import type { ExchangeSide } from '@shared/exchangeBody';
+import { exchangeInput, type ExchangeInput, type ExchangeSide } from '@shared/exchangeBody';
 
-export type ExchangeInput = Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'format' | 'reason'>;
+export type { ExchangeInput };
 export interface ExchangeSides { request: ExchangeSide; response: ExchangeSide }
 
 interface PendingParse {
@@ -65,8 +64,7 @@ export function parseExchange(detail: ExchangeInput, signal: AbortSignal): Promi
       cleanup();
       reject(new DOMException('Exchange parsing aborted', 'AbortError'));
     };
-    const { request, response, frames, format, reason } = detail;
-    pending.set(id, { detail: { request, response, frames, format, reason }, resolve, reject, cleanup });
+    pending.set(id, { detail: exchangeInput(detail), resolve, reject, cleanup });
     signal.addEventListener('abort', abort, { once: true });
     dispatch();
   });

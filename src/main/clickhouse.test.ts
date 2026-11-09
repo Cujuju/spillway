@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
+import { CAPTURE_BODY_LIMIT, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, validateClickHouseCredentials } from '@shared/clickhouse';
 import { startDemoClickHouse } from '../../scripts/demo/clickhouse.mts';
 import { openActivityDb, type Db } from './activityDb';
@@ -252,14 +252,14 @@ it('resends an unacknowledged piece after the outbox budget drops its fact', () 
   expect(store.status().discarded).toBe(1);
   expect(store.prepare()!.pieces).toBe(first.pieces);
 });
-it('omits oversized content without marking its request pieces sent', () => {
+it('includes escaped content above the normal batch limit', () => {
   const { store, archive, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
   store.configure({ ...config, includeBodies: true }); store.prepare();
   ingest(archive, record(1, { request: '\\'.repeat(1_000_000), response: '\\'.repeat(1_000_000), frames: Array.from({ length: 8 }, (_, i) => ({ index: i, at: new Date().toISOString(), direction: 'response', type: 'text', truncated: false, payload: '\\'.repeat(190_000) })) }));
-  const batch = store.prepare()!; expect(batch.pieces).toBe('');
-  expect(lines(batch.facts)[0].content_policy).toBe('omitted-size-limit');
+  const batch = store.prepare()!; expect(batch.pieces.length).toBeGreaterThan(0);
+  expect(lines(batch.facts)[0].content_policy).toBe('included');
   store.acknowledge(batch.token, batch.destination);
-  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get()).toEqual({ n: 0 });
+  expect((db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get() as { n: number }).n).toBeGreaterThan(0);
 });
 it('resets local v2 exporter state once and leaves the archive intact', () => {
   const { db, store, file, archive } = setup(); enable(store); store.append(fact());
@@ -281,5 +281,19 @@ it.each(['pieces', 'thread'] as const)('expires unavailable %s and continues del
   expect(batch.pieces).toBe('');
   expect(lines(batch.facts)[0]).toMatchObject({ content_policy: 'source-expired', request_pieces: [], response: '', frames_json: '' });
   expect(lines(batch.facts)).toHaveLength(2);
+  store.acknowledge(batch.token, batch.destination); expect(store.status().queued).toBe(0);
+});
+
+it('ships a large single capture with all required pieces in one batch', () => {
+  const { archive, store } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, includeBodies: true }); store.prepare();
+  const request = 'x'.repeat(CAPTURE_BODY_LIMIT);
+  ingest(archive, record(1, { request }));
+  const batch = store.prepare()!;
+  expect(Buffer.byteLength(batch.facts + batch.pieces)).toBeGreaterThan(CLICKHOUSE_BATCH_BYTES);
+  const capture = lines(batch.facts).find((f) => f.kind === 'capture');
+  expect(capture.content_policy).toBe('included');
+  const pieces = new Map(lines(batch.pieces).map((p) => [p.seq, p.bytes]));
+  expect(capture.request_pieces.map(([id, offset, length]: [number, number, number]) => pieces.get(id).slice(offset, offset + length)).join('')).toBe(request);
   store.acknowledge(batch.token, batch.destination); expect(store.status().queued).toBe(0);
 });

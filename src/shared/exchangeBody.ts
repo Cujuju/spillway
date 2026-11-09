@@ -1,4 +1,4 @@
-import { CAPTURE_BODY_LIMIT, type ArchiveDetail } from './archive';
+import type { ArchiveDetail, CaptureCut, CaptureFrame } from './archive';
 import { readableStreamText } from './archiveContent';
 
 export type ExchangePart =
@@ -6,19 +6,31 @@ export type ExchangePart =
   | { kind: 'thinking'; text: string }
   | { kind: 'tool-call'; name: string; text: string }
   | { kind: 'tool-result'; name: string; text: string }
-  | { kind: 'media'; text: string };
+  | { kind: 'media'; text: string }
+  | { kind: 'gap'; text: string };
+/** `role` is '' for a gap between recorded WebSocket messages. */
 export interface ExchangeMessage { role: string; parts: ExchangePart[] }
 export interface ExchangeSide {
   /** HTTP body as stored; WebSocket payloads in direction order, joined by two newlines. */
   raw: string;
   /** Strict JSON, formatted with two spaces. */
   pretty: string | null;
-  /** Recognised messages, including a recoverable cut tail. */
+  /** Recognised messages before any gap, including a recoverable cut end. */
   messages: ExchangeMessage[] | null;
-  cut: boolean;
+  /** Where recording stopped or left out bytes before `tail`; null when nothing is missing at that point. */
+  cut: ExchangeGap | null;
+  /** WebSocket losses between recorded messages, each a gap message in `messages`. */
+  gaps: number;
+  /** Raw text recorded after the gap (head + tail capture); '' when nothing follows it. */
+  tail: string;
 }
+/** `at` indexes `raw`; `omitted` is bytes left out, null when unknown. */
+export interface ExchangeGap { at: number; omitted: number | null }
 
 const BASE64_WIRE_PREFIX = 'Base64 wire body:\n';
+/** Head-only per-side cap of proxies before per-side cuts (#134); rows stored then carry no cut fields. */
+export const LEGACY_CAPTURE_BODY_LIMIT = 256 * 1024;
+const WEBSOCKET_LIMIT_REASONS = new Set(['websocket-frame-count-limit', 'websocket-byte-limit', 'websocket-frame-or-byte-limit']);
 const encoder = new TextEncoder();
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
@@ -188,13 +200,63 @@ function bodyBytes(raw: string): number {
   return Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
 }
 
-export function exchangeSide(detail: Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'format' | 'reason'>, direction: 'request' | 'response'): ExchangeSide {
-  const websocket = detail.format === 'websocket';
-  const frames = websocket ? detail.frames.filter((frame) => frame.direction === direction) : [];
-  const raw = websocket ? frames.map((frame) => frame.payload).join('\n\n') : detail[direction];
-  const { value, pretty } = parsed(raw);
-  const streamed = direction === 'response' ? readableStreamText(raw, frames) : '';
-  const messages = streamed ? [{ role: 'assistant', parts: [{ kind: 'text' as const, text: streamed }] }] : messagesIn(frames.length > 1 ? frames.map((frame) => parsed(frame.payload).value) : [value]);
-  const cut = websocket ? frames.some((frame) => frame.truncated) || frames.reduce((bytes, frame) => bytes + encoder.encode(frame.payload).length, 0) >= CAPTURE_BODY_LIMIT || detail.reason === 'websocket-frame-count-limit' : bodyBytes(raw) >= CAPTURE_BODY_LIMIT;
-  return { raw, pretty, messages, cut };
+/** UTF-16 index of a UTF-8 byte offset; offsets inside a character round down. */
+function charIndex(text: string, bytes: number): number {
+  let index = 0, used = 0;
+  while (index < text.length) {
+    const point = text.codePointAt(index)!;
+    used += point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
+    if (used > bytes) break;
+    index += point > 0xffff ? 2 : 1;
+  }
+  return index;
+}
+/** Text before a frame's cut; the tail after it can't be read as JSON. */
+const headOf = (payload: string, cut: CaptureCut | undefined) => cut ? payload.slice(0, charIndex(payload, cut.offset)) : payload;
+
+/** One direction's frames, split after a cut frame or where frame indexes were dropped. A drop in either direction splits both. */
+function frameRuns(all: CaptureFrame[], direction: CaptureFrame['direction']): { runs: CaptureFrame[][]; endLost: boolean } {
+  const runs: CaptureFrame[][] = [];
+  const lostAfter = (prior: number, at: number) => all[prior]!.truncated || all[at]!.index - all[prior]!.index > at - prior;
+  let prior = -1;
+  all.forEach((frame, at) => {
+    if (frame.direction !== direction) return;
+    if (prior < 0 || lostAfter(prior, at)) runs.push([]);
+    runs.at(-1)!.push(frame); prior = at;
+  });
+  return { runs, endLost: prior >= 0 && lostAfter(prior, all.length - 1) };
+}
+const GAP_MESSAGE: ExchangeMessage = { role: '', parts: [{ kind: 'gap', text: 'Messages not recorded here.' }] };
+
+/** The detail fields exchangeSide reads. */
+export type ExchangeInput = Pick<ArchiveDetail, 'request' | 'response' | 'frames' | 'format' | 'reason' | 'requestCut' | 'responseCut'>;
+/** Copies exactly the ExchangeInput fields, so a caller sending a detail elsewhere (the parse worker) can't drop one. */
+export const exchangeInput = ({ request, response, frames, format, reason, requestCut, responseCut }: ExchangeInput): ExchangeInput =>
+  ({ request, response, frames, format, reason, requestCut, responseCut });
+export function exchangeSide(detail: ExchangeInput, direction: 'request' | 'response'): ExchangeSide {
+  const legacy = detail.requestCut === undefined && detail.responseCut === undefined;
+  if (detail.format === 'websocket') {
+    const { runs, endLost } = frameRuns(detail.frames, direction);
+    const frames = runs.flat();
+    const raw = frames.map((frame) => frame.payload).join('\n\n');
+    // Each run reads alone, through cut frames' heads, so text never joins across a loss.
+    const readable = runs.map((run) => {
+      const heads = run.map((frame) => ({ ...frame, payload: headOf(frame.payload, frame.cut) }));
+      const streamed = direction === 'response' ? readableStreamText('', heads) : '';
+      return streamed ? [{ role: 'assistant', parts: [{ kind: 'text', text: streamed }] } satisfies ExchangeMessage] : messagesIn(heads.map((frame) => parsed(frame.payload).value)) ?? [];
+    });
+    const messages = readable.flatMap((run, i) => i ? [GAP_MESSAGE, ...run] : run);
+    const legacyCut = legacy && (WEBSOCKET_LIMIT_REASONS.has(detail.reason) || frames.reduce((bytes, frame) => bytes + encoder.encode(frame.payload).length, 0) >= LEGACY_CAPTURE_BODY_LIMIT);
+    const cut = endLost || legacyCut;
+    return { raw, pretty: frames.length === 1 && !cut ? parsed(raw).pretty : null, tail: '', cut: cut ? { at: raw.length, omitted: null } : null,
+      gaps: Math.max(0, runs.length - 1), messages: messages.some((m) => m !== GAP_MESSAGE) ? messages : null };
+  }
+  const raw = detail[direction], recorded = detail[direction === 'request' ? 'requestCut' : 'responseCut'];
+  const cut = recorded ? { at: charIndex(raw, recorded.offset), omitted: recorded.omitted }
+    : legacy && bodyBytes(raw) >= LEGACY_CAPTURE_BODY_LIMIT ? { at: raw.length, omitted: null } : null;
+  const head = cut ? raw.slice(0, cut.at) : raw;
+  const { value, pretty } = parsed(head);
+  const streamed = direction === 'response' ? readableStreamText(head) : '';
+  return { raw, pretty: cut ? null : pretty, tail: cut ? raw.slice(cut.at) : '', cut, gaps: 0,
+    messages: streamed ? [{ role: 'assistant', parts: [{ kind: 'text', text: streamed }] }] : messagesIn([value]) };
 }

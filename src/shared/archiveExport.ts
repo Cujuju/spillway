@@ -23,7 +23,7 @@ export interface ArchiveAttemptProvenance extends Required<TransportMetadata> {
   failed: boolean | null; statusCode: number | null; latencyMs: number | null; ttftMs: number | null;
 }
 export type PortableAttempt = Omit<ArchiveDetail['attempts'][number], 'provenance'> & { provenance: ArchiveAttemptProvenance | null };
-export type PortablePayloadData = Pick<ArchiveDetail, 'request' | 'response' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'requestDecoded' | 'responseDecoded' | 'format' | 'frames'>;
+export type PortablePayloadData = Pick<ArchiveDetail, 'requestCut' | 'responseCut' | 'request' | 'response' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'requestDecoded' | 'responseDecoded' | 'format' | 'frames'>;
 export interface PortableCapture {
   type: 'capture'; entry: ArchiveEntry; attempts: PortableAttempt[]; attemptsState: 'recorded' | 'malformed';
   payload: { state: 'included' | 'omitted' | 'unavailable' | 'malformed'; reason: string; representation: 'downstream-protocol-v1'; sha256: string | null; data: PortablePayloadData | null };

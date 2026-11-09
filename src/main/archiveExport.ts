@@ -1,10 +1,11 @@
+import { validCaptureCut } from './archiveStore';
 import { readBody } from './archivePieces';
 import { sessionKind } from '@shared/types';
 import { createHash, randomUUID } from 'node:crypto';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
 import path from 'node:path';
-import { archiveCursor, type ArchiveEntry, type ArchiveQuery, type CaptureState } from '@shared/archive';
+import { archiveCursor, CAPTURE_BODY_LIMIT, type ArchiveEntry, type ArchiveQuery, type CaptureState } from '@shared/archive';
 import { DEFAULT_EXPORT_LIMITS, EXPORT_PREVIEW_TTL_MS, type ExportLimits, PORTABLE_ARCHIVE_FORMAT, type ArchiveExportJob, type ArchiveExportOptions, type PortableAttempt, type PortableCapture, type PortablePayloadData, type PortableTrailer } from '@shared/archiveExport';
 import type { Db } from './activityDb';
 import type { ArchiveStore } from './archiveStore';
@@ -51,15 +52,17 @@ export function normalizeExportOptions(raw: ArchiveExportOptions): ArchiveExport
 function payloadData(raw: string): PortablePayloadData | null {
   let v: unknown;
   try { v = JSON.parse(raw); } catch { return null; }
-  if (!record(v) || !['request', 'response'].every((k) => text(v[k], 4 * 1024 * 1024)) ||
+  if (!record(v) || !['request', 'response'].every((k) => text(v[k], CAPTURE_BODY_LIMIT * 4)) ||
     !['requestType', 'responseType', 'requestEncoding', 'responseEncoding'].every((k) => text(v[k])) ||
     !['http', 'websocket'].includes(String(v.format)) || typeof v.requestDecoded !== 'boolean' || typeof v.responseDecoded !== 'boolean' || !Array.isArray(v.frames) || v.frames.length > 128) return null;
   for (const f of v.frames) if (!record(f) || !Number.isSafeInteger(f.index) || !['request', 'response'].includes(String(f.direction)) ||
-    !date(f.at) || !['text', 'binary'].includes(String(f.type)) || typeof f.truncated !== 'boolean' || !text(f.payload, 64 * 1024 * 3)) return null;
+    !date(f.at) || !['text', 'binary'].includes(String(f.type)) || typeof f.truncated !== 'boolean' || !text(f.payload, CAPTURE_BODY_LIMIT * 3)) return null;
+  if (!validCaptureCut(v.requestCut ?? undefined, v.request as string) || !validCaptureCut(v.responseCut ?? undefined, v.response as string) || v.frames.some((f) => !validCaptureCut(f.cut, f.payload))) return null;
   // Copy known fields only; stored objects must never widen the export boundary.
   return { request: v.request, response: v.response, requestType: v.requestType, responseType: v.responseType, requestEncoding: v.requestEncoding, responseEncoding: v.responseEncoding,
+    ...(v.requestCut !== undefined ? { requestCut: v.requestCut } : {}), ...(v.responseCut !== undefined ? { responseCut: v.responseCut } : {}),
     format: v.format, requestDecoded: v.requestDecoded, responseDecoded: v.responseDecoded,
-    frames: v.frames.map((f) => ({ index: f.index, direction: f.direction, at: f.at, type: f.type, payload: f.payload, truncated: f.truncated })) } as PortablePayloadData;
+    frames: v.frames.map((f) => ({ index: f.index, direction: f.direction, at: f.at, type: f.type, payload: f.payload, truncated: f.truncated, ...(f.cut !== undefined ? { cut: f.cut } : {}) })) } as PortablePayloadData;
 }
 
 function attempts(raw: string): PortableAttempt[] {

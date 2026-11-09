@@ -11,7 +11,7 @@ const RESET_HOLD_MS = 4_000;
 const HOLD_SECONDS = RESET_HOLD_MS / 1_000;
 
 const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
-  reset: (label) => `Reset applied to ${label}; its limits are cleared.`,
+  reset: (label) => `Reset applied to ${label}; its limits were re-read.`,
   nothing_to_reset: (label) => `${label} has no limit to clear, so no credit was spent.`,
   no_credit: (label) => `${label} holds no usable reset credit.`,
   already_redeemed: (label) => `That reset for ${label} was already redeemed.`,
@@ -63,7 +63,7 @@ export function ResetCreditButton(props: {
       ? (UNUSABLE_NOTE[props.credential.provider] ?? UNUSABLE_FALLBACK)
       : props.disabled
         ? 'Start the proxy to use one.'
-        : `Hold ${HOLD_SECONDS} seconds to spend one and clear this account's limits.`;
+        : `Hold ${HOLD_SECONDS} seconds to spend one; the limits are re-read after.`;
 
   return (
     <>

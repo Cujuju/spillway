@@ -1,3 +1,4 @@
+import { repairMatchedIdentities } from './usageLedger';
 import { clientLogKey } from './clientLogPaths';
 import { ARCHIVE_SCHEMA } from './archiveStore';
 import { CLICKHOUSE_SCHEMA } from './clickhouseStore';
@@ -30,6 +31,7 @@ const LEGACY_IMPORTED = 'legacy-files-imported';
 /** Set once whole-day baselines with retained requests have become hourly totals. */
 const RETAINED_HOURS_REBUILT = 'retained-hours-rebuilt';
 const COMPACT_IDENTITIES = 'compact-usage-identities';
+const DRIFT_METADATA_BACKFILL = 'client-log-drift-metadata-backfilled';
 const INCREMENTAL_VACUUM = 'incremental-vacuum-enabled';
 
 /** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
@@ -41,6 +43,9 @@ export const CLIENT_KEY_SQL = `coalesce(json_extract(event, '$.client'), '${NO_C
 
 /** Rows are ordered by id, the order Spillway recorded them, which also pages the list. */
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS request_settings (hash TEXT PRIMARY KEY, settings TEXT NOT NULL, first_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS canary_results (id TEXT PRIMARY KEY, day TEXT NOT NULL, result TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS canary_by_day ON canary_results(day);
 CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, failed INTEGER NOT NULL, event TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS requests_by_day ON requests (day, id);
 CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
@@ -108,6 +113,11 @@ export function openActivityDb(file: string, hexKey: string): Db {
           ALTER TABLE usage_identities ADD COLUMN provider TEXT;
           ALTER TABLE usage_identities ADD COLUMN client TEXT;
           UPDATE usage_identities SET at = json_extract(event, '$.at'), provider = json_extract(event, '$.provider'), client = json_extract(event, '$.client');`);
+      }
+      if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(DRIFT_METADATA_BACKFILL)) {
+        repairMatchedIdentities(db);
+        db.exec('DELETE FROM client_log_checkpoints');
+        db.prepare('INSERT INTO meta VALUES (?, ?)').run(DRIFT_METADATA_BACKFILL, '1');
       }
       // Group-first avoids sorting every identity; time-first also supports bounded range scans.
       db.exec(`CREATE INDEX IF NOT EXISTS usage_coverage ON usage_identities (source, at, provider, client, matched);

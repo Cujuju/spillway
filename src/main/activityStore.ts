@@ -1,3 +1,6 @@
+import { queryDrift, storeCanaryResults, queryCanaryResults } from './driftStore';
+import type { DriftQuery } from '@shared/drift';
+import type { CanaryResult } from '@shared/canary';
 import type { ArchiveMigrationState } from '@shared/ipc';
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
@@ -38,6 +41,7 @@ function toStored(r: RequestRow): StoredActivityEvent {
 }
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 const statementsFor = connectionStatements({
+  saveSettings: 'INSERT OR IGNORE INTO request_settings VALUES (?, ?, ?)',
   checkpoint: 'SELECT state FROM client_log_checkpoints WHERE path = ?',
   changes: 'SELECT total_changes() AS n',
   prune: 'DELETE FROM requests WHERE day < ?',
@@ -61,7 +65,7 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
 }
 
 /** SQL condition limiting requests to `scope`'s accounts and clients; null when every request is in scope. */
-function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
+export function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
   const parts: string[] = scope.source === 'proxy' ? ["coalesce(json_extract(event, '$.source'), 'proxy') = 'proxy'"] : [];
   const params: string[] = [];
   for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients], ["coalesce(json_extract(event, '$.reasoningEffort'), '')", scope.efforts ?? null]] as const) {
@@ -78,6 +82,12 @@ function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | 
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
+  driftQuery(q: DriftQuery) { return queryDrift(this.db, q); }
+  canaryLastRunAt(): string | null {
+    return (this.db.prepare("SELECT max(json_extract(result, '$.at')) AS at FROM canary_results").get() as { at: string | null }).at;
+  }
+  canarySave(results: CanaryResult[]) { storeCanaryResults(this.db, results); }
+  canaryResults(q: { from: string; to: string }) { return queryCanaryResults(this.db, q); }
   private get cases() { return new EvalCaseStore(this.db, this.archive); }
   evalList() { return this.cases.list(); }
   evalGet(id: string, revision?: number) { return this.cases.get(id, revision); }
@@ -196,7 +206,8 @@ export class ActivityLog {
       // Accounted events outlive their retained request rows; acknowledge without resurrecting details.
       if (this.statements.identity.get(identityKey(event))) return null;
     }
-    const { costUsd, uncachedCostUsd, ...details } = event;
+    const { costUsd, uncachedCostUsd, requestSettings, ...details } = event;
+    if (event.settingsHash && requestSettings) this.statements.saveSettings.run(event.settingsHash, JSON.stringify(requestSettings), event.at);
     const e = { ...details, ...normalizeTransport(event), effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
       parentSessionId: event.parentSessionId ?? null, sessionKind: event.sessionKind ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
       ttftMs: event.source === 'client-log' ? null : event.ttftMs ?? null,
@@ -208,6 +219,7 @@ export class ActivityLog {
     try {
       id = this.db.transaction(() => {
         const merge = reconcileUsage(this.db, accounted);
+        for (const key of ['thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
         if (merge.remove) {
           this.revision += 1;
           const old = merge.remove;
@@ -226,6 +238,7 @@ export class ActivityLog {
         const id = Number(this.statements.insertRequest.run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
         rememberUsage(this.db, accounted, id);
         this.statements.linkIdentity.run(id, identityKey(e));
+        if (merge.relinkKey) this.statements.linkIdentity.run(id, merge.relinkKey);
         if (!this.importing && matchLegacyUsage(this.db, [identityKey(e)])) {
           this.totals = null; this.revision += 1;
           return (this.statements.identityRow.get(identityKey(e)) as { row_id: number }).row_id;
@@ -364,7 +377,7 @@ export class ActivityLog {
   clear(): void {
     this.exporter?.cancelCurrent();
     this.db.transaction(() => {
-      this.db.exec("DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
+      this.db.exec("DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
       this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins; DELETE FROM archive_pieces WHERE thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)');
     })();

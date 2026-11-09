@@ -6,6 +6,7 @@ import './styles/dashboard.css';
 import '@cujuju/solidjs-kv-tooltip/styles.css';
 import '@cujuju/solidjs-tiling-window-manager/styles.css';
 import './styles/activity.css';
+import './styles/drift.css';
 import './styles/pool.css';
 import './styles/account.css';
 import './styles/board.css';

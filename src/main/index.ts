@@ -29,6 +29,7 @@ async function startNormalApp(): Promise<void> {
   const { updates } = await import('./updater');
   const { startUpdateInstaller } = await import('./updateInstaller');
   const { usage } = await import('./usagePoller');
+  const { canaryService } = await import('./canaryService');
   const { windowStarter } = await import('./windowStarter');
   const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, showWindowAndSend, syncWindowBackground } = await import('./window');
   const { notify, noticeOverlay, startNotices } = await import('./notifier');
@@ -60,6 +61,8 @@ async function startNormalApp(): Promise<void> {
     usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
     usage.on('error', (m) => send(EVENTS.onUsageError, m));
     windowStarter.attach();
+    canaryService.on('change', (s) => send(EVENTS.onCanaryChange, s));
+    void canaryService.attach().catch((error) => console.error('[canary] startup failed:', error));
     proxy.on('status', (s) => {
       send(EVENTS.onProxyStatus, s);
       if (s.state !== 'running') archiveSync.stop();

@@ -1,4 +1,5 @@
 /** IPC contract shared by main, preload and renderer. */
+import type { RequestSettings } from './requestSettings';
 import type { ActivityScope } from './activityScope';
 import type { TransportMetadata } from './activityTransport';
 import type { BuildInfo } from './buildInfo';
@@ -200,6 +201,11 @@ export const sessionKind = (v: unknown): SessionKind | null => typeof v === 'str
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent extends TransportMetadata {
+  /** Transient: stored once in request_settings, stripped from the stored event */
+  requestSettings?: RequestSettings | null;
+  thinkingTokens?: number | null;
+  clientVersion?: string | null;
+  settingsHash?: string | null;
   /** Full inbound identity; absent on historical and metadata-only client imports. */
   traceId?: string | null;
   at: string;

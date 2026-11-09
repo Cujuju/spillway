@@ -1,5 +1,6 @@
 /** Fake proxy: answers the app's management API calls with fixtures.mts data. Shapes follow docs/desktop-api.md in the fork; anything else is 404. */
 
+import { CANARY_PROBES } from '../../src/shared/canary.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { CAPTURE_BODY_LIMIT } from '../../src/shared/archive.ts';
@@ -96,6 +97,13 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
   }
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method === 'POST' && ['/v1/messages', '/v1/chat/completions'].includes(req.url ?? '')) {
+      const body = await readBody(req), messages = body.messages as { content: string }[];
+      const probe = CANARY_PROBES.find((p) => p.prompt === messages?.[0]?.content);
+      const answer = `ANSWER: ${probe?.id === 'seats' ? 'B' : probe?.answer ?? 'unknown'}`;
+      json(res, req.url === '/v1/messages' ? { model: body.model, content: [{ type: 'text', text: answer }], usage: { output_tokens: 120, output_tokens_details: { thinking_tokens: 100 } } } : { model: body.model, choices: [{ message: { content: answer } }], usage: { completion_tokens: 120, completion_tokens_details: { reasoning_tokens: 100 } } });
+      return;
+    }
     const url = new URL(req.url ?? '/', `http://${LOOPBACK}`);
     const path = url.pathname.startsWith(MANAGEMENT_PREFIX) ? url.pathname.slice(MANAGEMENT_PREFIX.length) : null;
     const route = `${req.method} ${path}`;

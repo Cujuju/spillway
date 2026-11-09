@@ -1,3 +1,5 @@
+import { parseRequestSettings } from '@shared/requestSettings';
+import { requestSettingsHash } from './requestSettings';
 import { sessionKind, type ActivityEvent } from '@shared/types';
 import { clientName } from '@shared/activityScope';
 import { activityTransport, transportReason } from '@shared/activityTransport';
@@ -52,11 +54,16 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   const r = raw as Record<string, unknown>;
   const requestId = s(r.request_id);
   // Window starts are the app's own requests; Activity records client traffic only.
-  if (!requestId || r.purpose === WINDOW_START_PURPOSE) return null;
+  if (!requestId || (r.purpose === WINDOW_START_PURPOSE || r.purpose === 'canary')) return null;
   const userAgent = s(r.user_agent);
+  const settings = parseRequestSettings(r.request_settings);
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,
+    thinkingTokens: typeof r.reasoning_tokens === 'number' && Number.isFinite(r.reasoning_tokens) && r.reasoning_tokens >= 0 ? r.reasoning_tokens : null,
+    clientVersion: userAgent?.match(/^[^/\s]+\/([^\s]+)/)?.[1] ?? null,
+    settingsHash: settings ? requestSettingsHash(settings) : null,
+    ...(settings ? { requestSettings: settings } : {}),
     traceId: s(r.trace_id),
     upstreamId: s(r.upstream_id),
     source: 'proxy',

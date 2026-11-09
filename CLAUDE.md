@@ -6,7 +6,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - GitHub Issues: `Cujuju/spillway`
 - Buckets: `area/supervisor`, `area/ui`
 - Kinds: `kind/feature`, `bug`
-- Arc: `arc/account-rotation`
+- Arcs: `arc/account-rotation`, `arc/model-drift`
 
 ## Layout
 - `src/main/`: proxy supervisor, management client, usage poller, tray, IPC.
@@ -27,6 +27,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 - Versions (sidebar card): `scripts/build-proxy.mjs` stamps the proxy with the newest upstream `v*` tag in the fork and the fork's build ID (`gitBuild` in `appVersion.ts`, `-dirty` when built from uncommitted changes); the app reads them from the `X-CPA-*` management headers. Never add `v*` tags to the fork.
 - Window starts (`src/main/windowStarter.ts`): when a 5-hour `on_use` window is idle, the app calls the fork's `POST /usage/start-window`. Those requests carry `purpose: "window-start"` and stay out of Activity.
 - Updates: `@cujuju/electron-updates` (toolkit), signed chunk updates on every OS; macOS rebuilds the app bundle, Linux replaces the AppImage. GitHub Actions (`.github/workflows/build.yml`) checks main every 3 hours, retries missing platforms while main matches the newest prerelease, and publishes `v<version>` from one source commit with the public toolkit and fork at their latest default branches. `scripts/releaseShared.mts` shares release metadata with the local CLI. `promote` refreshes and pushes demo screenshots, then makes the nightly stable, triggering CI for extra macOS DMG/ZIP installers; manual workflows can publish nightlies or missing stable installers. Feed and signature context: `src/shared/updateFeed.ts`.
+- Drift (Activity → Drift) reads retained requests only; canary probes (`src/main/canaryService.ts`) send `X-CPA-Purpose: canary`, which the fork marks `purpose: "canary"` so they stay out of Activity.
 - Proxy settings reach the proxy by rewriting `config.yaml` (`proxy.applyConfig()`); the proxy hot-reloads it. Don't add management PUTs for settings the app owns.
 
 - Themes: one palette per theme in `src/shared/themes.ts`, used by the renderer (inline CSS vars) and the window background. Tints derive in `tokens.css`; don't hardcode colours.

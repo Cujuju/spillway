@@ -29,6 +29,7 @@ import { getSettings, regenerateClientApiKey, setSettings } from './settingsStor
 import { setAppTrayTooltip, syncLimitTrays, taskbarDark } from './tray';
 import { updates } from './updater';
 import { usage } from './usagePoller';
+import { canaryService } from './canaryService';
 import { windowStarter } from './windowStarter';
 import { mainWindow } from './window';
 import { previewNotice } from './notifier';
@@ -200,6 +201,9 @@ const handlers: Handlers = {
     if (!authIndex) throw new Error('Account not found');
     return usage.useResetCredit(authIndex);
   },
+  driftQuery: (q) => activityLog.call('driftQuery', q),
+  canaryStatus: () => canaryService.status(), canaryRunNow: () => canaryService.runNow(),
+  canaryResults: (q) => activityLog.call('canaryResults', q),
   windowStartStatus: () => windowStarter.status(),
   usageHistory: () => history.all(),
   usageWindowSummaries: () => history.summaries(),

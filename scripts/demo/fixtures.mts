@@ -9,8 +9,8 @@ const DAY_MS = 24 * HOUR_MS;
 const STEP_MS = 5 * MINUTE_MS;
 /** The app keeps 14 days of usage history (historyStore.ts RETENTION_MS). */
 const HISTORY_DAYS = 14;
-/** Inside the app's default 30-day activity retention, with room for the heatmap to show weeks. */
-const ACTIVITY_DAYS = 28;
+/** Thirty calendar days, including today, match the default Activity range. */
+const ACTIVITY_DAYS = 30;
 /** Any fixed value works; changing it changes every generated number. */
 const SEED = 20_261_031;
 const FIVE_HOURS_S = 5 * 3600;
@@ -78,24 +78,71 @@ function rng(seed: number): () => number {
 
 /** Requests per hour by local hour: a working day with an evening tail. */
 const HOURLY_RATE = [0, 0, 0, 0, 0, 0, 1, 4, 14, 26, 30, 28, 16, 24, 30, 28, 22, 12, 6, 8, 10, 6, 2, 0];
-const WEEKEND_FACTOR = 0.3;
+/** Keep weekends quieter while retaining enough replies for daily drift comparisons. */
+const WEEKEND_FACTOR = 0.9;
+const DAILY_VOLUME_WOBBLE = 0.08;
+const DAILY_METRIC_WOBBLE = 0.04;
+const DRIFT_SHIFT_DAYS = 4;
+const THINKING_SHIFT_FACTOR = 0.55;
+const OUTPUT_SHIFT_FACTOR = 0.75;
+const NO_THINKING_RATE = 0.05;
+const THINKING_REPLY_MEAN = 290;
+const OUTPUT_REPLY_MEAN = 800;
+const TTFT_MEAN_MS = 1500;
+/** About 6,000 attempts across thirty days, concentrated into three useful series. */
+const DAILY_SERIES = [
+  { model: 'claude-opus-5-5', effort: 'high', attempts: 84 },
+  { model: 'gpt-6.1-sol', effort: 'high', attempts: 44 },
+  { model: 'claude-sonnet-5-5', effort: 'medium', attempts: 44 },
+  { model: 'claude-haiku-5-5', effort: 'low', attempts: 12 },
+  { model: 'gpt-6-luna', effort: 'medium', attempts: 10 },
+  { model: 'gemini-3.5-pro', effort: 'high', attempts: 8 },
+];
+interface PlannedReply { account: AccountSpec; model: string; effort: string; failed: boolean; at: number; metricScale: number; shifted: boolean }
 
-function hourlyRate(at: number): number {
-  const d = new Date(at);
-  const weekend = d.getDay() === 0 || d.getDay() === 6;
-  return HOURLY_RATE[d.getHours()]! * (weekend ? WEEKEND_FACTOR : 1);
-}
-
-/** Poisson draw by inversion; fine for the small means used here. */
-function poisson(mean: number, rand: () => number): number {
-  const limit = Math.exp(-mean);
-  let k = 0;
-  for (let p = rand(); p > limit; p *= rand()) k++;
-  return k;
+/** A daily quota avoids random gaps; weighted slots preserve the working-day rhythm. */
+function requestSchedule(start: number, now: number, rand: () => number): Map<number, PlannedReply[]> {
+  const schedule = new Map<number, PlannedReply[]>();
+  const shiftStart = new Date(now);
+  shiftStart.setHours(0, 0, 0, 0);
+  shiftStart.setDate(shiftStart.getDate() - DRIFT_SHIFT_DAYS + 1);
+  for (const day = new Date(start); day.getTime() <= now; day.setDate(day.getDate() + 1)) {
+    const end = new Date(day);
+    end.setDate(end.getDate() + 1);
+    const slots: number[] = [];
+    for (let t = day.getTime(); t < end.getTime() && t <= now; t += STEP_MS) {
+      // One overnight slot weight lets a demo launched before sunrise still show today's replies.
+      const weight = Math.max(1, HOURLY_RATE[new Date(t).getHours()]!);
+      for (let i = 0; i < weight; i++) slots.push(t);
+    }
+    const weekend = day.getDay() === 0 || day.getDay() === 6;
+    const volume = (weekend ? WEEKEND_FACTOR : 1) * (1 + (rand() * 2 - 1) * DAILY_VOLUME_WOBBLE);
+    const metricScale = 1 + (rand() * 2 - 1) * DAILY_METRIC_WOBBLE;
+    for (const series of DAILY_SERIES) {
+      const count = Math.round(series.attempts * volume);
+      const failureIndex = Math.floor(rand() * count);
+      const accounts = ACCOUNTS.filter((a) => a.models.includes(series.model));
+      const share = accounts.reduce((sum, a) => sum + a.share, 0);
+      for (let i = 0; i < count; i++) {
+        let pick = rand() * share;
+        const account = accounts.find((a) => (pick -= a.share) < 0) ?? accounts[0]!;
+        const slot = slots[Math.floor(rand() * slots.length)]!;
+        const at = slot + Math.floor(rand() * Math.min(STEP_MS, now - slot + 1));
+        const failed = series.attempts >= DAILY_SERIES[1]!.attempts ? i === failureIndex : rand() < FAILURE_RATE;
+        const reply = { account, model: series.model, effort: series.effort, failed, at, metricScale,
+          shifted: series.model === DAILY_SERIES[0]!.model && day.getTime() >= shiftStart.getTime() };
+        const batch = schedule.get(slot) ?? [];
+        batch.push(reply);
+        schedule.set(slot, batch);
+      }
+    }
+  }
+  return schedule;
 }
 
 export interface FakeEvent {
   reasoning_effort?: string;
+  reasoning_tokens?: number; request_settings?: { thinking: string; max_tokens: number; betas: string[] };
   downstream_transport?: 'http' | 'websocket'; upstream_transport?: 'http' | 'websocket' | 'websocket+http'; transport_fallback_reason?: string;
   at: string; request_id: string; upstream_id: string; selection_id: string; provider: string; model: string; auth_index: string;
   stream: boolean; failed: boolean; status_code: number; error?: string; latency_ms: number; ttft_ms: number;
@@ -120,11 +167,19 @@ const firstWeeklyReset = (start: number, offsetDays: number) => Math.ceil(start 
 const REQUESTS_PER_SESSION = 60;
 /** Share of attempts that fail upstream (rate limits, overloads). */
 const FAILURE_RATE = 0.02;
+/** A recent client update creates a visible drift marker. */
+const SETTINGS_CHANGE_DAYS_AGO = 10;
 
 /** Simulates ACTIVITY_DAYS of use ending at `now`. */
 export function generate(now: number): DemoData {
   const rand = rng(SEED);
-  const start = now - ACTIVITY_DAYS * DAY_MS;
+  const firstDay = new Date(now);
+  firstDay.setHours(0, 0, 0, 0);
+  firstDay.setDate(firstDay.getDate() - ACTIVITY_DAYS + 1);
+  const start = firstDay.getTime();
+  const changeDay = new Date(firstDay);
+  changeDay.setDate(changeDay.getDate() + ACTIVITY_DAYS - 1 - SETTINGS_CHANGE_DAYS_AGO);
+  const schedule = requestSchedule(start, now, rand);
   const historyFrom = now - HISTORY_DAYS * DAY_MS;
   const windows = new Map(ACCOUNTS.map((a, i) => [a.authIndex, new Map(a.windows.map((w) => [w.key, {
     used: 0, resetsAt: w.cadence === 'on_use' ? null : firstWeeklyReset(start, i + 1),
@@ -144,31 +199,31 @@ export function generate(now: number): DemoData {
           w.resetsAt = spec.cadence === 'on_use' ? null : w.resetsAt + spec.seconds * 1000;
         }
       }
-      const blocked = account.windows.some((spec) => !spec.scoped && states.get(spec.key)!.used >= FULL_PERCENT);
-      const count = blocked ? 0 : poisson((hourlyRate(t) * account.share * STEP_MS) / HOUR_MS, rand);
-      for (let i = 0; i < count; i++) {
-        const at = t + Math.floor(rand() * STEP_MS);
+      const replies = (schedule.get(t) ?? []).filter((reply) => reply.account === account);
+      for (const [i, reply] of replies.entries()) {
+        const { at, model, effort, failed, metricScale, shifted } = reply;
         const session = sessions.get(account.authIndex)!;
         if (session.left-- <= 0) Object.assign(session, { id: uuid(rand), left: Math.ceil(rand() * 2 * REQUESTS_PER_SESSION) });
-        const model = account.models[Math.floor(rand() * account.models.length)]!;
-        const failed = rand() < FAILURE_RATE;
         const cached = failed ? 0 : 20_000 + Math.floor(rand() * 120_000);
         // Claude counts cache reads apart from input; the others include them (modelPrices.ts CACHE_APART_FROM_INPUT).
         const apart = account.provider === 'claude';
         const input = failed ? 0 : 800 + Math.floor(rand() * 6000) + (apart ? 0 : cached);
+        const changedSettings = at >= changeDay.getTime();
         events.push({
+          reasoning_tokens: failed || rand() < NO_THINKING_RATE ? 0 : Math.round(THINKING_REPLY_MEAN * metricScale * (0.8 + rand() * 0.4) * (shifted ? THINKING_SHIFT_FACTOR : 1)),
+          request_settings: { thinking: changedSettings ? 'adaptive' : 'enabled', max_tokens: changedSettings ? 128000 : 64000, betas: [] },
           at: new Date(at).toISOString(), request_id: hex(rand, 16), upstream_id: `msg_${hex(rand, 20)}`, selection_id: hex(rand, 12),
           provider: account.provider, model, auth_index: account.authIndex, stream: true, failed,
-          reasoning_effort: ['low', 'medium', 'high'][Math.floor(rand() * 3)],
+          reasoning_effort: effort,
           // Synthetic transport observations; unrelated to the real proxy configuration.
           downstream_transport: account.provider === 'codex' && i % 7 !== 0 ? 'websocket' : 'http',
           upstream_transport: account.provider === 'codex' ? (i % 7 === 0 ? 'websocket+http' : 'websocket') : 'http',
           ...(account.provider === 'codex' && i % 7 === 0 ? { transport_fallback_reason: 'websocket_upgrade_426' } : {}),
           status_code: failed ? 529 : 200, ...(failed ? { error: 'Overloaded' } : {}),
-          latency_ms: 2000 + Math.floor(rand() * 30_000), ttft_ms: 400 + Math.floor(rand() * 2500),
-          input_tokens: input, output_tokens: failed ? 0 : 100 + Math.floor(rand() * 3000),
+          latency_ms: 2000 + Math.floor(rand() * 30_000), ttft_ms: Math.round(TTFT_MEAN_MS * metricScale * (0.7 + rand() * 0.6)),
+          input_tokens: input, output_tokens: failed ? 0 : Math.round(OUTPUT_REPLY_MEAN * metricScale * (0.75 + rand() * 0.5) * (shifted ? OUTPUT_SHIFT_FACTOR : 1)),
           cached_tokens: cached, cache_creation_tokens: failed || !apart ? 0 : Math.floor(rand() * 4000),
-          session_id: `${account.provider}:${session.id}`, session_kind: 'root', user_agent: account.userAgent,
+          session_id: `${account.provider}:${session.id}`, session_kind: 'root', user_agent: account.userAgent.replace(/\/[^ ]+/, account.provider === 'claude' ? changedSettings ? '/2.1.317' : '/2.1.316' : changedSettings ? '/0.166.0' : '/0.165.0'),
         });
         if (failed) continue;
         lastUsed.set(account.authIndex, at);

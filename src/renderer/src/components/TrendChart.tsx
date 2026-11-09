@@ -38,7 +38,7 @@ export interface TrendChartProps {
 }
 
 /** 1, 2, 2.5 or 5 times a power of ten, at least `v`. */
-function niceCeil(v: number): number {
+export function niceCeil(v: number): number {
   if (v <= 0) return 1;
   const p = 10 ** Math.floor(Math.log10(v));
   return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p;

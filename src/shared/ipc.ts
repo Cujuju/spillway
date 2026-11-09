@@ -9,6 +9,8 @@ import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList,
 import type { ActivityScope } from './activityScope';
 import type { BuildInfo } from './buildInfo';
 import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
+import type { DriftQuery, DriftReport } from './drift';
+import type { CanaryResult, CanaryStatus } from './canary';
 import type { AppSettings } from './settings';
 import type {
   ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
@@ -48,6 +50,11 @@ export interface DesktopApi {
   archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
   archivePolicy(policy: ArchivePolicy): Promise<ArchiveStatus>;
   archiveClear(): Promise<void>;
+  driftQuery(query: DriftQuery): Promise<DriftReport>;
+  canaryStatus(): Promise<CanaryStatus>;
+  canaryRunNow(): Promise<CanaryStatus>;
+  canaryResults(query: { from: string; to: string }): Promise<CanaryResult[]>;
+  onCanaryChange(cb: (s: CanaryStatus) => void): () => void;
   traceQuery(query: TraceQuery): Promise<TracePage>;
   traceAttempts(query: TraceAttemptQuery): Promise<TraceAttemptPage>;
   platform: string;
@@ -185,6 +192,7 @@ export const INVOKE = {
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',
   diagnosticPrepare: 'diagnostic:prepare', diagnosticSave: 'diagnostic:save', diagnosticDiscard: 'diagnostic:discard',
   archiveDetail: 'archive:detail', archiveStatus: 'archive:status', archivePolicy: 'archive:policy', archiveClear: 'archive:clear',
+  driftQuery: 'drift:query', canaryStatus: 'canary:status', canaryRunNow: 'canary:run-now', canaryResults: 'canary:results',
   traceQuery: 'trace:query', traceAttempts: 'trace:attempts',
   appBuild: 'app:build',
   getSettings: 'settings:get',
@@ -274,6 +282,7 @@ export const EVENTS = {
   onActivity: 'activity:event',
   onActivityImport: 'activity:import',
   onArchiveMigration: 'archive:migration',
+  onCanaryChange: 'canary:change',
   onActivityReset: 'activity:reset',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',

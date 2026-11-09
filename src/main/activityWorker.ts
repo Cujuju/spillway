@@ -15,6 +15,8 @@ const startSync = () => startClientLogSync(log, () => {
 }, (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
 const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise<void> } = {
+  canaryLastRunAt: () => log.canaryLastRunAt(),
+  driftQuery: (q) => log.driftQuery(q), canarySave: (r) => log.canarySave(r), canaryResults: (q) => log.canaryResults(q),
   evalList: () => log.evalList(), evalGet: (id, revision) => log.evalGet(id, revision),
   evalCreate: (...args) => log.evalCreate(...args), evalRevise: (...args) => log.evalRevise(...args),
   evalDelete: (id) => log.evalDelete(id), evalExport: (...args) => log.evalExport(...args), evalImport: (file) => log.evalImport(file),

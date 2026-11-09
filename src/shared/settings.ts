@@ -1,5 +1,6 @@
 /** App settings: shape, defaults and normalization of untrusted stored JSON. */
 
+import { DEFAULT_CANARY, normalizeCanary, type CanarySettings } from './canary';
 import { IS_DEV_BUILD } from './app';
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
 import { DEFAULT_NOTICE_CONFIG, normalizeNoticeConfig, type NoticeConfig, type NoticeDelivery, type NoticeStyle } from '@cujuju/electron-notices';
@@ -80,6 +81,7 @@ export interface AppSettings {
     /** Tray "Use account" override: provider → auth_index the proxy prefers while it is available. */
     preferredAccounts: Record<string, string>;
   };
+  canary: CanarySettings;
   windowStart: WindowStartSettings;
   dashboard: {
     refreshIntervalSeconds: number;
@@ -187,6 +189,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     clientDrift: 'warn',
     preferredAccounts: {},
   },
+  canary: DEFAULT_CANARY,
   windowStart: DEFAULT_WINDOW_START,
   dashboard: {
     refreshIntervalSeconds: 60,
@@ -298,6 +301,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       clientDrift: pick(p.clientDrift, ['warn', 'reapply'] as const, d.proxy.clientDrift),
       preferredAccounts: stringRecord(p.preferredAccounts),
     },
+    canary: normalizeCanary(r.canary),
     windowStart: normalizeWindowStart(r.windowStart),
     dashboard: {
       refreshIntervalSeconds: int(db.refreshIntervalSeconds, d.dashboard.refreshIntervalSeconds, MIN_REFRESH_SECONDS, MAX_REFRESH_SECONDS),

@@ -1,8 +1,10 @@
+import { parseRequestSettings, type RequestSettings } from '@shared/requestSettings';
+import { requestSettingsHash } from './requestSettings';
 import { createHash } from 'node:crypto';
 import { clientName } from '@shared/activityScope';
 import type { ActivityEvent } from '@shared/types';
 
-export interface LogContext { session?: string; model?: string; client?: string; turn?: string; total?: string; pendingRecord?: string; pendingSnapshot?: { usage: string; identity: string; at: string } }
+export interface LogContext { version?: string; effort?: string; settings?: Record<string, RequestSettings | null>; session?: string; model?: string; client?: string; turn?: string; total?: string; pendingRecord?: string; pendingSnapshot?: { usage: string; identity: string; at: string } }
 type Json = Record<string, any>;
 const tokens = (n: unknown): number => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0;
 const usageTotal = (u: Json | undefined): string | undefined => u ? JSON.stringify([u.input_tokens, u.cached_input_tokens, u.cache_write_input_tokens ?? 0, u.output_tokens, u.reasoning_output_tokens ?? 0]) : undefined;
@@ -17,6 +19,13 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
   let upstreamId: string | null = null;
   let identity: string;
   if (provider === 'claude') {
+    if (r.type === 'api-request') {
+      const value = parseRequestSettings(r.params);
+      if (typeof r.params?.model === 'string') context.settings = { ...context.settings, [r.params.model]: value };
+      return null;
+    }
+    context.version = text(r.version) ?? context.version;
+    context.effort = text(r.perTurnEffort) ?? undefined;
     if (r.type !== 'assistant' || !r.message?.usage || r.message.model === '<synthetic>') return null;
     usage = r.message.usage;
     upstreamId = text(r.message.id);
@@ -29,10 +38,12 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
     const p = r.payload;
     if (!p || typeof p !== 'object') return null;
     if (r.type === 'session_meta') {
+      context.version = text(p.cli_version) ?? undefined;
       context.session = text(p.session_id) ?? text(p.id) ?? undefined;
       context.client = clientName(text(p.originator)) ?? undefined;
     }
     if (r.type === 'turn_context') {
+      context.effort = text(p.effort) ?? undefined;
       context.model = text(p.model) ?? context.model;
       context.turn = text(p.turn_id) ?? undefined;
     }
@@ -68,10 +79,15 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
   }
   const at = text(r.timestamp);
   if (!at || !Number.isFinite(Date.parse(at)) || !context.model || !usage) return null;
+  const settings = provider === 'claude' ? context.settings?.[context.model] ?? null : null;
+  const thinking = provider === 'claude' ? usage.output_tokens_details?.thinking_tokens : usage.reasoning_output_tokens;
   return {
+    thinkingTokens: typeof thinking === 'number' && Number.isFinite(thinking) && thinking >= 0 ? thinking : null,
+    clientVersion: provider === 'claude' ? text(r.version) : context.version ?? null, settingsHash: settings ? requestSettingsHash(settings) : null,
+    ...(settings ? { requestSettings: settings } : {}),
     at, requestId: `client-log:${provider}:${createHash('sha256').update(identity).digest('hex')}`,
     upstreamId, source: 'client-log', selectionId: null, provider, model: context.model,
-    effectiveModel: null, reasoningEffort: null, parentSessionId: null,
+    effectiveModel: null, reasoningEffort: context.effort ?? null, parentSessionId: null,
     authIndex: null, stream: true, failed: false, statusCode: null, error: null, latencyMs: null, ttftMs: null,
     inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens),
     cachedTokens: tokens(provider === 'claude' ? usage.cache_read_input_tokens : usage.cached_input_tokens),

@@ -254,13 +254,18 @@ it('does not report migration progress for an empty archive', () => {
 
 it('validates per-side cuts and preserves complete versus legacy metadata', () => {
   const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
-  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: 'headtail', requestCut: { offset: 4, omitted: 20 } }), record(2, { request: 'headtail', requestCut: { offset: 9, omitted: null } }), record(3, { requestCut: { offset: 1, omitted: -1 } })] });
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: 'headtail', requestCut: { offset: 4, omitted: 20 }, responseCut: null }), record(2, { request: 'headtail', requestCut: { offset: 9, omitted: null } }), record(3, { requestCut: { offset: 1, omitted: -1 } })] });
   expect(store.status().rejected).toBe(2);
   expect(store.detail('inbound-full-1')).toMatchObject({ request: 'headtail', requestCut: { offset: 4, omitted: 20 }, responseCut: null });
   db.prepare("UPDATE archive_entries SET detail=json_remove(detail,'$.requestCut','$.responseCut') WHERE trace_id=?").run('inbound-full-1');
   expect(store.detail('inbound-full-1')?.requestCut).toBeUndefined();
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(4, { requestCut: { offset: 0, omitted: null } })] });
   expect(store.detail('inbound-full-4')?.requestCut).toEqual({ offset: 0, omitted: null });
+  // An older proxy sends no cut fields: they stay absent, so the inspector applies the legacy start-only test.
+  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(5, { request: 'old proxy' })] });
+  expect(store.detail('inbound-full-5')).toMatchObject({ request: 'old proxy' });
+  expect(store.detail('inbound-full-5')).not.toHaveProperty('requestCut');
+  expect(store.detail('inbound-full-5')).not.toHaveProperty('responseCut');
 });
 it('diffs frame snapshots across websocket revisions with bounded growth', () => {
   const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });

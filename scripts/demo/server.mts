@@ -70,7 +70,7 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
     return { id: 'demo-capture-1', traceId: demoTrace(e.request_id), epoch: captureEpoch, sequence: 1, startedAt: e.at,
       method: 'POST', path: '/v1/messages', status: 200, state: 'partial', reason: 'byte-limit',
       request: request.slice(0, CAPTURE_BODY_LIMIT / 2) + request.slice(-CAPTURE_BODY_LIMIT / 2),
-      requestCut: { offset: CAPTURE_BODY_LIMIT / 2, omitted: Buffer.byteLength(request) - CAPTURE_BODY_LIMIT },
+      requestCut: { offset: CAPTURE_BODY_LIMIT / 2, omitted: Buffer.byteLength(request) - CAPTURE_BODY_LIMIT }, responseCut: null,
       response: JSON.stringify({ id: 'msg_demo_1', type: 'message', role: 'assistant', model,
         content: [{ type: 'text', text: 'The archive contains 12 exchanges. Large request bodies retain their head and tail around an omitted middle.' }, { type: 'tool_use', id: 'tool_demo_2', name: 'inspect_archive', input: { scope: 'truncated' } }],
         stop_reason: 'tool_use', usage: { input_tokens: 70000, output_tokens: 80 } }),

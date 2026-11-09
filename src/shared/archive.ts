@@ -12,7 +12,8 @@ export function normalizeArchivePolicy(raw: unknown): ArchivePolicy {
 /** Proxy spool v1: one downstream HTTP exchange; not one upstream attempt. */
 export interface CaptureCut { offset: number; omitted: number | null }
 export interface CaptureRecord {
-  requestCut?: CaptureCut; responseCut?: CaptureCut;
+  /** null: side complete. Absent: a proxy before per-side cuts (#134), which kept only the first 256 KiB. */
+  requestCut?: CaptureCut | null; responseCut?: CaptureCut | null;
   id: string; traceId: string; epoch: string; sequence: number; startedAt: string;
   method: string; path: string; status: number; state: 'complete' | 'partial' | 'missing' | 'pending'; reason: string;
   request: string; response: string; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string;

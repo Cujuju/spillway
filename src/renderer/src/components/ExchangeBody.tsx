@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import { CAPTURE_BODY_LIMIT } from '@shared/archive';
-import type { ExchangePart, ExchangeSide } from '@shared/exchangeBody';
+import type { ExchangeMessage, ExchangePart, ExchangeSide } from '@shared/exchangeBody';
 import { shownText } from '../store';
 import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
@@ -10,6 +10,8 @@ import { Seg } from './ui';
 const RENDER_CHUNK = 32 * 1024;
 /** Messages rendered per step; 50 long messages measured ~20 ms of layout, 20 stay within one frame. */
 const MESSAGE_PAGE = 20;
+/** Parts rendered per step within one message; same one-frame budget as MESSAGE_PAGE. */
+const PART_PAGE = 20;
 /** Characters of one message part shown before its own expander. */
 const PART_PREVIEW = 2 * 1024;
 
@@ -42,6 +44,20 @@ function Part(props: { part: ExchangePart }) {
   </div>;
 }
 
+/** Label for a paging button: the next step, and how many remain when more than one step is left. */
+const moreLabel = (left: number, page: number) => (left > page ? `Show ${page} more of ${left}` : `Show ${left} more`);
+
+/** One message; its parts page like the message list, so one message with thousands of parts can't stall a frame. */
+function Message(props: { message: ExchangeMessage }) {
+  const [limit, setLimit] = createSignal(PART_PAGE);
+  const left = () => props.message.parts.length - limit();
+  return <div class="exchange-message">
+    <span class="exchange-role">{shownText(props.message.role)}</span>
+    <For each={props.message.parts.slice(0, limit())}>{(part) => <Part part={part} />}</For>
+    <Show when={left() > 0}><button class="exchange-more" type="button" onClick={() => setLimit((n) => n + PART_PAGE)}>{moreLabel(left(), PART_PAGE)}</button></Show>
+  </div>;
+}
+
 function CutMark() {
   return <span class="exchange-cut">Recording stopped here at {LIMIT_TEXT}; the rest was not recorded.</span>;
 }
@@ -53,10 +69,6 @@ export function ExchangeBody(props: { label: string; side: ExchangeSide; type: s
   const [rawLimit, setRawLimit] = createSignal(RENDER_CHUNK);
   const messages = () => props.side.messages ?? [];
   const readable = () => view() === 'readable' && messages().length > 0;
-  const moreText = () => {
-    const left = messages().length - messageLimit();
-    return left > MESSAGE_PAGE ? `Show ${MESSAGE_PAGE} more of ${left}` : `Show ${left} more`;
-  };
   const raw = createMemo(() => shownText(props.side.pretty ?? props.side.raw));
   return <section class="archive-body">
     <div class="archive-body-head">
@@ -72,14 +84,9 @@ export function ExchangeBody(props: { label: string; side: ExchangeSide; type: s
       <Show when={raw().length > rawLimit()}><button class="btn ghost" type="button" onClick={() => setRawLimit((n) => n + RENDER_CHUNK)}>Show more</button></Show>
     </>}>
       <div class="exchange-messages">
-        <For each={messages().slice(0, messageLimit())}>{(m) => (
-          <div class="exchange-message">
-            <span class="exchange-role">{shownText(m.role)}</span>
-            <For each={m.parts}>{(part) => <Part part={part} />}</For>
-          </div>
-        )}</For>
+        <For each={messages().slice(0, messageLimit())}>{(m) => <Message message={m} />}</For>
         <Show when={messages().length > messageLimit()}>
-          <button class="btn ghost" type="button" onClick={() => setMessageLimit((n) => n + MESSAGE_PAGE)}>{moreText()}</button>
+          <button class="btn ghost" type="button" onClick={() => setMessageLimit((n) => n + MESSAGE_PAGE)}>{moreLabel(messages().length - messageLimit(), MESSAGE_PAGE)}</button>
         </Show>
         <Show when={props.side.cut && messages().length <= messageLimit()}><CutMark /></Show>
       </div>

@@ -1,10 +1,10 @@
 import { ChevronDown, ChevronUp, FileArchive, FlaskConical, MessagesSquare, RefreshCw, Settings2, X } from 'lucide-solid';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ArchiveDetail, CaptureState } from '@shared/archive';
-import { exchangeSide } from '@shared/exchangeBody';
 import { openSettings, shownText } from '../store';
 import { CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, RECORDING_OFF_REASONS } from '../lib/traceFormat';
 import type { InspectorStep } from '../lib/exchangeNav';
+import { parseExchange, type ExchangeSides } from '../lib/exchangeParse';
 import { byteSize, dateTime } from '../lib/format';
 import { HoverTip, InfoTip } from './ChartTip';
 import { DiagnosticBundle } from './DiagnosticBundle';
@@ -46,6 +46,17 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
   const bodies = createMemo(() => detail(), null, { equals: sameBodies });
+  /** Parsed sides of the current bodies; parsing runs in a worker, and a newer capture aborts the older parse. */
+  const [sides, setSides] = createSignal<{ detail: ArchiveDetail; sides: ExchangeSides } | null>(null);
+  const [parseError, setParseError] = createSignal<string | null>(null);
+  createEffect(() => {
+    const b = bodies(); setSides(null); setParseError(null);
+    if (!b) return;
+    const parse = new AbortController();
+    parseExchange(b, parse.signal).then((parsed) => setSides({ detail: b, sides: parsed }),
+      (e: unknown) => { if (!(e instanceof DOMException && e.name === 'AbortError')) setParseError(String(e)); });
+    onCleanup(() => parse.abort());
+  });
   let generation = 0;
   const load = async (trace: string | null | undefined, quiet = false) => {
     const gen = ++generation;
@@ -114,14 +125,13 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
           <RecordBodiesOff />
         </Show>
       }>
-        {/* Keyed on unchanged bodies: each side parses once per capture, not on every prop read. */}
-        <Show when={bodies()} keyed>{(b) => {
-          const request = exchangeSide(b, 'request'), response = exchangeSide(b, 'response');
-          return <div class="archive-bodies">
-            <ExchangeBody label="Request" side={request} type={b.requestType} encoding={b.requestEncoding} />
-            <ExchangeBody label="Response" side={response} type={b.responseType} encoding={b.responseEncoding} />
-          </div>;
-        }}</Show>
+        <Show when={parseError()}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
+        <Show when={sides()} keyed fallback={<Show when={!parseError()}><p class="empty-note">Reading bodies…</p></Show>}>{(p) => (
+          <div class="archive-bodies">
+            <ExchangeBody label="Request" side={p.sides.request} type={p.detail.requestType} encoding={p.detail.requestEncoding} />
+            <ExchangeBody label="Response" side={p.sides.response} type={p.detail.responseType} encoding={p.detail.responseEncoding} />
+          </div>
+        )}</Show>
       </Show>
     </>}</Show>
   </div>;

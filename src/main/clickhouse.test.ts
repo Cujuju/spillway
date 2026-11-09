@@ -297,3 +297,15 @@ it('ships a large single capture with all required pieces in one batch', () => {
   expect(capture.request_pieces.map(([id, offset, length]: [number, number, number]) => pieces.get(id).slice(offset, offset + length)).join('')).toBe(request);
   store.acknowledge(batch.token, batch.destination); expect(store.status().queued).toBe(0);
 });
+
+it('exports dictionary-compressed request pieces as plain text bytes', () => {
+  const { db, archive, store } = setup();
+  archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure({ ...config, includeBodies: true }); store.prepare();
+  ingest(archive, record(1, { request: 'prefix first suffix' }));
+  const first = store.prepare()!; store.acknowledge(first.token, first.destination);
+  ingest(archive, record(2, { request: 'prefix second suffix' }));
+  const piece = db.prepare('SELECT id,dict FROM archive_pieces WHERE dict IS NOT NULL').get() as { id: number; dict: string };
+  expect(JSON.parse(piece.dict).length).toBeGreaterThan(0);
+  expect(lines(store.prepare()!.pieces)).toContainEqual(expect.objectContaining({ seq: piece.id, bytes: 'second' }));
+});

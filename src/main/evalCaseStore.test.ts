@@ -212,3 +212,15 @@ it('stores inline when the archive detail changes before case insertion', () => 
   store.revise(randomUUID(), original.id, 1, annotation());
   expect(store.get(original.id).capture).toEqual(original.capture);
 });
+
+it('pins a later entry dictionary chain through thread expiry', () => {
+  const { store, archive, db } = setup();
+  for (const sequence of [2, 3]) archive.ingest({ version: 1, epoch: 'test-epoch', dropped: 0, records: [captureRecord({ sequence, request: `{"input":"revision ${sequence}"}`, response: `response ${sequence}` })] });
+  expect((db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE dict IS NOT NULL').get() as { n: number }).n).toBe(2);
+  const c = store.create(randomUUID(), 'trace-synthetic-001', annotation(), true);
+  archive.prune(Date.now() + 30 * 86_400_000, true);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_threads').get()).toEqual({ n: 0 });
+  expect(store.get(c.id)).toEqual(c);
+  store.delete(c.id);
+  expect(db.prepare('SELECT count(*) AS n FROM archive_pieces').get()).toEqual({ n: 0 });
+});

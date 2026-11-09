@@ -1,4 +1,4 @@
-import { collectPieces, rebuild, type PieceDetail } from './archivePieces';
+import { collectPieces, pieceClosure, rebuild, type PieceDetail } from './archivePieces';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { EVAL_LIMITS, type EvalAnnotation, type EvalCase, type EvalCaseSummary } from '@shared/evalCase';
@@ -59,7 +59,7 @@ export class EvalCaseStore {
       }
       if (refs && matches) {
         snapshot = JSON.stringify({ ...c, capture: { ...c.capture, payload: { ...c.capture.payload, data: null } }, pieceRefs: refs });
-        for (const [id] of [...refs.request, ...refs.response, ...refs.frames]) this.db.prepare('INSERT OR IGNORE INTO archive_pins VALUES(?,?)').run(id, c.id);
+        for (const id of pieceClosure(this.db, [...refs.request, ...refs.response, ...refs.frames].map(([id]) => id))) this.db.prepare('INSERT OR IGNORE INTO archive_pins VALUES(?,?)').run(id, c.id);
       }
     }
     this.db.prepare('INSERT INTO eval_cases VALUES(?,?,?,?,?,?,?)').run(c.id, c.revision, c.createdAt, c.annotation.title, bytes, snapshot, operation);

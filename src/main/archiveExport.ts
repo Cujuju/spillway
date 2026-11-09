@@ -155,6 +155,8 @@ export class ArchiveExporter {
       let before: string | undefined;
       for (;;) {
         const page = this.archive.query({ ...selection.query, before }, false);
+        // One cache per page: revisions share dictionary ancestry, and the page size bounds its size.
+        const cache = new Map<number, Buffer>();
         for (const e of page.entries) {
           if (wanted && !wanted.has(e.id)) continue;
           const meta = JSON.stringify(e);
@@ -165,7 +167,7 @@ export class ArchiveExporter {
           const body = selection.includeRecordedBodies && e.bytes > 0;
           const saved = this.db.prepare('SELECT detail FROM archive_entries WHERE id=?').get(e.id) as { detail: string };
           let rebuilt = body ? saved.detail : '{}';
-          if (body) try { rebuilt = JSON.stringify(readBody(this.db, saved.detail)); } catch { /* Preserve the malformed payload marker. */ }
+          if (body) try { rebuilt = JSON.stringify(readBody(this.db, saved.detail, cache)); } catch { /* Preserve the malformed payload marker. */ }
           const size = Buffer.byteLength(rebuilt);
           const added = Buffer.byteLength(meta) + Buffer.byteLength(joined) + (body ? size : 2);
           if (body && size > recordBytes || added > recordBytes) throw new Error(`Archived record exceeds the ${mib(recordBytes)} export limit`);

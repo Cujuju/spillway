@@ -2,8 +2,7 @@ import { createHash } from 'node:crypto';
 import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, type ClickHouseBatch, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
 import type { Db } from './activityDb';
 import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore';
-import { rebuild, type PieceDetail } from './archivePieces';
-import { zstdDecompressSync } from 'node:zlib';
+import { pieceBytes, rebuild, type PieceDetail } from './archivePieces';
 import { encodeClickHouseLine, outboxBytes, CLICKHOUSE_SINGLE_FACT_BYTES, type OutboxRow } from './clickhouseLine';
 
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
@@ -99,6 +98,8 @@ export class ClickHouseStore implements ArchiveFactSink {
       const oversized: number[] = [];
       let facts = '', pieces = '', bytes = 0, rows = 0, last = 0;
       const sent = new Set<number>();
+      // One cache per batch: revisions share dictionary ancestry, and the batch row limit bounds its size.
+      const cache = new Map<number, Buffer>();
       for (const r of pending) {
         let additions = '', pieceRows = 0;
         const ids: number[] = [];
@@ -107,12 +108,12 @@ export class ClickHouseStore implements ArchiveFactSink {
         if (r.content && config.includeBodies && captureBodies) {
           try {
             const refs = JSON.parse(r.content) as PieceDetail;
-            resolved = rebuild(this.db, refs);
+            resolved = rebuild(this.db, refs, false, cache);
             for (const [id] of refs.request) {
               if (sent.has(id) || ids.includes(id)) continue;
-              const p = this.db.prepare('SELECT p.bytes,p.sent,p.thread_id,t.first_at FROM archive_pieces p JOIN archive_threads t ON t.id=p.thread_id WHERE p.id=?').get(id) as { bytes: Buffer; sent: number; thread_id: string; first_at: string } | undefined;
+              const p = this.db.prepare('SELECT p.sent,p.thread_id,t.first_at FROM archive_pieces p JOIN archive_threads t ON t.id=p.thread_id WHERE p.id=?').get(id) as { sent: number; thread_id: string; first_at: string } | undefined;
               if (!p) throw new Error('Archive piece unavailable');
-              if (!p.sent) { ids.push(id); additions += JSON.stringify({ source_id: state.source_id, thread_id: p.thread_id, seq: id, at: p.first_at.replace('T', ' ').replace('Z', ''), bytes: zstdDecompressSync(p.bytes).toString() }) + '\n'; pieceRows++; }
+              if (!p.sent) { ids.push(id); additions += JSON.stringify({ source_id: state.source_id, thread_id: p.thread_id, seq: id, at: p.first_at.replace('T', ' ').replace('Z', ''), bytes: pieceBytes(this.db, id, cache).toString() }) + '\n'; pieceRows++; }
             }
           } catch { unavailable = true; additions = ''; pieceRows = 0; ids.length = 0; resolved = undefined; }
         }

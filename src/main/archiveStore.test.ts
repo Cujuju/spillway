@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { archiveCursor, CAPTURE_BODY_LIMIT, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
-import { migratePieces } from './archivePieces';
+import { migratePieces, pieceClosure, rebuild, type PieceDetail } from './archivePieces';
 import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [];
@@ -207,8 +207,8 @@ it('falls back to a verified full copy when the proposed ranges rebuild incorrec
   const prepare = db.prepare.bind(db); let corrupt = true;
   const spy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
     const statement = prepare(sql);
-    if (sql === 'SELECT bytes FROM archive_pieces WHERE id=?' && corrupt) {
-      vi.spyOn(statement, 'get').mockImplementation(() => { corrupt = false; return { bytes: zstdCompressSync(Buffer.from('incorrect bytes')) }; });
+    if (sql === 'SELECT bytes,dict FROM archive_pieces WHERE id=?' && corrupt) {
+      vi.spyOn(statement, 'get').mockImplementation(() => { corrupt = false; return { bytes: zstdCompressSync(Buffer.from('incorrect bytes')), dict: null }; });
     }
     return statement;
   });
@@ -279,4 +279,27 @@ it('diffs frame snapshots across websocket revisions with bounded growth', () =>
   const pieces = db.prepare('SELECT bytes FROM archive_pieces').all() as { bytes: Buffer }[];
   expect(pieces.reduce((n, p) => n + zstdDecompressSync(p.bytes).length, 0)).toBeLessThan(logical * 3);
   expect(store.status().diffFallbacks).toBe(0);
+});
+
+it('chains request dictionaries through previous revision pieces and rebuilds every HTTP entry exactly', () => {
+  const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  let previous: number[] = [];
+  const saved: { refs: PieceDetail; request: string; response: string }[] = [];
+  for (const sequence of [1, 2, 3]) {
+    const capture = record(sequence, { request: `{"input":"revision ${sequence} with response text"}`, response: `response text ${sequence}` });
+    observe(store, capture.traceId, `execution-${sequence}`);
+    const before = (db.prepare('SELECT coalesce(max(id),0) AS id FROM archive_pieces').get() as { id: number }).id;
+    store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [capture] });
+    const refs = JSON.parse((db.prepare('SELECT detail FROM archive_entries WHERE trace_id=?').get(capture.traceId) as { detail: string }).detail) as PieceDetail;
+    const created = db.prepare('SELECT id,dict FROM archive_pieces WHERE id>? ORDER BY id').all(before) as { id: number; dict: string | null }[];
+    expect(created).toHaveLength(3);
+    expect(created[0]!.dict).toBe(sequence === 1 ? null : JSON.stringify(previous));
+    expect(created.slice(1).every((piece) => piece.dict === null)).toBe(true);
+    expect((db.prepare('SELECT dict FROM archive_threads WHERE id=?').get(refs.thread) as { dict: string }).dict).toBe(JSON.stringify(created.map((piece) => piece.id)));
+    previous = created.map((piece) => piece.id);
+    saved.push({ refs, request: capture.request, response: capture.response });
+  }
+  for (const { refs, request, response } of saved) expect(rebuild(db, refs)).toMatchObject({ request, response, frames: [] });
+  const latestRequest = saved.at(-1)!.refs.request.map(([id]) => id);
+  expect(pieceClosure(db, latestRequest).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 });

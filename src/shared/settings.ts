@@ -151,8 +151,8 @@ const MAX_FIRST_BYTE_TIMEOUT_SECONDS = 600;
 export const DEFAULT_USAGE_LOOKUP_SETTLE_SECONDS = 60;
 /** Beyond the proxy's 15-minute lookup age, the scheduled lookup comes first, so a longer delay never fires. */
 const MAX_USAGE_LOOKUP_SETTLE_SECONDS = 900;
-/** A month of requests is a few MB per busy day; a year bounds disk use. */
-const DEFAULT_ACTIVITY_RETENTION_DAYS = 30;
+/** Five weeks: whole weeks, room for Drift's 21-day window. A few MB per busy day; a year bounds disk use. */
+const DEFAULT_ACTIVITY_RETENTION_DAYS = 35;
 const MAX_ACTIVITY_RETENTION_DAYS = 365;
 
 export const DEFAULT_SETTINGS: AppSettings = {

@@ -91,7 +91,7 @@ class ManagementClient {
     return snapshot;
   }
 
-  /** Spends one reset credit; the proxy answers with ChatGPT's outcome and fresh usage. */
+  /** Spends one reset credit; the proxy answers with the provider's outcome and fresh usage. */
   async useResetCredit(authIndex: string): Promise<{ outcome: ResetCreditOutcome; snapshot: UsageSnapshot }> {
     const res = (await this.request('POST', '/usage/reset-credit', { auth_index: authIndex }, REFRESH_TIMEOUT_MS)) as { code?: unknown; usage?: unknown };
     const outcome = RESET_CREDIT_OUTCOMES.find((o) => o === res.code);

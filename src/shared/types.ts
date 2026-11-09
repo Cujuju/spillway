@@ -42,7 +42,7 @@ export interface ResetCredits {
   expiries: string[];
 }
 
-/** ChatGPT's answer to spending a reset credit: spent, nothing reached, none held, or a replayed request. */
+/** The provider's answer to spending a reset credit: spent, nothing to clear, none usable, or a replayed request. */
 export const RESET_CREDIT_OUTCOMES = ['reset', 'nothing_to_reset', 'no_credit', 'already_redeemed'] as const;
 export type ResetCreditOutcome = (typeof RESET_CREDIT_OUTCOMES)[number];
 

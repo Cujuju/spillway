@@ -31,7 +31,7 @@ Logins: Claude (Pro/Max), Codex (ChatGPT Plus/Pro), Antigravity (Google), xAI (G
 
 | Page | What it does |
 |---|---|
-| **Dashboard** | Quota left per provider and account (5-hour, weekly and model limits), reset times, drain rate and a forecast chart. Refresh one account or all; spend a Codex reset credit. |
+| **Dashboard** | Quota left per provider and account (5-hour, weekly and model limits), reset times, drain rate and a forecast chart. Refresh one account or all; spend a Codex or Claude reset credit. |
 | **Activity** | **Overview**: cost at list prices, tokens, cache hits, heatmap, per-model and per-effort tables. **Requests**: every request, live. **Traces**, **Drift**, **Evals**: see [Request history](#request-history). **Totals**: per day, week or month. **All usage** adds requests read from Claude Code's and Codex's local logs. |
 | **Providers** | Add, import, export, renew, disable or remove logins; set priority and a note. Add API-key upstreams. |
 | **Proxy** | Endpoint and client key, **Apply**/**Undo** per client, custom proxy settings (`config.user.yaml`), management lockouts. |
@@ -53,7 +53,7 @@ Every request the proxy handles is recorded: time, model, effort, account, token
 | For | Turn on | Default |
 |---|---|---|
 | Activity, Traces, Drift charts | Nothing. Keep the proxy running; local logs sync on their own | On |
-| A longer Drift baseline | Settings → Advanced → **Keep requests for** | 30 days (up to 365) |
+| A longer Drift baseline | Settings → Advanced → **Keep requests for** | 35 days (up to 365) |
 | Prompt and reply text: reading exchanges, text search, eval cases, exports with text | Settings → Data → Request capture → **Record bodies** | Off. Kept 7 days (up to 90), 100 MiB (up to 1 GiB) |
 | Canary probes | Activity → Drift → Canary probes → **Set up** | Off |
 | A copy in your own ClickHouse | Settings → Data → ClickHouse | Off |

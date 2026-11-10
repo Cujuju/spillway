@@ -17,10 +17,10 @@ const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
   already_redeemed: (label) => `That reset for ${label} was already redeemed.`,
 };
 
-/** Why no credit is usable, per provider: Codex needs a reached limit; Claude pauses grants or cools down between claims. */
+/** Why no credit is usable, per provider. Claude decides per grant (e.g. a limit the grant can't clear is reached). */
 const UNUSABLE_NOTE: Partial<Record<ProviderId, string>> = {
   codex: 'A Codex reset clears a limit the account has reached.',
-  claude: 'Claude marks none usable now: paused, or cooling down after a claim.',
+  claude: 'Claude marks none usable now, e.g. while a limit this reset cannot clear is reached.',
 };
 const UNUSABLE_FALLBACK = 'None is usable now.';
 

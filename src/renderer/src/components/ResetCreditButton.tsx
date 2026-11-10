@@ -3,7 +3,7 @@ import { createSignal, Show } from 'solid-js';
 import { Lock, RotateCcw } from 'lucide-solid';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
 import { clockText, resetParts } from '@shared/resetTime';
-import type { Credential, ProviderId, ResetCreditOutcome, ResetCredits } from '@shared/types';
+import type { Credential, ResetCreditOutcome, ResetCredits } from '@shared/types';
 import { dateTime } from '../lib/format';
 import { now } from '../store';
 
@@ -20,12 +20,7 @@ const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
   already_redeemed: (label) => `That reset for ${label} was already redeemed.`,
 };
 
-/** Why no credit is usable, per provider: Codex needs a reached limit; Claude decides per grant. */
-const UNUSABLE_NOTE: Partial<Record<ProviderId, string>> = {
-  codex: 'Usable once a limit is reached.',
-  claude: 'Blocked by Claude for now.',
-};
-const UNUSABLE_FALLBACK = 'None usable now.';
+const UNUSABLE_NOTE = 'Not currently redeemable.';
 
 /** Expiries still ahead; a passed one stays listed only until the next lookup drops it. */
 const upcoming = (r: ResetCredits, at: number) => r.expiries.filter((t) => Date.parse(t) > at);
@@ -63,7 +58,7 @@ export function ResetCreditButton(props: {
 
   const action = () =>
     !usable()
-      ? (UNUSABLE_NOTE[props.credential.provider] ?? UNUSABLE_FALLBACK)
+      ? UNUSABLE_NOTE
       : props.disabled
         ? 'Start the proxy to use one.'
         : `Hold ${HOLD_SECONDS} seconds to use one.`;

@@ -265,4 +265,7 @@
 /* Keeps the label above the hold progress fill. */
 .hold-label {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
 }

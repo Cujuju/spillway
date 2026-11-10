@@ -1,5 +1,6 @@
 import { HoverTip } from './ChartTip';
 import { createSignal, Show } from 'solid-js';
+import { Lock, RotateCcw } from 'lucide-solid';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
 import { clockText, resetParts } from '@shared/resetTime';
 import type { Credential, ProviderId, ResetCreditOutcome, ResetCredits } from '@shared/types';
@@ -9,6 +10,8 @@ import { now } from '../store';
 /** Spending a credit cannot be undone, so it takes a deliberate four-second hold. */
 const RESET_HOLD_MS = 4_000;
 const HOLD_SECONDS = RESET_HOLD_MS / 1_000;
+/** One step above the badge's 10px text, so the glyph reads at badge height. */
+const STATE_ICON_PX = 11;
 
 const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
   reset: (label) => `Reset applied to ${label}; its limits were re-read.`,
@@ -86,6 +89,7 @@ export function ResetCreditButton(props: {
             <HoldIndicator progress={hold.progress} shape="bar" stroke="var(--color-accent-border)" />
           </Show>
           <span class="hold-label">
+            {usable() ? <RotateCcw size={STATE_ICON_PX} aria-hidden="true" /> : <Lock size={STATE_ICON_PX} aria-hidden="true" />}
             {busy() ? 'Resetting…' : `${credits().available} ${credits().available === 1 ? 'reset' : 'resets'}`}
           </span>
         </button>

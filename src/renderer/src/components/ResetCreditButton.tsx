@@ -20,12 +20,12 @@ const OUTCOME_TEXT: Record<ResetCreditOutcome, (label: string) => string> = {
   already_redeemed: (label) => `That reset for ${label} was already redeemed.`,
 };
 
-/** Why no credit is usable, per provider. Claude decides per grant (e.g. a limit the grant can't clear is reached). */
+/** Why no credit is usable, per provider: Codex needs a reached limit; Claude decides per grant. */
 const UNUSABLE_NOTE: Partial<Record<ProviderId, string>> = {
-  codex: 'A Codex reset clears a limit the account has reached.',
-  claude: 'Claude marks none usable now, e.g. while a limit this reset cannot clear is reached.',
+  codex: 'Usable once a limit is reached.',
+  claude: 'Blocked by Claude for now.',
 };
-const UNUSABLE_FALLBACK = 'None is usable now.';
+const UNUSABLE_FALLBACK = 'None usable now.';
 
 /** Expiries still ahead; a passed one stays listed only until the next lookup drops it. */
 const upcoming = (r: ResetCredits, at: number) => r.expiries.filter((t) => Date.parse(t) > at);
@@ -66,7 +66,7 @@ export function ResetCreditButton(props: {
       ? (UNUSABLE_NOTE[props.credential.provider] ?? UNUSABLE_FALLBACK)
       : props.disabled
         ? 'Start the proxy to use one.'
-        : `Hold ${HOLD_SECONDS} seconds to spend one; the limits are re-read after.`;
+        : `Hold ${HOLD_SECONDS} seconds to use one.`;
 
   return (
     <>

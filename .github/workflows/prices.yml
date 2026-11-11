@@ -2,8 +2,9 @@ name: prices
 
 on:
   schedule:
-    # Daily: providers announce price changes, and the issue's date can be corrected to the announcement.
-    - cron: '17 6 * * *'
+    # Every 2 hours, 8 AM to 6 PM Pacific; :17 avoids the top-of-hour queue, where GitHub delays or drops runs.
+    - cron: '17 8-18/2 * * *'
+      timezone: America/Los_Angeles
   workflow_dispatch:
 
 permissions:
@@ -17,6 +18,8 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A healthy run takes about 15 seconds; this caps a hung runner well before GitHub's 6-hour default.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { compare, money, parseAnthropic, parseOpenAI } from './checkPrices.mts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { compare, fetchPage, money, parseAnthropic, parseOpenAI } from './checkPrices.mts';
 
 const ANTHROPIC = `
 ## Model pricing
@@ -37,6 +37,8 @@ const OPENAI = `
 | gpt-6.1-sol | $1.00 | $5.00 | $0.05 |
 `;
 
+afterEach(() => { vi.restoreAllMocks(); });
+
 const r = (input: number, cacheWrite: number, cacheRead: number, output: number) => ({ input, cacheWrite, cacheRead, output });
 const claude = { name: 'Anthropic', url: 'https://a/pricing.md', provider: 'claude', owns: (id: string) => id.startsWith('claude-') };
 const openai = { name: 'OpenAI', url: 'https://o/pricing.md', provider: 'codex', owns: (id: string) => !id.startsWith('claude-') };
@@ -67,6 +69,31 @@ describe('parsers', () => {
   it('fails loudly when a section is missing', () => {
     expect(() => parseAnthropic('# nothing')).toThrow('heading not found');
     expect(() => parseOpenAI('# nothing')).toThrow('heading not found');
+  });
+});
+
+describe('fetchPage', () => {
+  const md = (body: string, status = 200, type = 'text/markdown; charset=utf-8') => new Response(body, { status, headers: { 'content-type': type } });
+  const replies = (...rs: (Response | Error)[]) => {
+    const get = vi.fn<typeof fetch>();
+    for (const r of rs) r instanceof Error ? get.mockRejectedValueOnce(r) : get.mockResolvedValueOnce(r);
+    return get;
+  };
+  const NO_WAIT = [0, 0];
+  it('retries network errors and transient statuses, then returns the markdown', async () => {
+    const get = replies(new Error('ECONNRESET'), md('', 503), md('# ok'));
+    expect(await fetchPage('https://x/p.md', get, NO_WAIT)).toBe('# ok');
+    expect(get).toHaveBeenCalledTimes(3);
+  });
+  it('returns null, without throwing, when the page stays unreachable or serves HTML', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    expect(await fetchPage('https://x/p.md', replies(md('', 429), md('', 403), md('', 500)), NO_WAIT)).toBeNull();
+    expect(await fetchPage('https://x/p.md', replies(...[1, 2, 3].map(() => md('<html>', 200, 'text/html'))), NO_WAIT)).toBeNull();
+  });
+  it('fails at once when the page is gone', async () => {
+    const get = replies(md('', 404));
+    await expect(fetchPage('https://x/p.md', get, NO_WAIT)).rejects.toThrow('HTTP 404');
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });
 

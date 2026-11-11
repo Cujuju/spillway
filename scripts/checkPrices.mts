@@ -11,6 +11,12 @@ export const ISSUE_TITLE = 'Model prices differ from the pricing pages';
 const ISSUE_LABEL = 'bug';
 /** Prices are cents or fractions of a cent per MTok; anything smaller is float noise. */
 const SAME_PRICE_EPSILON = 1e-9;
+/** A healthy fetch of these ~60 KB pages takes under a second. */
+const REQUEST_TIMEOUT_MS = 30_000;
+/** Waits between attempts: rides out a brief CDN blip; longer outages wait for the next scheduled run. */
+const RETRY_DELAYS_MS = [5_000, 30_000];
+/** Rate limits, bot challenges (403) and server errors pass; 404/410 mean the page moved, which needs a fix. */
+const isTransientStatus = (status: number) => status === 403 || status === 408 || status === 429 || status >= 500;
 
 /** Page rates; null where the page lists none ("-"). */
 export interface PageRates { input: number; output: number; cacheRead: number | null; cacheWrite: number | null }
@@ -127,25 +133,61 @@ export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns
 }
 
 const gh = (...args: string[]) => execFileSync('gh', args, { encoding: 'utf8' }).trim();
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+class PageGone extends Error {}
+
+/**
+ * The page's markdown, or null when it stays unreachable after retries (network error, timeout, transient
+ * status, HTML instead of markdown). Throws when the page is gone (404/410).
+ */
+export async function fetchPage(url: string, get: typeof fetch = fetch, delays = RETRY_DELAYS_MS): Promise<string | null> {
+  for (let attempt = 0; ; attempt++) {
+    let why: string;
+    try {
+      const res = await get(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      if (res.ok && res.headers.get('content-type')?.includes('markdown')) return await res.text();
+      if (!res.ok && !isTransientStatus(res.status)) throw new PageGone(`HTTP ${res.status} from ${url}`);
+      why = res.ok ? `served ${res.headers.get('content-type')}, not markdown` : `HTTP ${res.status}`;
+    } catch (err) {
+      if (err instanceof PageGone) throw err;
+      why = err instanceof Error ? err.message : String(err);
+    }
+    if (attempt >= delays.length) { console.log(`::warning::${url} unreachable (${why}); the next scheduled run will retry.`); return null; }
+    await sleep(delays[attempt]!);
+  }
+}
 
 async function main(): Promise<void> {
   const ours = latestPrices();
   const report: string[] = [];
+  let complete = true;
   for (const source of SOURCES) {
-    const res = await fetch(source.url);
-    if (!res.ok) throw new Error(`${source.name}: HTTP ${res.status} from ${source.url}`);
-    report.push(...compare(source, source.parse(await res.text()), ours));
+    const md = await fetchPage(source.url);
+    if (md === null) { complete = false; continue; }
+    report.push(...compare(source, source.parse(md), ours));
   }
   const today = new Date().toISOString().slice(0, 10);
   const body = [...report, '', `Update \`src/shared/modelPrices.ts\` with a dated entry per change. "Detected" is when this check first saw it; use the announced date when known.`].join('\n');
-  console.log(report.length ? body : 'Prices match both pages.');
-  if (process.argv.includes('--dry-run') || !report.length) return;
+  console.log(report.length ? body : 'Prices match the pages that were read.');
+  // A partial report would drop the skipped page's differences from the issue, so leave it as is.
+  if (process.argv.includes('--dry-run') || !complete) return;
+  try {
+    syncIssue(report, body, today);
+  } catch (err) {
+    // Each run rebuilds the issue from scratch, so the next one repairs a failed GitHub call.
+    console.log(`::warning::GitHub issue not updated (${err instanceof Error ? err.message : err}); the next scheduled run will retry.`);
+  }
+}
 
+/** Keeps one open issue matching the report: opens, updates, or closes it when prices match. */
+function syncIssue(report: string[], body: string, today: string): void {
   const open = JSON.parse(gh('issue', 'list', '--state', 'open', '--search', `"${ISSUE_TITLE}" in:title`, '--json', 'number,title,body')) as { number: number; title: string; body: string }[];
   const issue = open.find((i) => i.title === ISSUE_TITLE);
   const stamped = `${body}\n\nDetected: ${today}`;
-  if (!issue) console.log(gh('issue', 'create', '--title', ISSUE_TITLE, '--label', ISSUE_LABEL, '--body', stamped));
-  else if (issue.body.replace(/\n\nDetected: .*$/s, '') !== body) {
+  if (!report.length) {
+    if (issue) console.log(gh('issue', 'close', String(issue.number), '--comment', `Prices match both pages (checked ${today}).`));
+  } else if (!issue) console.log(gh('issue', 'create', '--title', ISSUE_TITLE, '--label', ISSUE_LABEL, '--body', stamped));
+  else if (issue.body.replace(/\r\n/g, '\n').replace(/\n\nDetected: .*$/s, '') !== body) {
     gh('issue', 'edit', String(issue.number), '--body', stamped);
     gh('issue', 'comment', String(issue.number), '--body', `The differences changed (detected ${today}).`);
     console.log(`updated #${issue.number}`);

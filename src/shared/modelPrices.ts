@@ -24,6 +24,8 @@ interface ModelPrice {
 const r = (input: number, cacheWrite: number, cacheRead: number, output: number): Rates => ({ input, cacheWrite, cacheRead, output });
 /** OpenAI requests report no cache writes, so their write rate never applies. */
 const o = (input: number, cacheRead: number, output: number): Rates => r(input, input, cacheRead, output);
+/** OpenAI models without prompt caching ("-" on the page): any cached tokens bill as input. */
+const noCache = (input: number, output: number): Rates => o(input, input, output);
 /** Haiku 5.5's price step (Anthropic counts cache reads and writes in the prompt). */
 const HAIKU_5_5_LONG_ABOVE = 100_000;
 /** OpenAI's long-context step. */
@@ -67,6 +69,26 @@ const PRICES: Record<string, readonly ModelPrice[]> = {
   'gpt-5.6-terra': [{ from: null, rates: o(2, 0.2, 12), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 18) }],
   'gpt-5.6-luna': [{ from: null, rates: o(0.2, 0.02, 1.2), longAbove: OPENAI_LONG_ABOVE, long: o(0.4, 0.04, 1.8) }],
   'gpt-5.3-codex': [{ from: null, rates: o(1.75, 0.175, 14) }],
+  'gpt-6.1-terra': [{ from: null, rates: o(1, 0.05, 5), longAbove: OPENAI_LONG_ABOVE, long: o(2, 0.1, 7.5) }],
+  'gpt-5.5': [{ from: null, rates: o(5, 0.5, 30), longAbove: OPENAI_LONG_ABOVE, long: o(10, 1, 45) }],
+  'gpt-5.5-pro': [{ from: null, rates: noCache(30, 180), longAbove: OPENAI_LONG_ABOVE, long: noCache(60, 270) }],
+  'gpt-5.4': [{ from: null, rates: o(2.5, 0.25, 15), longAbove: OPENAI_LONG_ABOVE, long: o(5, 0.5, 22.5) }],
+  'gpt-5.4-pro': [{ from: null, rates: noCache(30, 180), longAbove: OPENAI_LONG_ABOVE, long: noCache(60, 270) }],
+  'gpt-5.4-mini': [{ from: null, rates: o(0.75, 0.075, 4.5) }],
+  'gpt-5.4-nano': [{ from: null, rates: o(0.2, 0.02, 1.25) }],
+  'gpt-5.2': [{ from: null, rates: o(1.75, 0.175, 14) }],
+  'gpt-5.2-pro': [{ from: null, rates: noCache(21, 168) }],
+  'gpt-5.1': [{ from: null, rates: o(1.25, 0.125, 10) }],
+  'gpt-5': [{ from: null, rates: o(1.25, 0.125, 10) }],
+  'gpt-5-mini': [{ from: null, rates: o(0.25, 0.025, 2) }],
+  'gpt-5-nano': [{ from: null, rates: o(0.05, 0.005, 0.4) }],
+  'gpt-5-pro': [{ from: null, rates: noCache(15, 120) }],
+  'gpt-4.1': [{ from: null, rates: o(2, 0.5, 8) }],
+  'gpt-4.1-mini': [{ from: null, rates: o(0.4, 0.1, 1.6) }],
+  'gpt-4o': [{ from: null, rates: o(2.5, 1.25, 10) }],
+  'gpt-4o-mini': [{ from: null, rates: o(0.15, 0.075, 0.6) }],
+  'o3-pro': [{ from: null, rates: noCache(20, 80) }],
+  'o3': [{ from: null, rates: o(2, 0.5, 8) }],
 };
 
 /** Claude bills cache reads and writes apart from input; OpenAI's input includes its cached tokens. */

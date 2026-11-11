@@ -91,7 +91,7 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
 
   async function replay(res: ServerResponse): Promise<void> {
     for (let i = 0; i < data.events.length && streams.has(res); i += REPLAY_BATCH) {
-      res.write(data.events.slice(i, i + REPLAY_BATCH).map((e) => `event: request\ndata: ${JSON.stringify({ ...e, trace_id: demoTrace(e.request_id) })}\n\n`).join(''));
+      res.write(data.events.slice(i, i + REPLAY_BATCH).map((e) => `event: request\ndata: ${JSON.stringify({ ...e, cache_creation_1h_tokens: 0, cache_creation_long_tokens: 0, tier: 'standard', trace_id: demoTrace(e.request_id) })}\n\n`).join(''));
       await sleep(REPLAY_PAUSE_MS);
     }
   }

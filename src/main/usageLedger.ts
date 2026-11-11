@@ -40,14 +40,14 @@ export function accountedUsage(e: AccountedActivityEvent): ActivityCounts {
 /** Only accounting and match fields survive retention, including mergeable timing counts/sums. */
 export function rememberUsage(db: Db, e: AccountedActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
   const { requestId, model, authIndex, sessionId,
-    inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed } = e;
+    inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed } = e;
   const { costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs } = accountedUsage(e);
   const statements = statementsFor(db);
   statements.insert.run([identityKey(e), JSON.stringify({
     costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs,
     ...(e.effectiveModel ? { effectiveModel: e.effectiveModel } : {}), ...(e.reasoningEffort ? { reasoningEffort: e.reasoningEffort } : {}),
     totalStart, totalDay, requestId, model, authIndex, sessionId,
-    inputTokens, outputTokens, cachedTokens, cacheWriteTokens, failed,
+    inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);
   if (e.source === 'proxy' && (e.upstreamId || e.sessionId)) {
     statements.boundary.run(e.at);

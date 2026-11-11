@@ -81,6 +81,7 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
   if (!at || !Number.isFinite(Date.parse(at)) || !context.model || !usage) return null;
   const settings = provider === 'claude' ? context.settings?.[context.model] ?? null : null;
   const thinking = provider === 'claude' ? usage.output_tokens_details?.thinking_tokens : usage.reasoning_output_tokens;
+  const write1h = provider === 'claude' ? usage.cache_creation?.ephemeral_1h_input_tokens : undefined;
   return {
     thinkingTokens: typeof thinking === 'number' && Number.isFinite(thinking) && thinking >= 0 ? thinking : null,
     clientVersion: provider === 'claude' ? text(r.version) : context.version ?? null, settingsHash: settings ? requestSettingsHash(settings) : null,
@@ -92,6 +93,8 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
     inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens),
     cachedTokens: tokens(provider === 'claude' ? usage.cache_read_input_tokens : usage.cached_input_tokens),
     cacheWriteTokens: tokens(provider === 'claude' ? usage.cache_creation_input_tokens : usage.cache_write_input_tokens),
+    cacheWrite1hTokens: typeof write1h === 'number' && Number.isFinite(write1h) && write1h >= 0 ? write1h : null,
+    tier: provider === 'claude' && (usage.speed === 'fast' || usage.speed === 'standard') ? usage.speed : null,
     sessionId: context.session ? `${provider}:${context.session}` : null,
     movedFrom: null, userAgent: null, client: context.client ?? null,
   };

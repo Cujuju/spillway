@@ -3,7 +3,7 @@
  * listing the differences. Run daily by .github/workflows/prices.yml; `--dry-run` prints the report only.
  */
 import { execFileSync } from 'node:child_process';
-import { latestPrices, reportsCacheWrites, type Rates } from '../src/shared/modelPrices.ts';
+import { latestPrices, reportsCacheWrites, type TierPrice, type Rates } from '../src/shared/modelPrices.ts';
 
 const ANTHROPIC_URL = 'https://platform.claude.com/docs/en/about-claude/pricing.md';
 const OPENAI_URL = 'https://developers.openai.com/api/docs/pricing.md';
@@ -19,8 +19,8 @@ const RETRY_DELAYS_MS = [5_000, 30_000];
 const isTransientStatus = (status: number) => status === 403 || status === 408 || status === 429 || status >= 500;
 
 /** Page rates; null where the page lists none ("-"). */
-export interface PageRates { input: number; output: number; cacheRead: number | null; cacheWrite: number | null }
-export interface PagePrice { rates: PageRates; long?: PageRates }
+export interface PageRates { input: number; output: number; cacheRead: number | null; cacheWrite: number | null; cacheWriteLong: number | null }
+export interface PagePrice { rates: PageRates; long?: PageRates; tiers?: { fast?: PagePrice; flex?: PagePrice } }
 type Page = Map<string, PagePrice>;
 
 interface Source { name: string; url: string; provider: string; owns: (id: string) => boolean; parse: (md: string) => Page }
@@ -74,28 +74,55 @@ export function parseAnthropic(md: string): Page {
   for (const row of table) {
     const name = row['Model'] ?? '';
     const rates = { input: required(row['Base input tokens']), output: required(row['Output tokens']),
-      cacheRead: money(row['Cache hits and refreshes']), cacheWrite: money(row['5m cache writes']) };
+      cacheRead: money(row['Cache hits and refreshes']), cacheWrite: money(row['5m cache writes']), cacheWriteLong: money(row['1h cache writes']) };
     // "Claude Sonnet 5.5 ([retired…](…))" → "claude-sonnet-5-5"
     const id = name.replace(/\s*\(.*$/, '').trim().toLowerCase().replace(/[\s.]+/g, '-');
     const entry = page.get(id);
     if (/\(for prompts over [\d,]+ tokens\)/.test(name)) page.set(id, { rates: entry?.rates ?? rates, long: rates });
     else page.set(id, { ...entry, rates });
   }
+  const fast = tables(section(md, '### Fast mode pricing'))[0];
+  if (!fast?.length) throw new Error('Anthropic fast-mode table not found');
+  for (const row of fast) {
+    for (const name of (row['Model'] ?? '').split(' / ')) {
+      const id = name.trim().toLowerCase().replace(/[\s.]+/g, '-');
+      const entry = page.get(id);
+      if (!entry) throw new Error(`Anthropic fast model absent from standard table: ${id}`);
+      const input = required(row['Input']);
+      const scale = input / entry.rates.input;
+      entry.tiers = { fast: { rates: { input, output: required(row['Output']),
+        cacheRead: entry.rates.cacheRead === null ? null : entry.rates.cacheRead * scale,
+        cacheWrite: entry.rates.cacheWrite === null ? null : entry.rates.cacheWrite * scale,
+        cacheWriteLong: entry.rates.cacheWriteLong === null ? null : entry.rates.cacheWriteLong * scale } } };
+    }
+  }
   return page;
 }
 
 export function parseOpenAI(md: string): Page {
-  const found = tables(section(md, '### Standard pricing data'));
+  const page = parseOpenAITables(section(md, '### Standard pricing data'));
+  for (const [tier, heading] of [['flex', '#### Flex'], ['fast', '### Fast pricing data']] as const) {
+    for (const [id, price] of parseOpenAITables(section(md, heading))) {
+      const entry = page.get(id);
+      if (!entry) throw new Error(`OpenAI ${tier} model absent from standard table: ${id}`);
+      entry.tiers = { ...entry.tiers, [tier]: price };
+    }
+  }
+  return page;
+}
+
+function parseOpenAITables(md: string): Page {
+  const found = tables(md);
   if (!found.length) throw new Error('OpenAI standard pricing tables not found');
   const page: Page = new Map();
   for (const row of found.flat()) {
     const id = (row['Model'] ?? '').replace(/\s*\(.*$/, '').trim().toLowerCase();
     if ('Short context input' in row) {
       const at = (prefix: string): PageRates => ({ input: required(row[`${prefix} input`]), output: required(row[`${prefix} output`]),
-        cacheRead: money(row[`${prefix} cached input`]), cacheWrite: money(row[`${prefix} 30m write`]) });
+        cacheRead: money(row[`${prefix} cached input`]), cacheWrite: money(row[`${prefix} 30m write`]), cacheWriteLong: money(row[`${prefix} 12h write`]) });
       page.set(id, { rates: at('Short context'), long: money(row['Long context input']) === null ? undefined : at('Long context') });
     } else {
-      page.set(id, { rates: { input: required(row['Input']), output: required(row['Output']), cacheRead: money(row['Cached input']), cacheWrite: null } });
+      page.set(id, { rates: { input: required(row['Input']), output: required(row['Output']), cacheRead: money(row['Cached input']), cacheWrite: null, cacheWriteLong: null } });
     }
   }
   return page;
@@ -108,15 +135,15 @@ const SOURCES: Source[] = [
 
 const fmt = (n: number | null | undefined) => n == null ? '—' : `$${n}`;
 
-/** Differences in the fields Spillway bills; OpenAI cache writes are skipped while its usage reports none. */
+/** Differences in the fields Spillway bills. */
 function rateDiffs(provider: string, ours: Rates, page: PageRates, label: string): string[] {
-  const fields: (keyof PageRates)[] = ['input', 'output', 'cacheRead', ...(reportsCacheWrites(provider) ? ['cacheWrite' as const] : [])];
+  const fields: (keyof PageRates)[] = ['input', 'output', 'cacheRead', ...(reportsCacheWrites(provider) ? ['cacheWrite' as const, 'cacheWriteLong' as const] : [])];
   return fields.filter((f) => page[f] !== null && Math.abs(ours[f] - page[f]!) > SAME_PRICE_EPSILON)
     .map((f) => `${label}${f}: ${fmt(ours[f])} → ${fmt(page[f])}`);
 }
 
 /** Markdown lines describing how one source's page differs from the table; empty when it matches. */
-export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns'>, page: Page, ours: Map<string, { rates: Rates; long?: Rates }>): string[] {
+export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns'>, page: Page, ours: Map<string, { rates: Rates; long?: Rates; tiers?: { fast?: TierPrice; flex?: TierPrice } }>): string[] {
   const tracked = [...ours.keys()].filter(source.owns);
   if (!tracked.some((id) => page.has(id))) throw new Error(`${source.name}: no tracked model found on the page; its layout may have changed`);
   const lines: string[] = [];
@@ -126,6 +153,18 @@ export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns
     const diffs = [...rateDiffs(source.provider, mine.rates, p.rates, ''),
       ...(p.long && mine.long ? rateDiffs(source.provider, mine.long, p.long, 'long-context ') : []),
       ...(p.long && !mine.long ? ['long-context rates listed but not tracked'] : [])];
+    for (const tier of ['fast', 'flex'] as const) {
+      const listed = p.tiers?.[tier];
+      const tracked = mine.tiers?.[tier];
+      if (listed && !tracked) diffs.push(`${tier} rates listed but not tracked`);
+      if (tracked && !listed) diffs.push(`${tier} rates tracked but not listed`);
+      if (listed && tracked) {
+        diffs.push(...rateDiffs(source.provider, tracked.rates, listed.rates, `${tier} `));
+        if (listed.long && tracked.long) diffs.push(...rateDiffs(source.provider, tracked.long, listed.long, `${tier} long-context `));
+        if (listed.long && !tracked.long) diffs.push(`${tier} long-context rates listed but not tracked`);
+        if (tracked.long && !listed.long) diffs.push(`${tier} long-context rates tracked but not listed`);
+      }
+    }
     if (diffs.length) lines.push(`- **Changed:** \`${id}\` ${diffs.join('; ')}`);
   }
   // Models dropped from the page stay priced for past requests, so they need no action.

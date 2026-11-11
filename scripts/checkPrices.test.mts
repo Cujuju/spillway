@@ -11,6 +11,12 @@ const ANTHROPIC = `
 | Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 / MTok | $0.50 / MTok |
 | Claude Haiku 5.5 (for prompts over 100,000 tokens) | $0.50 / MTok | $0.625 / MTok | $1 / MTok | $0.05 / MTok | $2.50 / MTok |
 
+### Fast mode pricing
+
+| Model | Input | Output |
+| --- | --- | --- |
+| Claude Sonnet 5.5 | $4 | $20 |
+
 ## Cloud platform pricing
 
 | Model | Base input tokens | Output tokens |
@@ -35,11 +41,23 @@ const OPENAI = `
 | Model | Input | Output | Cached input |
 | --- | --- | --- | --- |
 | gpt-6.1-sol | $1.00 | $5.00 | $0.05 |
+
+#### Flex
+
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| gpt-6.1-sol | $1.00 | $5.00 | $0.05 |
+
+### Fast pricing data
+
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| gpt-6.1-sol | $4.00 | $20.00 | $0.20 |
 `;
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-const r = (input: number, cacheWrite: number, cacheRead: number, output: number) => ({ input, cacheWrite, cacheRead, output });
+const r = (input: number, cacheWrite: number, cacheRead: number, output: number) => ({ input, cacheWrite, cacheWriteLong: input * 2, cacheRead, output });
 const claude = { name: 'Anthropic', url: 'https://a/pricing.md', provider: 'claude', owns: (id: string) => id.startsWith('claude-') };
 const openai = { name: 'OpenAI', url: 'https://o/pricing.md', provider: 'codex', owns: (id: string) => !id.startsWith('claude-') };
 
@@ -56,15 +74,15 @@ describe('parsers', () => {
   it('reads the Anthropic model table only, with Haiku long-context rows', () => {
     const page = parseAnthropic(ANTHROPIC);
     expect([...page.keys()]).toEqual(['claude-sonnet-5-5', 'claude-opus-4', 'claude-haiku-5-5']);
-    expect(page.get('claude-sonnet-5-5')!.rates).toEqual({ input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 });
-    expect(page.get('claude-haiku-5-5')).toEqual({ rates: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }, long: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 } });
+    expect(page.get('claude-sonnet-5-5')!.rates).toEqual({ input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5, cacheWriteLong: 4 });
+    expect(page.get('claude-haiku-5-5')).toEqual({ rates: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125, cacheWriteLong: 0.2 }, long: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625, cacheWriteLong: 1 } });
   });
   it('reads OpenAI standard tables only, in both layouts', () => {
     const page = parseOpenAI(OPENAI);
-    expect(page.get('gpt-6.1-sol')!.rates).toEqual({ input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 });
+    expect(page.get('gpt-6.1-sol')!.rates).toEqual({ input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5, cacheWriteLong: 5 });
     expect(page.get('gpt-6.1-sol')!.long!.input).toBe(4);
     expect(page.get('gpt-5.5')!.rates.cacheWrite).toBeNull();
-    expect(page.get('gpt-5.2-pro')!.rates).toEqual({ input: 21, output: 168, cacheRead: null, cacheWrite: null });
+    expect(page.get('gpt-5.2-pro')!.rates).toEqual({ input: 21, output: 168, cacheRead: null, cacheWrite: null, cacheWriteLong: null });
   });
   it('fails loudly when a section is missing', () => {
     expect(() => parseAnthropic('# nothing')).toThrow('heading not found');
@@ -100,7 +118,7 @@ describe('fetchPage', () => {
 describe('compare', () => {
   it('reports changed and new models, not ones dropped from the page', () => {
     const ours = new Map([
-      ['claude-sonnet-5-5', { rates: r(2, 2.5, 0.2, 10) }],
+      ['claude-sonnet-5-5', { rates: r(2, 2.5, 0.2, 10), tiers: { fast: { rates: r(4, 5, 0.2, 20) } } }],
       ['claude-haiku-5-5', { rates: r(0.1, 0.125, 0.01, 0.5), long: r(0.5, 0.625, 0.05, 2.5) }],
       ['claude-gone', { rates: r(1, 1, 1, 1) }],
     ]);
@@ -110,12 +128,45 @@ describe('compare', () => {
       '- **New:** `claude-opus-4` input $15, output $75, cache read $1.5',
     ]);
   });
-  it('is empty when prices match, and ignores OpenAI cache writes', () => {
-    const ours = new Map([['gpt-6.1-sol', { rates: r(2, 2, 0.1, 10), long: r(4, 4, 0.2, 15) }]]);
+  it('compares OpenAI write lifetimes and tier tables', () => {
     const page = new Map([...parseOpenAI(OPENAI)].filter(([id]) => id === 'gpt-6.1-sol'));
+    const rates = { ...r(2, 2.5, 0.1, 10), cacheWriteLong: 5 };
+    const tiers = { fast: { rates: r(4, 4, 0.2, 20) }, flex: { rates: r(1, 1, 0.05, 5) } };
+    const ours = new Map([['gpt-6.1-sol', { rates, long: { ...r(4, 5, 0.2, 15), cacheWriteLong: 10 }, tiers }]]);
     expect(compare(openai, page, ours)).toEqual([]);
+    ours.get('gpt-6.1-sol')!.rates.cacheWriteLong = 2;
+    tiers.fast.rates.input = 3;
+    expect(compare(openai, page, ours).join('\n')).toContain('cacheWriteLong: $2 → $5');
+    expect(compare(openai, page, ours).join('\n')).toContain('fast input: $3 → $4');
   });
   it('fails when no tracked model is on the page', () => {
     expect(() => compare(openai, new Map(), new Map([['gpt-6.1-sol', { rates: r(2, 2, 0.1, 10) }]]))).toThrow('no tracked model');
   });
+});
+
+
+it('compares Claude 1-hour writes and fast cache multipliers', () => {
+  const page = parseAnthropic(ANTHROPIC);
+  const mine = { rates: r(2, 2.5, 0.1, 10), tiers: { fast: { rates: r(4, 5, 0.2, 20) } } };
+  expect(page.get('claude-sonnet-5-5')!.tiers!.fast!.rates).toEqual(mine.tiers.fast.rates);
+  mine.rates.cacheWriteLong = 3;
+  mine.tiers.fast.rates.cacheWriteLong = 6;
+  const report = compare(claude, page, new Map([['claude-sonnet-5-5', mine]])).join('\n');
+  expect(report).toContain('cacheWriteLong: $3 → $4');
+  expect(report).toContain('fast cacheWriteLong: $6 → $8');
+});
+
+it('reads and compares both OpenAI tier lifetime columns and long-context rates', () => {
+  const table = OPENAI.split('### Standard pricing data')[1]!.split('| Model | Input')[0]!;
+  const page = parseOpenAI(OPENAI.replace(/#### Flex[\s\S]*$/, `#### Flex\n${table}\n### Fast pricing data\n${table}`));
+  const listed = page.get('gpt-6.1-sol')!;
+  expect(listed.tiers!.flex!.rates.cacheWriteLong).toBe(5);
+  expect(listed.tiers!.fast!.long!.cacheWrite).toBe(5);
+  expect(listed.tiers!.fast!.long!.cacheWriteLong).toBe(10);
+  const standard = { ...r(2, 2.5, 0.1, 10), cacheWriteLong: 5 };
+  const long = { ...r(4, 5, 0.2, 15), cacheWriteLong: 10 };
+  const ours = { rates: standard, long, tiers: { fast: { rates: standard, long: { ...long, cacheWriteLong: 9 } } } };
+  const report = compare(openai, new Map([['gpt-6.1-sol', listed]]), new Map([['gpt-6.1-sol', ours]])).join('\n');
+  expect(report).toContain('fast long-context cacheWriteLong: $9 → $10');
+  expect(report).toContain('flex rates listed but not tracked');
 });

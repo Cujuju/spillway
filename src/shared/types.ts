@@ -233,8 +233,11 @@ export interface ActivityEvent extends TransportMetadata {
   outputTokens: number;
   /** Cache reads. Claude counts them apart from input; OpenAI includes them in input. */
   cachedTokens: number;
-  /** Tokens written to the prompt cache (Claude); 0 where the provider doesn't report them. */
+  /** Cache writes; Claude counts them apart from input, OpenAI includes them. */
   cacheWriteTokens: number;
+  cacheWrite1hTokens?: number | null;
+  cacheWriteLongTokens?: number | null;
+  tier?: 'standard' | 'fast' | 'flex' | null;
   /** The client conversation as the proxy keys it ("claude:<session uuid>"); null when the client sent none. */
   sessionId: string | null;
   parentSessionId?: string | null;

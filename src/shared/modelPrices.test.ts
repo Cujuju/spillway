@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cheapestModel, priceAt, priceTableSnapshot, promptTokens, repriceStart, tokenCost } from './modelPrices';
+import { cheapestModel, priceAt, priceTableSnapshot, promptTokens, repriceStart, reportsCacheWrites, tokenCost } from './modelPrices';
 
 describe('price table changes', () => {
   const old = { from: null, rates: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 } };
@@ -32,8 +32,8 @@ const t = (inputTokens: number, outputTokens: number, cachedTokens = 0, cacheWri
 
 describe('tokenCost', () => {
   it('selects rates before and on their effective UTC date', () => {
-    const old = { from: null, rates: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 } };
-    const current = { from: '2026-10-26', rates: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 } };
+    const old = { from: null, rates: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5, cacheWriteLong: 8 } };
+    const current = { from: '2026-10-26', rates: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5, cacheWriteLong: 4 } };
     const history = [old, current];
     expect(priceAt(history, '2026-10-25T23:59:59Z')).toBe(old);
     expect(priceAt(history, Date.parse('2026-10-26T00:00:00Z'))).toBe(current);
@@ -77,5 +77,45 @@ describe('tokenCost', () => {
   it('matches dated snapshots and returns null for unknown models', () => {
     expect(tokenCost('claude', 'claude-opus-5-5-20260901', AT, t(1_000_000, 0))!.usd).toBeCloseTo(4);
     expect(tokenCost('codex', 'gpt-image-2', AT, t(10, 10))).toBeNull();
+  });
+});
+
+
+describe('observed billing metadata', () => {
+  it('splits Claude 5-minute and 1-hour writes and bounds invalid subsets', () => {
+    const tokens = { ...t(0, 0, 0, 1_000_000), cacheWrite1hTokens: 400_000 };
+    expect(tokenCost('claude', 'claude-opus-5-5', AT, tokens)!.usd).toBeCloseTo(0.6 * 5 + 0.4 * 8);
+    expect(tokenCost('claude', 'claude-opus-5-5', AT, { ...tokens, cacheWrite1hTokens: 2_000_000 })!.usd).toBeCloseTo(8);
+    expect(tokenCost('claude', 'claude-opus-5-5', AT, { ...tokens, cacheWrite1hTokens: -1 })!.usd).toBeCloseTo(5);
+  });
+  it.each(['codex', 'openai'])('prices %s writes included in input, with and without a 12-hour subset', (provider) => {
+    const tokens = { ...t(100_000, 0, 20_000, 40_000), cacheWriteLongTokens: null };
+    expect(reportsCacheWrites(provider)).toBe(true);
+    expect(promptTokens(provider, tokens)).toBe(100_000);
+    expect(tokenCost(provider, 'gpt-6.1-sol', AT, tokens)!.usd).toBeCloseTo(0.04 * 2 + 0.02 * 0.1 + 0.04 * 2.5);
+    expect(tokenCost(provider, 'gpt-6.1-sol', AT, { ...tokens, cacheWriteLongTokens: 10_000 })!.usd)
+      .toBeCloseTo(0.04 * 2 + 0.02 * 0.1 + 0.03 * 2.5 + 0.01 * 5);
+  });
+  it.each(['codex', 'openai'])('prices legacy %s writes at the 30-minute rate when new fields are absent', (provider) => {
+    expect(tokenCost(provider, 'gpt-6.1-sol', AT, t(100_000, 0, 20_000, 40_000))!.usd).toBeCloseTo(0.04 * 2 + 0.02 * 0.1 + 0.04 * 2.5);
+  });
+  it('uses Claude fast cache multipliers', () => {
+    expect(tokenCost('claude', 'claude-fable-5-2', AT,
+      { ...t(1_000_000, 1_000_000, 1_000_000, 1_000_000), cacheWrite1hTokens: 500_000, tier: 'fast' })!.usd)
+      .toBeCloseTo(16 + 80 + 0.4 + 0.5 * 20 + 0.5 * 32);
+  });
+  it.each(['fast', 'flex'] as const)('selects %s rates, including long-context cache writes', (tier) => {
+    const scale = tier === 'fast' ? 2 : 0.5;
+    const tokens = { ...t(1_000_000, 1_000_000, 200_000, 400_000), cacheWriteLongTokens: 100_000, tier };
+    expect(tokenCost('codex', 'gpt-6.1-sol', AT, tokens)!.usd).toBeCloseTo((0.4 * 4 + 15 + 0.2 * 0.2 + 0.3 * 5 + 0.1 * 10) * scale);
+  });
+  it('uses standard rates for absent, null, unknown and unsupported tiers', () => {
+    const tokens = t(100_000, 0);
+    const expected = tokenCost('codex', 'gpt-6.1-sol', AT, tokens);
+    for (const tier of [undefined, null, 'standard', 'other']) {
+      expect(tokenCost('codex', 'gpt-6.1-sol', AT, { ...tokens, tier } as Parameters<typeof tokenCost>[3])).toEqual(expected);
+    }
+    expect(tokenCost('claude', 'claude-sonnet-5-5', AT, { ...tokens, tier: 'flex' }))
+      .toEqual(tokenCost('claude', 'claude-sonnet-5-5', AT, tokens));
   });
 });

@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import { tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
 import { ActivityLog } from './activityStore';
 import { openActivityDb } from './activityDb';
@@ -180,4 +181,26 @@ it('replays more than one transaction batch and remains idempotent', async () =>
   importData(a.file, key, b.log, () => undefined);
   expect(b.log.totalsList()).toEqual(totals);
   expect(totals.reduce((n, t) => n + t.requests, 0)).toBe(batch.length);
+});
+
+it.each(['claude', 'codex'])('preserves %s billing context through encrypted transfer after retention', async (provider) => {
+  const a = fixture(); const b = fixture();
+  const original = event({ at: '2020-01-01T12:00:00Z', provider,
+    model: provider === 'claude' ? 'claude-opus-5-5' : 'gpt-6.1-sol',
+    inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 1_000_000,
+    cacheWrite1hTokens: 500_000, cacheWriteLongTokens: 500_000, tier: 'fast' });
+  a.log.append(original);
+  a.log.prune();
+  expect(a.log.days()).toEqual([]);
+  const expectedPrice = tokenCost(provider, original.model, original.at, original);
+  expect(expectedPrice?.usd).toBeCloseTo(provider === 'claude' ? 13 : 7.5);
+  expect([...a.log.exportEvents()][0]).toMatchObject({ cacheWrite1hTokens: 500_000, cacheWriteLongTokens: 500_000, tier: 'fast' });
+  await exportData(a.file, key, a.log, empty);
+  importData(a.file, key, b.log, () => undefined);
+  b.log.close();
+  expect(b.log.days()).toEqual([]);
+  const restored = [...b.log.exportEvents()][0]!;
+  expect(restored).toMatchObject({ cacheWrite1hTokens: 500_000, cacheWriteLongTokens: 500_000, tier: 'fast' });
+  expect(tokenCost(provider, restored.model, restored.at, restored)).toEqual(expectedPrice);
+  expect(b.log.totalsList()).toEqual(a.log.totalsList());
 });

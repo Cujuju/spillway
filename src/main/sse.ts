@@ -40,6 +40,7 @@ const WINDOW_START_PURPOSE = 'window-start';
 
 const s = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null);
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+const tokenSubset = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
 const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
 
 /** Parses a "request" event's JSON; null when it is not an object with a request id. */
@@ -86,6 +87,9 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     outputTokens: n(r.output_tokens),
     cachedTokens: n(r.cached_tokens),
     cacheWriteTokens: n(r.cache_creation_tokens),
+    cacheWrite1hTokens: tokenSubset(r.cache_creation_1h_tokens),
+    cacheWriteLongTokens: tokenSubset(r.cache_creation_long_tokens),
+    tier: r.tier === 'standard' || r.tier === 'fast' || r.tier === 'flex' ? r.tier : null,
     sessionId: s(r.session_id),
     parentSessionId: s(r.parent_session_id),
     sessionKind: sessionKind(r.session_kind),

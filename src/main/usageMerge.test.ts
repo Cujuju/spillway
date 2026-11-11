@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mergeUsage, sameUsage, USAGE_MATCH_TOLERANCE_MS } from './usageMerge';
 import { parseClientLine } from './clientLogParser';
+import { tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
 
 export const sampleUsage = (patch: Partial<ActivityEvent> = {}): ActivityEvent => ({
@@ -68,4 +69,17 @@ it('keeps Codex response IDs from token_usage_record without counting its token_
   const reversed = { session: 's', turn: 't', model: 'gpt-6' };
   const first = parseClientLine(JSON.stringify(snapshot), 'codex', reversed);
   expect(parseClientLine(JSON.stringify(record), 'codex', reversed)?.requestId).toBe(first?.requestId);
+});
+
+it.each(['fast', 'standard', 'flex', undefined])('maps Claude transcript billing context for speed %s', (speed) => {
+  const record = { type: 'assistant', timestamp: '2026-11-01T12:00:00Z', message: {
+    id: 'mixed-writes', model: 'claude-opus-5-5', usage: { input_tokens: 0, output_tokens: 0,
+      cache_creation_input_tokens: 1_000_000, speed, cache_creation: { ephemeral_1h_input_tokens: 500_000 } },
+  } };
+  const parsed = parseClientLine(JSON.stringify(record), 'claude', {})!;
+  expect(parsed).toMatchObject({ cacheWriteTokens: 1_000_000, cacheWrite1hTokens: 500_000,
+    tier: speed === 'fast' || speed === 'standard' ? speed : null });
+  expect(tokenCost(parsed.provider, parsed.model, parsed.at, parsed)?.usd).toBeCloseTo(speed === 'fast' ? 13 : 6.5);
+  const withoutLifetime = { ...record, message: { ...record.message, usage: { ...record.message.usage, cache_creation: undefined } } };
+  expect(parseClientLine(JSON.stringify(withoutLifetime), 'claude', {})?.cacheWrite1hTokens).toBeNull();
 });

@@ -6,6 +6,7 @@ import Database from 'better-sqlite3-multiple-ciphers';
 import type { ActivityEvent } from '@shared/types';
 import { openActivityDb } from './activityDb';
 import { ActivityLog } from './activityStore';
+import { EVERY_REQUEST } from '@shared/activityScope';
 import { emptyCounts } from '@shared/activityCounts';
 import { totalKey } from './activityTotals';
 
@@ -155,5 +156,20 @@ it('compacts old identities without losing cross-restart matching or recorded to
     log.append({ ...imported, requestId: 'proxy', source: 'proxy' });
     expect(log.totalsList().reduce((sum, t) => sum + t.requests, 0)).toBe(1);
     expect(log.coverage().clients).toEqual([{ provider: 'claude', client: 'claude-cli', requests: 1, viaProxy: 1 }]);
+  } finally { log.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+it('stores observed billing fields across reopening and counts the tier and lifetime split', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-billing-'));
+  const log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 30 });
+  try {
+    const e = { ...event(new Date(), 'billing', 'proxy'), model: 'claude-opus-5-5',
+      inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000, cacheWriteLongTokens: null, tier: 'fast' as const };
+    log.append(e);
+    log.close();
+    expect(log.page({ day: null, failedOnly: false, scope: EVERY_REQUEST, before: null }).events[0]).toMatchObject(e);
+    expect(log.totalsList()[0]!.costUsd).toBeCloseTo(0.5 * 10 + 0.5 * 16);
   } finally { log.close(); rmSync(dir, { recursive: true, force: true }); }
 });

@@ -277,3 +277,19 @@ it('matches recorded request and response text through the archive search, for o
   log.archiveClear();
   expect(ids('needle')).toEqual([]);
 });
+
+it.each(['claude', 'codex'])('preserves %s tier and write lifetime in retained and archive fallback pricing', (provider) => {
+  const { log, observe, edit } = setup();
+  const e = observe(event({ provider, model: provider === 'claude' ? 'claude-opus-5-5' : 'gpt-6.1-sol',
+    effectiveModel: null, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 1_000_000,
+    cacheWrite1hTokens: 500_000, cacheWriteLongTokens: 500_000, tier: 'fast' }));
+  const nodeId = `session:${e.sessionId}`;
+  const expectedCost = provider === 'claude' ? 13 : 7.5;
+  edit((db) => db.exec("UPDATE usage_identities SET event=json_remove(event,'$.costUsd')"));
+  for (const origin of ['activity', 'archive']) {
+    if (origin === 'archive') edit((db) => db.exec('DELETE FROM requests'));
+    expect(log.traceAttempts({ ...query, nodeId }).attempts[0]).toMatchObject({ origin, costUsd: expectedCost,
+      tokens: { cacheWrite1hTokens: 500_000, cacheWriteLongTokens: 500_000, tier: 'fast' } });
+    expect(log.traceQuery(query).nodes[0]?.metrics.costUsd).toBeCloseTo(expectedCost);
+  }
+});

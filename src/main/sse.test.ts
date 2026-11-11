@@ -75,3 +75,20 @@ it('parses observed success status and only supported session kinds', () => {
   }
   for (const kind of [undefined, 'other', 1, ['root']]) expect(parseActivityEvent(JSON.stringify({ request_id: 'old', session_kind: kind }))?.sessionKind).toBeNull();
 });
+
+
+it('parses cache lifetime subsets and known billed tiers, preserving zero and unknown', () => {
+  for (const tier of ['standard', 'fast', 'flex']) {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'billing', cache_creation_tokens: 40,
+      cache_creation_1h_tokens: 0, cache_creation_long_tokens: 20, tier })))
+      .toMatchObject({ cacheWriteTokens: 40, cacheWrite1hTokens: 0, cacheWriteLongTokens: 20, tier });
+  }
+  expect(parseActivityEvent('{"request_id":"old"}'))
+    .toMatchObject({ cacheWrite1hTokens: null, cacheWriteLongTokens: null, tier: null });
+  for (const value of [-1, 0.5, '10', {}, null]) {
+    expect(parseActivityEvent(JSON.stringify({ request_id: 'invalid', cache_creation_1h_tokens: value,
+      cache_creation_long_tokens: value, tier: value })))
+      .toMatchObject({ cacheWrite1hTokens: null, cacheWriteLongTokens: null, tier: null });
+  }
+  expect(parseActivityEvent('{"request_id":"unknown","tier":"priority"}')?.tier).toBeNull();
+});

@@ -19,12 +19,12 @@ CREATE INDEX IF NOT EXISTS archive_attempt_session ON archive_attempts (json_ext
 type Raw = { id: string; at: string; origin: 'activity' | 'archive'; event: string; accounting: string | null;
   trace_id: string | null; capture_state: TraceAttempt['captureState'] | null; capture_reason: string | null; path: string | null; identity: string | null };
 const DAY = 86_400_000;
-const TEXT_FIELDS = ['source', 'sessionId', 'parentSessionId', 'sessionKind', 'model', 'effectiveModel', 'reasoningEffort', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
+const TEXT_FIELDS = ['source', 'sessionId', 'parentSessionId', 'sessionKind', 'model', 'effectiveModel', 'reasoningEffort', 'tier', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
 function metadata(column: string, archive: boolean): string {
   const strings = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE WHEN json_type(${column},'$.${k}')='text' THEN substr(json_extract(${column},'$.${k}'),1,513) END`]);
   const numbers = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE ${k === 'cacheWriteTokens' ? `WHEN json_type(${column},'$.${k}') IS NULL OR json_type(${column},'$.${k}')='null' THEN 0 ` : ''}WHEN json_type(${column},'$.${k}') IN ('integer','real') THEN json_extract(${column},'$.${k}') END`]);
   const values = [...strings(archive ? ['at', 'requestId', 'selectionId'] : [...TEXT_FIELDS, 'at', 'requestId', 'selectionId', 'authIndex', 'movedFrom']),
-    ...numbers(archive ? [] : ['statusCode', 'latencyMs', 'ttftMs', 'inputTokens', 'outputTokens', 'cachedTokens', 'cacheWriteTokens'])];
+    ...numbers(archive ? [] : ['statusCode', 'latencyMs', 'ttftMs', 'inputTokens', 'outputTokens', 'cachedTokens', 'cacheWriteTokens', 'cacheWrite1hTokens', 'cacheWriteLongTokens'])];
   const failure = (col: string) => `json(CASE json_type(${col},'$.failed') WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE 'null' END)`;
   if (archive) values.push("'provenance'", metadata(`${column} -> '$.provenance'`, false));
   else values.push("'failed'", failure(column));
@@ -58,7 +58,9 @@ function observation(r: Raw): TraceAttempt | null {
   const source = r.origin === 'archive' || e.source !== 'client-log' ? 'proxy' : 'client-log';
   const keys = ['inputTokens', 'outputTokens', 'cachedTokens', 'cacheWriteTokens'] as const;
   const tokens = keys.every((k) => number(usage[k]) !== null)
-    ? Object.fromEntries(keys.map((k) => [k, usage[k]])) as unknown as TokenCounts : null;
+    ? { ...Object.fromEntries(keys.map((k) => [k, usage[k]])),
+      cacheWrite1hTokens: number(usage.cacheWrite1hTokens), cacheWriteLongTokens: number(usage.cacheWriteLongTokens),
+      tier: usage.tier === 'standard' || usage.tier === 'fast' || usage.tier === 'flex' ? usage.tier : null } as TokenCounts : null;
   // Token conventions need the provider; legacy archive links take it from their exact ledger row.
   const model = text(p.model), effectiveModel = text(p.effectiveModel), provider = text(p.provider) ?? (r.origin === 'archive' ? text(ledger.provider) : null);
   const recordedCost = number(ledger.costUsd);

@@ -2,9 +2,9 @@ name: prices
 
 on:
   schedule:
-    # 8 AM, 10 AM, noon, 2, 4 and 6 PM Pacific.
-    - cron: '0 8-18/2 * * *'
-      timezone: America/Los_Angeles
+    # Hourly UTC across 8 AM–6 PM Pacific in both PST and PDT; the gate job keeps the even Pacific hours.
+    # (A `timezone:` schedule never fired here.)
+    - cron: '0 0-2,15-23 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.hour.outputs.run }}
+    steps:
+      # 8 AM, 10 AM, noon, 2, 4 and 6 PM Pacific; a run delayed past its hour waits for the next slot.
+      - id: hour
+        run: |
+          hour=$(TZ=America/Los_Angeles date +%-H)
+          if [ "${{ github.event_name }}" != schedule ] || { [ $((hour % 2)) -eq 0 ] && [ "$hour" -ge 8 ] && [ "$hour" -le 18 ]; }; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          else
+            echo run=false >> "$GITHUB_OUTPUT"
+          fi
+
   check:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     # A healthy run takes about 15 seconds; this caps a hung runner well before GitHub's 6-hour default.
     timeout-minutes: 10

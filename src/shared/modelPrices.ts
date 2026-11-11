@@ -5,7 +5,7 @@
 
 const PER_TOKEN = 1 / 1_000_000;
 
-interface Rates {
+export interface Rates {
   input: number;
   output: number;
   cacheRead: number;
@@ -109,6 +109,9 @@ export function priceAt(history: readonly ModelPrice[], at: string | number): Mo
   const day = time.toISOString().split('T')[0]!;
   return history.findLast((price) => price.from === null || price.from <= day) ?? null;
 }
+
+/** Each priced model's current rates, for the price check script. */
+export const latestPrices = (): Map<string, ModelPrice> => new Map(Object.entries(PRICES).map(([id, history]) => [id, history.at(-1)!]));
 
 /**
  * The model with the lowest input, then output, list price; null when none is priced. A near-empty

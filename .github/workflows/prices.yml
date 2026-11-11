@@ -1,0 +1,33 @@
+name: prices
+
+on:
+  schedule:
+    # Daily: providers announce price changes, and the issue's date can be corrected to the announcement.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: spillway-prices
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      # Node builtins and src/shared/modelPrices.ts only, so no install step.
+      - name: Compare model prices with the pricing pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/checkPrices.mts

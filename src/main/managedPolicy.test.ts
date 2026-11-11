@@ -8,6 +8,8 @@ import {
 } from './managedPolicy';
 
 const TARGET = { endpoint: 'http://127.0.0.1:8317', key: 'client-key' };
+// Cold CI PowerShell startup took 8 seconds; 20 seconds leaves headroom for runner load.
+const COLD_CI_PROCESS_SPAWN_TIMEOUT_MS = 20_000;
 
 describe('managed policy file', () => {
   it('uses a drop-in Spillway owns under Claude Code’s managed folder', () => {
@@ -81,7 +83,7 @@ describe('elevated scripts', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, COLD_CI_PROCESS_SPAWN_TIMEOUT_MS);
 
   it.runIf(process.platform === 'win32')('copies the file into a new folder, then removes it', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "spillway policy's-"));

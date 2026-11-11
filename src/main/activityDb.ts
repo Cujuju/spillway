@@ -90,6 +90,8 @@ export function openActivityDb(file: string, hexKey: string): Db {
   }
   try {
     db.pragma('journal_mode = WAL');
+    // SQLite recommends WAL + NORMAL: app crashes preserve commits; power loss may drop recent commits without corrupting the database.
+    db.pragma('synchronous = NORMAL');
     db.transaction(() => {
       db.exec(SCHEMA);
       db.exec(ARCHIVE_SCHEMA);

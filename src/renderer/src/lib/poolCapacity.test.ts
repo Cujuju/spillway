@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket, Credential, CredentialPlan, HistorySample } from '@shared/types';
 import { measuredSessionUsd, poolShares } from './poolCapacity';
+import { poolSummary, project } from './forecast';
+import { pastSeries } from './poolHistory';
+import { poolSegments } from './poolWindows';
+import { readTray } from '@shared/trayValues';
 
 const H = 3_600_000;
 const NOW = Date.parse('2026-10-25T00:00:00Z');
@@ -55,6 +59,67 @@ describe('poolShares', () => {
   it('treats an unknown plan as Pro-sized', () => {
     const shares = poolShares([], [account('a', null), account('b', null)], 'five_hour', []);
     expect(shares.get('a')!.share).toBe(0.5);
+  });
+});
+
+describe('usable pooled quota', () => {
+  const samples = [
+    at(NOW - 2 * H, { max: { five_hour: 0, seven_day: 0 }, pro: { five_hour: 0, seven_day: 0 } }),
+    at(NOW - H, { max: { five_hour: 35, seven_day: 5 }, pro: { five_hour: 50, seven_day: 5 } }),
+  ];
+  const credentials = () => {
+    const max = account('max', MAX_5X);
+    const pro = account('pro', PRO);
+    max.windows[0]!.usedPercent = 20;
+    max.windows[1]!.usedPercent = 99;
+    pro.windows[0]!.usedPercent = 40;
+    pro.windows[1]!.usedPercent = 98;
+    return [max, pro];
+  };
+  // Weekly quota allows 7% of Max's session and 20% of Pro's: (5 × 7 + 1 × 20) / 6.
+  const remaining = (5 * 7 + 20) / 6;
+
+  it('converts each account weekly remainder before adding fixed plan-weighted session contributions', () => {
+    const creds = credentials();
+    const shares = poolShares(samples, creds, 'five_hour', []);
+    expect(shares.get('max')!.share).toBeCloseTo(5 / 6);
+    expect(shares.get('pro')!.share).toBeCloseTo(1 / 6);
+    expect(poolSummary(creds, 'five_hour', shares).remaining).toBeCloseTo(remaining);
+    const segments = poolSegments(creds, 'five_hour', shares);
+    expect(segments[0]!.usedPercent).toBeCloseTo(93);
+    expect(segments[1]!.usedPercent).toBeCloseTo(80);
+    expect(segments.every((s) => !s.rejected)).toBe(true);
+    const current = at(NOW, { max: { five_hour: 20, seven_day: 99 }, pro: { five_hour: 40, seven_day: 98 } });
+    expect(pastSeries([current], creds, 'five_hour', 0, shares)[0]!.remaining).toBeCloseTo(remaining);
+    const projection = project(creds, 'five_hour', 1, NOW, 1, 'round-robin', shares);
+    expect(projection.points[0]!.remaining).toBeCloseTo(remaining);
+    expect(projection.points.at(-1)!.remaining).toBeCloseTo(remaining - 1);
+    const tray = readTray({ provider: 'claude', windowKey: 'five_hour', scope: 'pool' },
+      { fetchedAt: '', strategy: '', credentials: creds },
+      (cs, key) => poolSummary(cs, key, poolShares(samples, cs, key, [])).remaining);
+    expect(tray.usedPercent).toBeCloseTo(100 - remaining);
+  });
+
+  it('keeps the session remainder when it is smaller than the converted weekly remainder', () => {
+    const creds = credentials();
+    creds[0]!.windows[0]!.usedPercent = 98;
+    creds[1]!.windows[0]!.usedPercent = 95;
+    expect(poolSummary(creds, 'five_hour', poolShares(samples, creds, 'five_hour', [])).remaining).toBeCloseTo((5 * 2 + 5) / 6);
+  });
+
+  it('keeps weekly quota independent of session windows that can refill', () => {
+    const creds = credentials();
+    for (const c of creds) c.windows[0]!.usedPercent = 100;
+    // Weekly capacities are 35 and 10 Pro sessions; their remaining fractions are 1% and 2%.
+    expect(poolSummary(creds, 'seven_day', poolShares(samples, creds, 'seven_day', [])).remaining).toBeCloseTo((35 + 10 * 2) / 45);
+  });
+
+  it('retains session weighting without inventing a missing weekly conversion ratio', () => {
+    const creds = credentials();
+    const shares = poolShares([], creds, 'five_hour', []);
+    expect(poolSummary(creds, 'five_hour', shares).remaining).toBeCloseTo((5 * 80 + 60) / 6);
+    for (const c of creds) c.windows[1]!.usedPercent = 100;
+    expect(poolSummary(creds, 'five_hour', shares).remaining).toBe(0);
   });
 });
 

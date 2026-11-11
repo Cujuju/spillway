@@ -58,15 +58,28 @@ export function accountsFor(credentials: Credential[], key: string, shares: Map<
   });
 }
 
+/** Longer account-wide windows bound the target; shorter windows can refill within its horizon. */
+const capsRemaining = (target: Win, w: Win) => w === target
+  || (!w.scoped && w.durationMs !== null && target.durationMs !== null && w.durationMs > target.durationMs);
+
 /** A reached target or longer account-wide window removes this account's remaining contribution. */
 export function blockingWindow(a: Account): Win | undefined {
   const target = a.windows[0]!;
-  return a.windows.find((w) => (w === target || (!w.scoped && w.durationMs !== null && target.durationMs !== null && w.durationMs > target.durationMs))
-    && (w.used >= FULL || w.rejected));
+  return a.windows.find((w) => capsRemaining(target, w) && (w.used >= FULL || w.rejected));
 }
 
-/** Usable account percent of the target window; plan shares stay fixed while another limit blocks it. */
-export const remainingIn = (a: Account) => blockingWindow(a) ? 0 : FULL - a.windows[0]!.used;
+/** Usable target percent, capped by longer windows in the same units. Unknown ratios only cap at exhaustion. */
+export function remainingIn(a: Account): number {
+  if (blockingWindow(a)) return 0;
+  const target = a.windows[0]!;
+  let remaining = FULL - target.used;
+  if (!(target.cost > 0)) return remaining;
+  for (const w of a.windows) {
+    if (w === target || !capsRemaining(target, w) || !(w.cost > 0)) continue;
+    remaining = Math.min(remaining, (FULL - w.used) * target.cost / w.cost);
+  }
+  return remaining;
+}
 export const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + a.share * remainingIn(a), 0);
 
 /** Pool percent `w` can still take before it caps. */

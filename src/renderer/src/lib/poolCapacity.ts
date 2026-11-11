@@ -124,7 +124,7 @@ export function poolShares(samples: HistorySample[], credentials: Credential[], 
   };
   // For a scoped `key`, other traffic also moves the session window, so its size runs high.
   const session = sessionSizes(samples, buckets, accounts);
-  // No ratio: the window scales with the plan and gets no cost, so it doesn't cap the forecast.
+  // Unknown ratios keep plan weighting; remaining quota cannot be converted, but exhaustion still blocks use.
   const sizes = new Map(accounts.map((c) => {
     const multiplier = session.get(c.id)!;
     return [c.id, new Map(c.windows.map((w) => {

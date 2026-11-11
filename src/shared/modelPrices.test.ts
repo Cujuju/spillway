@@ -36,6 +36,12 @@ describe('tokenCost', () => {
   it('skips the long step for summed totals', () => {
     expect(tokenCost('claude', 'claude-haiku-5-5', t(1_000_000, 0), false)!.usd).toBeCloseTo(0.1);
   });
+  it('prices Fable 5.2 and Mythos 5.2', () => {
+    // $8 in, $40 out, $0.20 read, $10 write per MTok.
+    for (const model of ['claude-fable-5-2', 'claude-mythos-5-2']) {
+      expect(tokenCost('claude', model, t(1_000_000, 1_000_000, 1_000_000, 1_000_000))!.usd).toBeCloseTo(8 + 40 + 0.2 + 10);
+    }
+  });
   it('matches dated snapshots and returns null for unknown models', () => {
     expect(tokenCost('claude', 'claude-opus-5-5-20260901', t(1_000_000, 0))!.usd).toBeCloseTo(4);
     expect(tokenCost('codex', 'gpt-image-2', t(10, 10))).toBeNull();

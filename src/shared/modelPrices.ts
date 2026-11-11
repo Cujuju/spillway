@@ -31,10 +31,13 @@ const OPENAI_LONG_ABOVE = 272_000;
 const OPUS_4_5_TO_5 = { rates: r(5, 6.25, 0.5, 25) };
 const OPUS_4 = { rates: r(15, 18.75, 1.5, 75) };
 const SONNET_4 = { rates: r(3, 3.75, 0.3, 15) };
+const FABLE_5_2 = { rates: r(8, 10, 0.2, 40) };
 const FABLE_5_1 = { rates: r(10, 12.5, 0.25, 50) };
 const FABLE_5 = { rates: r(10, 12.5, 1, 50) };
 
 const PRICES: Record<string, ModelPrice> = {
+  'claude-fable-5-2': FABLE_5_2,
+  'claude-mythos-5-2': FABLE_5_2,
   'claude-fable-5-1': FABLE_5_1,
   'claude-mythos-5-1': FABLE_5_1,
   'claude-fable-5': FABLE_5,

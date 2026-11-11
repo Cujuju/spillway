@@ -194,7 +194,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dashboard: {
     refreshIntervalSeconds: 60,
     showEmails: false,
-    forecastHours: 7 * HOURS_PER_DAY,
+    forecastHours: 3 * HOURS_PER_DAY,
     drainLookbackHours: 24,
     accountSort: 'reset',
   },

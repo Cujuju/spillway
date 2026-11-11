@@ -26,8 +26,8 @@ export function addToTotals(totals: Map<string, ActivityTotal>, e: ActivityEvent
   return row;
 }
 
-export function readTotalRows(db: Db): { key: string; total: ActivityTotal }[] {
-  const rows = db.prepare('SELECT key, total FROM activity_totals').all() as { key: string; total: string }[];
+export function readTotalRows(db: Db, day?: string): { key: string; total: ActivityTotal }[] {
+  const rows = db.prepare(`SELECT key, total FROM activity_totals${day === undefined ? "" : " WHERE json_extract(total, '$.day') = ?"}`).all(...(day === undefined ? [] : [day])) as { key: string; total: string }[];
   return rows.map((r) => {
     const t = JSON.parse(r.total) as ActivityTotal;
     return { key: r.key, total: { ...emptyCounts(), ...t, client: t.client ?? null, source: t.source ?? 'proxy' as const } };

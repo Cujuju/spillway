@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { cheapestModel, priceAt, promptTokens, tokenCost } from './modelPrices';
+import { cheapestModel, priceAt, priceTableSnapshot, promptTokens, repriceStart, tokenCost } from './modelPrices';
+
+describe('price table changes', () => {
+  const old = { from: null, rates: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 } };
+  const current = { ...old, from: '2026-10-07', rates: { ...old.rates, cacheRead: 0.1 } };
+  const table = (history: unknown[]) => JSON.stringify({ model: history });
+  it('ignores unchanged effective prices and redundant breakpoints', () => {
+    expect(repriceStart(priceTableSnapshot(), priceTableSnapshot()).size).toBe(0);
+    expect(repriceStart(table([old]), table([old, { ...old, from: current.from }])).size).toBe(0);
+  });
+  it('finds a later rate change', () => {
+    expect([...repriceStart(table([old]), table([old, current]))]).toEqual([['model', current.from]]);
+  });
+  it('marks additions, removals, missing snapshots and null-entry edits for all dates', () => {
+    for (const [prev, next] of [['{}', table([old])], [table([old]), '{}'], [null, table([old])], [table([old]), table([{ ...current, from: null }])]]) {
+      expect([...repriceStart(prev!, next!)]).toEqual([['model', null]]);
+    }
+  });
+});
 
 describe('cheapestModel', () => {
   it('picks the lowest input price and skips unpriced models', () => {

@@ -2,6 +2,7 @@ import { queryDrift, storeCanaryResults, queryCanaryResults } from './driftStore
 import type { DriftQuery } from '@shared/drift';
 import type { CanaryResult } from '@shared/canary';
 import type { ArchiveMigrationState } from '@shared/ipc';
+import { activityPriceSnapshot, invalidateActivityPrices } from './activityReprice';
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
@@ -127,7 +128,10 @@ export class ActivityLog {
   traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }
   constructor(private config: ActivityConfig, private migrationProgress?: (state: ArchiveMigrationState) => void) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
+  priceSnapshot(): string | null { return activityPriceSnapshot(this.db); }
+  pricesChanged(): void { this.totals = null; this.revision += 1; }
   revision = 0;
+  private totalsVersion: number | undefined;
   private conn: Db | null = null;
   /** Mirror of `activity_totals`; null until first read. */
   private totals: Map<string, ActivityTotal> | null = null;
@@ -180,9 +184,12 @@ export class ActivityLog {
         if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
         this.statements.prune.run(oldestKeptDay(Date.now(), this.config.retentionDays));
         const changed = events.length > 0 && changes() !== before;
+        if (changed && events.some((e) => e.costUsd !== undefined || e.uncachedCostUsd !== undefined)) {
+          invalidateActivityPrices(this.db);
+        }
         if (checkpoint) this.statements.saveCheckpoint.run(checkpoint.file, checkpoint.state);
         return changed;
-      })();
+      }).immediate();
       if (checkpoint) this.checkpoints.set(checkpoint.file, checkpoint.state);
       this.db.pragma('incremental_vacuum');
       return changed;
@@ -214,10 +221,10 @@ export class ActivityLog {
       source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const accounted = { ...e, costUsd, uncachedCostUsd };
     const day = localDay(Date.parse(e.at));
-    const totals = this.loadTotals();
     let id: number;
     try {
       id = this.db.transaction(() => {
+        const totals = this.loadTotals();
         const merge = reconcileUsage(this.db, accounted);
         for (const key of ['thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
         if (merge.remove) {
@@ -244,7 +251,7 @@ export class ActivityLog {
           return (this.statements.identityRow.get(identityKey(e)) as { row_id: number }).row_id;
         }
         return id;
-      })();
+      }).immediate();
     } catch (err) {
       // The mirror already counted it; reload from the rolled-back table.
       this.totals = null;
@@ -398,6 +405,9 @@ export class ActivityLog {
   }
 
   private loadTotals(): Map<string, ActivityTotal> {
+    const version = this.db.pragma('data_version', { simple: true }) as number;
+    if (this.totalsVersion !== version) this.totals = null;
+    this.totalsVersion = version;
     if (this.totals) return this.totals;
     this.totals = readTotals(this.db);
     return this.totals;

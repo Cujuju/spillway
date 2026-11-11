@@ -119,6 +119,35 @@ export interface Cost {
 /** Dated snapshot ids ("…-20260401") price like their model. */
 const DATE_SUFFIX = /-\d{8}$/;
 
+const stableJson = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
+  v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
+const PRICE_TABLE_SNAPSHOT = stableJson(PRICES);
+
+/** Full dated table, independent of object insertion order. */
+export const priceTableSnapshot = (): string => PRICE_TABLE_SNAPSHOT;
+
+/** Earliest breakpoint at which effective rates differ; redundant history entries do not count. */
+export function repriceStart(prev: string | null, next: string): Map<string, string | null> {
+  const before = JSON.parse(prev ?? '{}') as typeof PRICES;
+  const after = JSON.parse(next) as typeof PRICES;
+  const changed = new Map<string, string | null>();
+  for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const a = before[id], b = after[id];
+    if (prev === null || !a || !b) { changed.set(id, null); continue; }
+    const dates = new Set([null, ...a.map((p) => p.from), ...b.map((p) => p.from)]);
+    const effective = (history: readonly ModelPrice[], day: string | null) => {
+      const price = history.findLast((p) => p.from === null || day !== null && p.from <= day);
+      if (!price) return null;
+      const { from: _, ...rates } = price;
+      return stableJson(rates);
+    };
+    for (const day of [...dates].sort((a, b) => a === null ? -1 : b === null ? 1 : a.localeCompare(b))) {
+      if (effective(a, day) !== effective(b, day)) { changed.set(id, day); break; }
+    }
+  }
+  return changed;
+}
+
 function priceHistory(model: string): readonly ModelPrice[] | null {
   const id = model.trim().toLowerCase();
   return PRICES[id] ?? PRICES[id.replace(DATE_SUFFIX, '')] ?? null;

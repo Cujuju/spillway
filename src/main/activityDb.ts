@@ -11,6 +11,7 @@ import { localNoon, withCountsFilled } from '@shared/activityCounts';
 import { NO_ACCOUNT_KEY, NO_CLIENT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
 import { rebuildRetainedTotals } from './activityMigration';
+import { invalidateActivityPrices } from './activityReprice';
 import { totalKey } from './activityTotals';
 export { totalKey } from './activityTotals';
 
@@ -57,13 +58,18 @@ CREATE TABLE IF NOT EXISTS activity_totals (key TEXT PRIMARY KEY, total TEXT NOT
 CREATE TABLE IF NOT EXISTS client_log_checkpoints (path TEXT PRIMARY KEY, state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS usage_identities (key TEXT PRIMARY KEY, event TEXT NOT NULL, row_id INTEGER NOT NULL, matched INTEGER NOT NULL DEFAULT 0, fallback_key TEXT, upstream_id TEXT, source TEXT);
 CREATE INDEX IF NOT EXISTS usage_identity_session ON usage_identities (fallback_key, source, matched);
+CREATE INDEX IF NOT EXISTS usage_identity_row ON usage_identities (row_id) WHERE matched = 1;
 CREATE INDEX IF NOT EXISTS usage_identity_upstream ON usage_identities (upstream_id, source, matched);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
-function openKeyed(file: string, hexKey: string): Db {
+// Allow a concurrent day transaction to finish before failing a writer.
+export const ACTIVITY_BUSY_TIMEOUT_MS = 30_000;
+export function openKeyed(file: string, hexKey: string): Db {
+  if (!HEX_KEY.test(hexKey)) throw new Error('Activity database key is malformed');
   const db = new Database(file);
   try {
+    db.pragma(`busy_timeout = ${ACTIVITY_BUSY_TIMEOUT_MS}`);
     db.pragma(`cipher='${CIPHER}'`);
     db.pragma(`hexkey='${hexKey}'`);
     // The first read fails with SQLITE_NOTADB when the key doesn't match.
@@ -197,6 +203,7 @@ export function importLegacyFiles(db: Db, dir: string): void {
       }
       for (const t of readLegacyTotals(path.join(dir, LEGACY_TOTALS_FILE))) insertTotal.run(totalKey(t), JSON.stringify(t));
       rebuildRetainedTotals(db);
+      invalidateActivityPrices(db);
       db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(LEGACY_IMPORTED, new Date().toISOString());
     })();
   }

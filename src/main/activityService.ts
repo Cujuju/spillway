@@ -1,3 +1,5 @@
+import repriceWorkerPath from './activityRepriceWorker?modulePath';
+import { ActivityRepriceJob } from './activityRepriceJob';
 import { Worker } from 'node:worker_threads';
 import workerPath from './activityWorker?modulePath';
 import { ActivityRpc } from './activityRpc';
@@ -21,3 +23,15 @@ activityLog.on('failure', (error: string) => {
 });
 export const activityImportState = () => progress;
 export const archiveMigrationState = () => migration;
+
+const repricing = new ActivityRepriceJob(() => new Worker(repriceWorkerPath, { workerData: {
+  activityDb: appPaths.activityDb, databaseKey: getSecrets().databaseKey,
+} }), () => activityLog.call('pricesChanged'));
+let checkedPrices = false;
+activityLog.on('reset', () => {
+  if (checkedPrices) return;
+  checkedPrices = true;
+  void activityLog.call('priceSnapshot').then((previous) => repricing.start(previous))
+    .catch((error) => console.error('[activity] price snapshot failed:', error));
+});
+export const stopActivityReprice = () => repricing.stop();

@@ -13,7 +13,7 @@ else void startNormalApp();
 
 async function startNormalApp(): Promise<void> {
   const { EVENTS } = await import('@shared/ipc');
-  const { activityLog } = await import('./activityService');
+  const { activityLog, stopActivityReprice } = await import('./activityService');
   const { installAppMenu } = await import('./appMenu');
   const { activity } = await import('./activityStream');
   const { archiveSync } = await import('./archiveSync');
@@ -163,7 +163,7 @@ async function startNormalApp(): Promise<void> {
       invalidateEval();
       archiveSync.stop();
       void Promise.allSettled([
-        cancelClickHouse(true).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
+        stopActivityReprice().then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
         stopDiagnosticExport(),
       ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
         destroyTrays();

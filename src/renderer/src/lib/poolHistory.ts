@@ -1,6 +1,7 @@
 import type { Credential, HistorySample } from '@shared/types';
 import { consumedBetween } from '@shared/usageWindows';
 import type { AccountShare } from './poolCapacity';
+import { accountsFor, remainingOf } from './forecastState';
 
 /** Pool measures from usage history, in percent of the whole pool (see poolCapacity). */
 
@@ -46,22 +47,24 @@ export function drainRatePerHour(samples: HistorySample[], shares: Map<string, A
  */
 export function pastSeries(samples: HistorySample[], credentials: Credential[], key: string, from: number, shares: Map<string, AccountShare>): SeriesPoint[] {
   const clamp = (v: number) => Math.min(FULL, Math.max(0, v));
-  const last = new Map<string, number>();
-  for (const c of credentials) {
-    const current = c.windows.find((w) => w.key === key)?.usedPercent ?? null;
-    if (!shares.has(c.id) || current === null) continue;
-    const first = samples.find((s) => s.used[c.id]?.[key] !== undefined);
-    last.set(c.id, clamp(first ? first.used[c.id]![key]! : current));
+  const accounts = accountsFor(credentials, key, shares);
+  for (const a of accounts) {
+    const first = samples.find((s) => s.used[a.id]?.[key] !== undefined);
+    for (const w of a.windows) {
+      w.used = w.key === key ? clamp(first?.used[a.id]?.[key] ?? w.used) : 0;
+      // History records percentages; current rejection states cannot describe past availability.
+      w.rejected = false;
+    }
   }
   const out: SeriesPoint[] = [];
   for (const s of samples) {
-    for (const id of last.keys()) {
-      const v = s.used[id]?.[key];
-      if (v !== undefined) last.set(id, clamp(v));
+    for (const a of accounts) for (const w of a.windows) {
+      const v = s.used[a.id]?.[w.key];
+      if (v !== undefined) w.used = clamp(v);
     }
     const t = Date.parse(s.at);
-    if (t < from || last.size === 0) continue;
-    out.push({ t, remaining: [...last].reduce((sum, [id, used]) => sum + shares.get(id)!.share * (FULL - used), 0) });
+    if (t < from || !accounts.length) continue;
+    out.push({ t, remaining: remainingOf(accounts) });
   }
   return out;
 }

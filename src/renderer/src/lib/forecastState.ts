@@ -11,7 +11,8 @@ export interface Win {
   durationMs: number | null;
   resetCadence: LimitWindow['resetCadence'];
   scoped: boolean;
-  /** Account percent of this window used per 1% of the pool; 0 leaves it out of the cap. */
+  rejected: boolean;
+  /** Account percent used per 1% of the pool; 0 omits consumption modeling but still honors exhaustion. */
   cost: number;
 }
 
@@ -35,6 +36,7 @@ const toWin = (w: LimitWindow, cost: number): Win => ({
   durationMs: w.durationMs,
   resetCadence: w.resetCadence,
   scoped: w.scoped,
+  rejected: w.status === 'rejected',
   cost: w.usedPercent === null ? 0 : cost,
 });
 
@@ -56,10 +58,19 @@ export function accountsFor(credentials: Credential[], key: string, shares: Map<
   });
 }
 
-export const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + a.share * (FULL - a.windows[0]!.used), 0);
+/** A reached target or longer account-wide window removes this account's remaining contribution. */
+export function blockingWindow(a: Account): Win | undefined {
+  const target = a.windows[0]!;
+  return a.windows.find((w) => (w === target || (!w.scoped && w.durationMs !== null && target.durationMs !== null && w.durationMs > target.durationMs))
+    && (w.used >= FULL || w.rejected));
+}
+
+/** Usable account percent of the target window; plan shares stay fixed while another limit blocks it. */
+export const remainingIn = (a: Account) => blockingWindow(a) ? 0 : FULL - a.windows[0]!.used;
+export const remainingOf = (accounts: Account[]) => accounts.reduce((sum, a) => sum + a.share * remainingIn(a), 0);
 
 /** Pool percent `w` can still take before it caps. */
-export const roomIn = (w: Win) => (w.cost > 0 ? (FULL - w.used) / w.cost : Infinity);
+export const roomIn = (w: Win) => (w.used >= FULL || w.rejected ? 0 : w.cost > 0 ? (FULL - w.used) / w.cost : Infinity);
 export const roomOf = (a: Account) => Math.min(...a.windows.map(roomIn));
 
 /** Snapshot the longest current block per routable account before later simulation events mutate it. */

@@ -2,7 +2,7 @@ import type { Credential } from '@shared/types';
 import { nextResetAfter } from '@shared/usageWindows';
 import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
-import { accountsFor, remainingOf, roomIn, roomOf, stuckBlockers, type Account, type Win } from './forecastState';
+import { accountsFor, remainingIn, remainingOf, roomIn, roomOf, stuckBlockers, type Account, type Win } from './forecastState';
 import { FLAT_RHYTHM, localHour, localOffset, nextLocalHour, type RhythmProfile, type TimezoneOffset } from './rhythmProfile';
 
 /** Pool forecast for one provider and one limit window, in percent of the whole pool (see poolCapacity). */
@@ -139,15 +139,20 @@ function applyResets(accounts: Account[], t: number): { restored: number; firstA
   let restored = 0;
   let firstAt = Infinity;
   for (const a of accounts) {
-    a.windows.forEach((w, i) => {
+    const before = remainingIn(a);
+    let resetAt = Infinity;
+    a.windows.forEach((w) => {
       if (w.resetAt === null || w.resetAt > t) return;
-      if (i === 0) {
-        restored += a.share * w.used;
-        firstAt = Math.min(firstAt, w.resetAt);
-      }
+      resetAt = Math.min(resetAt, w.resetAt);
       w.used = 0;
+      w.rejected = false;
       w.resetAt = nextResetAfter(w, w.resetAt, t);
     });
+    const gained = a.share * (remainingIn(a) - before);
+    if (gained > 0) {
+      restored += gained;
+      firstAt = Math.min(firstAt, resetAt);
+    }
   }
   return { restored, firstAt };
 }

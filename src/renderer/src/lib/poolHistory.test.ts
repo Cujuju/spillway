@@ -51,6 +51,19 @@ describe('pastSeries', () => {
     const samples = [sample(NOW - 2 * H, { a: { seven_day: 10 } }), sample(NOW - H, { a: { seven_day: 20 } })];
     expect(pastSeries(samples, [weekly('a', 20), weekly('new', 30)], 'seven_day', 0, equal('a', 'new')).map((p) => p.remaining)).toEqual([80, 75]);
   });
+  it('uses each historical weekly reading to block and restore session capacity', () => {
+    const c = weekly('a', 100);
+    c.windows[0]!.status = 'rejected';
+    c.windows.push({ ...c.windows[0]!, key: 'five_hour', durationMs: 5 * H, usedPercent: 20, status: 'allowed' });
+    const samples = [
+      sample(NOW - 4 * H, { a: { five_hour: 20 } }),
+      sample(NOW - 3 * H, { a: { five_hour: 20, seven_day: 99 } }),
+      sample(NOW - 2 * H, { a: { seven_day: 100 } }),
+      sample(NOW - H, { a: { five_hour: 0 } }),
+      sample(NOW, { a: { seven_day: 0 } }),
+    ];
+    expect(pastSeries(samples, [c], 'five_hour', 0, equal('a')).map((p) => p.remaining)).toEqual([80, 80, 0, 0, 100]);
+  });
 });
 
 describe('drainSeries', () => {

@@ -1,6 +1,9 @@
 import type { Credential, LimitWindow } from '@shared/types';
 import type { AccountShare } from './poolCapacity';
 import type { SeriesPoint } from './poolHistory';
+import { accountsFor, blockingWindow, remainingIn } from './forecastState';
+
+const FULL = 100;
 
 export interface WindowChoice {
   value: string;
@@ -49,14 +52,11 @@ export interface PoolSegment {
   rejected: boolean;
 }
 
-/** One bar segment per account with data in window `key`: width by pool share, fill by its own use. */
+/** One bar segment per account: width by pool share, fill by usable remaining quota. */
 export function poolSegments(credentials: Credential[], key: string, shares: Map<string, AccountShare>): PoolSegment[] {
-  return credentials.flatMap((c) => {
-    const s = shares.get(c.id);
-    const w = c.windows.find((x) => x.key === key);
-    if (!s || !w || w.usedPercent === null) return [];
-    return [{ id: c.id, share: s.share, usedPercent: w.usedPercent, rejected: w.status === 'rejected' }];
-  });
+  return accountsFor(credentials, key, shares).map((a) => ({
+    id: a.id, share: a.share, usedPercent: FULL - remainingIn(a), rejected: !!blockingWindow(a),
+  }));
 }
 
 /** Soonest reset of window `key` after `now` across the accounts; null when none is pending. */

@@ -37,7 +37,14 @@ describe('card lines', () => {
   it('gives each shared account with data one segment, sized by its share', () => {
     expect(poolSegments(accounts, 'seven_day', shares)).toEqual([
       { id: 'max', share: 5 / 6, usedPercent: 84, rejected: false },
-      { id: 'pro', share: 1 / 6, usedPercent: 27, rejected: true },
+      { id: 'pro', share: 1 / 6, usedPercent: 100, rejected: true },
+    ]);
+  });
+  it('empties a session segment blocked by weekly quota without changing its share', () => {
+    const c = acct('max', 100, at(5));
+    c.windows.push({ ...win('five_hour', '5-hour', 5 * H), usedPercent: 0 });
+    expect(poolSegments([c], 'five_hour', shares)).toEqual([
+      { id: 'max', share: 5 / 6, usedPercent: 100, rejected: true },
     ]);
   });
   it('finds the soonest pending reset and ignores past ones', () => {

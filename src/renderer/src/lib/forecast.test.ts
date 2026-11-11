@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, CredentialPlan, LimitWindow } from '@shared/types';
 import { readTray } from '@shared/trayValues';
+import { rollPastResets } from '@shared/usageWindows';
 import { poolSummary, poolWindowKey, project } from './forecast';
 import { poolShares, type AccountShare } from './poolCapacity';
 
@@ -62,6 +63,36 @@ describe('poolSummary', () => {
     const snapshot = { fetchedAt: '', strategy: 'soonest-reset', credentials: creds };
     // Plain average would read 55% used; by plan it is 100 - 75.
     expect(readTray(spec, snapshot, remaining).usedPercent).toBeCloseTo(25);
+  });
+  it.each([
+    ['claude', 'five_hour', 'seven_day'],
+    ['codex', 'primary', 'secondary'],
+  ])('counts complementary exhausted windows as zero usable session quota for %s', (provider, session, week) => {
+    const creds = [
+      account('max', [win(session, 100, H, FIVE_H), win(week, 50, WEEK, WEEK)], { provider, plan: MAX_5X }),
+      account('pro', [win(session, 0, null, FIVE_H), win(week, 100, 2 * H, WEEK)], { provider, plan: PRO }),
+    ];
+    const remaining = (cs: Credential[], key: string) => poolSummary(cs, key, poolShares([], cs, key, [])).remaining;
+    expect(poolSummary(creds, session, poolShares([], creds, session, []))).toEqual({ remaining: 0, accounts: 2 });
+    expect(readTray({ provider, windowKey: session, scope: 'pool' }, { fetchedAt: '', strategy: '', credentials: creds }, remaining).usedPercent).toBe(100);
+    expect(remaining(creds, week)).toBeCloseTo(50 * 5 / 6);
+    expect(creds[1]!.windows[0]!.usedPercent).toBe(0);
+  });
+  it('keeps blocked accounts in the plan-weighted denominator until their weekly reset', () => {
+    const creds = [
+      account('max', [win('five_hour', 0, null, FIVE_H), win('seven_day', 100, H, WEEK)], { plan: MAX_5X }),
+      account('pro', [win('five_hour', 0, null, FIVE_H), win('seven_day', 0, WEEK, WEEK)], { plan: PRO }),
+    ];
+    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBeCloseTo(100 / 6);
+    const rolled = rollPastResets({ fetchedAt: '', strategy: '', credentials: creds }, NOW + H).credentials;
+    expect(poolSummary(rolled, 'five_hour', poolShares([], rolled, 'five_hour', [])).remaining).toBeCloseTo(100);
+  });
+  it('does not block the session for scoped or unknown weekly usage', () => {
+    const creds = [account('a', [
+      win('five_hour', 20, H, FIVE_H), win('seven_day', null, WEEK, WEEK),
+      win('seven_day_fable', 100, WEEK, WEEK, { scoped: true, status: 'rejected' }),
+    ])];
+    expect(poolSummary(creds, 'five_hour', poolShares([], creds, 'five_hour', [])).remaining).toBe(80);
   });
 });
 
@@ -135,12 +166,31 @@ describe('project: coupled windows', () => {
     const spare = account('spare', [win('five_hour', 0, null, FIVE_H), win('seven_day', 0, 120 * H, WEEK)]);
     const shares = new Map([['capped', half({ five_hour: 2, seven_day: 0.4 })], ['spare', half({ five_hour: 2, seven_day: 0.4 })]]);
     const p = project([capped, spare], 'five_hour', 10, NOW, 24, 'soonest-reset', shares);
-    // "capped" takes one 2.5% step (1% of its week), starting its 5-hour window at NOW.
-    expect(p.nextReset).toEqual({ at: NOW + FIVE_H, restores: 2.5 });
+    // The capped account's session reset restores nothing while its week remains exhausted.
+    expect(at(p, NOW + FIVE_H)).toBeCloseTo(2.5);
+    expect(p.nextReset).toEqual({ at: NOW + FIVE_H + STEP, restores: 50 });
   });
-  it('without a measured ratio the other window does not cap', () => {
+  it('an exhausted window blocks routing without a measured ratio', () => {
     const capped = account('capped', [win('five_hour', 100, 4 * H, FIVE_H), win('seven_day', 0, 2 * H, WEEK)]);
-    expect(run([capped], 'seven_day', 4, 'soonest-reset').nextReset).toEqual({ at: NOW + 2 * H, restores: 8 });
+    const p = run([capped], 'seven_day', 4, 'soonest-reset');
+    expect(p.accounts.get('capped')?.endsAtPercent).toBe(0);
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + 4 * H, blockers: [{ credentialId: 'capped', windowKey: 'five_hour', until: NOW + 4 * H }] });
+  });
+  it.each([100, null])('a rejected weekly window blocks with usage %s and no measured ratio', (used) => {
+    const creds = [account('a', [win('five_hour', 0, H, FIVE_H), win('seven_day', used, 2 * H, WEEK, { status: 'rejected' })])];
+    const p = run(creds, 'five_hour', 0, 'soonest-reset');
+    expect(at(p, NOW)).toBe(0);
+    expect(at(p, NOW + H)).toBe(0);
+    expect(at(p, NOW + 2 * H)).toBe(100);
+    expect(p.nextReset).toEqual({ at: NOW + 2 * H, restores: 100 });
+    expect(p.stuck).toEqual({ at: NOW, until: NOW + 2 * H, blockers: [{ credentialId: 'a', windowKey: 'seven_day', until: NOW + 2 * H }] });
+  });
+  it('keeps an empty weekly window blocked when its reset is unknown', () => {
+    const creds = [account('a', [win('five_hour', 0, H, FIVE_H), win('seven_day', 100, null, WEEK)])];
+    const p = run(creds, 'five_hour', 4, 'soonest-reset');
+    expect(new Set(p.points.map((x) => x.remaining))).toEqual(new Set([0]));
+    expect(p.nextReset).toBeNull();
+    expect(p.stuck?.until).toBeNull();
   });
 });
 

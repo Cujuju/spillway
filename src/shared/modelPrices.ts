@@ -14,6 +14,7 @@ interface Rates {
 }
 
 interface ModelPrice {
+  from: string | null;
   rates: Rates;
   /** Prompts over this many tokens bill at `long` instead. */
   longAbove?: number;
@@ -28,21 +29,21 @@ const HAIKU_5_5_LONG_ABOVE = 100_000;
 /** OpenAI's long-context step. */
 const OPENAI_LONG_ABOVE = 272_000;
 
-const OPUS_4_5_TO_5 = { rates: r(5, 6.25, 0.5, 25) };
-const OPUS_4 = { rates: r(15, 18.75, 1.5, 75) };
-const SONNET_4 = { rates: r(3, 3.75, 0.3, 15) };
-const FABLE_5_2 = { rates: r(8, 10, 0.2, 40) };
-const FABLE_5_1 = { rates: r(10, 12.5, 0.25, 50) };
-const FABLE_5 = { rates: r(10, 12.5, 1, 50) };
+const OPUS_4_5_TO_5 = [{ from: null, rates: r(5, 6.25, 0.5, 25) }];
+const OPUS_4 = [{ from: null, rates: r(15, 18.75, 1.5, 75) }];
+const SONNET_4 = [{ from: null, rates: r(3, 3.75, 0.3, 15) }];
+const FABLE_5_2 = [{ from: null, rates: r(8, 10, 0.2, 40) }];
+const FABLE_5_1 = [{ from: null, rates: r(10, 12.5, 0.25, 50) }];
+const FABLE_5 = [{ from: null, rates: r(10, 12.5, 1, 50) }];
 
-const PRICES: Record<string, ModelPrice> = {
+const PRICES: Record<string, readonly ModelPrice[]> = {
   'claude-fable-5-2': FABLE_5_2,
   'claude-mythos-5-2': FABLE_5_2,
   'claude-fable-5-1': FABLE_5_1,
   'claude-mythos-5-1': FABLE_5_1,
   'claude-fable-5': FABLE_5,
   'claude-mythos-5': FABLE_5,
-  'claude-opus-5-5': { rates: r(4, 5, 0.2, 20) },
+  'claude-opus-5-5': [{ from: null, rates: r(4, 5, 0.2, 20) }],
   'claude-opus-5': OPUS_4_5_TO_5,
   'claude-opus-4-8': OPUS_4_5_TO_5,
   'claude-opus-4-7': OPUS_4_5_TO_5,
@@ -50,21 +51,22 @@ const PRICES: Record<string, ModelPrice> = {
   'claude-opus-4-5': OPUS_4_5_TO_5,
   'claude-opus-4-1': OPUS_4,
   'claude-opus-4': OPUS_4,
-  'claude-sonnet-5-5': { rates: r(2, 2.5, 0.1, 10) },
-  'claude-sonnet-5': { rates: r(2, 2.5, 0.2, 10) },
+  /** Cache reads halved when Haiku 5.5 launched. */
+  'claude-sonnet-5-5': [{ from: null, rates: r(2, 2.5, 0.2, 10) }, { from: '2026-10-07', rates: r(2, 2.5, 0.1, 10) }],
+  'claude-sonnet-5': [{ from: null, rates: r(2, 2.5, 0.2, 10) }],
   'claude-sonnet-4-6': SONNET_4,
   'claude-sonnet-4-5': SONNET_4,
   'claude-sonnet-4': SONNET_4,
-  'claude-haiku-5-5': { rates: r(0.1, 0.125, 0.01, 0.5), longAbove: HAIKU_5_5_LONG_ABOVE, long: r(0.5, 0.625, 0.05, 2.5) },
-  'claude-haiku-4-5': { rates: r(1, 1.25, 0.1, 5) },
-  'gpt-6.1-sol': { rates: o(2, 0.1, 10), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15) },
-  'gpt-6-sol': { rates: o(2, 0.2, 10), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 15) },
-  'gpt-6-luna': { rates: o(0.1, 0.01, 0.5), longAbove: OPENAI_LONG_ABOVE, long: o(0.2, 0.02, 0.75) },
-  'gpt-6-astra': { rates: o(10, 1, 50), longAbove: OPENAI_LONG_ABOVE, long: o(20, 2, 75) },
-  'gpt-5.6-sol': { rates: o(4, 0.4, 20), longAbove: OPENAI_LONG_ABOVE, long: o(8, 0.8, 30) },
-  'gpt-5.6-terra': { rates: o(2, 0.2, 12), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 18) },
-  'gpt-5.6-luna': { rates: o(0.2, 0.02, 1.2), longAbove: OPENAI_LONG_ABOVE, long: o(0.4, 0.04, 1.8) },
-  'gpt-5.3-codex': { rates: o(1.75, 0.175, 14) },
+  'claude-haiku-5-5': [{ from: null, rates: r(0.1, 0.125, 0.01, 0.5), longAbove: HAIKU_5_5_LONG_ABOVE, long: r(0.5, 0.625, 0.05, 2.5) }],
+  'claude-haiku-4-5': [{ from: null, rates: r(1, 1.25, 0.1, 5) }],
+  'gpt-6.1-sol': [{ from: null, rates: o(2, 0.1, 10), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15) }],
+  'gpt-6-sol': [{ from: null, rates: o(2, 0.2, 10), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 15) }],
+  'gpt-6-luna': [{ from: null, rates: o(0.1, 0.01, 0.5), longAbove: OPENAI_LONG_ABOVE, long: o(0.2, 0.02, 0.75) }],
+  'gpt-6-astra': [{ from: null, rates: o(10, 1, 50), longAbove: OPENAI_LONG_ABOVE, long: o(20, 2, 75) }],
+  'gpt-5.6-sol': [{ from: null, rates: o(4, 0.4, 20), longAbove: OPENAI_LONG_ABOVE, long: o(8, 0.8, 30) }],
+  'gpt-5.6-terra': [{ from: null, rates: o(2, 0.2, 12), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 18) }],
+  'gpt-5.6-luna': [{ from: null, rates: o(0.2, 0.02, 1.2), longAbove: OPENAI_LONG_ABOVE, long: o(0.4, 0.04, 1.8) }],
+  'gpt-5.3-codex': [{ from: null, rates: o(1.75, 0.175, 14) }],
 };
 
 /** Claude bills cache reads and writes apart from input; OpenAI's input includes its cached tokens. */
@@ -95,9 +97,17 @@ export interface Cost {
 /** Dated snapshot ids ("…-20260401") price like their model. */
 const DATE_SUFFIX = /-\d{8}$/;
 
-function priceOf(model: string): ModelPrice | null {
+function priceHistory(model: string): readonly ModelPrice[] | null {
   const id = model.trim().toLowerCase();
   return PRICES[id] ?? PRICES[id.replace(DATE_SUFFIX, '')] ?? null;
+}
+
+/** Rates in effect on the request's UTC date; histories are oldest first. An unreadable time is unpriced. */
+export function priceAt(history: readonly ModelPrice[], at: string | number): ModelPrice | null {
+  const time = new Date(at);
+  if (Number.isNaN(time.getTime())) return null;
+  const day = time.toISOString().split('T')[0]!;
+  return history.findLast((price) => price.from === null || price.from <= day) ?? null;
 }
 
 /**
@@ -107,7 +117,7 @@ function priceOf(model: string): ModelPrice | null {
 export function cheapestModel(ids: readonly string[]): string | null {
   let best: { id: string; rates: Rates } | null = null;
   for (const id of ids) {
-    const rates = priceOf(id)?.rates;
+    const rates = priceHistory(id)?.at(-1)?.rates;
     if (!rates) continue;
     if (!best || rates.input < best.rates.input || (rates.input === best.rates.input && rates.output < best.rates.output)) best = { id, rates };
   }
@@ -118,8 +128,9 @@ export function cheapestModel(ids: readonly string[]): string | null {
  * List-price cost of one request, or null for a model without a known price. A day's totals hide the
  * long-context step, so `long` rates are skipped.
  */
-export function tokenCost(provider: string, model: string, t: TokenCounts, perRequest = true): Cost | null {
-  const price = priceOf(model);
+export function tokenCost(provider: string, model: string, at: string | number, t: TokenCounts, perRequest = true): Cost | null {
+  const history = priceHistory(model);
+  const price = history ? priceAt(history, at) : null;
   if (!price) return null;
   const prompt = promptTokens(provider, t);
   const rates = perRequest && price.long && prompt > price.longAbove! ? price.long : price.rates;

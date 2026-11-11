@@ -35,7 +35,7 @@ export const REQUEST_COLUMNS: readonly RequestColumn[] = [
   { key: 'output', label: 'Output', num: true, value: (e) => e.outputTokens },
   { key: 'cacheRead', label: 'Cache read', num: true, value: (e) => e.cachedTokens },
   { key: 'cacheWrite', label: 'Cache write', num: true, value: (e) => e.cacheWriteTokens },
-  { key: 'cost', label: 'API cost', num: true, title: 'At API list prices', value: (e) => tokenCost(e.provider, e.effectiveModel ?? e.model, e)?.usd ?? null },
+  { key: 'cost', label: 'API cost', num: true, title: 'At API list prices', value: (e) => tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, e)?.usd ?? null },
   { key: 'firstToken', label: 'First token', num: true, title: 'Time to first token', value: (e) => e.ttftMs },
   { key: 'totalTime', label: 'Total time', num: true, value: (e) => e.latencyMs },
 ];

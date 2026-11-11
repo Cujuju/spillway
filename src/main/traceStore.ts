@@ -62,9 +62,9 @@ function observation(r: Raw): TraceAttempt | null {
   // Token conventions need the provider; legacy archive links take it from their exact ledger row.
   const model = text(p.model), effectiveModel = text(p.effectiveModel), provider = text(p.provider) ?? (r.origin === 'archive' ? text(ledger.provider) : null);
   const recordedCost = number(ledger.costUsd);
-  const price = tokens ? tokenCost(provider ?? '', effectiveModel ?? model ?? '', tokens) : null;
+  const price = tokens ? tokenCost(provider ?? '', effectiveModel ?? model ?? '', r.at, tokens) : null;
   // The ledger also stores zero for unpriced models; that zero is not a known price.
-  const priceKnown = price ?? tokenCost(provider ?? '', effectiveModel ?? model ?? '', { inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 });
+  const priceKnown = price ?? tokenCost(provider ?? '', effectiveModel ?? model ?? '', r.at, { inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 });
   const costUsd = recordedCost !== null && (recordedCost > 0 || priceKnown) ? recordedCost : price?.usd ?? null;
   return { id: r.id, at: new Date(r.at).toISOString(), requestId: text(e.requestId)!, selectionId: text(e.selectionId),
     traceId: text(r.trace_id), origin: r.origin, source, sessionId: text(p.sessionId), parentSessionId: text(p.parentSessionId),

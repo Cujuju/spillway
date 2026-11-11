@@ -15,7 +15,7 @@ import { ProviderGlyph } from './ui';
 export const REQUEST_COLUMN_COUNT = REQUEST_COLUMNS.length;
 
 const requestCost = (e: ActivityEvent) => {
-  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
+  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, e);
   return cost ? usd(cost.usd) : '—';
 };
 

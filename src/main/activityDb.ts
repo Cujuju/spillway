@@ -7,7 +7,7 @@ import { EVAL_SCHEMA } from './evalCaseStore';
 import Database from 'better-sqlite3-multiple-ciphers';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { withCountsFilled } from '@shared/activityCounts';
+import { localNoon, withCountsFilled } from '@shared/activityCounts';
 import { NO_ACCOUNT_KEY, NO_CLIENT_KEY } from '@shared/activityScope';
 import type { ActivityDayTotal, ActivityEvent } from '@shared/types';
 import { rebuildRetainedTotals } from './activityMigration';
@@ -174,7 +174,7 @@ function readLegacyTotals(file: string): ActivityDayTotal[] {
   if (!existsSync(file)) return [];
   try {
     const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    return Array.isArray(raw) ? raw.filter((r): r is ActivityDayTotal => typeof r?.day === 'string' && typeof r?.requests === 'number').map(withCountsFilled) : [];
+    return Array.isArray(raw) ? raw.filter((r): r is ActivityDayTotal => typeof r?.day === 'string' && typeof r?.requests === 'number').map((r) => withCountsFilled(r, localNoon(r.day))) : [];
   } catch (err) {
     console.error('[activity] legacy totals unreadable, skipped:', err);
     return [];

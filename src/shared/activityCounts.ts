@@ -3,6 +3,7 @@ import type { ActivityCounts, ActivityEvent } from './types';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
+const LOCAL_NOON_HOUR = 12;
 
 /** Floors the local hour using this instant's offset, preserving repeated DST hours. */
 export function localHourStart(t: number): number {
@@ -15,6 +16,13 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export function localDay(t: number): string {
   const d = new Date(t);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A whole local day prices at local noon, which lands on the same UTC date for normal offsets. */
+export function localNoon(day: string): number {
+  const noon = new Date(`${day}T00:00:00`);
+  noon.setHours(LOCAL_NOON_HOUR);
+  return noon.getTime();
 }
 
 export const emptyCounts = (): ActivityCounts => ({
@@ -40,7 +48,7 @@ export function addEvent(row: ActivityCounts, e: ActivityEvent & Partial<Pick<Ac
     row.ttftCount += e.ttftCount ?? (ttft ? 1 : 0);
     row.ttftSumMs += e.ttftSumMs ?? (ttft ? e.ttftMs! : 0);
   }
-  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e);
+  const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, e);
   if (cost) {
     row.costUsd += cost.usd;
     row.uncachedCostUsd += cost.uncachedUsd;
@@ -52,10 +60,10 @@ export function addCounts(row: ActivityCounts, c: ActivityCounts): void {
 }
 
 /** Older saved rows lack cache writes and cost; prices them as one batch at standard rates. */
-export function withCountsFilled<T extends { provider: string; model: string }>(r: T & Partial<ActivityCounts>): T & ActivityCounts {
+export function withCountsFilled<T extends { provider: string; model: string }>(r: T & Partial<ActivityCounts>, at: string | number): T & ActivityCounts {
   const filled = { ...emptyCounts(), ...r };
   if (r.costUsd === undefined) {
-    const cost = tokenCost(r.provider, r.model, filled, false);
+    const cost = tokenCost(r.provider, r.model, at, filled, false);
     filled.costUsd = cost?.usd ?? 0;
     filled.uncachedCostUsd = cost?.uncachedUsd ?? 0;
     filled.unpricedRequests = cost ? 0 : filled.requests;

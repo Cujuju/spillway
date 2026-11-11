@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCounts, addEvent, emptyCounts, withCountsFilled } from './activityCounts';
+import { addCounts, addEvent, emptyCounts, localDay, localNoon, withCountsFilled } from './activityCounts';
 import type { ActivityEvent } from './types';
 
 const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
@@ -9,6 +9,12 @@ const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
 });
 
 describe('activity counts', () => {
+  it('prices a local day at local noon', () => {
+    const day = '2026-10-26';
+    const noon = localNoon(day);
+    expect(localDay(noon)).toBe(day);
+    expect(new Date(noon).getHours()).toBe(12);
+  });
   it.each(['account-a', null])('sums metadata-bearing rows without changing their identities (%s)', (authIndex) => {
     const metadata = { provider: 'claude', authIndex, model: 'claude-opus-5-5', day: '2026-10-26', source: 'proxy' };
     const row = { ...metadata, ...emptyCounts() };
@@ -28,10 +34,10 @@ describe('activity counts', () => {
     expect(row.costUsd).toBeCloseTo(4);
   });
   it('prices rows saved before cost was recorded', () => {
-    const row = withCountsFilled({ provider: 'claude', model: 'claude-opus-5-5', requests: 3, failed: 0, inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0 });
+    const row = withCountsFilled({ provider: 'claude', model: 'claude-opus-5-5', requests: 3, failed: 0, inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0 }, '2026-10-26T12:00:00Z');
     expect(row.cacheWriteTokens).toBe(0);
     expect(row.costUsd).toBeCloseTo(4);
-    expect(withCountsFilled({ provider: 'x', model: 'y', requests: 3 }).unpricedRequests).toBe(3);
+    expect(withCountsFilled({ provider: 'x', model: 'y', requests: 3 }, '2026-10-26T12:00:00Z').unpricedRequests).toBe(3);
   });
 
   it('prices effective models and counts only measured timings, preserving sums through merges', () => {
@@ -46,6 +52,6 @@ describe('activity counts', () => {
     const merged = emptyCounts();
     addCounts(merged, c);
     expect(merged).toEqual(c);
-    expect(withCountsFilled({ provider: 'x', model: 'y', requests: 9 })).toMatchObject({ latencyCount: 0, latencySumMs: 0 });
+    expect(withCountsFilled({ provider: 'x', model: 'y', requests: 9 }, '2026-10-26T12:00:00Z')).toMatchObject({ latencyCount: 0, latencySumMs: 0 });
   });
 });

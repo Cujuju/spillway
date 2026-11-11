@@ -2,8 +2,8 @@ name: prices
 
 on:
   schedule:
-    # Every 2 hours, 8 AM to 6 PM Pacific; :17 avoids the top-of-hour queue, where GitHub delays or drops runs.
-    - cron: '17 8-18/2 * * *'
+    # 8 AM, 10 AM, noon, 2, 4 and 6 PM Pacific.
+    - cron: '0 8-18/2 * * *'
       timezone: America/Los_Angeles
   workflow_dispatch:
 

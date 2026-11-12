@@ -22,7 +22,7 @@ export interface TestPlan {
   alternatives: ThinkingSetting[];
   /** Turns sampled per kind, spread evenly across the kinds that have replayable turns. */
   sampled: { kind: TurnKind; turns: number }[];
-  /** This setting's turns in range, and how many have a complete captured request to replay. */
+  /** This setting's turns in range, and how many have a complete recorded request by archive metadata. Sampled bodies are checked; failures move to `skipped`. */
   eligibleTurns: number;
   replayableTurns: number;
   /** Why the other turns can't be replayed, most common first. */

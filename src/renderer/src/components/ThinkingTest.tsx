@@ -1,9 +1,9 @@
 import { createEffect, createSignal, For, on, Show, untrack } from 'solid-js';
-import { settingKey, type SettingReport, type ThinkingQuery, type ThinkingSetting } from '@shared/thinking';
-import { DEFAULT_TEST_TURNS, MIN_KIND_GRADED, TEST_TURN_CHOICES, type TestPlan, type ThinkingTest, type TurnGrade } from '@shared/thinkingTest';
+import { settingKey, type KindStat, type SettingReport, type ThinkingQuery, type ThinkingSetting } from '@shared/thinking';
+import { DEFAULT_TEST_TURNS, MIN_KIND_GRADED, TEST_TURN_CHOICES, type AlternativeResult, type TestPlan, type ThinkingTest, type TurnGrade } from '@shared/thinkingTest';
 import { dateTime, usd } from '../lib/format';
 import { defaultAlternatives } from '../lib/thinkingTests';
-import { KIND_TEXT, settingName } from '../lib/thinkingReport';
+import { KIND_TEXT, settingName, share } from '../lib/thinkingReport';
 import { Dialog, Seg } from './ui';
 
 /** "18 of 20 matched" with a bar; "too few to tell" under MIN_KIND_GRADED; "not tested" without a result. */
@@ -73,7 +73,7 @@ export function TestDialog(props: { s: SettingReport; query: ThinkingQuery; onSt
       <Show when={plan()} fallback={<p class="muted think-dialog-note">{chosen().length ? 'Checking your recorded turns…' : 'Pick at least one setting.'}</p>}>
         {(p) => (
           <div class="think-dialog-plan">
-            <p>{p().replayableTurns.toLocaleString()} of your {p().eligibleTurns.toLocaleString()} turns on {settingName(p().setting)} can be replayed.
+            <p>{p().replayableTurns.toLocaleString()} of your {p().eligibleTurns.toLocaleString()} turns on {settingName(p().setting)} have a recorded request. Each sampled one is checked before it runs.
               <Show when={sampledTotal() > 0}> The test uses {sampledTotal()}: {p().sampled.filter((k) => k.turns > 0).map((k) => `${k.turns} ${KIND_TEXT[k.kind].name.toLowerCase()}${k.turns === 1 ? '' : 's'}`).join(', ')}.</Show>
             </p>
             <Show when={p().skipped.length}>
@@ -110,8 +110,15 @@ export function MismatchDialog(props: { test: ThinkingTest; onClose: () => void 
 }
 
 /** A verdict's last line: not tested, testing with progress, or each alternative's result. */
-export function TestStatus(props: { test: ThinkingTest | undefined; onTest: () => void; onCancel: (test: ThinkingTest) => void; onMismatches: (test: ThinkingTest) => void }) {
+export function TestStatus(props: { test: ThinkingTest | undefined; kinds: KindStat[]; onTest: () => void; onCancel: (test: ThinkingTest) => void; onMismatches: (test: ThinkingTest) => void }) {
   const differ = () => props.test?.grades.filter((g) => g.outcome === 'differ').length ?? 0;
+  /** Samples are spread evenly across kinds, so the traffic-weighted rate can differ from the raw count. */
+  const weighted = (r: AlternativeResult) => (r.weightedMatchShare === null ? '' : ` (${share(r.weightedMatchShare)} weighted)`);
+  const untested = () => {
+    const graded = new Set(props.test?.results.flatMap((r) => r.byKind.filter((k) => k.graded > 0).map((k) => k.kind)) ?? []);
+    const missing = props.kinds.filter((k) => k.turns > 0 && !graded.has(k.kind)).map((k) => KIND_TEXT[k.kind].name.toLowerCase());
+    return missing.length ? ` · not tested: ${missing.join(', ')}` : '';
+  };
   return (
     <div class="think-status">
       <Show when={props.test} fallback={<><span>Estimates only, not tested yet.</span><span class="spacer" /><button class="btn" type="button" onClick={props.onTest}>Test on your turns…</button></>}>
@@ -122,7 +129,7 @@ export function TestStatus(props: { test: ThinkingTest | undefined; onTest: () =
           </>}>
             <span>
               <Show when={t().state === 'complete'} fallback={<>{t().state === 'canceled' ? 'Test canceled.' : `Test failed: ${t().error ?? 'unknown error'}`}</>}>
-                <For each={t().results}>{(r, i) => <>{i() ? ' · ' : ''}<b>{settingName(r.setting)}</b> matched on {r.matched} of {r.graded}</>}</For>
+                <For each={t().results}>{(r, i) => <>{i() ? ' · ' : ''}<b>{settingName(r.setting)}</b> matched on {r.matched} of {r.graded}{weighted(r)}</>}</For>{untested()}
               </Show>
             </span>
             <span class="spacer" />

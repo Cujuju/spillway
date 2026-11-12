@@ -78,6 +78,8 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
   const tests = createThinkingTests();
   const [testing, setTesting] = createSignal<SettingReport | null>(null);
   const [mismatches, setMismatches] = createSignal<ThinkingTest | null>(null);
+  /** Tables show a test's results only once it has finished; the verdict shows progress. */
+  const finished = (s: SettingReport) => { const t = tests.of(s.setting); return t?.state === 'complete' ? t : undefined; };
   const state = createTileBoard<ThinkingPanelSpec>(() => settings().activity.thinkingBoard,
     (b) => updateSettings((d) => { d.activity.thinkingBoard = { version: THINKING_BOARD_VERSION, ...b }; }));
   const chosen = createMemo(() => (props.report ? chosenSetting(props.report, settings().activity.thinkingSetting) : undefined));
@@ -102,7 +104,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
           <Show when={at(spec) && props.report}>{(r) => <span class="chart-head-note num">{usd(at(spec)!.costUsdPerWeek, 0)} a week · {Math.round(perWeek(r(), at(spec)!.turns)).toLocaleString()} turns</span>}</Show>
         </>
       ),
-      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} onTest={() => setTesting(s())} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
+      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} kinds={s().kinds} onTest={() => setTesting(s())} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
     },
     buckets: {
       minSize: MIX_MIN,
@@ -116,12 +118,12 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
     kinds: {
       minSize: KINDS_MIN,
       createHead: () => <><SettingTitle report={props.report} prefix="By kind of turn" /><span class="chart-head-note">Sorted by what a turn looks like, not by what you asked.</span></>,
-      createBody: () => withSetting((r, s) => <KindsTable report={r} s={s} test={tests.of(s.setting)} />),
+      createBody: () => withSetting((r, s) => <KindsTable report={r} s={s} test={finished(s)} />),
     },
     alternatives: {
       minSize: ALTS_MIN, bleed: true,
       createHead: () => <><SettingTitle report={props.report} prefix="Alternatives" /><span class="chart-head-note">Every cost and saving here is an estimate.</span></>,
-      createBody: () => withSetting((_r, s) => <AlternativesTable s={s} test={tests.of(s.setting)} />),
+      createBody: () => withSetting((_r, s) => <AlternativesTable s={s} test={finished(s)} />),
     },
     method: {
       minSize: METHOD_MIN,

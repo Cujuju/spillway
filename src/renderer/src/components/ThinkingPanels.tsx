@@ -147,8 +147,10 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
             </p>
           </>}>
             {(r) => <>
-              <p class="think-rec">Use {m().setting.effort} for quick questions and small changes; keep {props.s.setting.effort} for long tasks: about {usd(m().savingUsdPerWeek!, 0)}/week saved.</p>
-              <p class="think-rec-sub">{cap(m().setting.effort)} matched on {r().matched} of {r().graded} quick questions and small changes<Show when={long()?.graded}>, and {long()!.matched} of {long()!.graded} long tasks</Show>. The saving is an estimate.</p>
+              <p class="think-rec">{cap(m().setting.effort)} would save about {usd(m().savingUsdPerWeek!, 0)}/week on quick questions and small changes, and matched on {r().matched} of {r().graded} of them in your test.</p>
+              <p class="think-rec-sub">
+                <Show when={long()?.graded} fallback="Long tasks were not tested.">On long tasks it matched {long()!.matched} of {long()!.graded}.</Show> The saving is an estimate; whether a match rate is good enough is your call.
+              </p>
             </>}
           </Show>
         )}
@@ -200,6 +202,7 @@ export function ThinkingMethod() {
       <li>A cheaper model reprices the same tokens at that model's list prices.</li>
       <li>Costs are API list prices. On a subscription, read them as how fast you use your limits.</li>
       <li>Estimates don't say whether the answers would be as good; the test does. It replays one recorded request from each sampled turn at the cheaper setting, runs no tools, and a model judges whether the reply makes the same next move.</li>
+      <li>A test samples each kind of turn evenly; "weighted" rescales its match rate by how often each kind occurs in your work.</li>
       <li>Testing needs request capture (Settings → Data) and costs what the replays and judging cost, shown before it starts.</li>
     </ul>
   );

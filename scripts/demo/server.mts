@@ -111,9 +111,10 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === 'POST' && ['/v1/messages', '/v1/chat/completions'].includes(req.url ?? '')) {
-      const body = await readBody(req), messages = body.messages as { content: string }[];
+      const body = await readBody(req), messages = body.messages as { role: string; content: string }[];
       if (req.headers['x-cpa-purpose'] === 'thinking-test') {
-        const prompt = JSON.stringify(messages), judge = prompt.includes('Compare next moves.');
+        const prompt = JSON.stringify(messages), instructions = body.system ?? messages.find((m) => m.role === 'system')?.content;
+        const judge = typeof instructions === 'string' && instructions.startsWith('Compare next moves.');
         const differs = judge ? prompt.includes('Different outcome.') : Number(prompt.match(/synthetic turn (\d+)/)?.[1] ?? 1) % THINKING_DEMO_DIFFER_EVERY === 0;
         const text = judge ? JSON.stringify({ verdict: differs ? 'differ' : 'match', reason: differs ? 'The outcome changed.' : 'The substance matches.' }) : differs ? 'Different outcome.' : 'Inspection complete.';
         return json(res, req.url === '/v1/messages' ? { type: 'message', content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 100, output_tokens: 20 } } : { choices: [{ finish_reason: 'stop', message: { content: text } }], usage: { prompt_tokens: 100, completion_tokens: 20 } });

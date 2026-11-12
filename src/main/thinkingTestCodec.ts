@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import type { TokenCounts } from '@shared/modelPrices';
 import type { ThinkingSetting } from '@shared/thinking';
 import { object } from './evalCaseCodec';
 
@@ -8,6 +9,19 @@ const CLAUDE_BUDGETS: Record<string, number> = { none: 0, minimal: 512, low: 102
 const CLAUDE_NONSTREAM_TOKENS = 21333;
 export const TEST_ROUTES = ['/v1/messages', '/v1/chat/completions', '/v1/responses', '/backend-api/codex/responses'];
 export interface NextMove { text: string; tools: { name: string; input: unknown }[] }
+export function responseTokens(data: Record<string, any>, claude: boolean): TokenCounts {
+  const u = data.usage ?? {}, details = { ...u.prompt_tokens_details, ...u.input_tokens_details };
+  const tier = claude ? u.speed ?? u.service_tier : data.service_tier;
+  return {
+    inputTokens: u.input_tokens ?? u.prompt_tokens ?? 0,
+    outputTokens: u.output_tokens ?? u.completion_tokens ?? 0,
+    cachedTokens: claude ? u.cache_read_input_tokens ?? 0 : details.cached_tokens ?? 0,
+    cacheWriteTokens: claude ? u.cache_creation_input_tokens ?? 0 : details.cache_creation_tokens ?? details.cache_write_tokens ?? u.cache_write_input_tokens ?? 0,
+    cacheWrite1hTokens: claude ? u.cache_creation?.ephemeral_1h_input_tokens ?? null : null,
+    cacheWriteLongTokens: claude ? null : details.cache_write_tokens_details?.ttl_12h_tokens ?? null,
+    tier: tier === 'priority' ? 'fast' : tier === 'default' ? 'standard' : ['standard', 'fast', 'flex'].includes(tier) ? tier : null,
+  };
+}
 export function rewriteTestBody(raw: Record<string, unknown>, route: string, setting: ThinkingSetting): Record<string, unknown> {
   const body = structuredClone(raw); body.model = setting.model; body.stream = false;
   if (route === '/v1/messages') {
@@ -50,6 +64,7 @@ export function assembleResponse(raw: string): Record<string, any> {
     if (e.type === 'message_delta') { Object.assign(message, e.delta); message.usage = { ...message.usage, ...e.usage }; }
     if (e.type === 'message_stop') { message.content = blocks.map((b) => b.type === 'tool_use' && b.arguments ? { ...b, input: JSON.parse(b.arguments) } : b); complete = true; }
     if (e.usage) message.usage = { ...message.usage, ...e.usage };
+    if (e.service_tier) message.service_tier = e.service_tier;
     const c = e.choices?.[0];
     if (c) {
       message.text = (message.text ?? '') + (c.delta?.content ?? '');

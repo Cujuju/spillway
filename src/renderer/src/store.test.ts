@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createComputed, createRoot } from 'solid-js';
 import { unwrap } from 'solid-js/store';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
+import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket, ActivityBucketSnapshot, Credential, UsageSnapshot } from '@shared/types';
 
 // IPC clones the request before main normalizes it.
@@ -73,10 +74,8 @@ const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', 
 describe('forecast activity evidence', () => {
   it('keeps pool capacity and forecasts fixed when the Activity page widens or narrows', async () => {
     const bucket: ActivityBucket = {
-      start: 0, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'm', client: null,
-      requests: 1, failed: 0, inputTokens: 1, outputTokens: 1, cachedTokens: 0, cacheWriteTokens: 0,
-      costUsd: 1, uncachedCostUsd: 1, unpricedRequests: 0,
-      latencyCount: 0, latencySumMs: 0, ttftCount: 0, ttftSumMs: 0,
+      ...emptyCounts(), start: 0, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'm', client: null,
+      requests: 1, inputTokens: 1, outputTokens: 1, costUsd: 1, uncachedCostUsd: 1,
     };
     const forecast = [bucket, { ...bucket, authIndex: 'b', costUsd: 3 }];
     const credentials = [cred('a', 20), cred('b', 80)];

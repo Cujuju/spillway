@@ -29,7 +29,16 @@ export const emptyCounts = (): ActivityCounts => ({
   requests: 0, failed: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
   costUsd: 0, uncachedCostUsd: 0, unpricedRequests: 0,
   latencyCount: 0, latencySumMs: 0, ttftCount: 0, ttftSumMs: 0,
+  ...emptyDetail(),
 });
+/** Share fields (#155): kept in totals going forward, so older totals have zeros and coverage starts with them. */
+function emptyDetail() {
+  return { detailRequests: 0, detailCostUsd: 0, thinkingTokens: 0, thinkingOutputTokens: 0,
+    fastRequests: 0, flexRequests: 0, fastCostUsd: 0, flexCostUsd: 0, failedCostUsd: 0 };
+}
+export const DETAIL_KEYS = Object.keys(emptyDetail()) as (keyof ReturnType<typeof emptyDetail>)[];
+/** Detail fields that are parts of `costUsd`; they scale with it when a recorded cost replaces the repriced one. */
+export const DETAIL_COST_KEYS = ['detailCostUsd', 'fastCostUsd', 'flexCostUsd', 'failedCostUsd'] as const;
 const COUNT_KEYS = Object.keys(emptyCounts()) as (keyof ActivityCounts)[];
 
 /** Adds one request, priced on its own so long-prompt rates apply. */
@@ -53,6 +62,22 @@ export function addEvent(row: ActivityCounts, e: ActivityEvent & Partial<Pick<Ac
     row.costUsd += cost.usd;
     row.uncachedCostUsd += cost.uncachedUsd;
   } else row.unpricedRequests += 1;
+  const usd = cost?.usd ?? 0;
+  row.detailRequests += 1;
+  row.detailCostUsd += usd;
+  if (typeof e.thinkingTokens === 'number' && Number.isFinite(e.thinkingTokens)) {
+    row.thinkingTokens += e.thinkingTokens;
+    row.thinkingOutputTokens += e.outputTokens;
+  }
+  if (e.tier === 'fast') { row.fastRequests += 1; row.fastCostUsd += usd; }
+  if (e.tier === 'flex') { row.flexRequests += 1; row.flexCostUsd += usd; }
+  if (e.failed) row.failedCostUsd += usd;
+}
+
+/** Scales the detail costs with `costUsd` when a recorded cost (an older price, an import) replaces the one just computed. */
+export function scaleDetailCosts(row: ActivityCounts, costUsd: number): void {
+  const scale = row.costUsd === 0 ? 0 : costUsd / row.costUsd;
+  for (const k of DETAIL_COST_KEYS) row[k] *= scale;
 }
 
 export function addCounts(row: ActivityCounts, c: ActivityCounts): void {

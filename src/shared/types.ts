@@ -303,6 +303,18 @@ export interface ActivityCounts {
   latencySumMs: number;
   ttftCount: number;
   ttftSumMs: number;
+  /** Requests counted with the share fields below; totals recorded before they existed have none. */
+  detailRequests: number;
+  /** Cost of the `detailRequests`: the denominator for failed and tier cost shares. */
+  detailCostUsd: number;
+  thinkingTokens: number;
+  /** Output tokens of requests whose thinking count is known: the denominator for `thinkingTokens`. */
+  thinkingOutputTokens: number;
+  fastRequests: number;
+  flexRequests: number;
+  fastCostUsd: number;
+  flexCostUsd: number;
+  failedCostUsd: number;
 }
 
 /** Requests and tokens for one local day, account, model and client; kept after that day's request log expires. */

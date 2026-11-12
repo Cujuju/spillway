@@ -51,6 +51,20 @@ it('does only one meta read when the snapshot is unchanged', () => {
   expect(prepare.mock.calls).toEqual([['SELECT value FROM meta WHERE key = ?']]);
 });
 
+it('reprices detail costs of detailed hours and leaves hours recorded without detail at zero', () => {
+  saveSnapshot('{}');
+  const detailed = event('2026-10-06T12:00:00Z', { failed: true, tier: 'fast' });
+  const t = stored(detailed);
+  db.prepare('UPDATE activity_totals SET total = ? WHERE key = ?').run(JSON.stringify({ ...t, detailCostUsd: 99, failedCostUsd: 99, fastCostUsd: 99 }), storedTotalKey(t));
+  const legacy = stored(event('2026-10-07T12:00:00Z', { requestId: 'legacy' }));
+  db.prepare('UPDATE activity_totals SET total = ? WHERE key = ?').run(JSON.stringify({ ...legacy, detailRequests: 0, detailCostUsd: 0 }), storedTotalKey(legacy));
+  repriceActivity(db);
+  const byDay = new Map(totals().map((total) => [total.day, total]));
+  const want = costs(detailed);
+  expect(byDay.get(t.day)).toMatchObject({ detailCostUsd: want.detailCostUsd, failedCostUsd: want.failedCostUsd, fastCostUsd: want.fastCostUsd });
+  expect(byDay.get(legacy.day)).toMatchObject({ detailRequests: 0, detailCostUsd: 0 });
+});
+
 it('reprices dated changes per request, preserving earlier and pruned totals and all counts', () => {
   const table = JSON.parse(priceTableSnapshot());
   table['claude-sonnet-5-5'] = [table['claude-sonnet-5-5'][0]];

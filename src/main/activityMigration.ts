@@ -1,4 +1,4 @@
-import { localDay, localHourStart } from '@shared/activityCounts';
+import { DETAIL_COST_KEYS, localDay, localHourStart } from '@shared/activityCounts';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotalRows, storedTotalKey, totalKey, type ActivityTotal } from './activityTotals';
@@ -57,7 +57,7 @@ function rebuildDay(db: Db, day: string, existing: ActivityTotal[], requests: Re
   if (!keepRecordedCost(hours, before, repriced)) return;
   const remove = db.prepare('DELETE FROM activity_totals WHERE key = ?');
   const insert = db.prepare('INSERT INTO activity_totals (key, total) VALUES (?, ?)');
-  const moveIdentity = db.prepare("UPDATE usage_identities SET event = json_set(event, '$.totalStart', ?, '$.totalDay', ?, '$.costUsd', ?, '$.uncachedCostUsd', ?, '$.latencyCount', ?, '$.latencySumMs', ?, '$.ttftCount', ?, '$.ttftSumMs', ?) WHERE key = ?");
+  const moveIdentity = db.prepare("UPDATE usage_identities SET event = json_set(event, '$.totalStart', ?, '$.totalDay', ?, '$.costUsd', ?, '$.uncachedCostUsd', ?, '$.latencyCount', ?, '$.latencySumMs', ?, '$.ttftCount', ?, '$.ttftSumMs', ?, '$.thinkingTokens', ?, '$.detail', json('true')) WHERE key = ?");
   for (const t of existing) remove.run(rawKeys.get(storedTotalKey(t))!);
   for (const t of hours.values()) insert.run(storedTotalKey(t), JSON.stringify(t));
   for (const { id, event: e } of requests) {
@@ -70,7 +70,7 @@ function rebuildDay(db: Db, day: string, existing: ActivityTotal[], requests: Re
       const total = repriced.get(key)![k];
       counts[k] = total === 0 ? 0 : counts[k] * (before.get(key)![k] / total);
     }
-    moveIdentity.run(start, day, counts.costUsd, counts.uncachedCostUsd, counts.latencyCount, counts.latencySumMs, counts.ttftCount, counts.ttftSumMs, identityKey(e));
+    moveIdentity.run(start, day, counts.costUsd, counts.uncachedCostUsd, counts.latencyCount, counts.latencySumMs, counts.ttftCount, counts.ttftSumMs, e.thinkingTokens ?? null, identityKey(e));
   }
 }
 
@@ -81,6 +81,9 @@ function keepRecordedCost(hours: Map<string, ActivityTotal>, recorded: Map<strin
   }
   for (const hour of hours.values()) {
     const key = totalKey(hour);
+    // Detail costs are parts of costUsd, so they take its scale.
+    const costScale = repriced.get(key)!.costUsd === 0 ? 0 : recorded.get(key)!.costUsd / repriced.get(key)!.costUsd;
+    for (const k of DETAIL_COST_KEYS) hour[k] *= costScale;
     for (const k of RECORDED_COSTS) {
       const total = repriced.get(key)![k];
       hour[k] = total === 0 ? 0 : hour[k] * (recorded.get(key)![k] / total);

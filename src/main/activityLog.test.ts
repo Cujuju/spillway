@@ -316,6 +316,27 @@ describe('client-log accounting', () => {
     activityLog.append(imported);
     expect(activityLog.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
   });
+  const detailSum = () => activityLog.totalsList().reduce((n, t) => ({ requests: n.requests + t.detailRequests, thinking: n.thinking + t.thinkingTokens, fast: n.fast + t.fastRequests }), { requests: 0, thinking: 0, fast: 0 });
+  it('counts the detail of a superseded client-log request once', () => {
+    const at = daysAgo(0);
+    activityLog.append(event(at, { requestId: 'local', source: 'client-log', upstreamId: 'msg_d', authIndex: null, sessionId: 'claude:s', thinkingTokens: 3, tier: 'fast' }));
+    activityLog.append(event(at, { requestId: 'proxy', upstreamId: 'msg_d', sessionId: 'claude:s', thinkingTokens: 3, tier: 'fast' }));
+    expect(detailSum()).toEqual({ requests: 1, thinking: 3, fast: 1 });
+  });
+  it('subtracts no detail for a request counted before totals kept it', async () => {
+    const at = daysAgo(0);
+    activityLog.append(event(at, { requestId: 'local', source: 'client-log', upstreamId: 'msg_l', authIndex: null, sessionId: 'claude:s', thinkingTokens: 3, tier: 'fast' }));
+    activityLog.close();
+    const { openActivityDb } = await import('./activityDb');
+    const db = openActivityDb(dbFile, secrets.databaseKey);
+    try {
+      // As recorded before #155: no detail in the identity or its total.
+      db.exec("UPDATE usage_identities SET event = json_remove(event, '$.detail', '$.thinkingTokens')");
+      db.exec("UPDATE activity_totals SET total = json_remove(total, '$.detailRequests', '$.detailCostUsd', '$.thinkingTokens', '$.thinkingOutputTokens', '$.fastRequests', '$.fastCostUsd')");
+    } finally { db.close(); }
+    activityLog.append(event(at, { requestId: 'proxy', upstreamId: 'msg_l', sessionId: 'claude:s', thinkingTokens: 3, tier: 'fast' }));
+    expect(detailSum()).toEqual({ requests: 1, thinking: 3, fast: 1 });
+  });
   it('filters requests, summaries, buckets and totals by source consistently', () => {
     activityLog.append(event(daysAgo(0), { requestId: 'proxy' }));
     activityLog.append(event(daysAgo(0), { requestId: 'direct', source: 'client-log', authIndex: null }));

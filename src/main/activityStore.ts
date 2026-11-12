@@ -27,7 +27,7 @@ import {
 } from '@shared/types';
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
-import { accountedUsage, identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
+import { identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
 
 interface RequestRow {
   id: number;
@@ -227,13 +227,12 @@ export class ActivityLog {
         const totals = this.loadTotals();
         const merge = reconcileUsage(this.db, accounted);
         for (const key of ['thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
-        if (merge.remove) {
+        if (merge.removeCounts) {
           this.revision += 1;
-          const old = merge.remove;
+          const counts = merge.removeCounts;
           const key = merge.removeKey!;
           const total = totals.get(key);
           if (total) {
-            const counts = accountedUsage(old);
             for (const k of Object.keys(counts) as (keyof typeof counts)[]) total[k] -= counts[k];
             this.statements.saveTotal.run(key, JSON.stringify(total));
           }

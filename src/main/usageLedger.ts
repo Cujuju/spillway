@@ -1,4 +1,4 @@
-import { addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
+import { addEvent, DETAIL_KEYS, emptyCounts, localDay, localHourStart, scaleDetailCosts } from '@shared/activityCounts';
 import { storedTotalKey } from './activityTotals';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
@@ -32,21 +32,29 @@ export type AccountedActivityEvent = ActivityEvent & Partial<Pick<ActivityCounts
 export function accountedUsage(e: AccountedActivityEvent): ActivityCounts {
   const counts = emptyCounts();
   addEvent(counts, e);
+  if (e.costUsd !== undefined) scaleDetailCosts(counts, e.costUsd);
   counts.costUsd = e.costUsd ?? counts.costUsd;
   counts.uncachedCostUsd = e.uncachedCostUsd ?? counts.uncachedCostUsd;
   return counts;
 }
 
-/** Only accounting and match fields survive retention, including mergeable timing counts/sums. */
+/** What an identity's request added to its total. Identities recorded before the detail fields (#155) added none of them. */
+export function countedUsage(row: IdentityRow): ActivityCounts {
+  const counts = accountedUsage(identityEvent(row));
+  if ((JSON.parse(row.event) as { detail?: boolean }).detail !== true) for (const k of DETAIL_KEYS) counts[k] = 0;
+  return counts;
+}
+
+/** Only accounting and match fields survive retention, including mergeable timing counts/sums. `detail` marks usage counted with the detail fields. */
 export function rememberUsage(db: Db, e: AccountedActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
-  const { requestId, model, authIndex, sessionId,
+  const { requestId, model, authIndex, sessionId, thinkingTokens,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed } = e;
   const { costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs } = accountedUsage(e);
   const statements = statementsFor(db);
   statements.insert.run([identityKey(e), JSON.stringify({
     costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs,
     ...(e.effectiveModel ? { effectiveModel: e.effectiveModel } : {}), ...(e.reasoningEffort ? { reasoningEffort: e.reasoningEffort } : {}),
-    totalStart, totalDay, requestId, model, authIndex, sessionId,
+    totalStart, totalDay, requestId, model, authIndex, sessionId, thinkingTokens, detail: true,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);
   if (e.source === 'proxy' && (e.upstreamId || e.sessionId)) {
@@ -78,7 +86,7 @@ function fillMetadata(db: Db, identity: IdentityRow, primary: ActivityEvent, sec
 }
 
 /** Called inside the same transaction as totals, requests and checkpoints. */
-export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remove?: ActivityEvent; removeKey?: string; relinkKey?: string; id?: number } {
+export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; removeCounts?: ActivityCounts; removeKey?: string; relinkKey?: string; id?: number } {
   const statements = statementsFor(db);
   const existing = statements.identity.get(identityKey(e)) as IdentityRow | undefined;
   if (existing) {
@@ -88,7 +96,7 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
       statements.removeIdentity.run(identityKey(e));
       statements.removeRequest.run(existing.row_id, old.requestId);
       const updated = { ...e, upstreamId: e.upstreamId ?? old.upstreamId };
-      return { ...reconcileUsage(db, updated), remove: old, removeKey: removalKey(existing) };
+      return { ...reconcileUsage(db, updated), removeCounts: countedUsage(existing), removeKey: removalKey(existing) };
     }
     const retained = ownedRequest(db, existing);
     if (retained) fillMetadata(db, existing, retained, e);
@@ -106,7 +114,7 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
   if (e.source === 'client-log') { fillMetadata(db, match, other, e); return { skip: true, id: match.row_id }; }
   fillMetadata(db, match, e, other);
   statements.removeRequest.run(match.row_id, identityEvent(match).requestId);
-  return { skip: false, remove: identityEvent(match), removeKey: removalKey(match), relinkKey: match.key };
+  return { skip: false, removeCounts: countedUsage(match), removeKey: removalKey(match), relinkKey: match.key };
 }
 
 /** A legacy identity belongs to the daily baseline even if newer usage shares its hour. */

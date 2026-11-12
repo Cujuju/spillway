@@ -1,4 +1,4 @@
-import { localDay } from '@shared/activityCounts';
+import { DETAIL_COST_KEYS, localDay } from '@shared/activityCounts';
 import type { ActivityEvent, ActivityCounts } from '@shared/types';
 import type { Db } from './activityDb';
 import { accountedUsage, identityEvent, type AccountedActivityEvent, type IdentityRow } from './usageLedger';
@@ -43,4 +43,5 @@ export function preserveImportedCost(row: ActivityCounts, e: ActivityEvent): voi
   const counted = accountedUsage(e);
   row.costUsd += counted.costUsd - priced.costUsd;
   row.uncachedCostUsd += counted.uncachedCostUsd - priced.uncachedCostUsd;
+  for (const k of DETAIL_COST_KEYS) row[k] += counted[k] - priced[k];
 }

@@ -1,4 +1,4 @@
-import { addCounts, addEvent, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
+import { addCounts, addEvent, DETAIL_COST_KEYS, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
 import { priceTableSnapshot, repriceStart } from '@shared/modelPrices';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
@@ -121,20 +121,27 @@ function repriceRetained(db: Db, changes: Map<string, string | null>, day: strin
   } finally {
     partners.return?.();
   }
-  const saveTotal = db.prepare("UPDATE activity_totals SET total = json_set(total, '$.costUsd', ?, '$.uncachedCostUsd', ?, '$.unpricedRequests', ?) WHERE key = ?");
+  const saveTotal = db.prepare(`UPDATE activity_totals SET total = json_set(total, '$.costUsd', ?, '$.uncachedCostUsd', ?, '$.unpricedRequests', ?${DETAIL_COST_KEYS.map((k) => `, '$.${k}', ?`).join('')}) WHERE key = ?`);
   const saveIdentity = db.prepare("UPDATE usage_identities SET event = json_set(event, '$.costUsd', ?, '$.uncachedCostUsd', ?) WHERE key = ?");
   const saveRequest = db.prepare("UPDATE requests SET event = json_set(event, '$.costUsd', ?, '$.uncachedCostUsd', ?) WHERE id = ? AND (json_type(event, '$.costUsd') IS NOT NULL OR json_type(event, '$.uncachedCostUsd') IS NOT NULL)");
   for (const { key, total } of totals) {
     const group = groups.get(storedTotalKey(total));
     if (!group?.affected || group.misplaced || !RETENTION_COUNTS.every((k) => total[k] === group.counts[k])) continue;
     if (!sameCosts(total, group.counts) || total.unpricedRequests !== group.counts.unpricedRequests) {
-      saveTotal.run(...COST_FIELDS.map((k) => group.counts[k]), key);
+      saveTotal.run(...COST_FIELDS.map((k) => group.counts[k]), ...detailCosts(total, group.counts), key);
     }
     for (const { id, keys, costUsd, uncachedCostUsd } of group.requests) {
       for (const identityKey of keys) saveIdentity.run(costUsd, uncachedCostUsd, identityKey);
       if (id !== null) saveRequest.run(costUsd, uncachedCostUsd, id);
     }
   }
+}
+
+/** A total whose every request carries detail takes the repriced detail costs; a partly detailed hour scales its own by the cost change. */
+function detailCosts(total: ActivityCounts, repriced: ActivityCounts): number[] {
+  if (total.detailRequests === total.requests) return DETAIL_COST_KEYS.map((k) => repriced[k]);
+  const scale = total.costUsd === 0 ? 0 : repriced.costUsd / total.costUsd;
+  return DETAIL_COST_KEYS.map((k) => (total[k] ?? 0) * scale);
 }
 
 /** Legacy matching requires a pre-boundary proxy, identical signature and nearby timestamps. */

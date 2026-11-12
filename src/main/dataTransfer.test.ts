@@ -77,6 +77,8 @@ it.each([false, true])('preserves retained historical costs across transfers, mi
     const total = JSON.parse(row.total) as ActivityTotal;
     total.costUsd *= 2;
     total.uncachedCostUsd *= 2;
+    // Detail costs are parts of costUsd, so a historical price scales them too.
+    total.detailCostUsd *= 2;
     if (migrated) {
       delete total.start;
       db.prepare('DELETE FROM activity_totals WHERE key = ?').run(row.key);

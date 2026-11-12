@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
 import { FLAT_RHYTHM, RHYTHM_FLAT_SHARE, RHYTHM_LOOKBACK_DAYS, RHYTHM_MIN_DAYS, rhythmProfile, weightedHours } from './rhythmProfile';
 
@@ -7,9 +8,8 @@ const DAY = 24 * H;
 const NOW = Date.parse('2026-10-25T23:00:00Z');
 const utc = () => 0;
 const bucket = (start: number, costUsd = 1, patch: Partial<ActivityBucket> = {}): ActivityBucket => ({
-  start, costUsd, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'model', client: null,
-  requests: 1, failed: 0, inputTokens: 1, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
-  uncachedCostUsd: costUsd, unpricedRequests: 0, ...patch,
+  ...emptyCounts(), start, costUsd, wholeDay: false, provider: 'claude', authIndex: 'a', model: 'model', client: null,
+  requests: 1, inputTokens: 1, uncachedCostUsd: costUsd, ...patch,
   latencyCount: 0, latencySumMs: 0, ttftCount: 0, ttftSumMs: 0,
 });
 const evidence = (days = RHYTHM_MIN_DAYS) => Array.from({ length: days }, (_, d) => bucket(NOW - 13 * H - d * DAY));

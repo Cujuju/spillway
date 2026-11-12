@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCounts, addEvent, emptyCounts, localDay, localNoon, withCountsFilled } from './activityCounts';
+import { addCounts, addEvent, emptyCounts, localDay, localNoon, scaleDetailCosts, withCountsFilled } from './activityCounts';
 import type { ActivityEvent } from './types';
 
 const event = (patch: Partial<ActivityEvent>): ActivityEvent => ({
@@ -32,6 +32,23 @@ describe('activity counts', () => {
     addEvent(row, event({ model: 'mystery' }));
     expect(row).toMatchObject({ requests: 2, unpricedRequests: 1 });
     expect(row.costUsd).toBeCloseTo(4);
+  });
+  it('keeps thinking, tier and failed shares with their denominators', () => {
+    const row = emptyCounts();
+    addEvent(row, event({ outputTokens: 100, thinkingTokens: 40, tier: 'fast' }));
+    addEvent(row, event({ outputTokens: 50, thinkingTokens: null, failed: true }));
+    addEvent(row, event({ outputTokens: 10, thinkingTokens: 0, tier: 'flex' }));
+    expect(row).toMatchObject({ detailRequests: 3, thinkingTokens: 40, thinkingOutputTokens: 110, fastRequests: 1, flexRequests: 1 });
+    expect(row.detailCostUsd).toBeCloseTo(row.costUsd);
+    expect(row.failedCostUsd).toBeGreaterThan(0);
+    expect(row.fastCostUsd + row.flexCostUsd + row.failedCostUsd).toBeLessThanOrEqual(row.detailCostUsd);
+  });
+  it('scales detail costs with a recorded cost', () => {
+    const row = emptyCounts();
+    addEvent(row, event({ failed: true }));
+    scaleDetailCosts(row, row.costUsd / 2);
+    expect(row.detailCostUsd).toBeCloseTo(row.costUsd / 2);
+    expect(row.failedCostUsd).toBeCloseTo(row.costUsd / 2);
   });
   it('prices rows saved before cost was recorded', () => {
     const row = withCountsFilled({ provider: 'claude', model: 'claude-opus-5-5', requests: 3, failed: 0, inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0 }, '2026-10-26T12:00:00Z');

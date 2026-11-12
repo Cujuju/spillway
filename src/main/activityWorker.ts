@@ -42,7 +42,7 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   archiveExportStart: (id, file) => log.archiveExportStart(id, file), archiveExportCancel: (id) => log.archiveExportCancel(id),
   clickhouseStatus: () => log.clickhouseStatus(), clickhouseConfigure: (c) => log.clickhouseConfigure(c),
   clickhousePrepare: () => log.clickhousePrepare(), clickhouseAcknowledge: (t, d) => log.clickhouseAcknowledge(t, d),
-  clickhouseFail: (t, n, e) => log.clickhouseFail(t, n, e), clickhouseRetry: () => log.clickhouseRetry(), clickhouseClear: () => log.clickhouseClear(),
+  clickhouseFail: (t, n, e) => log.clickhouseFail(t, n, e), clickhouseRetry: () => log.clickhouseRetry(), clickhouseClear: () => log.clickhouseClear(), clickhouseMirrorUsage: (r, o) => log.clickhouseMirrorUsage(r, o),
   diagnosticSnapshot: (id, bodies) => log.diagnosticSnapshot(id, bodies),
   traceQuery: (q) => log.traceQuery(q), traceAttempts: (q) => log.traceAttempts(q),
   close: async () => { await stop(); await log.archiveExportDispose(); log.close(); },

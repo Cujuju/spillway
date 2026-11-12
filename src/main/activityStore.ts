@@ -9,6 +9,7 @@ import { activityPriceSnapshot, invalidateActivityPrices } from './activityRepri
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
+import type { UsageRecord } from './clickhouseRecords';
 import type { ClickHouseConfig } from '@shared/clickhouse';
 import { diagnosticSnapshot } from './diagnosticSnapshot';
 import type { ArchivePolicy, CapturePage } from '@shared/archive';
@@ -133,6 +134,7 @@ export class ActivityLog {
   clickhouseFail(token: string, now: number, error: string): void { this.clickhouse.fail(token, now, error); }
   clickhouseRetry(): void { this.clickhouse.retry(); }
   clickhouseClear(): void { this.clickhouse.clear(); }
+  clickhouseMirrorUsage(records: UsageRecord[], oldestAt: string): void { this.clickhouse.mirrorUsage(records, oldestAt); }
   diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
   traceQuery(q: TraceQuery) { this.archive.prune(); return new TraceStore(this.db).query(q); }
   traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }

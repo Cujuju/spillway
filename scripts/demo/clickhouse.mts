@@ -24,7 +24,9 @@ export async function startDemoClickHouse() {
       if (sql.startsWith('INSERT')) events.emit('insert');
       const respond = () => {
         if (sql.startsWith('INSERT')) {
-          const records = sql.slice(sql.indexOf('\n') + 1).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as DemoClickHouseRow);
+          const records = sql.slice(sql.indexOf('\n') + 1).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as DemoClickHouseRow & { request_pieces?: unknown[] });
+          // Like ClickHouse 26: named tuples must be JSON objects.
+          if (records.some((r) => r.request_pieces?.some((p) => Array.isArray(p)))) { res.writeHead(400).end('Cannot parse input: expected \'{\''); return; }
           for (const row of behavior.partialRows < 0 ? records : records.slice(0, behavior.partialRows)) {
             const id = `${row.source_id}:${row.seq}`;
             (isPieces ? pieces : rows).set(id, row);

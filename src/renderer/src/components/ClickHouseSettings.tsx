@@ -39,7 +39,8 @@ export function ClickHouseSettings() {
       setUsername(''); setPassword(''); setDraft(result.config); setMessage('Settings saved.');
     });
   };
-  const savedPlaceholder = () => status()?.hasCredentials ? SAVED_CREDENTIAL_PLACEHOLDER : '';
+  const unsaved = () => { const saved = status()?.config; return !!saved && (JSON.stringify({ ...saved, sourceLabel: saved.sourceLabel.trim() }) !== JSON.stringify({ ...draft(), sourceLabel: draft().sourceLabel.trim() }) || !!username() || !!password()); };
+  const savedPlaceholder = () =>status()?.hasCredentials ? SAVED_CREDENTIAL_PLACEHOLDER : '';
   const state = () =>!status()?.config.enabled ? 'Disabled' : status()?.paused ? 'Paused' : status()?.running ? 'Uploading / checking' : status()?.backfilling ? 'Queuing retained requests' : 'Waiting';
   return <>
     <SettingsGroup title="ClickHouse destination">
@@ -64,6 +65,7 @@ export function ClickHouseSettings() {
       </SettingRow>
       <SettingRow label="Password"><input class="input" aria-label="ClickHouse password" type="password" autocomplete="new-password" placeholder={savedPlaceholder()} value={password()} onInput={(e) => setPassword(e.currentTarget.value)} /></SettingRow>
       <SettingRow label="Apply settings" help="Turning export on, or changing destination, first sends a snapshot of the requests still kept locally. Disabling pauses delivery and keeps the outbox. Clear the outbox before changing destination.">
+        <Show when={unsaved()}><span class="secondary" role="status">Unsaved changes</span></Show>
         <button class="btn primary" disabled={busy() || !status()} onClick={() => void save()}>Save</button>
         <button class="btn" disabled={busy() || !status()?.hasCredentials} onClick={() => void save(true)}>Forget credentials</button>
       </SettingRow>

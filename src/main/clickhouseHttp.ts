@@ -1,4 +1,7 @@
-import { zstdCompressSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { zstdCompress } from 'node:zlib';
+// Async zlib runs on the libuv threadpool, keeping up-to-8 MiB batches off the main thread.
+const compress = promisify(zstdCompress);
 import { validateClickHouseConfig, validateClickHouseCredentials, type ClickHouseConfig, type ClickHouseCredentials } from '@shared/clickhouse';
 const RESPONSE_LIMIT_BYTES = 64 * 1024;
 const QUERY_TIMEOUT_MS = 15_000, UPLOAD_BYTES_PER_SECOND = 32 * 1024;
@@ -33,7 +36,7 @@ export async function clickhouseRequest(config: ClickHouseConfig, credentials: C
     const timeout = sql.startsWith('INSERT') ? clickhouseTimeout(Buffer.byteLength(sql)) : QUERY_TIMEOUT_MS;
     const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]), headers: {
       ...(sql.startsWith('INSERT') ? { 'Content-Encoding': 'zstd' } : {}), 'Content-Type': 'text/plain; charset=utf-8', 'X-ClickHouse-User': auth.username, 'X-ClickHouse-Key': auth.password,
-    }, body: sql.startsWith('INSERT') ? new Uint8Array(zstdCompressSync(Buffer.from(sql))) : sql });
+    }, body: sql.startsWith('INSERT') ? new Uint8Array(await compress(Buffer.from(sql))) : sql });
     if (!response.ok) { await response.body?.cancel(); throw new Error(`ClickHouse HTTP ${response.status} (${httpFailureHint(response.status)})`); }
     if (response.headers.get('X-ClickHouse-Exception-Code') && response.headers.get('X-ClickHouse-Exception-Code') !== '0') {
       await response.body?.cancel(); throw new Error('ClickHouse reported a query failure');

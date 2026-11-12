@@ -294,7 +294,7 @@ it('ships a large single capture with all required pieces in one batch', () => {
   const capture = lines(batch.facts).find((f) => f.kind === 'capture');
   expect(capture.content_policy).toBe('included');
   const pieces = new Map(lines(batch.pieces).map((p) => [p.seq, p.bytes]));
-  expect(capture.request_pieces.map(([id, offset, length]: [number, number, number]) => pieces.get(id).slice(offset, offset + length)).join('')).toBe(request);
+  expect(capture.request_pieces.map(({ piece_seq: id, offset, length }: { piece_seq: number; offset: number; length: number }) => pieces.get(id).slice(offset, offset + length)).join('')).toBe(request);
   store.acknowledge(batch.token, batch.destination); expect(store.status().queued).toBe(0);
 });
 
@@ -325,4 +325,13 @@ it('matches pretty-printed ClickHouse types but not different ones', () => {
   expect(sameClickHouseType('Array(Tuple(\n    piece_seq UInt64,\n    offset UInt32,\n    length UInt32))', compact)).toBe(true);
   expect(sameClickHouseType('Array(Tuple(\n    piece_seq UInt64,\n    offset UInt64,\n    length UInt32))', compact)).toBe(false);
   expect(sameClickHouseType("DateTime64(3,'UTC')", "DateTime64(3, 'UTC')")).toBe(true);
+});
+
+it('keeps the source label across a reopen', () => {
+  const { db, store, file } = setup();
+  store.configure({ ...config, sourceLabel: 'desktop-dev' }); db.close();
+  const reopened = openActivityDb(file, 'ab'.repeat(32)); dbs.push(reopened);
+  let again: ClickHouseStore;
+  const archive = new ArchiveStore(reopened, { append: (f) => again.append(f) }); again = new ClickHouseStore(reopened, archive);
+  expect(again.config().sourceLabel).toBe('desktop-dev');
 });

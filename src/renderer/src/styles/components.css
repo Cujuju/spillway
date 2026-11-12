@@ -426,6 +426,10 @@
   color: var(--color-text-soft);
   border-color: var(--color-accent-border);
 }
+/* Result notices under a settings group's rows. */
+.settings-group > .notice {
+  margin: var(--spacing-2) 0 0;
+}
 /* ── List rows: an item's text on the left, its actions right-aligned ── */
 .list-row {
   --list-action-min-width: 76px; /* Fits "Re-apply", so Apply and Re-apply share a right column. */

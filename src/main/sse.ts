@@ -61,6 +61,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   return {
     at: s(r.at) ?? new Date().toISOString(),
     requestId,
+    turnKey: s(r.turn_key),
     thinkingTokens: typeof r.reasoning_tokens === 'number' && Number.isFinite(r.reasoning_tokens) && r.reasoning_tokens >= 0 ? r.reasoning_tokens : null,
     clientVersion: userAgent?.match(/^[^/\s]+\/([^\s]+)/)?.[1] ?? null,
     settingsHash: settings ? requestSettingsHash(settings) : null,

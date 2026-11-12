@@ -16,6 +16,8 @@ import { TraceStore } from './traceStore';
 import { EvalCaseStore } from './evalCaseStore';
 import type { EvalAnnotation } from '@shared/evalCase';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
+import { thinkingActivity, type OfferedModel } from './activityThinking';
+import type { ThinkingQuery } from '@shared/thinking';
 import { compareActivity } from './activityCompare';
 import type { CompareQuery } from '@shared/activityCompare';
 export { oldestKeptDay, lastDays } from './activityTransfer';
@@ -228,7 +230,7 @@ export class ActivityLog {
       id = this.db.transaction(() => {
         const totals = this.loadTotals();
         const merge = reconcileUsage(this.db, accounted);
-        for (const key of ['thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
+        for (const key of ['turnKey', 'thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
         if (merge.removeCounts) {
           this.revision += 1;
           const counts = merge.removeCounts;
@@ -344,6 +346,8 @@ export class ActivityLog {
     return { since, clients: rows };
   }
 
+  /** Thinking costs and alternatives from retained turns; null for a malformed query. */
+  thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models); }
   /** Combination cards and Compare table for the Overview; null for a malformed query. */
   compare(q: CompareQuery) { return compareActivity(this.db, this.loadTotals().values(), q, Date.now()); }
 

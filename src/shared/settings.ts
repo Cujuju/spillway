@@ -3,6 +3,7 @@
 import { DEFAULT_CANARY, normalizeCanary, type CanarySettings } from './canary';
 import { IS_DEV_BUILD } from './app';
 import { DEFAULT_ACTIVITY_BOARD, normalizeActivityBoard, type ActivityBoard } from './activityBoard';
+import { DEFAULT_THINKING_BOARD, normalizeThinkingBoard, type ThinkingBoard } from './thinkingBoard';
 import { DEFAULT_NOTICE_CONFIG, normalizeNoticeConfig, type NoticeConfig, type NoticeDelivery, type NoticeStyle } from '@cujuju/electron-notices';
 import { THEME_CHOICES } from './themes';
 import { UPDATE_CHANNELS, type UpdateChannel } from './updateFeed';
@@ -131,6 +132,10 @@ export interface AppSettings {
     board: ActivityBoard;
     /** Compare's baseline column (comboKey); null, or a combination not shown, uses the first. */
     compareBaseline: string | null;
+    /** Activity → Thinking's tiles. */
+    thinkingBoard: ThinkingBoard;
+    /** The setting By kind of turn and Alternatives show (settingKey); null, or one not in range, uses the costliest. */
+    thinkingSetting: string | null;
   };
 }
 
@@ -230,6 +235,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     zipCode: '',
     board: DEFAULT_ACTIVITY_BOARD,
     compareBaseline: null,
+    thinkingBoard: DEFAULT_THINKING_BOARD,
+    thinkingSetting: null,
   },
 };
 
@@ -342,6 +349,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
       retentionDays: int(a.retentionDays, d.activity.retentionDays, 1, MAX_ACTIVITY_RETENTION_DAYS),
       board: normalizeActivityBoard(a.board),
       compareBaseline: typeof a.compareBaseline === 'string' ? a.compareBaseline : null,
+      thinkingBoard: normalizeThinkingBoard(a.thinkingBoard),
+      thinkingSetting: typeof a.thinkingSetting === 'string' ? a.thinkingSetting : null,
     },
   };
 }

@@ -9,6 +9,8 @@ import { DEFAULT_TRACE_FILTERS, TraceLimitNote, type TraceFilters } from '../com
 import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
 import { AddChartSelect, AddComboSelect, type PendingChart } from '../components/ActivityBoard';
 import { createCompareReport } from '../lib/compareReport';
+import { createThinkingReport } from '../lib/thinkingReport';
+import { AddThinkingSelect, ThinkingCoverage, ThinkingView, type PendingThinkingTile } from '../components/ThinkingView';
 import { dayText, isCustomRange, RANGES, rangeSpan, type CustomRange, type Range } from '../lib/activityRange';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
@@ -21,7 +23,7 @@ import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
 import { activityBuckets, now, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'drift', label: 'Drift' }, { value: 'totals', label: 'Totals' }, { value: 'evals', label: 'Evals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'drift', label: 'Drift' }, { value: 'totals', label: 'Totals' }, { value: 'thinking', label: 'Thinking' }, { value: 'evals', label: 'Evals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 /** Default custom span: the last 30 days. */
 const DEFAULT_CUSTOM_DAYS = 30;
@@ -61,12 +63,14 @@ export function Activity() {
   const [evalSource, setEvalSource] = createSignal<string>();
   const startEval = (traceId: string) => { setEvalSource(traceId); setView('evals'); };
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
+  const [placingThinking, setPlacingThinking] = createSignal<PendingThinkingTile | null>(null);
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
   const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
   const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
   const overviewSpan = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
   const compare = createCompareReport(() => view() === 'overview', scope, overviewSpan);
+  const thinking = createThinkingReport(() => view() === 'thinking', scope, overviewSpan);
   const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
@@ -81,7 +85,7 @@ export function Activity() {
   const groups = createMemo(() => accountGroups(snapshot()?.credentials ?? [], activityBuckets(), accounts()));
   const clientChoices = createMemo(() => clientOptions(activityBuckets(), clients()));
   const timeFrame = (): TimeFrame | undefined => {
-    if (view() === 'overview') return { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom };
+    if (view() === 'overview' || view() === 'thinking') return { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom };
     if (view() === 'traces') return { range: traceRange(), custom: traceCustom(), today: dayText(now()), onRange: setTraceRange, onCustom: setTraceCustom, ranges: TRACE_RANGES, maxDays: TRACE_MAX_DAYS };
     if (view() === 'drift') return { range: driftRange(), custom: driftCustom(), today: dayText(now()), onRange: setDriftRange, onCustom: setDriftCustom, ranges: DRIFT_RANGES };
     return undefined;
@@ -94,10 +98,11 @@ export function Activity() {
           <ActivityScopeLine full={view() !== 'traces'} source={source()} onSource={setSource}
             groups={groups()} accounts={accounts()} onAccounts={setAccounts}
             clients={clientChoices()} clientScope={clients()} onClients={setClients}
-            efforts={efforts()} effort={effort()} onEffort={setEffort}
+            efforts={efforts()} effort={effort()} onEffort={setEffort} noEffort={view() === 'thinking'}
             traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined} time={timeFrame()} />
           <div class="scope-row-end">
             <Show when={view() === 'overview'}><AddComboSelect report={compare()} onPick={setPlacing} /><AddChartSelect onPick={setPlacing} /></Show>
+            <Show when={view() === 'thinking'}><ThinkingCoverage report={thinking()} /><AddThinkingSelect onPick={setPlacingThinking} /></Show>
             <Show when={view() === 'traces' && traceLimit()}>{(n) => <TraceLimitNote limit={n()} />}</Show>
             <Show when={view() === 'totals'}>
               <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
@@ -128,6 +133,7 @@ export function Activity() {
       <Show when={view() === 'requests'}>
         <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />
       </Show>
+      <Show when={view() === 'thinking'}><ThinkingView report={thinking()} placing={placingThinking()} onPlacingEnd={() => setPlacingThinking(null)} /></Show>
       <Show when={view() === 'evals'}><EvalCases traceId={evalSource()} onSourceUsed={() => setEvalSource(undefined)} /></Show>
     </>
   );

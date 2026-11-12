@@ -215,6 +215,14 @@ const handlers: Handlers = {
   activityDay: (day, failedOnly, scope) => activityLog.call('day', day, failedOnly, scope),
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
   activityTotals: () => activityLog.call('totalsList'),
+  activityThinking: async (q) => {
+    const credentials = usage.latest()?.credentials ?? [];
+    const lists = await Promise.all(credentials.map(async (c) => {
+      try { return (await management.credentialModels(c.name)).map((m) => ({ ...m, provider: c.provider })); }
+      catch (error) { console.error('Thinking credential models failed', c.name, error); return []; }
+    }));
+    return activityLog.call('thinking', q, lists.flat());
+  },
   activityCompare: (q) => activityLog.call('compare', q),
   activityCoverage: () => activityLog.call('coverage'),
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),

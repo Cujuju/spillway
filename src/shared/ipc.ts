@@ -7,6 +7,7 @@ import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from '
 import type { TraceQuery, TracePage, TraceAttemptQuery, TraceAttemptPage } from './sessionTrace';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
+import type { ThinkingQuery, ThinkingReport } from './thinking';
 import type { CompareQuery, CompareReport } from './activityCompare';
 import type { BuildInfo } from './buildInfo';
 import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
@@ -112,6 +113,7 @@ export interface DesktopApi {
   /** Each local day with stored requests from `accounts`, newest first. */
   activityDaySummaries(scope: ActivityScope): Promise<ActivityDaySummary[]>;
   activityTotals(): Promise<ActivityDayTotal[]>;
+  activityThinking(query: ThinkingQuery): Promise<ThinkingReport | null>;
   /** Combination cards and Compare table (Overview); null for a malformed query. */
   activityCompare(query: CompareQuery): Promise<CompareReport | null>;
   /** Share of local client usage that went through the proxy. */
@@ -231,6 +233,7 @@ export const INVOKE = {
   activityDay: 'activity:day',
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',
+  activityThinking: 'activity:thinking',
   activityCompare: 'activity:compare',
   activityImportState: 'activity:import-state',
   archiveMigrationState: 'archive:migration-state',

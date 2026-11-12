@@ -1,0 +1,151 @@
+/* ── Activity → Thinking ── */
+.think-est {
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.think-cover { font-size: var(--text-xs); }
+.think-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  color: var(--color-text);
+}
+.board-tile-head > .section-label:has(> .think-title) {
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-label);
+  color: var(--color-text);
+}
+
+/* Verdict: the sentence and the savings dominate; the status line sits at the bottom. */
+.think-verdict {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.think-say {
+  margin: var(--spacing-1) 0 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+.think-say b { font-weight: inherit; white-space: nowrap; }
+.think-alts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-4);
+  margin: var(--spacing-4) 0 var(--spacing-3);
+}
+.think-alt-l {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.think-alt-v {
+  font-size: var(--text-stat);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.think-alt-v small {
+  margin-left: var(--spacing-1);
+  font-size: var(--text-body);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.think-alt-s { font-size: var(--text-xs); color: var(--color-text-secondary); }
+.think-alt-s b { color: var(--color-text); font-weight: 600; white-space: nowrap; }
+.think-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-1_5) var(--spacing-3);
+  margin-top: auto;
+  padding-top: var(--spacing-2);
+  border-top: var(--border-width) solid var(--color-divider);
+  font-size: var(--text-body);
+  color: var(--color-text-secondary);
+}
+.think-status b { color: var(--color-text); font-weight: 600; }
+
+/* Where the thinking goes: shares of turns against shares of thinking cost, shaded by bucket. */
+.think-mixes {
+  display: grid;
+  /* Wide enough for the bucket table; narrower tiles stack the settings. */
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: var(--spacing-6);
+}
+.think-mix { min-width: 0; }
+.think-mix-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.think-mix-say { margin: var(--spacing-0_5) 0 var(--spacing-2); font-size: var(--text-sm); color: var(--color-text-soft); }
+.think-bar-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  margin-bottom: var(--spacing-1_5);
+}
+.think-bar-l { font-size: var(--text-xs); color: var(--color-text-soft); }
+/* Tall enough for a percentage label inside each segment. */
+.think-bar { --think-bar-height: 20px; display: flex; gap: 1px; height: var(--think-bar-height); }
+.think-seg {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.think-seg.light, .think-dot.light { background: color-mix(in srgb, var(--series) 30%, var(--color-surface)); }
+.think-seg.typical, .think-dot.typical { background: color-mix(in srgb, var(--series) 60%, var(--color-surface)); }
+.think-seg.heavy, .think-dot.heavy { background: var(--series); color: var(--color-on-accent); }
+.think-dot { display: inline-block; flex: none; width: var(--dot-size); height: var(--dot-size); }
+.think-key { display: inline-flex; align-items: center; gap: var(--spacing-1_5); }
+
+/* Tables */
+.think-table, .think-mini { width: 100%; }
+.think-mini { margin-top: var(--spacing-2); }
+.think-table th, .think-mini th {
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  text-align: left;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+.think-table th small { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.think-table td, .think-mini td { font-size: var(--text-xs); border-top: var(--border-width) solid var(--color-divider); vertical-align: baseline; }
+.think-table .num, .think-mini .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.think-table td.name { font-weight: 600; white-space: nowrap; }
+.think-table td.name small { display: block; font-weight: 400; color: var(--color-text-muted); }
+.think-table .sub { display: inline-block; min-width: 30px; margin-left: var(--spacing-1_5); color: var(--color-text-muted); }
+.think-table tr.now td { background: var(--color-surface-raised); }
+.think-table tfoot td { border-top-color: var(--color-border-strong); font-weight: 600; }
+.think-table td.how { min-width: 180px; color: var(--color-text-secondary); }
+.board-tile.bleed .think-table :is(th, td):first-child { padding-left: var(--spacing-4); }
+.board-tile.bleed .think-table :is(th, td):last-child { padding-right: var(--spacing-4); }
+.think-rec { margin: var(--spacing-3) 0 var(--spacing-0_5); font-size: var(--text-md); font-weight: 600; line-height: var(--leading-tight); }
+.think-rec-sub { margin: 0; font-size: var(--text-xs); color: var(--color-text-secondary); }
+
+.think-how {
+  display: grid;
+  gap: var(--spacing-1);
+  max-width: 86ch;
+  margin: 0;
+  padding-left: var(--spacing-4);
+  font-size: var(--text-body);
+  color: var(--color-text-secondary);
+}

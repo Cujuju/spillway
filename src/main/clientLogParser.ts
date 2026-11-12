@@ -87,7 +87,7 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
     clientVersion: provider === 'claude' ? text(r.version) : context.version ?? null, settingsHash: settings ? requestSettingsHash(settings) : null,
     ...(settings ? { requestSettings: settings } : {}),
     at, requestId: `client-log:${provider}:${createHash('sha256').update(identity).digest('hex')}`,
-    upstreamId, source: 'client-log', selectionId: null, provider, model: context.model,
+    upstreamId, turnKey: null, source: 'client-log', selectionId: null, provider, model: context.model,
     effectiveModel: null, reasoningEffort: context.effort ?? null, parentSessionId: null,
     authIndex: null, stream: true, failed: false, statusCode: null, error: null, latencyMs: null, ttftMs: null,
     inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens),

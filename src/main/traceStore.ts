@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS archive_attempt_session ON archive_attempts (json_ext
 type Raw = { id: string; at: string; origin: 'activity' | 'archive'; event: string; accounting: string | null;
   trace_id: string | null; capture_state: TraceAttempt['captureState'] | null; capture_reason: string | null; path: string | null; identity: string | null };
 const DAY = 86_400_000;
-const TEXT_FIELDS = ['source', 'sessionId', 'parentSessionId', 'sessionKind', 'model', 'effectiveModel', 'reasoningEffort', 'tier', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
+const TEXT_FIELDS = ['turnKey', 'source', 'sessionId', 'parentSessionId', 'sessionKind', 'model', 'effectiveModel', 'reasoningEffort', 'tier', 'provider', 'client', 'downstreamTransport', 'upstreamTransport', 'transportFallbackReason'];
 function metadata(column: string, archive: boolean): string {
   const strings = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE WHEN json_type(${column},'$.${k}')='text' THEN substr(json_extract(${column},'$.${k}'),1,513) END`]);
   const numbers = (fields: string[]) => fields.flatMap((k) => [`'${k}'`, `CASE ${k === 'cacheWriteTokens' ? `WHEN json_type(${column},'$.${k}') IS NULL OR json_type(${column},'$.${k}')='null' THEN 0 ` : ''}WHEN json_type(${column},'$.${k}') IN ('integer','real') THEN json_extract(${column},'$.${k}') END`]);

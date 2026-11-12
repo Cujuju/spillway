@@ -157,6 +157,7 @@ export type OAuthStatus =
 
 /** A model an account serves, from the proxy's model registry. */
 export interface CredentialModel {
+  created?: number | null;
   id: string;
   displayName: string | null;
   ownedBy: string | null;
@@ -201,6 +202,7 @@ export const sessionKind = (v: unknown): SessionKind | null => typeof v === 'str
 
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent extends TransportMetadata {
+  turnKey?: string | null;
   /** Transient: stored once in request_settings, stripped from the stored event */
   requestSettings?: RequestSettings | null;
   thinkingTokens?: number | null;

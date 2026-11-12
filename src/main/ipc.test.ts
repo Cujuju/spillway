@@ -9,7 +9,8 @@ const archiveMocks = vi.hoisted(() => ({ call: vi.fn(), refresh: vi.fn() }));
 vi.mock('electron', () => ({ ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler), on: vi.fn() } }));
 vi.mock('./settingsStore', () => ({ getSettings: () => settings, setSettings: (next: AppSettings) => (settings = normalizeSettings(next)) }));
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true, restart, applyConfig: vi.fn() } }));
-vi.mock('./usagePoller', () => ({ usage: { start: vi.fn() } }));
+const thinkingMocks = vi.hoisted(() => ({ latest: vi.fn(), credentialModels: vi.fn() }));
+vi.mock('./usagePoller', () => ({ usage: { start: vi.fn(), latest: thinkingMocks.latest } }));
 vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
 vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
 vi.mock('./diagnosticService', () => ({ diagnosticExporter: {} }));
@@ -22,7 +23,7 @@ vi.mock('./clientDriftService', () => ({}));
 vi.mock('./managedPolicy', () => ({}));
 vi.mock('./credentialFiles', () => ({}));
 vi.mock('./historyStore', () => ({}));
-vi.mock('./managementClient', () => ({}));
+vi.mock('./managementClient', () => ({ management: { credentialModels: thinkingMocks.credentialModels } }));
 vi.mock('./paths', () => ({}));
 vi.mock('./proxyLaunch', () => ({}));
 vi.mock('./proxyIdentity', () => ({}));
@@ -60,4 +61,25 @@ it('returns current settings after a restart instead of overwriting a later save
   expect(await first).toEqual(latest);
   expect((await first).general.theme).toBe('nord');
   expect(settings.proxy.port).toBe(9000);
+});
+
+
+it.each([false, true])('returns thinking with failed model lists omitted (all fail: %s)', async (allFail) => {
+  thinkingMocks.latest.mockReturnValue({ credentials: [{ name: 'bad', provider: 'codex' }, { name: 'good', provider: 'claude' }] });
+  const failure = new Error('proxy unavailable');
+  thinkingMocks.credentialModels.mockImplementation(async (name) => {
+    if (name === 'bad' || allFail) throw failure;
+    return [{ id: 'claude-sonnet-5-5', created: 123 }];
+  });
+  const result = { settings: [], untracked: { requests: 0, costUsd: 0 } };
+  archiveMocks.call.mockResolvedValue(result);
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const query = { from: 0, to: 1, scope: { accounts: null, clients: null } };
+  try {
+    expect(await handlers.get(INVOKE.activityThinking)!(null, query)).toEqual(result);
+    expect(archiveMocks.call).toHaveBeenCalledWith('thinking', query,
+      allFail ? [] : [{ id: 'claude-sonnet-5-5', created: 123, provider: 'claude' }]);
+    expect(error).toHaveBeenCalledTimes(allFail ? 2 : 1);
+    expect(error).toHaveBeenCalledWith('Thinking credential models failed', 'bad', failure);
+  } finally { error.mockRestore(); }
 });

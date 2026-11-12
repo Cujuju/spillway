@@ -47,14 +47,14 @@ export function countedUsage(row: IdentityRow): ActivityCounts {
 
 /** Only accounting and match fields survive retention, including mergeable timing counts/sums. `detail` marks usage counted with the detail fields. */
 export function rememberUsage(db: Db, e: AccountedActivityEvent, id: number, totalStart: number | null = localHourStart(Date.parse(e.at)), totalDay = localDay(Date.parse(e.at))): void {
-  const { requestId, model, authIndex, sessionId, thinkingTokens,
+  const { requestId, model, authIndex, sessionId, turnKey, thinkingTokens,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed } = e;
   const { costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs } = accountedUsage(e);
   const statements = statementsFor(db);
   statements.insert.run([identityKey(e), JSON.stringify({
     costUsd, uncachedCostUsd, latencyCount, latencySumMs, ttftCount, ttftSumMs,
     ...(e.effectiveModel ? { effectiveModel: e.effectiveModel } : {}), ...(e.reasoningEffort ? { reasoningEffort: e.reasoningEffort } : {}),
-    totalStart, totalDay, requestId, model, authIndex, sessionId, thinkingTokens, detail: true,
+    totalStart, totalDay, requestId, model, authIndex, sessionId, turnKey, thinkingTokens, detail: true,
     inputTokens, outputTokens, cachedTokens, cacheWriteTokens, cacheWrite1hTokens, cacheWriteLongTokens, tier, failed,
   }), id, fallbackKey(e), e.upstreamId, e.source, e.at, e.provider, e.client]);
   if (e.source === 'proxy' && (e.upstreamId || e.sessionId)) {
@@ -78,7 +78,7 @@ function ownedRequest(db: Db, identity: IdentityRow): ActivityEvent | undefined 
 function fillMetadata(db: Db, identity: IdentityRow, primary: ActivityEvent, secondary: ActivityEvent): void {
   const old = ownedRequest(db, identity);
   if (!old) return;
-  const fields = { thinkingTokens: primary.thinkingTokens ?? secondary.thinkingTokens ?? null, clientVersion: primary.clientVersion ?? secondary.clientVersion ?? null, settingsHash: primary.settingsHash ?? secondary.settingsHash ?? null, reasoningEffort: primary.reasoningEffort ?? secondary.reasoningEffort ?? null };
+  const fields = { turnKey: primary.turnKey ?? secondary.turnKey ?? null, thinkingTokens: primary.thinkingTokens ?? secondary.thinkingTokens ?? null, clientVersion: primary.clientVersion ?? secondary.clientVersion ?? null, settingsHash: primary.settingsHash ?? secondary.settingsHash ?? null, reasoningEffort: primary.reasoningEffort ?? secondary.reasoningEffort ?? null };
   if (Object.entries(fields).some(([key, value]) => (old[key as keyof typeof fields] ?? null) !== value)) {
     metadataStatementsFor(db).updateRequest.run(JSON.stringify({ ...old, ...fields }), identity.row_id);
   }

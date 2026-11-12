@@ -46,6 +46,8 @@ export function ActivityScopeLine(props: {
   groups: AccountGroup[]; accounts: AccountScope; onAccounts: (v: AccountScope) => void;
   clients: ClientOption[]; clientScope: ClientScope; onClients: (v: ClientScope) => void;
   efforts: string[]; effort: string; onEffort: (v: string) => void;
+  /** Hides the effort filter, for a view that compares efforts. */
+  noEffort?: boolean;
   traces?: { value: TraceFilters; onChange: (patch: Partial<TraceFilters>) => void };
   time?: TimeFrame;
 }) {
@@ -56,7 +58,7 @@ export function ActivityScopeLine(props: {
   ]);
   const narrowed = () => props.source !== 'proxy' || (props.time !== undefined && props.time.range !== DEFAULT_RANGE)
     || (props.traces !== undefined && traceFiltersNarrowed(props.traces.value))
-    || (props.full && (props.accounts !== null || props.clientScope !== null || props.effort !== ANY_EFFORT));
+    || (props.full && (props.accounts !== null || props.clientScope !== null || (!props.noEffort && props.effort !== ANY_EFFORT)));
   const reset = () => {
     props.onSource('proxy');
     props.time?.onRange(DEFAULT_RANGE);
@@ -73,8 +75,10 @@ export function ActivityScopeLine(props: {
         <AccountFilter groups={props.groups} value={props.accounts} onChange={props.onAccounts} />
         <span>from</span>
         <ClientFilter options={props.clients} value={props.clientScope} onChange={props.onClients} />
-        <span>at</span>
-        <ChoiceChip label="Effort" value={props.effort} initial={ANY_EFFORT} options={effortOptions()} onChange={props.onEffort} />
+        <Show when={!props.noEffort}>
+          <span>at</span>
+          <ChoiceChip label="Effort" value={props.effort} initial={ANY_EFFORT} options={effortOptions()} onChange={props.onEffort} />
+        </Show>
       </Show>
       <Show when={props.traces}>{(t) => <TraceScopeParts value={t().value} onChange={t().onChange} />}</Show>
       <Show when={props.time}>{(t) => <>

@@ -218,7 +218,7 @@ export function parseCredentialModels(data: unknown): CredentialModel[] {
   const rows = (data as { models?: unknown } | null)?.models;
   if (!Array.isArray(rows)) return [];
   return rows.flatMap((r: Record<string, unknown>) =>
-    typeof r?.id === 'string' && r.id ? [{ id: r.id, displayName: optStr(r.display_name), ownedBy: optStr(r.owned_by) }] : [],
+    typeof r?.id === 'string' && r.id ? [{ id: r.id, displayName: optStr(r.display_name), ownedBy: optStr(r.owned_by), ...(typeof r.created === 'number' && Number.isFinite(r.created) && r.created > 0 ? { created: r.created } : {}) }] : [],
   );
 }
 

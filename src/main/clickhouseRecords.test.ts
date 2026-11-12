@@ -8,7 +8,7 @@ import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
 import { checkClickHouseSchema } from './clickhouseHttp';
-import { RECORD_SPECS } from './clickhouseRecords';
+import { RECORD_SPECS, recordLookup } from './clickhouseRecords';
 
 const dirs: string[] = [], dbs: Db[] = [];
 afterEach(() => { for (const db of dbs.splice(0)) if (db.open) db.close(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -132,4 +132,13 @@ it('offers an upgrade for schema v1 facts tables', async () => {
     s.behavior.schemaVersion = 2;
     await expect(checkClickHouseSchema({ ...config, endpoint: s.endpoint }, undefined, new AbortController().signal)).resolves.toBeUndefined();
   } finally { await s.close(); }
+});
+
+it('finds every queued record by an index, never a table scan', () => {
+  const { db } = setup();
+  for (const spec of RECORD_SPECS) {
+    const params = spec.lookup?.params('key:1') ?? ['key'];
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN SELECT 1 FROM ${spec.table} t WHERE ${recordLookup(spec)}`).all(...params) as { detail: string }[]).map((r) => r.detail).join(' ');
+    expect(plan, spec.kind).toMatch(/SEARCH t USING (INTEGER PRIMARY KEY|(COVERING )?INDEX)/);
+  }
 });

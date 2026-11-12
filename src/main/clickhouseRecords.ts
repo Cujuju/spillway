@@ -6,17 +6,20 @@ interface RecordSpec {
   kind: string; store: ClickHouseStoreName; table: string; key: string; at: string; trace: string; record: string;
   /** Record sent when captured content is included; `record` is the metadata-only form. */
   withContent?: string;
+  /** Primary-key lookup for a queued key; the default compares `key`, which only some tables index. */
+  lookup?: { where: string; params(key: string): unknown[] };
 }
+const splitRevision = (key: string) => { const at = key.lastIndexOf(':'); return [key.slice(0, at), Number(key.slice(at + 1))]; };
 const jsonOrText = (column: string) => `CASE WHEN json_valid(${column}) THEN json(${column}) ELSE ${column} END`;
 // Totals carry an hour start (epoch ms) or, for day totals, a local day; 'utc' converts its local midnight to an instant.
 const TOTAL_AT = "coalesce(strftime('%Y-%m-%dT%H:%M:%fZ', json_extract({r}.total,'$.start')/1000.0,'unixepoch'), strftime('%Y-%m-%dT%H:%M:%fZ', json_extract({r}.total,'$.day'),'utc'))";
 export const RECORD_SPECS: readonly RecordSpec[] = [
-  { kind: 'request', store: 'requests', table: 'requests', key: 'CAST({r}.id AS TEXT)', at: "json_extract({r}.event,'$.at')", trace: "coalesce(json_extract({r}.event,'$.traceId'),'')", record: '{r}.event' },
+  { kind: 'request', store: 'requests', table: 'requests', key: 'CAST({r}.id AS TEXT)', at: "json_extract({r}.event,'$.at')", trace: "coalesce(json_extract({r}.event,'$.traceId'),'')", record: '{r}.event', lookup: { where: '{r}.id=?', params: (key) => [Number(key)] } },
   { kind: 'request-settings', store: 'requests', table: 'request_settings', key: '{r}.hash', at: '{r}.first_at', trace: "''", record: `json_object('hash',{r}.hash,'firstAt',{r}.first_at,'settings',${jsonOrText('{r}.settings')})` },
   { kind: 'total', store: 'totals', table: 'activity_totals', key: '{r}.key', at: TOTAL_AT, trace: "''", record: `json_object('key',{r}.key,'total',json({r}.total))` },
   { kind: 'canary', store: 'drift', table: 'canary_results', key: '{r}.id', at: "json_extract({r}.result,'$.at')", trace: "''", record: '{r}.result' },
   { kind: 'thinking-test', store: 'evals', table: 'thinking_tests', key: '{r}.setting_key', at: "json_extract({r}.test,'$.startedAt')", trace: "''", record: `json_object('settingKey',{r}.setting_key,'test',json({r}.test))` },
-  { kind: 'eval-case', store: 'evals', table: 'eval_cases', key: "{r}.id||':'||{r}.revision", at: '{r}.created_at', trace: "''", record: "json_remove({r}.snapshot,'$.capture')", withContent: '{r}.snapshot' },
+  { kind: 'eval-case', store: 'evals', table: 'eval_cases', key: "{r}.id||':'||{r}.revision", at: '{r}.created_at', trace: "''", record: "json_remove({r}.snapshot,'$.capture')", withContent: '{r}.snapshot', lookup: { where: '{r}.id=? AND {r}.revision=?', params: splitRevision } },
   { kind: 'usage-sample', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
   { kind: 'usage-window', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
   { kind: 'usage-span', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
@@ -92,6 +95,8 @@ export function backfillRecords(db: Db, config: ClickHouseConfig): boolean {
   return Object.keys(cursors).length > 0;
 }
 
+/** WHERE clause finding one queued record by key; each is a primary-key search (clickhouseRecords.test.ts). */
+export const recordLookup = (spec: RecordSpec): string => `${sql(spec.lookup?.where ?? `${spec.key}=?`, 't')} AND ${kindFilter(spec, 't')}`;
 export interface ResolvedRecord { record: string; trace: string; at: string; content: boolean }
 /** Current value of a queued record, or null once the row is gone (pruned, cleared or replaced). */
 export function resolveRecord(db: Db, kind: string, key: string, includeContent: boolean): ResolvedRecord | null {
@@ -99,7 +104,7 @@ export function resolveRecord(db: Db, kind: string, key: string, includeContent:
   if (!spec) return null;
   const content = includeContent && !!spec.withContent;
   const row = db.prepare(`SELECT ${sql(content ? spec.withContent! : spec.record, 't')} AS record, ${sql(spec.trace, 't')} AS trace, coalesce(${sql(spec.at, 't')},${NOW}) AS at
-    FROM ${spec.table} t WHERE ${sql(spec.key, 't')}=? AND ${kindFilter(spec, 't')} LIMIT 1`).get(key) as Omit<ResolvedRecord, 'content'> | undefined;
+    FROM ${spec.table} t WHERE ${recordLookup(spec)} LIMIT 1`).get(...(spec.lookup?.params(key) ?? [key])) as Omit<ResolvedRecord, 'content'> | undefined;
   return row ? { ...row, content } : null;
 }
 

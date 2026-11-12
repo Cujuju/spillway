@@ -41,8 +41,11 @@ export class ClickHouseStore implements ArchiveFactSink {
     const next = validateClickHouseConfig(raw), prev = this.config();
     this.db.transaction(() => {
       const changed = clickhouseDestination(next) !== clickhouseDestination(prev);
-      if (changed) this.db.exec('UPDATE archive_pieces SET sent=0');
-      if (changed && this.totals().n) throw new Error('Clear the upload queue before changing destination');
+      if (changed) {
+        // Queued rows belong to the old destination; backfill below re-sends everything still stored locally.
+        this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,attempts=0,next_attempt=0').run(this.totals().n);
+        this.db.exec('DELETE FROM clickhouse_outbox; UPDATE archive_pieces SET sent=0');
+      }
       this.db.prepare('UPDATE clickhouse_export SET config=?,error=NULL').run(JSON.stringify(next));
       const everything = !prev.enabled || changed;
       if (next.enabled && next.stores.traces && (everything || !prev.stores.traces || !prev.includeBodies && next.includeBodies)) this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(JSON.stringify(['', '']));

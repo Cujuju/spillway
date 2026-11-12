@@ -14,7 +14,7 @@ GRANT ALL ON spillway.* TO spillway;
 
 Then in Spillway: enter endpoint, database, username and password, Save, Check (then Create tables if offered), and turn on Export requests. Named tuples in `request_pieces` are sent as JSON objects, the JSONEachRow default. Errors report status only: 401/403 means credentials or grants; 404 means the database or tables are missing.
 
-Credentials remain in `secrets.bin` and are sent only in ClickHouse authentication headers. Redirects are rejected. Diagnostics hide server responses. Changing destinations requires an empty queue and pauses delivery. Local unreleased v2 state, outbox and triggers are dropped once with no migration; remote v2 tables are left alone. A fresh local source identity is created.
+Credentials remain in `secrets.bin` and are sent only in ClickHouse authentication headers. Redirects are rejected. Diagnostics hide server responses. Changing destination discards the unsent queue (counted as Discarded) and re-sends everything stored locally; delivery pauses during the change. Local unreleased v2 state, outbox and triggers are dropped once with no migration; remote v2 tables are left alone. A fresh local source identity is created.
 
 ## Stores and records
 

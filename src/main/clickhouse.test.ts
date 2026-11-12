@@ -87,8 +87,10 @@ it('retries identical bytes, preserves new rows during upload, and binds acknowl
   const { store } = setup(); enable(store); store.append(fact()); const b = store.prepare()!;
   store.fail(b.token, Date.now(), 'offline'); expect(store.prepare()).toBeNull(); store.retry(); expect(store.prepare()!.facts).toBe(b.facts);
   store.append(fact(1)); store.acknowledge(b.token, 'wrong'); expect(store.status().queued).toBe(2);
-  expect(() => store.configure({ ...config, tablePrefix: 'other' })).toThrow(/Clear/);
   store.acknowledge(b.token, b.destination); expect(store.status()).toMatchObject({ queued: 1, acknowledged: 1, attempts: 0 });
+  // A new destination discards the old queue instead of refusing; an old-destination acknowledgment no longer applies.
+  const late = store.prepare()!; store.configure({ ...config, tablePrefix: 'other' }); expect(store.status()).toMatchObject({ queued: 0, discarded: 1 });
+  store.acknowledge(late.token, late.destination); expect(store.status().acknowledged).toBe(1);
 });
 it('applies current label and content policy at prepare time without changing stored content', () => {
   const { archive, store, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); enable(store); ingest(archive);

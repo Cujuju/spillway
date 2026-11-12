@@ -88,7 +88,7 @@ export function ClickHouseSettings() {
         <input class="input" aria-label="ClickHouse username" autocomplete="off" placeholder={savedPlaceholder()} value={username()} onInput={(e) => setUsername(e.currentTarget.value)} />
       </SettingRow>
       <SettingRow label="Password"><input class="input" aria-label="ClickHouse password" type="password" autocomplete="new-password" placeholder={savedPlaceholder()} value={password()} onInput={(e) => setPassword(e.currentTarget.value)} /></SettingRow>
-      <SettingRow label="Apply" help="Enabling or a new destination first uploads stored requests. Clear the outbox before changing destination.">
+      <SettingRow label="Apply" help="Enabling export or a store uploads what is stored locally. A new destination discards unsent rows, then re-sends everything stored locally.">
         <Show when={unsaved()}><span class="secondary" role="status">Unsaved changes</span></Show>
         <button class="btn primary" disabled={busy() || !unsaved()} onClick={() => void save()}>Save</button>
         <button class="btn" disabled={busy() || !status()?.hasCredentials} onClick={() => void save(true)}>Forget credentials</button>

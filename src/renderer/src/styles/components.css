@@ -225,6 +225,11 @@
 .number-field-unit {
   color: var(--color-text-muted);
 }
+/* Fits a scheme://host:port origin, a little wider than the default text box. */
+.input.origin-field {
+  --origin-field-width: 240px;
+  width: var(--origin-field-width);
+}
 .input.wide {
   flex: 1 1 0;
   min-width: 0;
@@ -426,9 +431,12 @@
   color: var(--color-text-soft);
   border-color: var(--color-accent-border);
 }
-/* Result notices under a settings group's rows. */
+/* A settings group's stat strip and result notices keep the rows' rhythm: one row gap from the title and rows. */
+.settings-group > .stat-strip.inset {
+  margin: var(--spacing-2_5) 0 0;
+}
 .settings-group > .notice {
-  margin: var(--spacing-2) 0 0;
+  margin: var(--spacing-2_5) 0 0;
 }
 /* ── List rows: an item's text on the left, its actions right-aligned ── */
 .list-row {

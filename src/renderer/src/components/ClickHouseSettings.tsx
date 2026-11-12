@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, DEFAULT_CLICKHOUSE_CONFIG, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, CLICKHOUSE_TABLES_MISSING, DEFAULT_CLICKHOUSE_CONFIG, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
 import { shownText } from '../store';
 import { Dialog, SettingRow, SettingsGroup, Toggle } from './ui';
 
@@ -45,6 +45,7 @@ export function ClickHouseSettings() {
   const savedPlaceholder = () => status()?.hasCredentials ? SAVED_CREDENTIAL_PLACEHOLDER : '';
   const state = () => !status()?.config.enabled ? 'Off' : status()?.paused ? 'Paused' : status()?.running ? 'Uploading' : status()?.backfilling ? 'Queuing' : 'Idle';
   const problem = () => error() || status()?.error || '';
+  const tablesMissing = () => problem().includes(CLICKHOUSE_TABLES_MISSING);
   return <>
     <SettingsGroup title="ClickHouse destination">
       <SettingRow label="Export requests" help="Sends each request's metadata to ClickHouse. Local Activity is unaffected.">
@@ -53,8 +54,8 @@ export function ClickHouseSettings() {
       <SettingRow label="Include captured content" help="Also sends request and response text. Needs Record bodies (Request capture).">
         <Toggle value={draft().includeBodies} onChange={(v) => update('includeBodies', v)} />
       </SettingRow>
-      <SettingRow stacked label="HTTP endpoint" help="Origin only, e.g. https://clickhouse.example:8443. HTTPS encrypts login and content.">
-        <input class="input wide" aria-label="ClickHouse endpoint" value={draft().endpoint} onInput={(e) => update('endpoint', e.currentTarget.value)} />
+      <SettingRow label="HTTP endpoint" help="Origin only, e.g. https://clickhouse.example:8443. HTTPS encrypts login and content.">
+        <input class="input origin-field" aria-label="ClickHouse endpoint" value={draft().endpoint} onInput={(e) => update('endpoint', e.currentTarget.value)} />
       </SettingRow>
       <SettingRow label="Database"><input class="input" aria-label="ClickHouse database" value={draft().database} onInput={(e) => update('database', e.currentTarget.value)} /></SettingRow>
       <SettingRow label="Table prefix (schema v1)" help={`Writes ${draft().tablePrefix || '<prefix>'}_facts and ${draft().tablePrefix || '<prefix>'}_pieces.`}>
@@ -84,9 +85,12 @@ export function ClickHouseSettings() {
           <div class="stat-cell" title={EXPIRED_TIP}><div class="stat-label">No content</div><div class="stat-value">{n().toLocaleString()}</div><div class="stat-sub">text expired first</div></div>
         )}</Show>
       </div>
-      <SettingRow label="Connection & schema" help="Check reads the saved setup. Create table makes both tables; create the database first.">
-        <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(false)))}>Check</button>
-        <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(true)))}>Create table</button>
+      <SettingRow label="Connection" help={tablesMissing() ? 'Tables not found. Create them in the saved database.' : 'Tests the saved login, database and tables.'}>
+        <Show when={tablesMissing()} fallback={
+          <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(false)))}>Check</button>
+        }>
+          <button class="btn primary" disabled={busy()} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(true)))}>Create tables</button>
+        </Show>
       </SettingRow>
       <SettingRow label="Outbox" help="Cancel pauses until Retry, Save or restart. Clear discards unsent rows; sent rows stay.">
         <button class="btn" disabled={busy()} onClick={() => void action(() => window.api.clickhouseRetry())}>Retry / resume</button>

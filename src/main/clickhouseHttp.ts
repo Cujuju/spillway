@@ -2,7 +2,7 @@ import { promisify } from 'node:util';
 import { zstdCompress } from 'node:zlib';
 // Async zlib runs on the libuv threadpool, keeping up-to-8 MiB batches off the main thread.
 const compress = promisify(zstdCompress);
-import { validateClickHouseConfig, validateClickHouseCredentials, type ClickHouseConfig, type ClickHouseCredentials } from '@shared/clickhouse';
+import { CLICKHOUSE_TABLES_MISSING, validateClickHouseConfig, validateClickHouseCredentials, type ClickHouseConfig, type ClickHouseCredentials } from '@shared/clickhouse';
 const RESPONSE_LIMIT_BYTES = 64 * 1024;
 const QUERY_TIMEOUT_MS = 15_000, UPLOAD_BYTES_PER_SECOND = 32 * 1024;
 export const clickhouseTimeout = (bytes: number): number => QUERY_TIMEOUT_MS + Math.ceil(bytes / UPLOAD_BYTES_PER_SECOND) * 1000;
@@ -60,7 +60,10 @@ export async function checkClickHouseSchema(c: ClickHouseConfig, credentials: Cl
   if ((await request('SELECT 1 FORMAT TabSeparated')).trim() !== '1') throw new Error('ClickHouse connection returned an unexpected response');
   for (const kind of ['pieces', 'facts']) {
     const expected = kind === 'facts' ? CLICKHOUSE_COLUMNS : CLICKHOUSE_PIECE_COLUMNS;
-    const description = await request(`DESCRIBE TABLE ${clickhouseTable(c, kind)} FORMAT JSON`);
+    const description = await request(`DESCRIBE TABLE ${clickhouseTable(c, kind)} FORMAT JSON`).catch((e: unknown) => {
+      // ClickHouse answers an unknown table or database with 404.
+      throw e instanceof Error && e.message.startsWith('ClickHouse HTTP 404') ? new Error(`${CLICKHOUSE_TABLES_MISSING}; Create tables needs an existing database`) : e;
+    });
     const engine = await request(`SELECT engine_full,sorting_key,partition_key FROM system.tables WHERE database='${c.database}' AND name='${c.tablePrefix}_${kind}' FORMAT JSON`);
     try {
       const columns = (JSON.parse(description) as { data: { name: string; type: string; default_type?: string }[] }).data;

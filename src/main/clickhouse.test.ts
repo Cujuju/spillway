@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CAPTURE_BODY_LIMIT, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
-import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, validateClickHouseCredentials } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, CLICKHOUSE_TABLES_MISSING, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, validateClickHouseCredentials } from '@shared/clickhouse';
 import { startDemoClickHouse } from '../../scripts/demo/clickhouse.mts';
 import { openActivityDb, type Db } from './activityDb';
 import { ArchiveStore, type ArchiveFact } from './archiveStore';
@@ -334,4 +334,9 @@ it('keeps the source label across a reopen', () => {
   let again: ClickHouseStore;
   const archive = new ArchiveStore(reopened, { append: (f) => again.append(f) }); again = new ClickHouseStore(reopened, archive);
   expect(again.config().sourceLabel).toBe('desktop-dev');
+});
+
+it('reports missing tables so the page can offer Create tables', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('1\n')).mockResolvedValueOnce(new Response('', { status: 404 }));
+  await expect(checkClickHouseSchema(config, undefined, new AbortController().signal)).rejects.toThrow(CLICKHOUSE_TABLES_MISSING);
 });

@@ -1,6 +1,6 @@
 # Optional ClickHouse event destination (schema v1)
 
-Settings → Data → ClickHouse exports immutable archive facts. Export and content inclusion are independently opt-in. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check and Create table handle both `<prefix>_facts` and `<prefix>_pieces`. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
+Settings → Data → ClickHouse exports immutable archive facts. Export and content inclusion are independently opt-in. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check (and Create tables, offered when Check finds them missing) handles both `<prefix>_facts` and `<prefix>_pieces`; types compare without layout whitespace, since ClickHouse 26 pretty-prints named tuples. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
 
 ## First setup
 
@@ -12,7 +12,7 @@ CREATE USER spillway IDENTIFIED BY '<password>' HOST IP '192.168.0.0/16';
 GRANT ALL ON spillway.* TO spillway;
 ```
 
-Then in Spillway: enter endpoint, database, username and password, Save, Create table, Check, and turn on Export requests. Errors report status only: 401/403 means credentials or grants; 404 means the database or tables are missing.
+Then in Spillway: enter endpoint, database, username and password, Save, Check (then Create tables if offered), and turn on Export requests. Named tuples in `request_pieces` are sent as JSON objects, the JSONEachRow default. Errors report status only: 401/403 means credentials or grants; 404 means the database or tables are missing.
 
 Credentials remain in `secrets.bin` and are sent only in ClickHouse authentication headers. Redirects are rejected. Diagnostics hide server responses. Changing destinations requires an empty queue and pauses delivery. Local unreleased v2 state, outbox and triggers are dropped once with no migration; remote v2 tables are left alone. A fresh local source identity is created.
 

@@ -51,7 +51,12 @@ export function saveClickHouse(raw: ClickHouseConfig, rawCredentials?: ClickHous
   }, true);
 }
 export function diagnoseClickHouse(create: boolean): Promise<string> {
-  return withClickHousePaused(async () => clickhouseUploader.diagnose((await activityLog.call('clickhouseStatus')).config, create === true));
+  return withClickHousePaused(async () => {
+    const result = await clickhouseUploader.diagnose((await activityLog.call('clickhouseStatus')).config, create === true);
+    // A passing check makes the stored delivery error stale; upload now instead of after backoff.
+    await activityLog.call('clickhouseRetry');
+    return result;
+  });
 }
 export function retryClickHouse(): Promise<void> {
   return withClickHousePaused(async () => { await activityLog.call('clickhouseRetry'); clickhouseUploader.error = null; }, true);

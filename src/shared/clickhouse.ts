@@ -7,6 +7,8 @@ export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, end
 // The outbox holds at least as much content as the archive can retain.
 export const CLICKHOUSE_OUTBOX_BYTES = ARCHIVE_MAX_BYTES;
 export const CLICKHOUSE_SOURCE_LABEL_MAX = 64;
+/** Error prefix the settings page matches to offer Create tables instead of Check. */
+export const CLICKHOUSE_TABLES_MISSING = 'ClickHouse tables are missing';
 export const CLICKHOUSE_BATCH_BYTES = 8 * 1024 * 1024;
 // ClickHouse recommends at least 1,000 rows per insert to reduce part creation overhead.
 export const CLICKHOUSE_BATCH_ROWS = 1_000;

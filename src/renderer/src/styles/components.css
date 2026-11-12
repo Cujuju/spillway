@@ -225,6 +225,10 @@
 .number-field-unit {
   color: var(--color-text-muted);
 }
+/* Inline setting values sit against the right edge, so their text aligns there too. Stacked rows keep reading order. */
+.list-row:not(.stacked) > .list-row-actions > .input {
+  text-align: right;
+}
 /* Fits a scheme://host:port origin, a little wider than the default text box. */
 .input.origin-field {
   --origin-field-width: 240px;

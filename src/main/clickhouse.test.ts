@@ -11,7 +11,7 @@ import { ClickHouseStore } from './clickhouseStore';
 import { encodeClickHouseLine, type OutboxRow } from './clickhouseLine';
 import { ActivityLog } from './activityStore';
 import { ClickHouseUploader } from './clickhouseUploader';
-import { checkClickHouseSchema, clickhouseRequest, clickhouseTimeout, insertClickHouse } from './clickhouseHttp';
+import { checkClickHouseSchema, clickhouseRequest, clickhouseTimeout, insertClickHouse, sameClickHouseType } from './clickhouseHttp';
 import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [], servers: Awaited<ReturnType<typeof startDemoClickHouse>>[] = [];
@@ -308,4 +308,21 @@ it('exports dictionary-compressed request pieces as plain text bytes', () => {
   const piece = db.prepare('SELECT id,dict FROM archive_pieces WHERE dict IS NOT NULL').get() as { id: number; dict: string };
   expect(JSON.parse(piece.dict).length).toBeGreaterThan(0);
   expect(lines(store.prepare()!.pieces)).toContainEqual(expect.objectContaining({ seq: piece.id, bytes: 'second' }));
+});
+
+it('names the setup step for HTTP failures without echoing the body', async () => {
+  for (const [status, hint] of [[403, 'grants'], [404, 'Create table'], [500, 'server or schema failure']] as const) {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('secret echo', { status }));
+    const failure = clickhouseRequest(config, undefined, 'SELECT 1', new AbortController().signal);
+    await expect(failure).rejects.toThrow(`ClickHouse HTTP ${status}`);
+    await expect(failure).rejects.toThrow(hint);
+    await expect(failure).rejects.not.toThrow('secret echo');
+  }
+});
+
+it('matches pretty-printed ClickHouse types but not different ones', () => {
+  const compact = 'Array(Tuple(piece_seq UInt64, offset UInt32, length UInt32))';
+  expect(sameClickHouseType('Array(Tuple(\n    piece_seq UInt64,\n    offset UInt32,\n    length UInt32))', compact)).toBe(true);
+  expect(sameClickHouseType('Array(Tuple(\n    piece_seq UInt64,\n    offset UInt64,\n    length UInt32))', compact)).toBe(false);
+  expect(sameClickHouseType("DateTime64(3,'UTC')", "DateTime64(3, 'UTC')")).toBe(true);
 });

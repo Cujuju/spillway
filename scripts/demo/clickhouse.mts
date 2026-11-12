@@ -2,7 +2,8 @@ import { createServer } from 'node:http';
 import { EventEmitter, once } from 'node:events';
 
 import { zstdDecompressSync } from 'node:zlib';
-const CLICKHOUSE_COLUMNS = { schema_version: 'UInt16', source_id: 'String', source_label: 'LowCardinality(String)', seq: 'UInt64', kind: 'LowCardinality(String)', trace_id: 'String', thread_id: 'String', at: "DateTime64(3, 'UTC')", capture_state: 'LowCardinality(String)', content_policy: 'LowCardinality(String)', request_pieces: 'Array(Tuple(piece_seq UInt64, offset UInt32, length UInt32))', response: 'String', frames_json: 'String', record_json: 'String' };
+// DESCRIBE types as ClickHouse 26 prints them: named tuples span lines.
+const CLICKHOUSE_COLUMNS = { schema_version: 'UInt16', source_id: 'String', source_label: 'LowCardinality(String)', seq: 'UInt64', kind: 'LowCardinality(String)', trace_id: 'String', thread_id: 'String', at: "DateTime64(3, 'UTC')", capture_state: 'LowCardinality(String)', content_policy: 'LowCardinality(String)', request_pieces: 'Array(Tuple(\n    piece_seq UInt64,\n    offset UInt32,\n    length UInt32))', response: 'String', frames_json: 'String', record_json: 'String' };
 const CLICKHOUSE_PIECE_COLUMNS = { source_id: 'String', thread_id: 'String', seq: 'UInt64', at: "DateTime64(3, 'UTC')", bytes: 'String' };
 export interface DemoClickHouseRow { source_id: string; seq: number; kind: string; capture_state: string; content_policy: string; record_json: string }
 /** Loopback-only synthetic destination; rows models SELECT FINAL, requests retains physical retry duplicates. */

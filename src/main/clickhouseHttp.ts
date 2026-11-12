@@ -7,10 +7,21 @@ const SQL_STRING = "'(?:[^'\\\\]|\\\\.|'')*'";
 const REPLACING_ENGINE = new RegExp(`^(?:Shared|Replicated)?ReplacingMergeTree(?:\\(\\s*(?:${SQL_STRING}\\s*,\\s*${SQL_STRING}\\s*)?\\))?(?:\\s|$)`);
 export const CLICKHOUSE_COLUMNS = { schema_version: 'UInt16', source_id: 'String', source_label: 'LowCardinality(String)', seq: 'UInt64', kind: 'LowCardinality(String)', trace_id: 'String', thread_id: 'String', at: "DateTime64(3, 'UTC')", capture_state: 'LowCardinality(String)', content_policy: 'LowCardinality(String)', request_pieces: 'Array(Tuple(piece_seq UInt64, offset UInt32, length UInt32))', response: 'String', frames_json: 'String', record_json: 'String' };
 export const CLICKHOUSE_PIECE_COLUMNS = { source_id: 'String', thread_id: 'String', seq: 'UInt64', at: "DateTime64(3, 'UTC')", bytes: 'String' };
-export const clickhouseTable = (c: ClickHouseConfig, kind = 'facts'): string => `\`${c.database}\`.\`${c.tablePrefix}_${kind}\``;
+/** ClickHouse pretty-prints nested types (newlines, indents), so compare type text without layout whitespace. */
+export const sameClickHouseType = (actual: string, expected: string): boolean => {
+  const canonical = (type: string) => type.replace(/\s+/g, ' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')').replace(/\s?,\s?/g, ', ');
+  return canonical(actual) === canonical(expected);
+};
+export const clickhouseTable =(c: ClickHouseConfig, kind = 'facts'): string => `\`${c.database}\`.\`${c.tablePrefix}_${kind}\``;
 export function clickhouseDDL(c: ClickHouseConfig, kind = 'facts'): string {
   const columns = kind === 'facts' ? CLICKHOUSE_COLUMNS : CLICKHOUSE_PIECE_COLUMNS;
   return `CREATE TABLE IF NOT EXISTS ${clickhouseTable(validateClickHouseConfig(c), kind)} (${Object.entries(columns).map(([name, type]) => `${name} ${type}${['response', 'frames_json', 'record_json', 'bytes'].includes(name) ? ' CODEC(ZSTD(3))' : ''}`).join(', ')}) ENGINE = ReplacingMergeTree PARTITION BY toYYYYMM(at) ORDER BY (${kind === 'facts' ? 'source_id, at, seq' : 'source_id, thread_id, seq'})`;
+}
+/** Status-only hints; ClickHouse maps unknown database/table to 404 and auth or grant failures to 401/403. */
+export function httpFailureHint(status: number): string {
+  if (status === 401 || status === 403) return 'check username, password and grants on the database';
+  if (status === 404) return 'database or tables missing: create the database in ClickHouse, then use Create table';
+  return 'server or schema failure';
 }
 /** Never expose server responses: they can echo passwords, submitted SQL or captured content. */
 export async function clickhouseRequest(config: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, sql: string, signal: AbortSignal): Promise<string> {
@@ -23,7 +34,7 @@ export async function clickhouseRequest(config: ClickHouseConfig, credentials: C
     const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]), headers: {
       ...(sql.startsWith('INSERT') ? { 'Content-Encoding': 'zstd' } : {}), 'Content-Type': 'text/plain; charset=utf-8', 'X-ClickHouse-User': auth.username, 'X-ClickHouse-Key': auth.password,
     }, body: sql.startsWith('INSERT') ? new Uint8Array(zstdCompressSync(Buffer.from(sql))) : sql });
-    if (!response.ok) { await response.body?.cancel(); throw new Error(`ClickHouse HTTP ${response.status}${response.status === 401 || response.status === 403 ? ' (credentials or permissions)' : ' (server or schema failure)'}`); }
+    if (!response.ok) { await response.body?.cancel(); throw new Error(`ClickHouse HTTP ${response.status} (${httpFailureHint(response.status)})`); }
     if (response.headers.get('X-ClickHouse-Exception-Code') && response.headers.get('X-ClickHouse-Exception-Code') !== '0') {
       await response.body?.cancel(); throw new Error('ClickHouse reported a query failure');
     }
@@ -52,7 +63,7 @@ export async function checkClickHouseSchema(c: ClickHouseConfig, credentials: Cl
       const columns = (JSON.parse(description) as { data: { name: string; type: string; default_type?: string }[] }).data;
       const table = (JSON.parse(engine) as { data: { engine_full: string; sorting_key: string; partition_key: string }[] }).data;
       const target = table[0];
-      if (!Array.isArray(columns) || columns.length !== Object.keys(expected).length || !Object.entries(expected).every(([name, type]) => columns.some((col) => col.name === name && col.type === type && !col.default_type)) || table.length !== 1 || !target || !REPLACING_ENGINE.test(target.engine_full.replaceAll('`', '')) || target.sorting_key.replaceAll(/[\s()`]/g, '') !== (kind === 'facts' ? 'source_id,at,seq' : 'source_id,thread_id,seq') || target.partition_key.replaceAll(/[\s`]/g, '') !== 'toYYYYMM(at)') throw new Error('incompatible');
+      if (!Array.isArray(columns) || columns.length !== Object.keys(expected).length || !Object.entries(expected).every(([name, type]) => columns.some((col) => col.name === name && sameClickHouseType(col.type, type) && !col.default_type)) || table.length !== 1 || !target || !REPLACING_ENGINE.test(target.engine_full.replaceAll('`', '')) || target.sorting_key.replaceAll(/[\s()`]/g, '') !== (kind === 'facts' ? 'source_id,at,seq' : 'source_id,thread_id,seq') || target.partition_key.replaceAll(/[\s`]/g, '') !== 'toYYYYMM(at)') throw new Error('incompatible');
     } catch { throw new Error('ClickHouse table does not match archive schema v1 (columns, engine or sorting key)'); }
   }
 }

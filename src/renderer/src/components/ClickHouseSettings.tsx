@@ -7,7 +7,9 @@ const MIB = 1024 * 1024, GIB = 1024 * MIB;
 const STATUS_POLL_MS = 3_000;
 const mib = (bytes: number) => `${(bytes / MIB).toFixed(1)} MiB`;
 const BACKLOG_HELP = `Up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} rows / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB per upload. Unsent rows wait in the encrypted local outbox, up to ${CLICKHOUSE_OUTBOX_BYTES / GIB} GiB; the oldest are dropped beyond that. Rows point to recorded text instead of copying it; text is read when sent.`;
-const EXPIRED_HELP = 'Rows whose conversation text was removed locally (Keep bodies or Body budget) before upload. They were sent without content.';
+// Saved credentials never return to the renderer; masked placeholder marks them saved.
+const SAVED_CREDENTIAL_PLACEHOLDER = '••••••••';
+const EXPIRED_HELP ='Rows whose conversation text was removed locally (Keep bodies or Body budget) before upload. They were sent without content.';
 
 export function ClickHouseSettings() {
   const [draft, setDraft] = createSignal<ClickHouseConfig>({ ...DEFAULT_CLICKHOUSE_CONFIG });
@@ -37,7 +39,8 @@ export function ClickHouseSettings() {
       setUsername(''); setPassword(''); setDraft(result.config); setMessage('Settings saved.');
     });
   };
-  const state = () => !status()?.config.enabled ? 'Disabled' : status()?.paused ? 'Paused' : status()?.running ? 'Uploading / checking' : status()?.backfilling ? 'Queuing retained requests' : 'Waiting';
+  const savedPlaceholder = () => status()?.hasCredentials ? SAVED_CREDENTIAL_PLACEHOLDER : '';
+  const state = () =>!status()?.config.enabled ? 'Disabled' : status()?.paused ? 'Paused' : status()?.running ? 'Uploading / checking' : status()?.backfilling ? 'Queuing retained requests' : 'Waiting';
   return <>
     <SettingsGroup title="ClickHouse destination">
       <SettingRow label="Export requests" help="Sends each request's attempts and captures to ClickHouse as they're recorded. Off by default. Save changes to apply; local Activity storage always continues.">
@@ -57,16 +60,16 @@ export function ClickHouseSettings() {
         <Toggle value={draft().includeBodies} onChange={(v) => update('includeBodies', v)} />
       </SettingRow>
       <SettingRow label="Username" help={status()?.hasCredentials ? 'Credentials are saved; leave fields empty to keep them. Saved credentials never return to this view.' : 'Empty uses the ClickHouse default user without a password.'}>
-        <input class="input" aria-label="ClickHouse username" autocomplete="off" value={username()} onInput={(e) => setUsername(e.currentTarget.value)} />
+        <input class="input" aria-label="ClickHouse username" autocomplete="off" placeholder={savedPlaceholder()} value={username()} onInput={(e) => setUsername(e.currentTarget.value)} />
       </SettingRow>
-      <SettingRow label="Password"><input class="input" aria-label="ClickHouse password" type="password" autocomplete="new-password" value={password()} onInput={(e) => setPassword(e.currentTarget.value)} /></SettingRow>
+      <SettingRow label="Password"><input class="input" aria-label="ClickHouse password" type="password" autocomplete="new-password" placeholder={savedPlaceholder()} value={password()} onInput={(e) => setPassword(e.currentTarget.value)} /></SettingRow>
       <SettingRow label="Apply settings" help="Turning export on, or changing destination, first sends a snapshot of the requests still kept locally. Disabling pauses delivery and keeps the outbox. Clear the outbox before changing destination.">
         <button class="btn primary" disabled={busy() || !status()} onClick={() => void save()}>Save</button>
         <button class="btn" disabled={busy() || !status()?.hasCredentials} onClick={() => void save(true)}>Forget credentials</button>
       </SettingRow>
     </SettingsGroup>
     <SettingsGroup title="Delivery">
-      <SettingRow label="Connection & schema" help="Uses saved settings. Check is read-only; Create table creates both schema v1 tables in an existing database. No database is deployed.">
+      <SettingRow label="Connection & schema" help="Uses saved settings. First setup: create the database in ClickHouse and give your user access to it, then Save, Create table and Check. Check is read-only; Create table makes both schema v1 tables but never the database.">
         <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(false)))}>Check</button>
         <button class="btn" disabled={busy() || !status()?.config.endpoint} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(true)))}>Create table</button>
       </SettingRow>

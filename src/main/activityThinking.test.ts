@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, expect, it } from 'vitest';
 import type { ThinkingReport } from '@shared/thinking';
 import { tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
+import { group, kind } from './activityThinking';
 import { ActivityLog } from './activityStore';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-compare-'));
@@ -132,4 +133,20 @@ it('orders all observed provider efforts below ultra and adds unobserved medium'
   expect(claude.alternatives.map((a) => a.setting.effort)).toEqual(['medium', 'low']);
   expect(claude.alternatives[0]).toMatchObject({ reason: 'not-enough-data' });
   expect(r.settings.find((s) => s.setting.effort === 'none')!.alternatives).toEqual([]);
+});
+
+it('keeps compaction continuations and parent chains in one turn, while forks remain roots', () => {
+  const requests = [
+    event(60, { sessionId: 'root', sessionKind: 'root', turnKey: 'one' }),
+    event(59, { sessionId: 'compact', sessionKind: 'compaction', parentSessionId: 'root', turnKey: 'compact' }),
+    event(58, { sessionId: 'compact', sessionKind: 'compaction', parentSessionId: 'root', turnKey: 'continuation' }),
+    event(57, { sessionId: 'nested', sessionKind: 'compaction', parentSessionId: 'compact', turnKey: 'nested' }),
+    event(56, { sessionId: 'fork', sessionKind: 'fork', parentSessionId: 'root', turnKey: 'fork' }),
+  ];
+  const grouped = group(requests);
+  expect(grouped.excluded).toEqual([]);
+  expect(grouped.turns).toHaveLength(2);
+  expect(grouped.turns[0]!.requests).toHaveLength(4);
+  expect(kind(grouped.turns[0]!)).toBe('question');
+  expect(grouped.turns[1]!.first.sessionId).toBe('fork');
 });

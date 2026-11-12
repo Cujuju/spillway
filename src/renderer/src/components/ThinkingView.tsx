@@ -1,5 +1,8 @@
-import { createMemo, For, Show, type JSX } from 'solid-js';
-import { settingKey, type SettingReport, type ThinkingReport } from '@shared/thinking';
+import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { settingKey, type SettingReport, type ThinkingQuery, type ThinkingReport } from '@shared/thinking';
+import type { ThinkingTest } from '@shared/thinkingTest';
+import { createThinkingTests } from '../lib/thinkingTests';
+import { MismatchDialog, TestDialog, TestStatus } from './ThinkingTest';
 import { THINKING_BOARD_VERSION, VERDICT_RANKS, type ThinkingPanelKind, type ThinkingPanelSpec } from '@shared/thinkingBoard';
 import { usd } from '../lib/format';
 import { spanText } from '../lib/compareFormat';
@@ -10,8 +13,8 @@ import { createTileBoard, TileBoard, type PendingTile, type TileDef } from './Ti
 import { AlternativesTable, KindsTable, ThinkingMethod, ThinkingMix, Verdict } from './ThinkingPanels';
 
 /** Tile chrome (padding, border, header) is 52px; each minimum adds the body that must show without scrolling. */
-/** A verdict: two-line sentence, two savings and the status line. */
-const VERDICT_MIN = { width: 320, height: 230 };
+/** A verdict: sentence, two savings, and a status line that wraps once tested. */
+const VERDICT_MIN = { width: 320, height: 270 };
 /** Two settings side by side: name, sentence, two bars and a three-row bucket table. */
 const MIX_MIN = { width: 420, height: 340 };
 /** Three kinds, the footer and the two-line recommendation. */
@@ -71,16 +74,20 @@ function SettingTitle(props: { report: ThinkingReport | null | undefined; prefix
 }
 
 /** Thinking's panels as tiles: verdicts for the costliest settings, where the thinking goes, kinds of turn, alternatives and the method. */
-export function ThinkingView(props: { report: ThinkingReport | null | undefined; placing: PendingThinkingTile | null; onPlacingEnd: () => void }) {
+export function ThinkingView(props: { report: ThinkingReport | null | undefined; query: ThinkingQuery; placing: PendingThinkingTile | null; onPlacingEnd: () => void }) {
+  const tests = createThinkingTests();
+  const [testing, setTesting] = createSignal<SettingReport | null>(null);
+  const [mismatches, setMismatches] = createSignal<ThinkingTest | null>(null);
   const state = createTileBoard<ThinkingPanelSpec>(() => settings().activity.thinkingBoard,
     (b) => updateSettings((d) => { d.activity.thinkingBoard = { version: THINKING_BOARD_VERSION, ...b }; }));
   const chosen = createMemo(() => (props.report ? chosenSetting(props.report, settings().activity.thinkingSetting) : undefined));
   const ready = (body: (r: ThinkingReport) => JSX.Element) => (
-    <Show when={props.report && props.report.settings.length > 0 ? props.report : undefined} fallback={<div class="muted">{props.report === undefined ? 'Loading…' : 'No turns in this range yet.'}</div>}>
-      {(r) => body(r())}
+    // Keyed: `body` reads plain values, so a new report or setting rebuilds it.
+    <Show when={props.report && props.report.settings.length > 0 ? props.report : undefined} keyed fallback={<div class="muted">{props.report === undefined ? 'Loading…' : 'No turns in this range yet.'}</div>}>
+      {(r) => body(r)}
     </Show>
   );
-  const withSetting = (body: (r: ThinkingReport, s: SettingReport) => JSX.Element) => ready((r) => <Show when={chosen()}>{(s) => body(r, s())}</Show>);
+  const withSetting = (body: (r: ThinkingReport, s: SettingReport) => JSX.Element) => ready((r) => <Show when={chosen()} keyed>{(s) => body(r, s)}</Show>);
   const rankOf = (spec: () => ThinkingPanelSpec) => spec().rank ?? 0;
   const at = (spec: () => ThinkingPanelSpec) => props.report?.settings[rankOf(spec)];
 
@@ -95,7 +102,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
           <Show when={at(spec) && props.report}>{(r) => <span class="chart-head-note num">{usd(at(spec)!.costUsdPerWeek, 0)} a week · {Math.round(perWeek(r(), at(spec)!.turns)).toLocaleString()} turns</span>}</Show>
         </>
       ),
-      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} />}</Show>),
+      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} onTest={() => setTesting(s())} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
     },
     buckets: {
       minSize: MIX_MIN,
@@ -109,12 +116,12 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
     kinds: {
       minSize: KINDS_MIN,
       createHead: () => <><SettingTitle report={props.report} prefix="By kind of turn" /><span class="chart-head-note">Sorted by what a turn looks like, not by what you asked.</span></>,
-      createBody: () => withSetting((r, s) => <KindsTable report={r} s={s} />),
+      createBody: () => withSetting((r, s) => <KindsTable report={r} s={s} test={tests.of(s.setting)} />),
     },
     alternatives: {
       minSize: ALTS_MIN, bleed: true,
       createHead: () => <><SettingTitle report={props.report} prefix="Alternatives" /><span class="chart-head-note">Every cost and saving here is an estimate.</span></>,
-      createBody: () => withSetting((_r, s) => <AlternativesTable s={s} />),
+      createBody: () => withSetting((_r, s) => <AlternativesTable s={s} test={tests.of(s.setting)} />),
     },
     method: {
       minSize: METHOD_MIN,
@@ -133,6 +140,8 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
       </p>
       <TileBoard class="activity-board" state={state} def={(kind) => DEFS[kind]} same={sameSpec} placing={props.placing} onPlacingEnd={props.onPlacingEnd}
         empty="No panels. Use “Add panel” to place one." placeBelowLabel="Place below all panels" />
+      <Show when={testing()}>{(s) => <TestDialog s={s()} query={props.query} onStarted={tests.started} onClose={() => setTesting(null)} />}</Show>
+      <Show when={mismatches()}>{(t) => <MismatchDialog test={t()} onClose={() => setMismatches(null)} />}</Show>
     </>
   );
 }

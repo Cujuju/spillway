@@ -1,6 +1,9 @@
-import { For, Show } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import { THINKING_BUCKETS, TURN_KINDS, type Alternative, type BucketStat, type SettingReport, type ThinkingReport } from '@shared/thinking';
+import { MIN_KIND_GRADED, type ThinkingTest } from '@shared/thinkingTest';
 import { usd } from '../lib/format';
+import { kindsResult, resultFor } from '../lib/thinkingTests';
+import { Matched } from './ThinkingTest';
 import {
   alternativeMethod, alternativeName, cheaperModel, estimatedLowerEffort, KIND_TEXT, lowerEffort, mixedOption, perWeek, settingName, share,
 } from '../lib/thinkingReport';
@@ -28,7 +31,7 @@ function Saving(props: { label: string; alt: Alternative | undefined; empty: str
 }
 
 /** One setting: its thinking share, then the estimated saving at a lower effort and on a cheaper model. */
-export function Verdict(props: { s: SettingReport }) {
+export function Verdict(props: { s: SettingReport; status: JSX.Element }) {
   const lower = () => lowerEffort(props.s);
   return (
     <div class="think-verdict">
@@ -38,7 +41,7 @@ export function Verdict(props: { s: SettingReport }) {
           empty={lower() ? `Not enough of your turns at ${lower()!.setting.effort} to estimate.` : 'No lower effort to compare.'} />
         <Saving label="Cheaper model, same effort" alt={cheaperModel(props.s)} empty="No cheaper model on your accounts." />
       </div>
-      <div class="think-status">Estimates only, not tested yet.</div>
+      {props.status}
     </div>
   );
 }
@@ -92,18 +95,22 @@ export function ThinkingMix(props: { report: ThinkingReport; s: SettingReport; s
 }
 
 /** Turns by shape for one setting: cost, thinking share and the estimated saving at the lower effort, then the mixed recommendation. */
-export function KindsTable(props: { report: ThinkingReport; s: SettingReport }) {
+export function KindsTable(props: { report: ThinkingReport; s: SettingReport; test: ThinkingTest | undefined }) {
   const lower = () => estimatedLowerEffort(props.s) ?? lowerEffort(props.s);
   const saved = () => props.s.kinds.reduce((sum, k) => sum + (k.lowerEffortSavingUsdPerWeek ?? 0), 0);
   const mixed = () => mixedOption(props.s);
   const lowerName = () => lower()?.setting.effort ?? 'a lower effort';
+  const tested = () => resultFor(props.test, lower()?.setting);
+  const routine = () => kindsResult(tested(), ['question', 'change']);
+  const long = () => kindsResult(tested(), ['long']);
+  const cap = (t: string) => `${t[0]!.toUpperCase()}${t.slice(1)}`;
   return (
     <>
       <div class="table-wrap think-wrap">
         <table class="table think-table">
           <thead><tr>
             <th>Kind of turn</th><th class="num">Turns a week</th><th class="num">Cost a week</th><th class="num">Thinking share</th>
-            <th class="num">Saving at {lowerName()}<small>estimate, a week</small></th>
+            <th class="num">Saving at {lowerName()}<small>estimate, a week</small></th><th class="num">Test at {lowerName()}</th>
           </tr></thead>
           <tbody>
             <For each={TURN_KINDS}>
@@ -116,6 +123,7 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport }) 
                     <td class="num">{usd(perWeek(props.report, k().costUsd), 0)}<span class="sub">{share(k().costShare)}</span></td>
                     <td class="num">{share(k().thinkingShare)}</td>
                     <td class="num">{k().lowerEffortSavingUsdPerWeek === null ? <span class="muted">not enough data</span> : usd(k().lowerEffortSavingUsdPerWeek!, 0)}</td>
+                    <td class="num"><Matched result={kindsResult(tested(), [kind])} small /></td>
                   </tr>
                 );
               }}
@@ -124,32 +132,46 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport }) 
           <tfoot><tr>
             <td>All turns</td><td class="num">{Math.round(perWeek(props.report, props.s.turns)).toLocaleString()}</td><td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
             <td class="num">{share(props.s.thinkingShare)}</td><td class="num">{saved() > 0 ? usd(saved(), 0) : '—'}</td>
+            <td class="num"><Matched result={tested()} /></td>
           </tr></tfoot>
         </table>
       </div>
       <Show when={mixed()?.savingUsdPerWeek != null && mixed()} fallback={<p class="think-rec-sub">Not enough of your own turns at a lower effort to estimate a saving yet.</p>}>
-        {(m) => <>
-          <p class="think-rec">{m().setting.effort[0]!.toUpperCase()}{m().setting.effort.slice(1)} could save about {usd(m().savingUsdPerWeek!, 0)}/week on quick questions and small changes. Test it before you switch.</p>
-          <p class="think-rec-sub">The saving is an estimate. It doesn't say whether the answers would be as good.</p>
-        </>}
+        {(m) => (
+          <Show when={routine() && routine()!.graded >= MIN_KIND_GRADED ? routine() : undefined} fallback={<>
+            <p class="think-rec">{cap(m().setting.effort)} could save about {usd(m().savingUsdPerWeek!, 0)}/week on quick questions and small changes. Test it before you switch.</p>
+            <p class="think-rec-sub">
+              <Show when={routine()?.graded} fallback="The saving is an estimate. It doesn't say whether the answers would be as good.">
+                Only {routine()!.graded} quick questions and small changes were tested: too few to tell. Test more turns.
+              </Show>
+            </p>
+          </>}>
+            {(r) => <>
+              <p class="think-rec">Use {m().setting.effort} for quick questions and small changes; keep {props.s.setting.effort} for long tasks: about {usd(m().savingUsdPerWeek!, 0)}/week saved.</p>
+              <p class="think-rec-sub">{cap(m().setting.effort)} matched on {r().matched} of {r().graded} quick questions and small changes<Show when={long()?.graded}>, and {long()!.matched} of {long()!.graded} long tasks</Show>. The saving is an estimate.</p>
+            </>}
+          </Show>
+        )}
       </Show>
     </>
   );
 }
 
 /** What the setting costs now, then each alternative's estimated weekly cost and saving. */
-export function AlternativesTable(props: { s: SettingReport }) {
+export function AlternativesTable(props: { s: SettingReport; test: ThinkingTest | undefined }) {
+  // The mixed option was tested as its lower effort on quick questions and small changes.
+  const tested = (a: Alternative) => a.method === 'mixed' ? kindsResult(resultFor(props.test, a.setting), ['question', 'change']) : resultFor(props.test, a.setting);
   return (
     <div class="table-wrap think-wrap end">
       <table class="table think-table">
         <thead><tr>
           <th>Setting</th><th class="num">Cost a week<small>estimate</small></th><th class="num">Saving a week<small>estimate</small></th>
-          <th class="num">Cost per turn<small>median</small></th><th>How it's worked out</th>
+          <th class="num">Cost per turn<small>median</small></th><th class="num">Test result</th><th>How it's worked out</th>
         </tr></thead>
         <tbody>
           <tr class="now">
             <td class="name">{settingName(props.s.setting)}<small>what you use now</small></td><td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
-            <td class="num muted">–</td><td class="num">{usd(props.s.medianTurnCostUsd)}</td><td class="how">What you spent, as a weekly average.</td>
+            <td class="num muted">–</td><td class="num">{usd(props.s.medianTurnCostUsd)}</td><td class="num muted">–</td><td class="how">What you spent, as a weekly average.</td>
           </tr>
           <For each={props.s.alternatives}>
             {(a) => (
@@ -158,6 +180,7 @@ export function AlternativesTable(props: { s: SettingReport }) {
                 <td class="num">{a.costUsdPerWeek === null ? '—' : usd(a.costUsdPerWeek, 0)}</td>
                 <td class="num">{a.savingUsdPerWeek === null ? '—' : <><b>{usd(a.savingUsdPerWeek, 0)}</b><span class="sub">{share(a.savingShare ?? 0)}</span></>}</td>
                 <td class="num">{a.medianTurnCostUsd === null ? '—' : usd(a.medianTurnCostUsd)}</td>
+                <td class="num"><Matched result={tested(a)} /></td>
                 <td class="how">{alternativeMethod(props.s, a)}</td>
               </tr>
             )}
@@ -176,7 +199,8 @@ export function ThinkingMethod() {
       <li>A lower effort is estimated from your own turns: thinking is scaled by how much less your turns of the same kind think at that effort. With too few such turns there is no estimate.</li>
       <li>A cheaper model reprices the same tokens at that model's list prices.</li>
       <li>Costs are API list prices. On a subscription, read them as how fast you use your limits.</li>
-      <li>Estimates don't say whether the answers would be as good.</li>
+      <li>Estimates don't say whether the answers would be as good; the test does. It replays one recorded request from each sampled turn at the cheaper setting, runs no tools, and a model judges whether the reply makes the same next move.</li>
+      <li>Testing needs request capture (Settings → Data) and costs what the replays and judging cost, shown before it starts.</li>
     </ul>
   );
 }

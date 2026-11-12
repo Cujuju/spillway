@@ -92,3 +92,7 @@ it('parses cache lifetime subsets and known billed tiers, preserving zero and un
   }
   expect(parseActivityEvent('{"request_id":"unknown","tier":"priority"}')?.tier).toBeNull();
 });
+
+it('excludes thinking quality calls from activity and accounting', () => {
+  expect(parseActivityEvent(JSON.stringify({ request_id: 'test', provider: 'claude', purpose: 'thinking-test' }))).toBeNull();
+});

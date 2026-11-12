@@ -45,6 +45,7 @@ export const CLIENT_KEY_SQL = `coalesce(json_extract(event, '$.client'), '${NO_C
 /** Rows are ordered by id, the order Spillway recorded them, which also pages the list. */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS request_settings (hash TEXT PRIMARY KEY, settings TEXT NOT NULL, first_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS thinking_tests (setting_key TEXT PRIMARY KEY, test TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS canary_results (id TEXT PRIMARY KEY, day TEXT NOT NULL, result TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS canary_by_day ON canary_results(day);
 CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, failed INTEGER NOT NULL, event TEXT NOT NULL);

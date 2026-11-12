@@ -203,6 +203,12 @@ export class ArchiveStore {
     const rows = this.db.prepare(`SELECT ${ENTRY_COLUMNS} FROM archive_entries ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY at DESC,id DESC LIMIT ?`).all(...args, ARCHIVE_PAGE_SIZE + 1) as Row[];
     return { entries: rows.slice(0, ARCHIVE_PAGE_SIZE).map(entry), more: rows.length > ARCHIVE_PAGE_SIZE };
   }
+  /** Reads capture eligibility without reconstructing compressed body pieces. */
+  captureMetadata(traceId: string): Pick<ArchiveDetail, 'state' | 'method' | 'path' | 'format' | 'bytes'> | null {
+    this.prune();
+    if (typeof traceId !== 'string' || !TRACE.test(traceId)) return null;
+    return this.db.prepare("SELECT state,method,path,bytes,coalesce(json_extract(detail, '$.format'),'http') AS format FROM archive_entries WHERE trace_id=?").get(traceId) as ReturnType<ArchiveStore['captureMetadata']> ?? null;
+  }
   detail(traceId: string): ArchiveDetail | null {
     this.prune();
     if (typeof traceId !== 'string' || !TRACE.test(traceId)) return null;

@@ -55,7 +55,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
   const r = raw as Record<string, unknown>;
   const requestId = s(r.request_id);
   // Window starts are the app's own requests; Activity records client traffic only.
-  if (!requestId || (r.purpose === WINDOW_START_PURPOSE || r.purpose === 'canary')) return null;
+  if (!requestId || (r.purpose === WINDOW_START_PURPOSE || r.purpose === 'canary' || r.purpose === 'thinking-test')) return null;
   const userAgent = s(r.user_agent);
   const settings = parseRequestSettings(r.request_settings);
   return {

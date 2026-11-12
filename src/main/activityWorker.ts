@@ -15,6 +15,7 @@ const startSync = () => startClientLogSync(log, () => {
 }, (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
 const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise<void> } = {
+  thinkingTestPrepare: (req) => log.thinkingTestPrepare(req), thinkingTestSave: (test) => log.thinkingTestSave(test), thinkingTests: () => log.thinkingTests(),
   priceSnapshot: () => log.priceSnapshot(),
   pricesChanged: () => { log.pricesChanged(); port.postMessage({ event: 'reset' }); },
   canaryLastRunAt: () => log.canaryLastRunAt(),

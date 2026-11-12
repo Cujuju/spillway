@@ -1,5 +1,8 @@
 import { queryDrift, storeCanaryResults, queryCanaryResults } from './driftStore';
 import type { DriftQuery } from '@shared/drift';
+import { prepareTest } from './thinkingTestPlan';
+import type { TestPlanRequest, ThinkingTest } from '@shared/thinkingTest';
+import { settingKey } from '@shared/thinking';
 import type { CanaryResult } from '@shared/canary';
 import type { ArchiveMigrationState } from '@shared/ipc';
 import { activityPriceSnapshot, invalidateActivityPrices } from './activityReprice';
@@ -87,6 +90,9 @@ export function scopeClause(scope: ActivityScope): { sql: string; params: string
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
+  thinkingTestPrepare(req: TestPlanRequest) { return prepareTest(this.db, this.archive, req); }
+  thinkingTestSave(test: ThinkingTest): void { this.db.prepare('INSERT OR REPLACE INTO thinking_tests VALUES (?,?)').run(settingKey(test.setting), JSON.stringify(test)); }
+  thinkingTests(): Record<string, ThinkingTest> { return Object.fromEntries((this.db.prepare('SELECT setting_key, test FROM thinking_tests').all() as { setting_key: string; test: string }[]).map((r) => [r.setting_key, JSON.parse(r.test)])); }
   driftQuery(q: DriftQuery) { return queryDrift(this.db, q); }
   canaryLastRunAt(): string | null {
     return (this.db.prepare("SELECT max(json_extract(result, '$.at')) AS at FROM canary_results").get() as { at: string | null }).at;
@@ -392,7 +398,7 @@ export class ActivityLog {
   clear(): void {
     this.exporter?.cancelCurrent();
     this.db.transaction(() => {
-      this.db.exec("DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
+      this.db.exec("DELETE FROM thinking_tests; DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
       this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins; DELETE FROM archive_pieces WHERE thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)');
     })();

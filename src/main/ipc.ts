@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { thinkingTestPlan, thinkingTestRunner, thinkingTests, clearThinkingTests } from './thinkingTestService';
 import { evalReplay, forgetEvalExport, importEvalFile, invalidateEval, prepareEvalExport, prepareEvalReplay, saveEvalExport, withEvalDeletion } from './evalService';
 import type { Document } from 'yaml';
 import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
@@ -115,6 +116,10 @@ const handlers: Handlers = {
   evalRevise: (id, revision, annotation) => activityLog.call('evalRevise', randomUUID(), id, revision, annotation),
   evalDelete: (id) => { invalidateEval(id); return activityLog.call('evalDelete', id); },
   evalImport: importEvalFile, evalExportPrepare: prepareEvalExport, evalExportSave: saveEvalExport, evalExportDiscard: forgetEvalExport,
+  thinkingTestPlan, thinkingTests,
+  thinkingTestStart: (id) => thinkingTestRunner.start(id),
+  thinkingTestStatus: async (id) => { const saved = Object.values(await thinkingTests()).find((t) => t.id === id); if (!saved) throw new Error('Thinking test not available'); return saved; },
+  thinkingTestCancel: (id) => thinkingTestRunner.cancel(id),
   evalReplayPrepare: prepareEvalReplay,
   evalReplayStart: (id) => evalReplay.start(id), evalReplayStatus: (id) => evalReplay.status(id), evalReplayCancel: (id) => evalReplay.cancel(id),
   archiveExportPrepare: (options) => activityLog.call('archiveExportPrepare', options),
@@ -238,7 +243,7 @@ const handlers: Handlers = {
     const n = Math.max(1, Math.floor(Number(days) || 1));
     return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);
   },
-  clearActivity: () => withEvalDeletion(() => withClickHousePaused(() => activityLog.call('clear'))),
+  clearActivity: () => withEvalDeletion(() => clearThinkingTests(() => withClickHousePaused(() => activityLog.call('clear')))),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),
   moveConversation: (sessionId, authIndex) => management.moveConversation(String(sessionId), String(authIndex)),
   // The dialog opens the link: a second account for a provider needs a private window, not the signed-in browser.

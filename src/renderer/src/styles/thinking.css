@@ -149,3 +149,34 @@
   font-size: var(--text-body);
   color: var(--color-text-secondary);
 }
+
+/* Quality test */
+.think-status .link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-light);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.think-hit { white-space: nowrap; }
+/* A small meter after the count; the count carries the value. */
+.think-hit-bar {
+  --think-hit-width: 40px;
+  position: relative;
+  display: inline-block;
+  width: var(--think-hit-width);
+  height: var(--bar-height);
+  margin-left: var(--spacing-2);
+  background: var(--color-surface-input);
+  vertical-align: middle;
+}
+.think-hit-bar i { position: absolute; inset: 0 auto 0 0; background: var(--color-text-secondary); }
+.think-dialog-lede, .think-dialog-plan p { margin: 0 0 var(--spacing-3); font-size: var(--text-body); color: var(--color-text-secondary); }
+.think-dialog-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-2) var(--spacing-4); margin-bottom: var(--spacing-3); }
+.think-dialog-group .think-alt-l { flex-basis: 100%; }
+.think-check { display: inline-flex; align-items: center; gap: var(--spacing-1_5); font-size: var(--text-body); }
+.think-skipped { margin: 0 0 var(--spacing-3); padding-left: var(--spacing-4); font-size: var(--text-xs); color: var(--color-text-muted); }
+.think-dialog-error { margin: 0 0 var(--spacing-3); font-size: var(--text-body); color: var(--color-red); }
+.think-dialog-note { margin: var(--spacing-2) 0 0; font-size: var(--text-xs); }
+.think-dialog-table { max-height: 50vh; overflow: auto; }

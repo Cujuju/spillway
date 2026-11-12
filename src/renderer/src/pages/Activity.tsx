@@ -133,7 +133,7 @@ export function Activity() {
       <Show when={view() === 'requests'}>
         <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />
       </Show>
-      <Show when={view() === 'thinking'}><ThinkingView report={thinking()} placing={placingThinking()} onPlacingEnd={() => setPlacingThinking(null)} /></Show>
+      <Show when={view() === 'thinking'}><ThinkingView report={thinking()} query={{ scope: { ...scope(), efforts: null }, from: overviewSpan().from, to: overviewSpan().to }} placing={placingThinking()} onPlacingEnd={() => setPlacingThinking(null)} /></Show>
       <Show when={view() === 'evals'}><EvalCases traceId={evalSource()} onSourceUsed={() => setEvalSource(undefined)} /></Show>
     </>
   );

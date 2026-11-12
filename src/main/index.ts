@@ -22,6 +22,7 @@ async function startNormalApp(): Promise<void> {
   const { registerIpc } = await import('./ipc');
   const { stopDiagnosticExport } = await import('./diagnosticService');
   const { invalidateEval } = await import('./evalService');
+  const { thinkingTestRunner } = await import('./thinkingTestService');
   const { startClientDrift } = await import('./clientDriftService');
   const { syncPreferredAccounts } = await import('./preferredAccounts');
   const { proxy } = await import('./proxySupervisor');
@@ -163,7 +164,7 @@ async function startNormalApp(): Promise<void> {
       invalidateEval();
       archiveSync.stop();
       void Promise.allSettled([
-        stopActivityReprice().then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
+        thinkingTestRunner.clear().then(() => stopActivityReprice()).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
         stopDiagnosticExport(),
       ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
         destroyTrays();

@@ -11,6 +11,12 @@ const MANAGEMENT_PREFIX = '/v8/management';
 const DEMO_VERSION = 'demo';
 /** SSE comment cadence; keeps the stream from looking idle to proxies or timeouts. */
 const KEEPALIVE_MS = 15_000;
+// Keep enough captured turns for every offered sample size.
+const THINKING_DEMO_TURNS = 40;
+// Archive ingestion accepts four captures per page.
+const DEMO_CAPTURE_PAGE_SIZE = 4;
+// Every fifth synthetic turn differs, deterministically.
+const THINKING_DEMO_DIFFER_EVERY = 5;
 const LOOPBACK = '127.0.0.1';
 /** Replay pace (500 requests/s): the app stores them faster, so its 4,000-entry queue (ACTIVITY_QUEUE_CAP) never fills. */
 const REPLAY_BATCH = 250;
@@ -77,6 +83,13 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
         stop_reason: 'tool_use', usage: { input_tokens: 70000, output_tokens: 80 } }),
       requestType: 'application/json', responseType: 'application/json', requestEncoding: '', responseEncoding: '' };
   };
+  const thinkingCaptures = data.events.filter((e) => e.provider === 'claude' && !e.failed && e.session_kind === 'root' && e.turn_key).slice(-THINKING_DEMO_TURNS).map((e, index) => ({
+    id: `demo-thinking-${index}`, traceId: demoTrace(e.request_id), epoch: captureEpoch, sequence: index + 2, startedAt: e.at,
+    method: 'POST', path: '/v1/messages', status: 200, state: 'complete', reason: '', requestCut: null, responseCut: null,
+    request: JSON.stringify({ model: e.model, max_tokens: 1024, output_config: { effort: e.reasoning_effort }, tools: [{ name: 'inspect', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: `Inspect synthetic turn ${index}` }] }),
+    response: JSON.stringify({ type: 'message', content: [{ type: 'text', text: 'Inspection complete.' }], stop_reason: 'end_turn' }),
+    requestType: 'application/json', responseType: 'application/json', requestEncoding: '', responseEncoding: '',
+  }));
   const streams = new Set<ServerResponse>();
 
   function events(res: ServerResponse): void {
@@ -99,6 +112,12 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === 'POST' && ['/v1/messages', '/v1/chat/completions'].includes(req.url ?? '')) {
       const body = await readBody(req), messages = body.messages as { content: string }[];
+      if (req.headers['x-cpa-purpose'] === 'thinking-test') {
+        const prompt = JSON.stringify(messages), judge = prompt.includes('Compare next moves.');
+        const differs = judge ? prompt.includes('Different outcome.') : Number(prompt.match(/synthetic turn (\d+)/)?.[1] ?? 1) % THINKING_DEMO_DIFFER_EVERY === 0;
+        const text = judge ? JSON.stringify({ verdict: differs ? 'differ' : 'match', reason: differs ? 'The outcome changed.' : 'The substance matches.' }) : differs ? 'Different outcome.' : 'Inspection complete.';
+        return json(res, req.url === '/v1/messages' ? { type: 'message', content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 100, output_tokens: 20 } } : { choices: [{ finish_reason: 'stop', message: { content: text } }], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+      }
       const probe = CANARY_PROBES.find((p) => p.prompt === messages?.[0]?.content);
       const answer = `ANSWER: ${probe?.id === 'seats' ? 'B' : probe?.answer ?? 'unknown'}`;
       json(res, req.url === '/v1/messages' ? { model: body.model, content: [{ type: 'text', text: answer }], usage: { output_tokens: 120, output_tokens_details: { thinking_tokens: 100 } } } : { model: body.model, choices: [{ message: { content: answer } }], usage: { completion_tokens: 120, completion_tokens_details: { reasoning_tokens: 100 } } });
@@ -131,7 +150,7 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
         captureEnabled = (await readBody(req)).enabled === true;
         return json(res, { leaseSeconds: 60, bodyLimit: CAPTURE_BODY_LIMIT });
       }
-      case 'GET /observability/captures': return json(res, { version: 1, epoch: captureEpoch, dropped: 0, records: captureEnabled && data.events.length && Number(url.searchParams.get('after') ?? 0) < 1 ? [demoCapture()] : [] });
+      case 'GET /observability/captures': return json(res, { version: 1, epoch: captureEpoch, dropped: 0, records: captureEnabled && data.events.length ? [demoCapture(), ...thinkingCaptures].filter((c) => c.sequence > Number(url.searchParams.get('after') ?? 0)).slice(0, DEMO_CAPTURE_PAGE_SIZE) : [] });
       case 'DELETE /server/lockouts':
       case 'POST /server/shutdown':
       case 'PATCH /credentials/status':

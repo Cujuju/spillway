@@ -12,6 +12,7 @@ import type { CompareQuery, CompareReport } from './activityCompare';
 import type { BuildInfo } from './buildInfo';
 import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
 import type { DriftQuery, DriftReport } from './drift';
+import type { TestPlanRequest, TestPlan, ThinkingTest } from './thinkingTest';
 import type { CanaryResult, CanaryStatus } from './canary';
 import type { AppSettings } from './settings';
 import type {
@@ -30,6 +31,12 @@ export interface DesktopApi {
   evalExportPrepare(id: string, revision: number, includeBodies: boolean): Promise<EvalExportPreview>;
   evalExportSave(token: string): Promise<string | null>;
   evalExportDiscard(): Promise<void>;
+  thinkingTestPlan(req: TestPlanRequest): Promise<TestPlan>;
+  thinkingTestStart(planId: string): Promise<ThinkingTest>;
+  thinkingTestStatus(id: string): Promise<ThinkingTest>;
+  thinkingTestCancel(id: string): Promise<void>;
+  /** Latest test per setting, retained across restarts. */
+  thinkingTests(): Promise<Record<string, ThinkingTest>>;
   evalReplayPrepare(id: string, revision: number): Promise<EvalReplayPreview>;
   evalReplayStart(id: string): Promise<EvalReplayResult>;
   evalReplayStatus(id: string): Promise<EvalReplayResult>;
@@ -192,6 +199,7 @@ export interface DesktopApi {
 export const INVOKE = {
   evalList: 'eval:list', evalGet: 'eval:get', evalCreate: 'eval:create', evalRevise: 'eval:revise', evalDelete: 'eval:delete', evalImport: 'eval:import',
   evalExportPrepare: 'eval:export-prepare', evalExportSave: 'eval:export-save', evalExportDiscard: 'eval:export-discard',
+  thinkingTestPlan: 'thinking-test:plan', thinkingTestStart: 'thinking-test:start', thinkingTestStatus: 'thinking-test:status', thinkingTestCancel: 'thinking-test:cancel', thinkingTests: 'thinking-test:list',
   evalReplayPrepare: 'eval:replay-prepare', evalReplayStart: 'eval:replay-start', evalReplayStatus: 'eval:replay-status', evalReplayCancel: 'eval:replay-cancel',
   archiveExportPrepare: 'archive:export-prepare', archiveExportStatus: 'archive:export-status', archiveExportSave: 'archive:export-save', archiveExportCancel: 'archive:export-cancel',
   clickhouseStatus: 'clickhouse:status', clickhouseSave: 'clickhouse:save', clickhouseDiagnose: 'clickhouse:diagnose', clickhouseRetry: 'clickhouse:retry', clickhouseClear: 'clickhouse:clear', clickhouseCancel: 'clickhouse:cancel',

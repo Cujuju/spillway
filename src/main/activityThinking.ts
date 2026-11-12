@@ -8,7 +8,7 @@ import { identityKey } from './usageLedger';
 
 export interface OfferedModel { id: string; provider: string; created?: number | null }
 type Request = ActivityEvent & { costUsd?: number };
-interface Turn { first: Request; requests: Request[] }
+export interface Turn { first: Request; requests: Request[] }
 const EFFORTS = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none'];
 // Every provider offers medium; include it even without observed comparison turns.
 const UNIVERSAL_COMPARISON_EFFORT = 'medium';
@@ -16,7 +16,7 @@ const DAYS_PER_WEEK = 7;
 const MAX_MODEL_ALTERNATIVES = 3;
 const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((n, x) => n + f(x), 0);
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b), mid = Math.floor(s.length / 2); return s.length ? s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2 : 0; };
-const setting = (e: Request): ThinkingSetting => ({ provider: e.provider, model: e.effectiveModel ?? e.model, effort: e.reasoningEffort! });
+export const setting = (e: Request): ThinkingSetting => ({ provider: e.provider, model: e.effectiveModel ?? e.model, effort: e.reasoningEffort! });
 const cost = (e: Request) => e.costUsd ?? tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, { ...e, cacheWriteTokens: e.cacheWriteTokens ?? 0 })?.usd ?? 0;
 const counts = (e: Request) => ({ ...e, cacheWriteTokens: e.cacheWriteTokens ?? 0 });
 // Subtracting identical prompt charges isolates output pricing, including tier and long-context rates.
@@ -26,12 +26,15 @@ const thinkingCost = (e: Request) => {
   const visible = tokenCost(e.provider, model, e.at, { ...t, outputTokens: e.outputTokens - (e.thinkingTokens ?? 0) });
   return full && visible ? full.usd - visible.usd : 0;
 };
-const kind = (t: Turn): TurnKind => t.requests.length > CHANGE_MAX_REQUESTS || t.requests.some((e) => e.sessionKind === 'subagent') ? 'long' : t.requests.length <= QUESTION_MAX_REQUESTS ? 'question' : 'change';
+export const kind = (t: Turn): TurnKind => {
+  const requests = t.requests.filter((e) => e.sessionKind !== 'compaction');
+  return requests.length > CHANGE_MAX_REQUESTS || requests.some((e) => e.sessionKind === 'subagent') ? 'long' : requests.length <= QUESTION_MAX_REQUESTS ? 'question' : 'change';
+};
 const thinking = (t: Turn) => sum(t.requests, (e) => e.thinkingTokens ?? 0);
 const turnCost = (t: Turn) => sum(t.requests, cost);
 const bucket = (t: Turn) => thinking(t) <= LIGHT_THINKING_MAX ? 'light' : thinking(t) <= TYPICAL_THINKING_MAX ? 'typical' : 'heavy';
 
-function group(requests: Request[]): { turns: Turn[]; excluded: Request[] } {
+export function group(requests: Request[]): { turns: Turn[]; excluded: Request[] } {
   const sessions = new Map<string, Request[]>();
   const excluded: Request[] = [];
   for (const e of requests) {
@@ -39,10 +42,11 @@ function group(requests: Request[]): { turns: Turn[]; excluded: Request[] } {
     const list = sessions.get(e.sessionId) ?? [];
     list.push(e); sessions.set(e.sessionId, list);
   }
+  const attached = (list: Request[]) => list.some((e) => e.sessionKind === 'subagent' || e.sessionKind === 'compaction' && e.parentSessionId);
   const roots = new Map<string, Turn[]>();
   const turns: Turn[] = [];
   for (const [id, list] of sessions) {
-    if (list.some((e) => e.sessionKind === 'subagent')) continue;
+    if (attached(list)) continue;
     let active: Turn | undefined;
     for (const e of list) {
       if (!e.turnKey) { excluded.push(e); active = undefined; continue; }
@@ -54,7 +58,7 @@ function group(requests: Request[]): { turns: Turn[]; excluded: Request[] } {
     }
   }
   for (const [id, list] of sessions) {
-    if (!list.some((e) => e.sessionKind === 'subagent')) continue;
+    if (!attached(list)) continue;
     const seen = new Set([id]);
     let parent = list.find((e) => e.parentSessionId)?.parentSessionId;
     while (parent && !roots.has(parent) && !seen.has(parent)) {

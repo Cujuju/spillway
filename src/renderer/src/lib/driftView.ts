@@ -15,7 +15,7 @@ export const METRIC_META: Record<DriftMetric, MetricMeta> = {
   failureRate: { label: 'Failure rate', help: 'Share of attempts that failed.', format: rate },
 };
 
-const SUM_FIELDS = ['replies', 'failed', 'outputTokens', 'thinkingTokens', 'thinkingKnown', 'noThinking', 'ttftSumMs', 'ttftCount', 'latencySumMs', 'latencyCount'] as const;
+const SUM_FIELDS = ['replies', 'failed', 'observedAttempts', 'outputTokens', 'thinkingTokens', 'thinkingKnown', 'noThinking', 'ttftSumMs', 'ttftCount', 'latencySumMs', 'latencyCount'] as const;
 /** One pooled day, so a window's value is a ratio of sums rather than a mean of daily ratios. */
 export function sumDays(days: DriftDay[]): DriftDay {
   const total = { day: '' } as DriftDay;

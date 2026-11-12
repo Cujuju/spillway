@@ -5,7 +5,7 @@ import { recentChanges, RECENT_DAYS, signedPercent, sumDays, summarizeMetric, ve
 const DAYS = 30;
 const dayOf = (i: number) => `2026-10-${String(i + 1).padStart(2, '0')}`;
 const day = (i: number, thinkingPerReply: number, replies = 100): DriftDay => ({
-  day: dayOf(i), replies, failed: 0, outputTokens: replies * (thinkingPerReply + 400), thinkingTokens: replies * thinkingPerReply,
+  day: dayOf(i), replies, failed: 0, observedAttempts: replies, outputTokens: replies * (thinkingPerReply + 400), thinkingTokens: replies * thinkingPerReply,
   thinkingKnown: replies, noThinking: Math.round(replies * 0.3), ttftSumMs: replies * 1500, ttftCount: replies, latencySumMs: replies * 9000, latencyCount: replies,
 });
 // Gentle wobble so the baseline has a spread, as real days do.

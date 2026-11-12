@@ -12,6 +12,7 @@ import { parseActivityEvent } from './sse';
 import { ActivityLog } from './activityStore';
 import { localDay } from '@shared/activityCounts';
 import { EVERY_REQUEST } from '@shared/activityScope';
+import { DRIFT_MIN_DAY_SAMPLES, driftValue } from '@shared/drift';
 import { requestSettingsHash } from './requestSettings';
 import { parseRequestSettings } from '@shared/requestSettings';
 it('parses proxy metadata including zero and drops canary traffic', () => {
@@ -86,6 +87,26 @@ it('bounds change history to the seven-day lookback', () => {
     const report = queryDrift(db, { from: '2026-11-08', to: '2026-11-08', scope: EVERY_REQUEST });
     expect(report.series[0]?.changes).toEqual([]);
     expect(report.series[0]?.replies).toBe(1);
+  } finally { db.close(); }
+});
+it('reports a new value once, not each time concurrent sessions alternate', () => {
+  const db = new Database(':memory:');
+  db.exec('CREATE TABLE requests (id INTEGER PRIMARY KEY, day TEXT, event TEXT); CREATE TABLE request_settings (hash TEXT, settings TEXT)');
+  try {
+    for (const [hour, version] of ['1', '2', '1', '2', '1'].entries()) db.prepare('INSERT INTO requests(day,event) VALUES (?,?)').run('2026-11-08',
+      JSON.stringify({ at: `2026-11-08T1${hour}:00:00Z`, provider: 'claude', model: 'opus', clientVersion: version, outputTokens: 1 }));
+    const changes = queryDrift(db, { from: '2026-11-08', to: '2026-11-08', scope: EVERY_REQUEST }).series[0]?.changes;
+    expect(changes).toEqual([expect.objectContaining({ from: '1', to: '2' })]);
+  } finally { db.close(); }
+});
+it('leaves failure rate unknown on days only client logs saw', () => {
+  const db = new Database(':memory:');
+  db.exec('CREATE TABLE requests (id INTEGER PRIMARY KEY, day TEXT, event TEXT); CREATE TABLE request_settings (hash TEXT, settings TEXT)');
+  try {
+    for (let i = 0; i < DRIFT_MIN_DAY_SAMPLES; i++) db.prepare('INSERT INTO requests(day,event) VALUES (?,?)').run('2026-11-08',
+      JSON.stringify({ at: '2026-11-08T12:00:00Z', provider: 'claude', model: 'opus', source: 'client-log', failed: false, outputTokens: 1 }));
+    const day = queryDrift(db, { from: '2026-11-08', to: '2026-11-08', scope: EVERY_REQUEST }).series[0]!.days[0]!;
+    expect(driftValue(day, 'failureRate')).toBeNull();
   } finally { db.close(); }
 });
 it('replays imported transcripts after migration without duplicating rows or totals', async () => {

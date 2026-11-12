@@ -25,10 +25,12 @@ export function queryDrift(db: Db, q: DriftQuery): DriftReport {
     coalesce(json_extract(event, '$.effectiveModel'), json_extract(event, '$.model')) AS model,
     json_extract(event, '$.reasoningEffort') AS effort`;
   const ok = "NOT coalesce(json_extract(event, '$.failed'), 0)";
-  const timing = `${ok} AND coalesce(json_extract(event, '$.source'), 'proxy') != 'client-log'`;
+  // Client logs record only completed replies, so failures and timings come from the proxy alone.
+  const observed = "coalesce(json_extract(event, '$.source'), 'proxy') != 'client-log'";
+  const timing = `${ok} AND ${observed}`;
   const sum = (condition: string, field?: string) => `sum(CASE WHEN ${condition} THEN ${field ? `coalesce(json_extract(event, '$.${field}'), 0)` : '1'} ELSE 0 END)`;
   const rows = db.prepare(`SELECT day, ${dimensions},
-    ${sum(ok)} AS replies, ${sum(`NOT (${ok})`)} AS failed,
+    ${sum(ok)} AS replies, ${sum(`NOT (${ok})`)} AS failed, ${sum(observed)} AS observedAttempts,
     ${sum(ok, 'outputTokens')} AS outputTokens, ${sum(ok, 'thinkingTokens')} AS thinkingTokens,
     ${sum(`${ok} AND json_extract(event, '$.thinkingTokens') IS NOT NULL`)} AS thinkingKnown,
     ${sum(`${ok} AND json_extract(event, '$.thinkingTokens') = 0`)} AS noThinking,
@@ -44,7 +46,7 @@ export function queryDrift(db: Db, q: DriftQuery): DriftReport {
     let series = groups.get(key);
     if (!series) {
       series = { key, provider: row.provider, model: row.model, effort: row.effort, replies: 0,
-        days: days.map((day) => ({ day, replies: 0, failed: 0, outputTokens: 0, thinkingTokens: 0, thinkingKnown: 0, noThinking: 0, ttftSumMs: 0, ttftCount: 0, latencySumMs: 0, latencyCount: 0 })), changes: [] };
+        days: days.map((day) => ({ day, replies: 0, failed: 0, observedAttempts: 0, outputTokens: 0, thinkingTokens: 0, thinkingKnown: 0, noThinking: 0, ttftSumMs: 0, ttftCount: 0, latencySumMs: 0, latencyCount: 0 })), changes: [] };
       groups.set(key, series);
     }
     const { provider: _provider, model: _model, effort: _effort, ...stats } = row;
@@ -68,9 +70,11 @@ export function queryDrift(db: Db, q: DriftQuery): DriftReport {
       SELECT id, day, ${dimensions}, json_extract(event, '$.at') AS at,
         json_extract(event, '$.client') AS client, json_extract(event, '$.${field}') AS value
       FROM requests WHERE day BETWEEN ? AND ? ${scopeSql} AND json_extract(event, '$.${field}') IS NOT NULL
-    ), transitions AS (
-      SELECT *, lag(value) OVER (PARTITION BY provider, model, effort, client ORDER BY at, id) AS previous FROM values_in_range
-    ) SELECT * FROM transitions WHERE day >= ? AND previous IS NOT NULL AND value IS NOT previous ORDER BY at, id`)
+    ), sightings AS (
+      SELECT *, lag(value) OVER (PARTITION BY provider, model, effort, client ORDER BY at, id) AS previous,
+        row_number() OVER (PARTITION BY provider, model, effort, client, value ORDER BY at, id) AS sighting FROM values_in_range
+    ) -- A change is a value's first sighting; concurrent sessions alternating known values add none.
+    SELECT * FROM sightings WHERE day >= ? AND sighting = 1 AND previous IS NOT NULL ORDER BY at, id`)
       .all(localDay(cutoff.getTime()), q.to, ...params, q.from) as { day: string; at: string; provider: string; model: string; effort: string | null; client: string | null; value: string; previous: string | null }[];
     for (const row of changes) {
       const series = groups.get(JSON.stringify([row.provider, row.model, row.effort]));

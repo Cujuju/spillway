@@ -3,7 +3,7 @@ import { driftPoints, driftValue, type DriftDay } from './drift';
 import { normalizeCanary, CANARY_MAX_TARGETS } from './canary';
 import { normalizeSettings } from './settings';
 import { diffRequestSettings, parseRequestSettings } from './requestSettings';
-const day = (value: number, replies = 30): DriftDay => ({ day: '2026-11-08', replies, failed: 0, outputTokens: value * replies, thinkingTokens: value * replies, thinkingKnown: replies, noThinking: 0, ttftSumMs: 0, ttftCount: 0, latencySumMs: 0, latencyCount: 0 });
+const day = (value: number, replies = 30): DriftDay => ({ day: '2026-11-08', replies, failed: 0, observedAttempts: replies, outputTokens: value * replies, thinkingTokens: value * replies, thinkingKnown: replies, noThinking: 0, ttftSumMs: 0, ttftCount: 0, latencySumMs: 0, latencyCount: 0 });
 it('requires samples and a prior baseline, flags shifts and handles zero spread', () => {
   expect(driftValue(day(10, 29), 'outputPerReply')).toBeNull();
   const p = driftPoints([...Array.from({ length: 5 }, () => day(10)), day(100)], 'outputPerReply');

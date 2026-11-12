@@ -1,6 +1,7 @@
 import type { ActivityScope } from './activityScope';
 export interface DriftQuery { from: string; to: string; scope: ActivityScope }
-export interface DriftDay { day: string; replies: number; failed: number; outputTokens: number; thinkingTokens: number; thinkingKnown: number; noThinking: number; ttftSumMs: number; ttftCount: number; latencySumMs: number; latencyCount: number }
+/** `observedAttempts`: attempts from sources that see failures (the proxy); the failure-rate denominator. */
+export interface DriftDay { day: string; replies: number; failed: number; observedAttempts: number; outputTokens: number; thinkingTokens: number; thinkingKnown: number; noThinking: number; ttftSumMs: number; ttftCount: number; latencySumMs: number; latencyCount: number }
 export interface DriftChange { at: string; day: string; kind: 'client-version' | 'settings'; client: string | null; from: string | null; to: string; details: string[] }
 export interface DriftSeries { key: string; provider: string; model: string; effort: string | null; replies: number; days: DriftDay[]; changes: DriftChange[] }
 export interface DriftReport { from: string; to: string; retainedFrom: string | null; series: DriftSeries[] }
@@ -31,7 +32,7 @@ export const DRIFT_MIN_SPREAD: Record<DriftMetric, number> = {
   meanTtftMs: 50,
 };
 export function driftValue(day: DriftDay, metric: DriftMetric): number | null {
-  const [sum, count] = metric === 'thinkingPerReply' ? [day.thinkingTokens, day.thinkingKnown] : metric === 'outputPerReply' ? [day.outputTokens, day.replies] : metric === 'noThinkingRate' ? [day.noThinking, day.thinkingKnown] : metric === 'meanTtftMs' ? [day.ttftSumMs, day.ttftCount] : [day.failed, day.replies + day.failed];
+  const [sum, count] = metric === 'thinkingPerReply' ? [day.thinkingTokens, day.thinkingKnown] : metric === 'outputPerReply' ? [day.outputTokens, day.replies] : metric === 'noThinkingRate' ? [day.noThinking, day.thinkingKnown] : metric === 'meanTtftMs' ? [day.ttftSumMs, day.ttftCount] : [day.failed, day.observedAttempts];
   return count < DRIFT_MIN_DAY_SAMPLES ? null : sum / count;
 }
 export interface DriftPoint { day: string; value: number | null; baseline: number | null; low: number | null; high: number | null; z: number | null; flagged: 'up' | 'down' | null }

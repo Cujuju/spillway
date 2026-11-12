@@ -114,10 +114,10 @@ export function TestStatus(props: { test: ThinkingTest | undefined; kinds: KindS
   const differ = () => props.test?.grades.filter((g) => g.outcome === 'differ').length ?? 0;
   /** Samples are spread evenly across kinds, so the traffic-weighted rate can differ from the raw count. */
   const weighted = (r: AlternativeResult) => (r.weightedMatchShare === null ? '' : ` (${share(r.weightedMatchShare)} weighted)`);
-  const untested = () => {
-    const graded = new Set(props.test?.results.flatMap((r) => r.byKind.filter((k) => k.graded > 0).map((k) => k.kind)) ?? []);
-    const missing = props.kinds.filter((k) => k.turns > 0 && !graded.has(k.kind)).map((k) => KIND_TEXT[k.kind].name.toLowerCase());
-    return missing.length ? ` · not tested: ${missing.join(', ')}` : '';
+  /** Kinds this setting has turns of but the alternative got no graded replay for. */
+  const untested = (r: AlternativeResult) => {
+    const missing = props.kinds.filter((k) => k.turns > 0 && !r.byKind.some((g) => g.kind === k.kind && g.graded > 0)).map((k) => KIND_TEXT[k.kind].name.toLowerCase());
+    return missing.length ? `, not tested on ${missing.join(', ')}` : '';
   };
   return (
     <div class="think-status">
@@ -129,7 +129,7 @@ export function TestStatus(props: { test: ThinkingTest | undefined; kinds: KindS
           </>}>
             <span>
               <Show when={t().state === 'complete'} fallback={<>{t().state === 'canceled' ? 'Test canceled.' : `Test failed: ${t().error ?? 'unknown error'}`}</>}>
-                <For each={t().results}>{(r, i) => <>{i() ? ' · ' : ''}<b>{settingName(r.setting)}</b> matched on {r.matched} of {r.graded}{weighted(r)}</>}</For>{untested()}
+                <For each={t().results}>{(r, i) => <>{i() ? ' · ' : ''}<b>{settingName(r.setting)}</b> matched on {r.matched} of {r.graded}{weighted(r)}{untested(r)}</>}</For>
               </Show>
             </span>
             <span class="spacer" />

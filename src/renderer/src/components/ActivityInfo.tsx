@@ -1,6 +1,7 @@
 import { createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { dateTime, pct } from '../lib/format';
 import { InfoTip, type TipRow } from './ChartTip';
+import { appLocale } from '@shared/timeFormat';
 
 /** Date the price table in src/shared/modelPrices.ts was checked. */
 const PRICES_CHECKED = 'Oct 26, 2026';
@@ -27,7 +28,7 @@ export function ActivityInfo(props: { unpriced: string[] }) {
       ...(since && clients().length ? [{ label: 'Proxy coverage since', value: dateTime(since) }] : []),
       ...clients().map((c) => ({
         label: c.client ?? c.provider,
-        value: `${pct((c.viaProxy / c.requests) * 100)} via proxy (${(c.requests - c.viaProxy).toLocaleString()} bypassed)`,
+        value: `${pct((c.viaProxy / c.requests) * 100)} via proxy (${(c.requests - c.viaProxy).toLocaleString(appLocale())} bypassed)`,
       })),
     ];
   });

@@ -14,10 +14,11 @@ import { TraceDetail } from './TraceDetail';
 import { sessionNode, type TraceFilters } from './TraceScopeParts';
 import '../styles/archive.css';
 import '../styles/sessionTraces.css';
+import { appLocale } from '@shared/timeFormat';
 
 /** Node IDs of unassigned exchanges; the same `trace:<id>` form as their archive ID. */
 const TRACE_NODE = 'trace:';
-const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const day = (iso: string) => new Date(iso).toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' });
 
 /** Typing settles before a query runs. */
 const QUERY_DEBOUNCE_MS = 200;

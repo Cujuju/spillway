@@ -7,6 +7,7 @@ import { ProviderDialog } from '../components/ProviderDialog';
 import { Dialog, Notice, ProviderGlyph, Toggle } from '../components/ui';
 import { providerVar } from '../lib/providers';
 import { PageHeader } from '../components/PageHeader';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 
@@ -126,7 +127,7 @@ export function Providers() {
                     <td>
                       <Show when={g.models.length} fallback={<span class="muted">All</span>}>
                         <HoverTip title="Provider models" rows={[
-                          { label: 'Count', value: g.models.length.toLocaleString() },
+                          { label: 'Count', value: g.models.length.toLocaleString(appLocale()) },
                           ...g.models.map((m) => ({ label: m.alias || m.name, value: m.name })),
                         ]}>{g.models.length}</HoverTip>
                       </Show>

@@ -12,6 +12,7 @@ import { activeTheme } from '../store';
 import { ChartTip, HoverTip, type TipRow } from './ChartTip';
 import { RhythmSkyBack, RhythmSkyFront } from './RhythmSky';
 import '../styles/rhythm.css';
+import { appLocale } from '@shared/timeFormat';
 
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
@@ -24,7 +25,7 @@ const AXIS_HOURS = [0, 12, 24];
 const AXIS_GAP_HOURS = 2;
 const AXIS_ICON_PX = 12;
 const pct = (share: number) => `${share * 100}%`;
-const timeLabel = (hour: number) => new Date(2000, 0, 1, 0, Math.round(hour * MINUTES_PER_HOUR)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const timeLabel = (hour: number) => new Date(2000, 0, 1, 0, Math.round(hour * MINUTES_PER_HOUR)).toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' });
 
 export function ActivityRhythm(props: {
   rows: ActivityBucket[];
@@ -108,7 +109,7 @@ export function ActivityRhythm(props: {
       <div class="rhythm-footer">
         <span>Busiest hour: <strong>{stats().peak === null ? '—' : hourLabel(stats().peak!)}</strong></span>
         <Show when={stats().undetailedDays > 0}>
-          <HoverTip title="Missing hourly detail" rows={[{ label: 'Days', value: stats().undetailedDays.toLocaleString() }, { label: 'Reason', value: 'Older days keep daily totals only' }]}><span>{stats().undetailedDays}d without hours</span></HoverTip>
+          <HoverTip title="Missing hourly detail" rows={[{ label: 'Days', value: stats().undetailedDays.toLocaleString(appLocale()) }, { label: 'Reason', value: 'Older days keep daily totals only' }]}><span>{stats().undetailedDays}d without hours</span></HoverTip>
         </Show>
         <span>{days()}d · {props.format(stats().total)} total</span>
       </div>

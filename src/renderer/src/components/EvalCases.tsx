@@ -5,6 +5,7 @@ import { shownText } from '../store';
 import { InfoTip } from './ChartTip';
 import { Seg, SettingRow, Toggle } from './ui';
 import '../styles/archive.css';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 /** A running replay reports its result this often. */
@@ -165,14 +166,14 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
     </div>}</Show>
 
     <Show when={preview()}>{(p) => <div class="eval-section">
-      <div class="panel-head"><h3 class="section-label">Export preview</h3><span class="panel-count">{p().bytes.toLocaleString()} bytes</span>
+      <div class="panel-head"><h3 class="section-label">Export preview</h3><span class="panel-count">{p().bytes.toLocaleString(appLocale())} bytes</span>
         <div class="panel-head-end"><button class="btn primary" type="button" disabled={busy()} onClick={() => void run(async () => { const path = await window.api.evalExportSave(p().token); setPreview(undefined); if (path) setMessage(`Saved ${path}`); })}>Save file…</button></div>
       </div>
       <textarea class="input archive-raw" rows="10" readOnly value={p().jsonl} spellcheck={false} />
     </div>}</Show>
     <Show when={replay()}>{(r) => <div class="eval-section" aria-live="polite">
       <div class="panel-head"><h3 class="section-label">Replay</h3><InfoTip title="Replay" rows={[
-          { label: 'Assertions', value: r().assertions.length.toLocaleString() },
+          { label: 'Assertions', value: r().assertions.length.toLocaleString(appLocale()) },
           { label: 'Expected', value: shownText(r().expectedOutcome || '—') },
         ]} note={`${r().environment} ${r().inputFidelity} ${REPLAY_NOTE}`} />
         <div class="panel-head-end">
@@ -183,7 +184,7 @@ export function EvalCases(props: { traceId?: string; onSourceUsed: () => void })
       <dl class="kv-grid">
         <div class="kv"><dt>Model</dt><dd>{shownText(r().model ?? 'Unsupported')}</dd></div>
         <div class="kv"><dt>Route</dt><dd>{r().route ?? 'Unsupported'}</dd></div>
-        <div class="kv"><dt>Output cap</dt><dd>{r().maxOutputTokens.toLocaleString()} tokens</dd></div>
+        <div class="kv"><dt>Output cap</dt><dd>{r().maxOutputTokens.toLocaleString(appLocale())} tokens</dd></div>
         <div class="kv"><dt>Deadline</dt><dd>{r().timeoutMs / MS_PER_SECOND} s</dd></div>
         <div class="kv kv-wide"><dt>Destination</dt><dd class="selectable">{r().destination || '—'}</dd></div>
       </dl>

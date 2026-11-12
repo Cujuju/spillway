@@ -2,9 +2,11 @@ import { createNoticeBridge } from '@cujuju/electron-notices';
 import { contextBridge, ipcRenderer } from 'electron';
 import { EVENTS, INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import { unwrapRemoteError } from '@shared/ipcError';
+import { HOUR_CYCLE_ARG, parseHourCycle } from '@shared/timeFormat';
 
 type Fn = (...args: unknown[]) => unknown;
-const api: Record<string, unknown> = { platform: process.platform };
+const hourCycle = parseHourCycle(process.argv.find((a) => a.startsWith(HOUR_CYCLE_ARG))?.slice(HOUR_CYCLE_ARG.length));
+const api: Record<string, unknown> = { platform: process.platform, hourCycle };
 
 for (const [method, channel] of Object.entries(INVOKE)) {
   api[method] = ((...args: unknown[]) => ipcRenderer.invoke(channel, ...args).catch(unwrapRemoteError)) satisfies Fn;

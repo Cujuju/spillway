@@ -1,3 +1,4 @@
+import { appLocale } from '@shared/timeFormat';
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -14,17 +15,17 @@ export function compactDuration(ms: number): string {
 }
 
 export function dayTime(t: number): string {
-  return new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return new Date(t).toLocaleString(appLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
 /** "Sat, Oct 25" for a local YYYY-MM-DD day key. */
 export function dayLabel(day: string): string {
   const [y, m, d] = day.split('-').map(Number);
-  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return new Date(y!, m! - 1, d!).toLocaleDateString(appLocale(), { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 export function dateTime(at: string | number): string {
-  return new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(at).toLocaleString(appLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function pct(value: number, digits = 0): string {
@@ -45,9 +46,9 @@ const WHOLE_DOLLARS_FROM = 1000;
 const CENT_DIGITS = 2;
 export function usd(v: number, digits = CENT_DIGITS): string {
   const step = 10 ** -digits;
-  if (v > 0 && v < step) return `<${step.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: digits })}`;
+  if (v > 0 && v < step) return `<${step.toLocaleString(appLocale(), { style: 'currency', currency: 'USD', maximumFractionDigits: digits })}`;
   const fraction = v >= WHOLE_DOLLARS_FROM ? 0 : digits;
-  return v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: fraction, minimumFractionDigits: fraction });
+  return v.toLocaleString(appLocale(), { style: 'currency', currency: 'USD', maximumFractionDigits: fraction, minimumFractionDigits: fraction });
 }
 
 const MS_PER_SECOND = 1000;
@@ -61,7 +62,7 @@ export function msDuration(ms: number | null): string {
 
 /** "1.2M", "34K", "980" for token counts. */
 export function compactNumber(v: number): string {
-  return v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+  return v.toLocaleString(appLocale(), { notation: 'compact', maximumFractionDigits: 1 });
 }
 
 const KIB = 1024;
@@ -69,5 +70,5 @@ const MIB = KIB * KIB;
 /** Stored sizes: KiB below a mebibyte, so small stores never read as 0 MiB. */
 export function byteSize(bytes: number): string {
   const [value, unit] = bytes < MIB ? [bytes / KIB, 'KiB'] : [bytes / MIB, 'MiB'];
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}`;
+  return `${value.toLocaleString(appLocale(), { maximumFractionDigits: 1 })} ${unit}`;
 }

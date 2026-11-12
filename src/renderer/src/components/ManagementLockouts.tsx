@@ -1,10 +1,11 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { ManagementLockout } from '@shared/types';
+import { appLocale } from '@shared/timeFormat';
 
 /** A new failure or lockout shows up within this long while the page is open. */
 const LOCKOUT_POLL_MS = 10_000;
 
-const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' });
 
 function describe(l: ManagementLockout): string {
   if (l.lockedUntil) return `${l.ip}: locked out until ${timeOf(l.lockedUntil)}`;

@@ -12,6 +12,7 @@ import { CanaryPanel } from './CanaryPanel';
 import { DriftChanges } from './DriftChanges';
 import { DriftMetric } from './DriftMetric';
 import { Notice, ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 18;
 /** Series offered as chips; the rest are rare model/effort pairs with too few replies to judge. */
@@ -23,7 +24,7 @@ function SeriesChip(props: { s: DriftSeries; selected: boolean; flagged: number;
     <button type="button" role="tab" class="drift-chip" classList={{ selected: props.selected }} aria-selected={props.selected} onClick={() => props.onPick()}>
       <ProviderGlyph provider={props.s.provider} size="sm" />
       <span class="drift-chip-name">{seriesLabel(props.s)}</span>
-      <span class="drift-chip-count">{props.s.replies.toLocaleString()}</span>
+      <span class="drift-chip-count">{props.s.replies.toLocaleString(appLocale())}</span>
       <Show when={props.flagged}><span class="drift-chip-flag" title={`${props.flagged} unusual metric days this week`} /></Show>
     </button>
   );
@@ -73,7 +74,7 @@ export function DriftView(props: { scope: ActivityScope; from: string; to: strin
                   </div>
                   <div class="drift-verdict-meta">
                     <span>{seriesLabel(s())}</span>
-                    <span class="muted">{s().replies.toLocaleString()} replies · {dayLabel(props.from)} – {dayLabel(props.to)}</span>
+                    <span class="muted">{s().replies.toLocaleString(appLocale())} replies · {dayLabel(props.from)} – {dayLabel(props.to)}</span>
                   </div>
                 </div>
               )}

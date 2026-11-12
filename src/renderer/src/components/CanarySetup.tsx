@@ -5,6 +5,7 @@ import type { AppSettings } from '@shared/settings';
 import { settings, updateSettings } from '../store';
 import { CANARY_COLORS } from '../lib/canaryView';
 import { Seg, Select, Toggle } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 const HOURS_PER_DAY = 24;
@@ -51,7 +52,7 @@ export function CanarySetup(props: { models: string[] }) {
         <div class="canary-targets-foot">
           <button class="btn ghost" type="button" disabled={canary().targets.length >= CANARY_MAX_TARGETS || !props.models.length} onClick={add}><Plus size={ICON_PX} />Add target</button>
           <Show when={canary().targets.length}>
-            <span class="muted">{callsPerDay().toLocaleString()} calls a day</span>
+            <span class="muted">{callsPerDay().toLocaleString(appLocale())} calls a day</span>
           </Show>
         </div>
       </div>

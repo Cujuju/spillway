@@ -5,6 +5,7 @@ import { dateTime, usd } from '../lib/format';
 import { defaultAlternatives } from '../lib/thinkingTests';
 import { KIND_TEXT, settingName, share } from '../lib/thinkingReport';
 import { Dialog, Seg } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 /** "18 of 20 matched" with a bar; "too few to tell" under MIN_KIND_GRADED; "not tested" without a result. */
 export function Matched(props: { result: { matched: number; graded: number } | undefined; small?: boolean }) {
@@ -73,11 +74,11 @@ export function TestDialog(props: { s: SettingReport; query: ThinkingQuery; onSt
       <Show when={plan()} fallback={<p class="muted think-dialog-note">{chosen().length ? 'Checking your recorded turns…' : 'Pick at least one setting.'}</p>}>
         {(p) => (
           <div class="think-dialog-plan">
-            <p>{p().replayableTurns.toLocaleString()} of your {p().eligibleTurns.toLocaleString()} turns on {settingName(p().setting)} have a recorded request. Each sampled one is checked before it runs.
+            <p>{p().replayableTurns.toLocaleString(appLocale())} of your {p().eligibleTurns.toLocaleString(appLocale())} turns on {settingName(p().setting)} have a recorded request. Each sampled one is checked before it runs.
               <Show when={sampledTotal() > 0}> The test uses {sampledTotal()}: {p().sampled.filter((k) => k.turns > 0).map((k) => `${k.turns} ${KIND_TEXT[k.kind].name.toLowerCase()}${k.turns === 1 ? '' : 's'}`).join(', ')}.</Show>
             </p>
             <Show when={p().skipped.length}>
-              <ul class="think-skipped"><For each={p().skipped}>{(r) => <li>{r.turns.toLocaleString()} · {r.reason}</li>}</For></ul>
+              <ul class="think-skipped"><For each={p().skipped}>{(r) => <li>{r.turns.toLocaleString(appLocale())} · {r.reason}</li>}</For></ul>
             </Show>
             <Show when={sampledTotal() === 0}><p class="think-dialog-error">Nothing to replay yet. Turn on request capture in Settings → Data, use your agent for a while, then test.</p></Show>
           </div>

@@ -3,6 +3,7 @@ import { createEffect, For, on } from 'solid-js';
 import { Toggle } from '../components/ui';
 import { logs, setLogs, settings, shownText, updateSettings } from '../store';
 import { PageHeader } from '../components/PageHeader';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 /** Within this share of a screen from the bottom counts as following the tail. */
@@ -43,7 +44,7 @@ export function Logs() {
         <For each={logs()} fallback={<div class="muted">No output yet.</div>}>
           {(l) => (
             <div classList={{ 'log-err': l.stream === 'stderr', 'log-app': l.stream === 'app' }}>
-              <span class="muted">{new Date(l.at).toLocaleTimeString()}</span> {shownText(l.text)}
+              <span class="muted">{new Date(l.at).toLocaleTimeString(appLocale())}</span> {shownText(l.text)}
             </div>
           )}
         </For>

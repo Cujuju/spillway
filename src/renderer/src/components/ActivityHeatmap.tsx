@@ -4,6 +4,7 @@ import { weekdayHours } from '../lib/activityHeat';
 import type { Span } from '../lib/activityRange';
 import { hourLabel, metricValue, type Metric, type Summary } from '../lib/activityStats';
 import { ChartTip, HoverTip, type TipRow } from './ChartTip';
+import { appLocale } from '@shared/timeFormat';
 
 /** Shades above empty; matches `.heat-cell.l1`–`.l4` in activity.css. */
 const LEVELS = 4;
@@ -14,7 +15,7 @@ const SHADES = Array.from({ length: LEVELS + 1 }, (_, l) => l);
 const DAYS_PER_WEEK = 7;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 /** Starts from a Monday, so local short names run Monday first. */
-const WEEKDAY_NAMES = Array.from({ length: DAYS_PER_WEEK }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' }));
+const WEEKDAY_NAMES = Array.from({ length: DAYS_PER_WEEK }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(appLocale(), { weekday: 'short' }));
 
 /** Shade step for a value: 0 is empty; the rest split the range up to the busiest cell. */
 export function heatLevel(value: number, max: number): number {
@@ -61,7 +62,7 @@ export function ActivityHeatmap(props: {
         less <For each={SHADES}>{(l) => <span class={`heat-cell l${l}`} />}</For> more
         <Show when={grid().undetailedDays > 0}>
           <span class="spacer" />
-          <HoverTip title="Missing hourly detail" rows={[{ label: 'Days', value: grid().undetailedDays.toLocaleString() }, { label: 'Reason', value: 'Older days keep daily totals only' }]}>
+          <HoverTip title="Missing hourly detail" rows={[{ label: 'Days', value: grid().undetailedDays.toLocaleString(appLocale()) }, { label: 'Reason', value: 'Older days keep daily totals only' }]}>
             <span>{grid().undetailedDays}d without hours</span>
           </HoverTip>
         </Show>

@@ -1,4 +1,6 @@
 import './identity';
+import { setHourCycle } from '@shared/timeFormat';
+import { systemHourCycle } from './hourCycle';
 import { spillwayNotice } from '@shared/notice';
 import { app, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
@@ -135,6 +137,7 @@ async function startNormalApp(): Promise<void> {
     app.on('activate', reveal);
 
     void app.whenReady().then(async () => {
+      setHourCycle(systemHourCycle());
       await loadSecrets();
       registerIpc();
       wireEvents();

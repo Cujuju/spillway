@@ -11,6 +11,7 @@ import { shownText } from '../store';
 import { MoveConversation } from './MoveConversation';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 export const REQUEST_COLUMN_COUNT = REQUEST_COLUMNS.length;
 
@@ -26,7 +27,7 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>
-        <td class="tabular"><button class="sort-btn" type="button" title="Inspect request and response" aria-expanded={inspect()} onClick={() => setInspect((v) => !v)}>{new Date(props.e.at).toLocaleTimeString()}</button></td>
+        <td class="tabular"><button class="sort-btn" type="button" title="Inspect request and response" aria-expanded={inspect()} onClick={() => setInspect((v) => !v)}>{new Date(props.e.at).toLocaleTimeString(appLocale())}</button></td>
         <td class="fill">
           <HoverTip title="Request account" layout="block" rows={[
             { label: 'Account', value: props.account(props.e.authIndex) },

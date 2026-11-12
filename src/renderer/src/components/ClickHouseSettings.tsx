@@ -2,15 +2,16 @@ import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, CLICKHOUSE_SOURCE_LABEL_MAX, CLICKHOUSE_STORES, CLICKHOUSE_TABLES_MISSING, CLICKHOUSE_TABLES_OUTDATED, DEFAULT_CLICKHOUSE_CONFIG, type ClickHouseConfig, type ClickHouseStatus, type ClickHouseStoreName } from '@shared/clickhouse';
 import { shownText } from '../store';
 import { Dialog, SettingRow, SettingsGroup, Toggle } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const MIB = 1024 * 1024, GIB = 1024 * MIB;
 const STATUS_POLL_MS = 3_000;
 const mib = (bytes: number) => `${(bytes / MIB).toFixed(1)} MiB`;
-const when = (at: string | number | null | undefined) => at ? new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+const when = (at: string | number | null | undefined) => at ? new Date(at).toLocaleString(appLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
 // Saved credentials never return to the renderer; masked placeholder marks them saved.
 const SAVED_CREDENTIAL_PLACEHOLDER = '••••••••';
 const SENT_TIP = 'Counts rows, not requests. Retries can store a row twice; use FINAL or distinct (source_id, seq).';
-const QUEUED_TIP = `Uploads up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} rows / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB at a time. The encrypted outbox holds up to ${CLICKHOUSE_OUTBOX_BYTES / GIB} GiB, then drops the oldest.`;
+const QUEUED_TIP = `Uploads up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString(appLocale())} rows / ${CLICKHOUSE_BATCH_BYTES / MIB} MiB at a time. The encrypted outbox holds up to ${CLICKHOUSE_OUTBOX_BYTES / GIB} GiB, then drops the oldest.`;
 const STORE_ROWS: Record<ClickHouseStoreName, { label: string; help: string }> = {
   traces: { label: 'Traces', help: 'Request archive: attempts, captures and snapshots.' },
   requests: { label: 'Requests', help: 'Activity records: tokens, cost, account, model, effort, latency and status.' },
@@ -97,12 +98,12 @@ export function ClickHouseSettings() {
     <SettingsGroup title="Delivery">
       <div class="stat-strip inset">
         <div class="stat-cell"><div class="stat-label">Status</div><div class="stat-value">{state()}</div><div class="stat-sub">{status()?.backfilling ? 'adding stored requests' : status()?.config.enabled ? 'export on' : 'export off'}</div></div>
-        <div class="stat-cell" title={SENT_TIP}><div class="stat-label">Sent</div><div class="stat-value">{(status()?.acknowledged ?? 0).toLocaleString()}</div><div class="stat-sub">{status()?.lastAcknowledgedAt ? `last ${when(status()?.lastAcknowledgedAt)}` : 'rows'}</div></div>
-        <div class="stat-cell" title={QUEUED_TIP}><div class="stat-label">Queued</div><div class="stat-value">{(status()?.queued ?? 0).toLocaleString()}</div><div class="stat-sub">{mib(status()?.queuedBytes ?? 0)}{status()?.oldestQueuedAt ? ` · since ${when(status()?.oldestQueuedAt)}` : ''}</div></div>
+        <div class="stat-cell" title={SENT_TIP}><div class="stat-label">Sent</div><div class="stat-value">{(status()?.acknowledged ?? 0).toLocaleString(appLocale())}</div><div class="stat-sub">{status()?.lastAcknowledgedAt ? `last ${when(status()?.lastAcknowledgedAt)}` : 'rows'}</div></div>
+        <div class="stat-cell" title={QUEUED_TIP}><div class="stat-label">Queued</div><div class="stat-value">{(status()?.queued ?? 0).toLocaleString(appLocale())}</div><div class="stat-sub">{mib(status()?.queuedBytes ?? 0)}{status()?.oldestQueuedAt ? ` · since ${when(status()?.oldestQueuedAt)}` : ''}</div></div>
         <div class="stat-cell"><div class="stat-label">Retries</div><div class="stat-value" classList={{ 'danger-text': !!status()?.attempts }}>{status()?.attempts ?? 0}</div><div class="stat-sub">{status()?.nextAttemptAt ? `next ${when(status()?.nextAttemptAt)}` : 'none pending'}</div></div>
-        <div class="stat-cell"><div class="stat-label">Discarded</div><div class="stat-value" classList={{ 'danger-text': !!status()?.discarded }}>{(status()?.discarded ?? 0).toLocaleString()}</div><div class="stat-sub">{status()?.oversized ?? 0} oversized</div></div>
+        <div class="stat-cell"><div class="stat-label">Discarded</div><div class="stat-value" classList={{ 'danger-text': !!status()?.discarded }}>{(status()?.discarded ?? 0).toLocaleString(appLocale())}</div><div class="stat-sub">{status()?.oversized ?? 0} oversized</div></div>
         <Show when={status()?.contentExpired}>{(n) => (
-          <div class="stat-cell" title={EXPIRED_TIP}><div class="stat-label">No content</div><div class="stat-value">{n().toLocaleString()}</div><div class="stat-sub">text expired first</div></div>
+          <div class="stat-cell" title={EXPIRED_TIP}><div class="stat-label">No content</div><div class="stat-value">{n().toLocaleString(appLocale())}</div><div class="stat-sub">text expired first</div></div>
         )}</Show>
       </div>
       <SettingRow label="Connection" help={tablesMissing() ? 'Tables not found. Create them in the saved database.' : tablesOutdated() ? 'Tables use schema v1. Upgrade adds the record_key column; existing rows stay.' : 'Tests the saved login, database and tables.'}>

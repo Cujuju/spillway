@@ -1,11 +1,12 @@
 import { createEffect, createMemo, Show, type JSX } from 'solid-js';
 import { inScope, type ActivityScope } from '@shared/activityScope';
+import type { CompareReport } from '@shared/activityCompare';
 import {
-  axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, rangeSpan, UNIT_NOTE, type CustomRange, type Range,
+  axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, UNIT_NOTE, type Range, type Span,
 } from '../lib/activityRange';
 import { byAccount, byClient, byModel, byModelEffort, series, summarize } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
-import { activityBuckets, holdActivityDays, now } from '../store';
+import { activityBuckets, holdActivityDays, now, settings } from '../store';
 import { ActivityBoard, type PendingChart } from './ActivityBoard';
 import { ActivityInfo } from './ActivityInfo';
 import { costText, countRows, hitRate, savings } from './activityFormat';
@@ -21,16 +22,13 @@ function Stat(props: { label: string; value: string; sub: string; title?: string
   );
 }
 
-/** Totals for `scope` over the page's time frame on top; the charts below are tiles the user arranges. `placing` comes from the page's Add chart menu. */
+/** Totals for `scope` over the page's time frame (`span`) on top; the charts below are tiles the user arranges. `placing` comes from the page's add menus. */
 export function ActivityOverview(props: {
   scope: ActivityScope; account: (authIndex: string | null) => string;
-  range: Range; custom: CustomRange; placing: PendingChart | null; onPlacingEnd: () => void;
+  range: Range; span: Span; compare: CompareReport | null | undefined; placing: PendingChart | null; onPlacingEnd: () => void;
 }) {
   const range = () => props.range;
-  const custom = () => props.custom;
-
-  const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
-  const span = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
+  const span = () => props.span;
   createEffect(() => holdActivityDays(daysToFetch(range(), span(), now())));
   const unit = createMemo(() => bucketUnit(span()));
   const starts = createMemo(() => bucketStarts(span(), unit()));
@@ -57,6 +55,8 @@ export function ActivityOverview(props: {
     bucketNote: () => UNIT_NOTE[unit()],
     xLabel: (t) => axisLabel(t, unit()),
     tip: (i) => ({ title: bucketTitle(points()[i]!.start, points()[i]!.end, unit()), rows: countRows(points()[i]!.summary) }),
+    compare: () => props.compare,
+    retentionDays: () => settings().activity.retentionDays,
   };
 
   return (

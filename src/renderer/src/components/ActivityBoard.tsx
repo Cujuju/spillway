@@ -3,9 +3,11 @@ import { X } from 'lucide-solid';
 import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Select } from './ui';
 import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelSpec } from '@shared/activityBoard';
+import { DEFAULT_COMBOS, MAX_COMBOS, type CompareReport } from '@shared/activityCompare';
 import { appendRow } from '../lib/boardGrow';
+import { baselineOf, comboName, comboTiles, pinCombos, resolveCombos, shownCombos } from '../lib/comboSelection';
 import { settings, updateSettings } from '../store';
-import { ADD_CHOICES, PANELS, type ActivityData } from './activityPanels';
+import { ADD_CHOICES, PANELS, type ActivityData, type ComboSelection } from './activityPanels';
 
 /** CSS token for the gap between tiles (also the divider's grab area), shared with every other card gap. */
 const TILE_GAP_TOKEN = '--card-gap';
@@ -23,6 +25,25 @@ export function AddChartSelect(props: { onPick: (chart: PendingChart) => void })
   return (
     <Select label="Add chart" placeholder="Add chart…" options={ADD_CHOICES.map((c, i) => ({ value: i, label: c.label }))}
       onChange={(i) => { const choice = ADD_CHOICES[i]; if (choice) props.onPick({ id: crypto.randomUUID(), label: choice.label, spec: choice.spec }); }} />
+  );
+}
+
+/** "3 of 4 combinations" and a menu adding a card for a combination not shown; placing it is the board's job. */
+export function AddComboSelect(props: { report: CompareReport | null | undefined; onPick: (chart: PendingChart) => void }) {
+  const board = () => settings().activity.board;
+  const cards = createMemo(() => comboTiles(tileIds(normalize(board().tiles, new Set(Object.keys(board().panels)))), board().panels));
+  const ranked = () => props.report?.combos.map((c) => c.key) ?? [];
+  const options = createMemo(() => {
+    const shown = new Set(shownCombos(cards(), resolveCombos(cards(), ranked())));
+    return ranked().filter((key) => !shown.has(key)).map((key) => ({ value: key, label: comboName(key) }));
+  });
+  return (
+    <>
+      <span class="muted combo-count">{cards().length} of {MAX_COMBOS} combinations</span>
+      <Select label="Add combination" placeholder="Add combination…" options={options()} disabled={cards().length >= MAX_COMBOS || options().length === 0}
+        title={`Model and effort. Starts with the top ${DEFAULT_COMBOS} by cost in the range, then keeps your last selection.`}
+        onChange={(key) => props.onPick({ id: crypto.randomUUID(), label: comboName(key), spec: { kind: 'combo', metric: 'cost', combo: key } })} />
+    </>
   );
 }
 
@@ -47,6 +68,16 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
     const local = pending();
     return local ? local.tiles : normalize(board().tiles, new Set(Object.keys(board().panels)));
   });
+  // Each card's combination follows the board order and the range's spend until pinned.
+  const cards = createMemo(() => comboTiles(tileIds(layout()), panels()));
+  const resolved = createMemo(() => resolveCombos(cards(), props.data.compare()?.combos.map((c) => c.key) ?? []));
+  const shown = createMemo(() => shownCombos(cards(), resolved()));
+  const selection: ComboSelection = {
+    of: (id) => resolved().get(id) ?? null,
+    shown,
+    baseline: () => baselineOf(shown(), settings().activity.compareBaseline),
+    setBaseline: (key) => void updateSettings((d) => { d.activity.compareBaseline = key; }),
+  };
   const specFor = (id: string) => panels()[id] ?? (props.placing?.id === id ? props.placing.spec : undefined);
   const minFor = (id: string) => PANELS[specFor(id)?.kind ?? 'trend'].minSize;
   const tileGapPx = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(TILE_GAP_TOKEN));
@@ -59,8 +90,9 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
   const save = (tiles: TileNode | undefined, added?: { id: string; spec: ActivityPanelSpec }, height = heightPx()) => {
     const h = tiles ? height : null;
     const kept = new Set(tileIds(tiles));
-    const next = Object.fromEntries(Object.entries(panels()).filter(([id]) => kept.has(id)));
-    if (added) next[added.id] = added.spec;
+    const filtered = Object.fromEntries(Object.entries(panels()).filter(([id]) => kept.has(id)));
+    if (added) filtered[added.id] = added.spec;
+    const next = pinCombos(tileIds(tiles), filtered, resolved());
     const revision = ++saveRevision;
     setPending({ tiles, panels: next, heightPx: h });
     saveQueue = saveQueue.then(() => updateSettings((d) => { d.activity.board = { version: ACTIVITY_BOARD_VERSION, tiles: tiles ?? null, panels: next, heightPx: h }; }));
@@ -114,20 +146,21 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
             const spec = createMemo(() => specFor(tile.id)!, undefined, { equals: sameSpec });
             // A tile id keeps its chart kind for life, so the body mounts once; only its metric changes.
             const def = PANELS[untrack(() => specFor(tile.id)?.kind) ?? 'trend'];
-            const body = def.createBody(spec, props.data);
+            const ctx = { id: tile.id, selection };
+            const body = def.createBody(spec, props.data, ctx);
             return (
               <Show when={specFor(tile.id)}>
-                <section class="card board-tile">
+                <section class="card board-tile" classList={{ bleed: def.bleed }}>
                   <header class="chart-head board-tile-head" onPointerDown={tile.startMove} title="Drag to move">
-                    <Show when={def.switchesMetric} fallback={<div class="section-label">{def.title(spec())}</div>}>
+                    <Show when={def.switchesMetric} fallback={<div class="section-label" classList={{ quiet: def.quiet }}>{def.heading ? def.heading(ctx) : def.title(spec())}</div>}>
                       <Select class="section-label title-switch" label="Chart metric" title="Change metric" value={spec().metric}
                         options={ACTIVITY_METRICS.map((m) => ({ value: m, label: def.title({ ...spec(), metric: m }) }))}
                         onChange={(metric) => void setMetric(tile.id, metric)} />
                     </Show>
                     <Show when={def.info}>{(info) => info()()}</Show>
-                    <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data)}</span>}</Show>
+                    <Show when={def.note}>{(note) => <span class="chart-head-note">{note()(props.data, ctx)}</span>}</Show>
                     <span class="spacer" />
-                    <button type="button" class="btn ghost icon-btn" title="Remove chart" aria-label="Remove chart" onClick={tile.remove}>
+                    <button type="button" class="btn ghost icon-btn" title={def.removeLabel ?? 'Remove chart'} aria-label={def.removeLabel ?? 'Remove chart'} onClick={tile.remove}>
                       <X size={ICON_PX} />
                     </button>
                   </header>

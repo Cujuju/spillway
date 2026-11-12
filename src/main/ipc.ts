@@ -215,6 +215,7 @@ const handlers: Handlers = {
   activityDay: (day, failedOnly, scope) => activityLog.call('day', day, failedOnly, scope),
   activityDaySummaries: (scope) => activityLog.call('daySummaries', scope),
   activityTotals: () => activityLog.call('totalsList'),
+  activityCompare: (q) => activityLog.call('compare', q),
   activityCoverage: () => activityLog.call('coverage'),
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
   traceAttempts: (q) => activityLog.call('traceAttempts', q),

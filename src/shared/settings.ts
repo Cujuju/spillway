@@ -129,6 +129,8 @@ export interface AppSettings {
     zipCode: string;
     /** The Overview's chart tiles. */
     board: ActivityBoard;
+    /** Compare's baseline column (comboKey); null, or a combination not shown, uses the first. */
+    compareBaseline: string | null;
   };
 }
 
@@ -227,6 +229,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     retentionDays: DEFAULT_ACTIVITY_RETENTION_DAYS,
     zipCode: '',
     board: DEFAULT_ACTIVITY_BOARD,
+    compareBaseline: null,
   },
 };
 
@@ -338,6 +341,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       zipCode: typeof a.zipCode === 'string' && /^\d{5}$/.test(a.zipCode.trim()) ? a.zipCode.trim() : '',
       retentionDays: int(a.retentionDays, d.activity.retentionDays, 1, MAX_ACTIVITY_RETENTION_DAYS),
       board: normalizeActivityBoard(a.board),
+      compareBaseline: typeof a.compareBaseline === 'string' ? a.compareBaseline : null,
     },
   };
 }

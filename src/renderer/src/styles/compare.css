@@ -1,0 +1,184 @@
+/* ── Activity → Overview: combination cards and Compare (#156) ── */
+/* One series colour per shown combination, by position (tokens.css derives them from the theme). */
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  background: var(--series);
+}
+.series-1 { --series: var(--color-series-1); }
+.series-2 { --series: var(--color-series-2); }
+.series-3 { --series: var(--color-series-3); }
+.series-4 { --series: var(--color-series-4); }
+
+/* A card's title names its combination: larger than chart labels, in the text colour. */
+.board-tile-head > .section-label:has(> .combo-title) {
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-label);
+  color: var(--color-text);
+}
+.combo-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+}
+.board-tile-head > .section-label.quiet {
+  color: var(--color-text-muted);
+}
+.combo-count {
+  font-size: var(--text-xs);
+}
+
+.combo-lead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+}
+.combo-lead-v {
+  font-size: var(--text-stat);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+.combo-lead-l {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.combo-lead-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.combo-ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: var(--spacing-2) 0 0;
+  font-size: var(--text-xs);
+}
+.combo-ledger :is(dt, dd) {
+  margin: 0;
+  padding: var(--spacing-1) 0;
+  border-top: var(--border-width) solid var(--color-divider);
+}
+.combo-ledger dt {
+  padding-right: var(--spacing-2_5);
+  color: var(--color-text-secondary);
+}
+.combo-ledger dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.combo-ledger .sum {
+  border-top-color: var(--color-border-strong);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* A bleeding tile's body reaches its edges; the table's first and last columns carry the inset instead. */
+.board-tile.bleed .board-tile-body {
+  margin: 0 calc(-1 * var(--spacing-4)) calc(-1 * var(--spacing-3));
+}
+.cmp-empty {
+  padding: 0 var(--spacing-4);
+}
+.table.cmp {
+  /* Fits "12.34×" and "−10.0 pt", so values line up whether or not a comparison follows. */
+  --multiple-width: 54px;
+  font-size: var(--text-xs);
+}
+.table.cmp th {
+  padding: var(--spacing-2);
+  border-bottom: 0;
+  line-height: var(--leading-tight);
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+.table.cmp td {
+  padding: var(--spacing-1) var(--spacing-2);
+  border-top: var(--border-width) solid var(--color-divider);
+  border-bottom: 0;
+  vertical-align: baseline;
+}
+.table.cmp :is(th, td):first-child { padding-left: var(--spacing-4); }
+.table.cmp :is(th, td):last-child { padding-right: var(--spacing-4); }
+.table.cmp :is(th, td).num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cmp .gnote {
+  margin-left: var(--spacing-2);
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.cmp tfoot td {
+  padding-top: var(--spacing-2);
+  padding-bottom: var(--spacing-2_5);
+  border-top-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+.cmp th.combo {
+  /* Four combinations share the width beside the labels. */
+  width: 24%;
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.cmp th.combo .n {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1_5);
+}
+.cmp th.combo small {
+  display: block;
+  font-size: var(--text-xxs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.cmp th.combo .act {
+  text-decoration: underline dotted var(--color-text-muted);
+  text-underline-offset: var(--spacing-0_5);
+}
+.cmp th.combo:hover .act { color: var(--color-text); }
+.cmp th.combo:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent-border);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.cmp .base { background: var(--color-surface-raised); }
+.cmp td.lab {
+  color: var(--color-text-soft);
+  white-space: nowrap;
+}
+.cmp td.lab small {
+  margin-left: var(--spacing-1_5);
+  font-size: var(--text-xxs);
+  color: var(--color-text-muted);
+}
+.cmp .x {
+  display: inline-block;
+  min-width: var(--multiple-width);
+  color: var(--color-text-muted);
+}
+.cmp .x.blank { visibility: hidden; }
+/* Which part of the range a row's figures cover: the filled part runs from its first covered day to today. */
+.cov {
+  --coverage-width: 50px;
+  display: inline-block;
+  position: relative;
+  width: var(--coverage-width);
+  height: var(--bar-height);
+  margin-left: var(--spacing-1_5);
+  background: var(--color-surface-input);
+  vertical-align: 1px;
+}
+.cov i {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-text-muted);
+}

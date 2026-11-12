@@ -158,6 +158,11 @@
   --color-row-hover: color-mix(in srgb, var(--color-surface-input) 50%, transparent);
   --color-nav-hover: color-mix(in srgb, var(--color-surface-input) 40%, transparent);
   --color-nav-active-ring: color-mix(in srgb, var(--color-accent-light) 28%, transparent);
+  /* Combination series (Activity → Overview): accent, teal, orange, magenta. Hue mixes of palette colours, so status colours keep their meaning. */
+  --color-series-1: var(--color-accent-light);
+  --color-series-2: color-mix(in oklch, var(--color-green), var(--color-accent-light) 30%);
+  --color-series-3: color-mix(in oklch, var(--color-amber), var(--color-red) 35%);
+  --color-series-4: color-mix(in oklch, var(--color-red-light), var(--color-accent-light) 45%);
   /* xAI's brand mark is monochrome, so it follows the text colour. */
   --provider-xai: var(--color-text);
 }

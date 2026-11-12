@@ -16,6 +16,8 @@ import { TraceStore } from './traceStore';
 import { EvalCaseStore } from './evalCaseStore';
 import type { EvalAnnotation } from '@shared/evalCase';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
+import { compareActivity } from './activityCompare';
+import type { CompareQuery } from '@shared/activityCompare';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { clientLogKey } from './clientLogPaths';
 import { connectionStatements } from './connectionStatements';
@@ -341,6 +343,9 @@ export class ActivityLog {
       .all(first) as ProxyCoverage['clients'];
     return { since, clients: rows };
   }
+
+  /** Combination cards and Compare table for the Overview; null for a malformed query. */
+  compare(q: CompareQuery) { return compareActivity(this.db, this.loadTotals().values(), q, Date.now()); }
 
   totalsList(): ActivityDayTotal[] {
     return dailyTotals(this.loadTotals().values());

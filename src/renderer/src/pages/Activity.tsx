@@ -7,7 +7,8 @@ import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } f
 import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE, type TimeFrame } from '../components/ActivityScopeLine';
 import { DEFAULT_TRACE_FILTERS, TraceLimitNote, type TraceFilters } from '../components/TraceScopeParts';
 import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
-import { AddChartSelect, type PendingChart } from '../components/ActivityBoard';
+import { AddChartSelect, AddComboSelect, type PendingChart } from '../components/ActivityBoard';
+import { createCompareReport } from '../lib/compareReport';
 import { dayText, isCustomRange, RANGES, rangeSpan, type CustomRange, type Range } from '../lib/activityRange';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
@@ -63,6 +64,9 @@ export function Activity() {
   const [revision, setRevision] = createSignal(0);
   onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
   const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
+  const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
+  const overviewSpan = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
+  const compare = createCompareReport(() => view() === 'overview', scope, overviewSpan);
   const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
@@ -93,7 +97,7 @@ export function Activity() {
             efforts={efforts()} effort={effort()} onEffort={setEffort}
             traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined} time={timeFrame()} />
           <div class="scope-row-end">
-            <Show when={view() === 'overview'}><AddChartSelect onPick={setPlacing} /></Show>
+            <Show when={view() === 'overview'}><AddComboSelect report={compare()} onPick={setPlacing} /><AddChartSelect onPick={setPlacing} /></Show>
             <Show when={view() === 'traces' && traceLimit()}>{(n) => <TraceLimitNote limit={n()} />}</Show>
             <Show when={view() === 'totals'}>
               <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
@@ -114,7 +118,7 @@ export function Activity() {
       </Show>
 
       <Show when={view() === 'overview'}>
-        <ActivityOverview scope={scope()} account={accountName} range={range()} custom={custom()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
+        <ActivityOverview scope={scope()} account={accountName} range={range()} span={overviewSpan()} compare={compare()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
       </Show>
       <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} onLimit={setTraceLimit} onEval={startEval} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
       <Show when={view() === 'drift'}><DriftView scope={scope()} from={driftFrom()} to={driftTo()} /></Show>

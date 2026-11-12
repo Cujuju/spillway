@@ -10,6 +10,7 @@ import './styles/drift.css';
 import './styles/pool.css';
 import './styles/account.css';
 import './styles/board.css';
+import './styles/compare.css';
 import './styles/pages.css';
 import './styles/help.css';
 import './styles/about.css';

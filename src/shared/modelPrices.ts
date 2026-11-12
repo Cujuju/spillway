@@ -173,6 +173,9 @@ export function priceAt(history: readonly ModelPrice[], at: string | number): Mo
   return history.findLast((price) => price.from === null || price.from <= day) ?? null;
 }
 
+/** A model's current list rates; null when unpriced. */
+export const currentRates = (model: string): Rates | null => priceHistory(model)?.at(-1)?.rates ?? null;
+
 /** Each priced model's current rates, for the price check script. */
 export const latestPrices = (): Map<string, ModelPrice> => new Map(Object.entries(PRICES).map(([id, history]) => [id, history.at(-1)!]));
 

@@ -89,6 +89,14 @@ const NO_THINKING_RATE = 0.05;
 const THINKING_REPLY_MEAN = 290;
 const OUTPUT_REPLY_MEAN = 800;
 const TTFT_MEAN_MS = 1500;
+/** Claude sessions hand this share of their Haiku replies to a subagent session, so tasks span combinations. */
+const SUBAGENT_RATE = 0.6;
+/** Requests per subagent session before the next one starts. */
+const SUBAGENT_REQUESTS = 6;
+/** Opus replies sent on the fast tier (Fable/Opus fast mode). */
+const FAST_TIER_RATE = 0.08;
+/** Gemini replies whose effort the proxy didn't record; the Compare table counts them apart. */
+const UNKNOWN_EFFORT_RATE = 0.5;
 /** About 6,000 attempts across thirty days, concentrated into three useful series. */
 const DAILY_SERIES = [
   { model: 'claude-opus-5-5', effort: 'high', attempts: 84 },
@@ -141,7 +149,7 @@ function requestSchedule(start: number, now: number, rand: () => number): Map<nu
 }
 
 export interface FakeEvent {
-  reasoning_effort?: string;
+  reasoning_effort?: string; tier?: 'standard' | 'fast'; parent_session_id?: string;
   reasoning_tokens?: number; request_settings?: { thinking: string; max_tokens: number; betas: string[] };
   downstream_transport?: 'http' | 'websocket'; upstream_transport?: 'http' | 'websocket' | 'websocket+http'; transport_fallback_reason?: string;
   at: string; request_id: string; upstream_id: string; selection_id: string; provider: string; model: string; auth_index: string;
@@ -184,7 +192,7 @@ export function generate(now: number): DemoData {
   const windows = new Map(ACCOUNTS.map((a, i) => [a.authIndex, new Map(a.windows.map((w) => [w.key, {
     used: 0, resetsAt: w.cadence === 'on_use' ? null : firstWeeklyReset(start, i + 1),
   }]))]));
-  const sessions = new Map(ACCOUNTS.map((a) => [a.authIndex, { id: uuid(rand), left: 0 }]));
+  const sessions = new Map(ACCOUNTS.map((a) => [a.authIndex, { id: uuid(rand), left: 0, agent: '', agentLeft: 0 }]));
   const lastUsed = new Map<string, number>();
   const history: HistorySample[] = [];
   const events: FakeEvent[] = [];
@@ -209,12 +217,16 @@ export function generate(now: number): DemoData {
         const apart = account.provider === 'claude';
         const input = failed ? 0 : 800 + Math.floor(rand() * 6000) + (apart ? 0 : cached);
         const changedSettings = at >= changeDay.getTime();
+        const root = `${account.provider}:${session.id}`;
+        const subagent = account.provider === 'claude' && model.includes('haiku') && rand() < SUBAGENT_RATE;
+        if (subagent && session.agentLeft-- <= 0) Object.assign(session, { agent: hex(rand, 8), agentLeft: SUBAGENT_REQUESTS });
         events.push({
           reasoning_tokens: failed || rand() < NO_THINKING_RATE ? 0 : Math.round(THINKING_REPLY_MEAN * metricScale * (0.8 + rand() * 0.4) * (shifted ? THINKING_SHIFT_FACTOR : 1)),
           request_settings: { thinking: changedSettings ? 'adaptive' : 'enabled', max_tokens: changedSettings ? 128000 : 64000, betas: [] },
           at: new Date(at).toISOString(), request_id: hex(rand, 16), upstream_id: `msg_${hex(rand, 20)}`, selection_id: hex(rand, 12),
           provider: account.provider, model, auth_index: account.authIndex, stream: true, failed,
-          reasoning_effort: effort,
+          ...(account.provider === 'gemini' && rand() < UNKNOWN_EFFORT_RATE ? {} : { reasoning_effort: effort }),
+          tier: model.includes('opus') && rand() < FAST_TIER_RATE ? 'fast' : 'standard',
           // Synthetic transport observations; unrelated to the real proxy configuration.
           downstream_transport: account.provider === 'codex' && i % 7 !== 0 ? 'websocket' : 'http',
           upstream_transport: account.provider === 'codex' ? (i % 7 === 0 ? 'websocket+http' : 'websocket') : 'http',
@@ -223,7 +235,7 @@ export function generate(now: number): DemoData {
           latency_ms: 2000 + Math.floor(rand() * 30_000), ttft_ms: Math.round(TTFT_MEAN_MS * metricScale * (0.7 + rand() * 0.6)),
           input_tokens: input, output_tokens: failed ? 0 : Math.round(OUTPUT_REPLY_MEAN * metricScale * (0.75 + rand() * 0.5) * (shifted ? OUTPUT_SHIFT_FACTOR : 1)),
           cached_tokens: cached, cache_creation_tokens: failed || !apart ? 0 : Math.floor(rand() * 4000),
-          session_id: `${account.provider}:${session.id}`, session_kind: 'root', user_agent: account.userAgent.replace(/\/[^ ]+/, account.provider === 'claude' ? changedSettings ? '/2.1.317' : '/2.1.316' : changedSettings ? '/0.166.0' : '/0.165.0'),
+          ...(subagent ? { session_id: `${root}:agent:${session.agent}`, session_kind: 'subagent', parent_session_id: root } : { session_id: root, session_kind: 'root' }), user_agent: account.userAgent.replace(/\/[^ ]+/, account.provider === 'claude' ? changedSettings ? '/2.1.317' : '/2.1.316' : changedSettings ? '/0.166.0' : '/0.165.0'),
         });
         if (failed) continue;
         lastUsed.set(account.authIndex, at);

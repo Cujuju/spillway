@@ -40,12 +40,14 @@ export function quotaPercent(value: number | null): string {
   return value === null ? '—' : `${quotaFormat.format(Number(value.toPrecision(FLOAT_NOISE_FREE_DIGITS)))}%`;
 }
 
-/** Below a cent, "<$0.01"; to the cent under $1,000; whole dollars above. */
+/** Below the smallest shown step, "<$0.01"; to the cent (or `digits`) under $1,000; whole dollars above. */
 const WHOLE_DOLLARS_FROM = 1000;
-const CENT = 0.01;
-export function usd(v: number): string {
-  if (v > 0 && v < CENT) return '<$0.01';
-  return v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2, minimumFractionDigits: v >= WHOLE_DOLLARS_FROM ? 0 : 2 });
+const CENT_DIGITS = 2;
+export function usd(v: number, digits = CENT_DIGITS): string {
+  const step = 10 ** -digits;
+  if (v > 0 && v < step) return `<${step.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: digits })}`;
+  const fraction = v >= WHOLE_DOLLARS_FROM ? 0 : digits;
+  return v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: fraction, minimumFractionDigits: fraction });
 }
 
 const MS_PER_SECOND = 1000;

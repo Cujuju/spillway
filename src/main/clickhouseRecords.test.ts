@@ -28,10 +28,11 @@ function seedEveryStore(db: Db) {
   addRequest(db);
   db.prepare("INSERT INTO request_settings VALUES('hash-1','{\"effort\":\"high\"}',?)").run(AT);
   db.prepare('INSERT INTO activity_totals VALUES(?,?)').run('total-1', JSON.stringify({ day: '2026-11-12', start: Date.parse(AT), requests: 1 }));
+  db.prepare("INSERT INTO clickhouse_mirror VALUES('conversation-title','claude:s1',?,'{\"title\":\"Fix bug\"}')").run(AT);
   db.prepare("INSERT INTO canary_results VALUES('canary-1','2026-11-12',?)").run(JSON.stringify({ id: 'canary-1', at: AT, outcome: 'pass' }));
   db.prepare("INSERT INTO thinking_tests VALUES('setting-1',?)").run(JSON.stringify({ startedAt: AT }));
   db.prepare("INSERT INTO eval_cases(id,revision,created_at,title,bytes,snapshot) VALUES('case-1',1,?,'Case',10,?)").run(AT, JSON.stringify({ id: 'case-1', annotation: { title: 'Case' }, capture: { request: 'secret body' } }));
-  db.prepare("INSERT INTO clickhouse_usage VALUES('usage-sample',?,?,'{}')").run(AT, AT);
+  db.prepare("INSERT INTO clickhouse_mirror VALUES('usage-sample',?,?,'{}')").run(AT, AT);
 }
 
 it('queues every write to an exported table and sends the current row as a keyed v2 record', () => {
@@ -48,7 +49,7 @@ it('backfills rows written before export, for every store, then stops', () => {
   const { db, store } = setup(); seedEveryStore(db);
   store.configure(config); expect(store.status().backfilling).toBe(true);
   const kinds = lines(store.prepare()!.facts).map((l) => l.kind);
-  expect(new Set(kinds)).toEqual(new Set(['request', 'request-settings', 'total', 'canary', 'thinking-test', 'eval-case', 'usage-sample']));
+  expect(new Set(kinds)).toEqual(new Set(['request', 'request-settings', 'total', 'canary', 'thinking-test', 'eval-case', 'usage-sample', 'conversation-title']));
   expect(store.status().backfilling).toBe(false);
 });
 
@@ -79,14 +80,33 @@ it('counts a queued record whose row left local storage as discarded instead of 
 });
 
 it('mirrors usage only while exported and skips unchanged rows', () => {
-  const { db, store } = setup();
+  const { db, store } = setup(); const before = { before: '2026-01-01T00:00:00.000Z' };
   const usage = [{ kind: 'usage-window' as const, key: 'acct|5h|1', at: AT, record: '{"peak":10}' }];
-  store.mirrorUsage(usage, '2026-01-01T00:00:00.000Z'); expect(db.prepare('SELECT count(*) AS n FROM clickhouse_usage').get()).toEqual({ n: 0 });
+  store.mirror('usage', usage, before); expect(db.prepare('SELECT count(*) AS n FROM clickhouse_mirror').get()).toEqual({ n: 0 });
   store.configure(config); store.prepare();
-  store.mirrorUsage(usage, '2026-01-01T00:00:00.000Z'); const batch = store.prepare()!; store.acknowledge(batch.token, batch.destination);
-  store.mirrorUsage(usage, '2026-01-01T00:00:00.000Z'); expect(store.status().queued).toBe(0);
-  store.mirrorUsage([{ ...usage[0]!, record: '{"peak":40}' }], '2026-01-01T00:00:00.000Z');
+  store.mirror('usage', usage, before); const batch = store.prepare()!; store.acknowledge(batch.token, batch.destination);
+  store.mirror('usage', usage, before); expect(store.status().queued).toBe(0);
+  store.mirror('usage', [{ ...usage[0]!, record: '{"peak":40}' }], before);
   expect(JSON.parse(lines(store.prepare()!.facts)[0]!.record_json as string)).toEqual({ peak: 40 });
+});
+
+it('re-sends a renamed conversation title and retires titles a complete pass no longer finds', () => {
+  const { db, store } = setup(); store.configure(config); store.prepare();
+  const title = (key: string, text: string) => ({ kind: 'conversation-title' as const, key, at: AT, record: JSON.stringify({ sessionId: key, title: text }) });
+  store.mirror('titles', [title('claude:a', 'Draft'), title('codex:b', 'Other')], { notPushed: true });
+  let batch = store.prepare()!; expect(lines(batch.facts)).toHaveLength(2); store.acknowledge(batch.token, batch.destination);
+  store.mirror('titles', [title('claude:a', 'Renamed')], null);
+  batch = store.prepare()!; expect(lines(batch.facts).map((l) => [l.record_key, JSON.parse(l.record_json as string).title])).toEqual([['claude:a', 'Renamed']]); store.acknowledge(batch.token, batch.destination);
+  store.mirror('titles', [title('claude:a', 'Renamed')], { notPushed: true });
+  expect(db.prepare("SELECT key FROM clickhouse_mirror WHERE kind='conversation-title'").all()).toEqual([{ key: 'claude:a' }]);
+  expect(store.status().queued).toBe(0);
+});
+
+it('stamps day totals at local midnight as an instant, like hourly totals', () => {
+  const { db, store } = setup(); store.configure(config); store.prepare();
+  db.prepare('INSERT INTO activity_totals VALUES(?,?)').run('day-1', JSON.stringify({ day: '2026-11-12', requests: 3 }));
+  const expected = new Date(2026, 10, 12).toISOString().replace('T', ' ').slice(0, -1);
+  expect(lines(store.prepare()!.facts)[0]!.at).toBe(expected);
 });
 
 it('keeps triggers only while exporting, reinstalls them on reopen and covers every spec table', () => {

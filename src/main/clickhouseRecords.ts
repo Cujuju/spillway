@@ -8,8 +8,8 @@ interface RecordSpec {
   withContent?: string;
 }
 const jsonOrText = (column: string) => `CASE WHEN json_valid(${column}) THEN json(${column}) ELSE ${column} END`;
-// Totals carry an hour start (epoch ms) or, for day totals and legacy rows, only a local day.
-const TOTAL_AT = "coalesce(strftime('%Y-%m-%dT%H:%M:%fZ', json_extract({r}.total,'$.start')/1000.0,'unixepoch'), json_extract({r}.total,'$.day')||'T00:00:00.000Z')";
+// Totals carry an hour start (epoch ms) or, for day totals, a local day; 'utc' converts its local midnight to an instant.
+const TOTAL_AT = "coalesce(strftime('%Y-%m-%dT%H:%M:%fZ', json_extract({r}.total,'$.start')/1000.0,'unixepoch'), strftime('%Y-%m-%dT%H:%M:%fZ', json_extract({r}.total,'$.day'),'utc'))";
 export const RECORD_SPECS: readonly RecordSpec[] = [
   { kind: 'request', store: 'requests', table: 'requests', key: 'CAST({r}.id AS TEXT)', at: "json_extract({r}.event,'$.at')", trace: "coalesce(json_extract({r}.event,'$.traceId'),'')", record: '{r}.event' },
   { kind: 'request-settings', store: 'requests', table: 'request_settings', key: '{r}.hash', at: '{r}.first_at', trace: "''", record: `json_object('hash',{r}.hash,'firstAt',{r}.first_at,'settings',${jsonOrText('{r}.settings')})` },
@@ -17,14 +17,15 @@ export const RECORD_SPECS: readonly RecordSpec[] = [
   { kind: 'canary', store: 'drift', table: 'canary_results', key: '{r}.id', at: "json_extract({r}.result,'$.at')", trace: "''", record: '{r}.result' },
   { kind: 'thinking-test', store: 'evals', table: 'thinking_tests', key: '{r}.setting_key', at: "json_extract({r}.test,'$.startedAt')", trace: "''", record: `json_object('settingKey',{r}.setting_key,'test',json({r}.test))` },
   { kind: 'eval-case', store: 'evals', table: 'eval_cases', key: "{r}.id||':'||{r}.revision", at: '{r}.created_at', trace: "''", record: "json_remove({r}.snapshot,'$.capture')", withContent: '{r}.snapshot' },
-  { kind: 'usage-sample', store: 'usage', table: 'clickhouse_usage', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
-  { kind: 'usage-window', store: 'usage', table: 'clickhouse_usage', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
-  { kind: 'usage-span', store: 'usage', table: 'clickhouse_usage', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
+  { kind: 'usage-sample', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
+  { kind: 'usage-window', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
+  { kind: 'usage-span', store: 'usage', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
+  { kind: 'conversation-title', store: 'titles', table: 'clickhouse_mirror', key: '{r}.key', at: '{r}.at', trace: "''", record: '{r}.record' },
 ];
 export const recordSpec = (kind: string): RecordSpec | undefined => RECORD_SPECS.find((s) => s.kind === kind);
 const sql = (expr: string, alias: string) => expr.replaceAll('{r}', alias);
-// The mirror table holds several usage kinds; others hold one kind per table.
-const kindFilter = (spec: RecordSpec, alias: string) => spec.table === 'clickhouse_usage' ? `${alias}.kind='${spec.kind}'` : '1';
+// The mirror table holds several kinds; other tables hold one kind each.
+const kindFilter = (spec: RecordSpec, alias: string) => spec.table === 'clickhouse_mirror' ? `${alias}.kind='${spec.kind}'` : '1';
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 /** Outbox columns for a record reference; the payload is read at delivery. */
 const reference = (spec: RecordSpec, alias: string) => {
@@ -33,8 +34,8 @@ const reference = (spec: RecordSpec, alias: string) => {
 };
 const OUTBOX_COLUMNS = 'kind,record_key,trace_id,at,capture_state,record,content,bytes';
 
-/** Usage history lives in main-process files; this mirror gives it the same trigger path. */
-const USAGE_TABLE = 'CREATE TABLE IF NOT EXISTS clickhouse_usage (kind TEXT NOT NULL, key TEXT NOT NULL, at TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind,key))';
+/** Usage history (main-process files) and conversation titles (other apps' data) are mirrored here for the same trigger path. */
+const USAGE_TABLE = 'CREATE TABLE IF NOT EXISTS clickhouse_mirror (kind TEXT NOT NULL, key TEXT NOT NULL, at TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind,key))';
 const ALL_CURSORS = JSON.stringify(Object.fromEntries(RECORD_SPECS.map((s) => [s.kind, 0])));
 
 /** Adds record columns to v1 outbox state and (re)creates triggers; runs after every source table exists. */
@@ -102,14 +103,27 @@ export function resolveRecord(db: Db, kind: string, key: string, includeContent:
   return row ? { ...row, content } : null;
 }
 
-export interface UsageRecord { kind: 'usage-sample' | 'usage-window' | 'usage-span'; key: string; at: string; record: string }
-/** Mirrors usage history for export; unchanged rows skip the update, so their triggers stay quiet. */
-export function mirrorUsage(db: Db, config: ClickHouseConfig, records: UsageRecord[], oldestAt: string): void {
-  // Main pushes the whole history again when export or the usage store turns on.
-  if (!config.enabled || !config.stores.usage) { db.exec('DELETE FROM clickhouse_usage'); return; }
-  const upsert = db.prepare('INSERT INTO clickhouse_usage(kind,key,at,record) VALUES(?,?,?,?) ON CONFLICT(kind,key) DO UPDATE SET at=excluded.at,record=excluded.record WHERE record<>excluded.record');
+export type MirrorKind = 'usage-sample' | 'usage-window' | 'usage-span' | 'conversation-title';
+export interface MirrorRecord { kind: MirrorKind; key: string; at: string; record: string }
+/** Which mirror rows a push retires: those older than a time, every row not in the push, or none (a partial push). */
+export type MirrorPrune = { before: string } | { notPushed: true } | null;
+/** Mirrors records of one store's kinds; unchanged rows skip the update, so their triggers stay quiet. */
+export function mirrorRecords(db: Db, config: ClickHouseConfig, store: ClickHouseStoreName, records: MirrorRecord[], prune: MirrorPrune): void {
+  const kinds = RECORD_SPECS.filter((s) => s.store === store && s.table === 'clickhouse_mirror').map((s) => s.kind);
+  const ofKinds = `kind IN (${kinds.map(() => '?').join(',')})`;
+  // The source pushes everything again when export or its store turns on.
+  if (!config.enabled || !config.stores[store]) { db.prepare(`DELETE FROM clickhouse_mirror WHERE ${ofKinds}`).run(...kinds); return; }
+  const upsert = db.prepare('INSERT INTO clickhouse_mirror(kind,key,at,record) VALUES(?,?,?,?) ON CONFLICT(kind,key) DO UPDATE SET at=excluded.at,record=excluded.record WHERE record<>excluded.record');
   db.transaction(() => {
-    for (const r of records) upsert.run(r.kind, r.key, r.at, r.record);
-    db.prepare('DELETE FROM clickhouse_usage WHERE at<?').run(oldestAt);
+    for (const r of records) if (kinds.includes(r.kind)) upsert.run(r.kind, r.key, r.at, r.record);
+    if (!prune) return;
+    if ('before' in prune) db.prepare(`DELETE FROM clickhouse_mirror WHERE ${ofKinds} AND at<?`).run(...kinds, prune.before);
+    else {
+      const pushed = new Set(records.map((r) => `${r.kind}
+${r.key}`));
+      const remove = db.prepare('DELETE FROM clickhouse_mirror WHERE kind=? AND key=?');
+      for (const row of db.prepare(`SELECT kind,key FROM clickhouse_mirror WHERE ${ofKinds}`).all(...kinds) as { kind: string; key: string }[]) if (!pushed.has(`${row.kind}
+${row.key}`)) remove.run(row.kind, row.key);
+    }
   })();
 }

@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, type ClickHouseBatch, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, type ClickHouseBatch, type ClickHouseConfig, type ClickHouseStatus, type ClickHouseStoreName } from '@shared/clickhouse';
 import type { Db } from './activityDb';
 import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore';
 import { pieceBytes, rebuild, type PieceDetail } from './archivePieces';
 import { encodeClickHouseLine, encodeRecordLine, outboxBytes, CLICKHOUSE_SINGLE_FACT_BYTES, type OutboxRow } from './clickhouseLine';
-import { backfillRecords, mirrorUsage, recordSpec, resolveRecord, restartRecordCursors, syncRecordTriggers, type UsageRecord } from './clickhouseRecords';
+import { backfillRecords, mirrorRecords, recordSpec, resolveRecord, restartRecordCursors, syncRecordTriggers, type MirrorPrune, type MirrorRecord } from './clickhouseRecords';
 
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
 const RETRY_JITTER_FRACTION = 0.5;
@@ -163,7 +163,7 @@ export class ClickHouseStore implements ArchiveFactSink {
     const delay = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** Math.min(this.state().attempts, RETRY_MAX_EXPONENT));
     this.db.prepare('UPDATE clickhouse_export SET attempts=attempts+1,next_attempt=?,error=?').run(now + delay * (1 - RETRY_JITTER_FRACTION * Math.random()), error.slice(0, 256));
   }
-  mirrorUsage(records: UsageRecord[], oldestAt: string): void { mirrorUsage(this.db, this.config(), records, oldestAt); }
+  mirror(store: ClickHouseStoreName, records: MirrorRecord[], prune: MirrorPrune): void { mirrorRecords(this.db, this.config(), store, records, prune); }
   retry(): void { this.db.exec('UPDATE clickhouse_export SET next_attempt=0'); }
   clear(): void {
     this.db.transaction(() => {

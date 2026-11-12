@@ -22,12 +22,13 @@ Credentials remain in `secrets.bin` and are sent only in ClickHouse authenticati
 |---|---|---|
 | Traces | `attempt`, `capture`, `finalized`, `snapshot` (immutable facts) | empty |
 | Requests | `request` (Activity `ActivityEvent`: tokens, cost, account, effort, latency, status), `request-settings` | local row id, settings hash |
-| Hourly and daily totals | `total` (`{key,total}`) | total key |
+| Conversation titles | `conversation-title` (`{sessionId,title}`) from T3 Code, Codex and Claude Code | session ID |
+| Hourly and daily totals | `total` (`{key,total}`); `at` is the hour start, or local midnight for day totals | total key |
 | Usage limits | `usage-sample`, `usage-window`, `usage-span` | sample time; credential\|window\|first reset; credential\|window\|start |
 | Drift checks | `canary` | result id |
 | Evals and thinking tests | `eval-case` (one per revision; `capture` only with content), `thinking-test` | `id:revision`, setting key |
 
-Keyed records change locally (usage merges, repricing, running totals, re-run tests), so each change queues the record again; the newest `seq` per `(source_id, kind, record_key)` is current. SQLite triggers queue a reference on every insert or update of an exported table, so no write path skips export; delivery reads the row's current value. Usage history lives in main-process files and is mirrored into `clickhouse_usage` for the same path. Local deletes (retention, clears) are not exported: ClickHouse keeps what it received. A queued record whose row is gone before upload counts as Discarded. Enabling export or a store, or changing destination, backfills existing rows.
+Keyed records change locally (usage merges, repricing, running totals, re-run tests), so each change queues the record again; the newest `seq` per `(source_id, kind, record_key)` is current. SQLite triggers queue a reference on every insert or update of an exported table, so no write path skips export; delivery reads the row's current value. Usage history lives in main-process files and titles in other apps' data, so both are mirrored into `clickhouse_mirror` for the same path. Titles of sessions active in the last day are re-read every five minutes; all retained sessions on startup and when export or the store turns on. Spillway never deletes, alters rows in or truncates ClickHouse tables; local deletes (retention, clears) are not exported, and removing remote data is the user's choice. A queued record whose row is gone before upload counts as Discarded. Enabling export or a store, or changing destination, backfills existing rows.
 
 ```sql
 -- Current requests.

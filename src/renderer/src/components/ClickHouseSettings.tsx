@@ -14,6 +14,7 @@ const QUEUED_TIP = `Uploads up to ${CLICKHOUSE_BATCH_ROWS.toLocaleString()} rows
 const STORE_ROWS: Record<ClickHouseStoreName, { label: string; help: string }> = {
   traces: { label: 'Traces', help: 'Request archive: attempts, captures and snapshots.' },
   requests: { label: 'Requests', help: 'Activity records: tokens, cost, account, model, effort, latency and status.' },
+  titles: { label: 'Conversation titles', help: 'Titles from T3 Code, Codex and Claude Code, re-sent when they change.' },
   totals: { label: 'Hourly and daily totals', help: 'Kept locally until cleared; includes totals older than request retention.' },
   usage: { label: 'Usage limits', help: 'Limit readings, window summaries and observed spans.' },
   drift: { label: 'Drift checks', help: 'Canary probe results.' },

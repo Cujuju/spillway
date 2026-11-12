@@ -1,6 +1,6 @@
 import { ARCHIVE_MAX_BYTES } from './archive';
 /** Local stores the export can send; each has its own switch. */
-export const CLICKHOUSE_STORES = ['traces', 'requests', 'totals', 'usage', 'drift', 'evals'] as const;
+export const CLICKHOUSE_STORES = ['traces', 'requests', 'titles', 'totals', 'usage', 'drift', 'evals'] as const;
 export type ClickHouseStoreName = typeof CLICKHOUSE_STORES[number];
 export type ClickHouseStores = Record<ClickHouseStoreName, boolean>;
 // Turning export on sends everything unless a store is switched off.

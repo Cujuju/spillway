@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { appLocale, parseHourCycle, setHourCycle } from './timeFormat';
-import { windowsHourCycle } from '../main/hourCycle';
+import { systemHourCycle, windowsHourCycle } from '../main/hourCycle';
 
 afterEach(() => setHourCycle(null));
 const AFTERNOON = new Date(2026, 0, 1, 15, 5);
@@ -15,6 +15,11 @@ it('formats times with the system hour cycle', () => {
 it('reads the Windows short time pattern and rejects unknown cycles', () => {
   expect([windowsHourCycle('HH:mm'), windowsHourCycle('h:mm tt'), windowsHourCycle('mm')]).toEqual(['h23', 'h12', null]);
   expect([parseHourCycle('h23'), parseHourCycle('h24'), parseHourCycle(undefined)]).toEqual(['h23', null, null]);
+});
+
+// Every Windows profile has a short time pattern, so a null here means the registry read failed.
+it.runIf(process.platform === 'win32')('reads the hour cycle from the Windows registry', () => {
+  expect(systemHourCycle()).not.toBeNull();
 });
 
 const SRC = path.join(import.meta.dirname, '..');

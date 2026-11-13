@@ -13,7 +13,7 @@ export function systemHourCycle(): HourCycle { return cached === undefined ? cac
 
 function readHourCycle(): HourCycle {
   if (process.platform === 'win32') {
-    const out = spawnSync('reg', ['query', 'HKCU\Control Panel\International', '/v', 'sShortTime'], { encoding: 'utf8', windowsHide: true });
+    const out = spawnSync('reg', ['query', String.raw`HKCU\Control Panel\International`, '/v', 'sShortTime'], { encoding: 'utf8', windowsHide: true });
     const pattern = /sShortTime\s+REG_SZ\s+(.+)/.exec(out.stdout ?? '')?.[1]?.trim();
     return pattern ? windowsHourCycle(pattern) : null;
   }

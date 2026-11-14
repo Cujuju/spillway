@@ -39,9 +39,8 @@ export function saveClickHouse(raw: ClickHouseConfig, rawCredentials?: ClickHous
   const credentials = rawCredentials === undefined || rawCredentials === null ? rawCredentials : validateClickHouseCredentials(rawCredentials);
   return withClickHousePaused(async () => {
     const prev = await activityLog.call('clickhouseStatus');
-    if ((prev.config.endpoint !== config.endpoint || prev.config.database !== config.database || prev.config.tablePrefix !== config.tablePrefix) && prev.queued) throw new Error('Clear the upload queue before changing destination');
     const changed = prev.config.endpoint !== config.endpoint || prev.config.database !== config.database || prev.config.tablePrefix !== config.tablePrefix;
-    // Worker atomically checks backlog before secrets change; a crash leaves the new destination disabled.
+    // The worker discards the old destination's queue before secrets change; a crash leaves the new destination disabled.
     if (changed) await activityLog.call('clickhouseConfigure', { ...config, enabled: false });
     if (credentials !== undefined) await setClickHouseCredentials(credentials, config.endpoint);
     else if (prev.config.endpoint !== config.endpoint) await setClickHouseCredentials(null);

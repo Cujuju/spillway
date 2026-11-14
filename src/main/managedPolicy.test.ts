@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -78,6 +78,36 @@ describe('elevated scripts', () => {
       writeFileSync(script, windowsLauncher(windowsElevatedScript('C:\\Program Files\\ClaudeCode\\managed-settings.d\\spillway.json', 'C:\\t\\x.json')));
       const check = `$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile('${script}', [ref]$null, [ref]$e); $e.Count`;
       expect(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', check], { encoding: 'utf8' }).trim()).toBe('0');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Runs the same shell commands pkexec and osascript run, unelevated in a disposable folder.
+  it.runIf(process.platform === 'darwin' || process.platform === 'linux')('copies the file readable by all into a new folder, then removes it (Unix)', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "spillway policy's-"));
+    try {
+      const source = path.join(dir, 'source.json');
+      const file = path.join(dir, 'Claude Code', 'managed-settings.d', 'spillway.json');
+      writeFileSync(source, policyText(TARGET), { mode: 0o600 });
+      const sh = (script: string) => execFileSync('/bin/sh', ['-c', script]);
+      sh(unixElevatedScript(file, source));
+      expect(readFileSync(file, 'utf8')).toBe(policyText(TARGET));
+      expect(statSync(file).mode & 0o777).toBe(0o644);
+      sh(unixElevatedScript(file, null));
+      expect(existsSync(file)).toBe(false);
+      sh(unixElevatedScript(file, null));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'darwin')('builds AppleScript that osacompile accepts without running it', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-applescript-'));
+    try {
+      const script = macElevatedScript("/Library/Application Support/ClaudeCode/managed-settings.d/it's.json", '/tmp/a "b".json');
+      execFileSync('osacompile', ['-o', path.join(dir, 'check.scpt'), '-e', script]);
+      expect(existsSync(path.join(dir, 'check.scpt'))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

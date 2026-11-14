@@ -5,6 +5,7 @@ import { comboName, comboRow, modelName } from '../lib/comboSelection';
 import { coverageStart, daysOf, money, multiple, points, share, spanText } from '../lib/compareFormat';
 import { compactNumber, pct, usd } from '../lib/format';
 import { costText } from './activityFormat';
+import { appLocale } from '@shared/timeFormat';
 
 const PER_MILLION = 1_000_000;
 /** Mean cost per request sits in fractions of a cent, so it gets a third decimal. */
@@ -24,7 +25,7 @@ interface Row {
 
 /** A combination with no figures (pinned, but absent from this range) shows a dash. */
 const dash = '—';
-const rate = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const rate = (n: number) => `$${n.toLocaleString(appLocale(), { maximumFractionDigits: 2 })}`;
 const perTask = (c: CompareRow, f: (t: NonNullable<CompareRow['tasks']>) => number) => (c.tasks ? f(c.tasks) : null);
 const shown = (v: number | null, f: (v: number) => string) => (v === null ? dash : f(v));
 const percent = (v: number | null) => shown(v, (n) => pct(n, SHARE_DIGITS));
@@ -43,7 +44,7 @@ function wholeRows(r: CompareReport): Row[] {
     { label: 'List price per MTok', sub: 'input / output', text: (c) => { const p = currentRates(c.model); return p ? `${rate(p.input)} / ${rate(p.output)}` : dash; } },
     { label: '', sub: 'cache read / 5-min write', text: (c) => { const p = currentRates(c.model); return p ? `${usd(p.cacheRead)} / ${usd(p.cacheWrite)}` : dash; } },
     { label: 'API cost', value: (c) => c.whole.costUsd, text: (c) => usd(c.whole.costUsd), kind: 'multiple' },
-    { label: 'Requests', value: (c) => c.whole.requests, text: (c) => c.whole.requests.toLocaleString(), kind: 'multiple' },
+    { label: 'Requests', value: (c) => c.whole.requests, text: (c) => c.whole.requests.toLocaleString(appLocale()), kind: 'multiple' },
     { label: 'Cost per request', sub: 'mean', value: (c) => (c.whole.requests ? c.whole.costUsd / c.whole.requests : null), text: (c) => shown(c.whole.requests ? c.whole.costUsd / c.whole.requests : null, (v) => usd(v, REQUEST_COST_DIGITS)), kind: 'multiple' },
     { label: 'Cost per 1M tokens', sub: 'all token types', value: (c) => (tokens(c) ? (c.whole.costUsd / tokens(c)) * PER_MILLION : null), text: (c) => shown(tokens(c) ? (c.whole.costUsd / tokens(c)) * PER_MILLION : null, (v) => usd(v)), kind: 'multiple' },
     { label: 'Cache hit', sub: 'share of input', value: (c) => share(c.whole.cachedTokens, c.whole.promptTokens), text: (c) => percent(share(c.whole.cachedTokens, c.whole.promptTokens)), kind: 'points' },
@@ -54,9 +55,9 @@ function wholeRows(r: CompareReport): Row[] {
 }
 
 function taskRows(): Row[] {
-  const median = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: MEDIAN_DIGITS });
+  const median = (n: number) => n.toLocaleString(appLocale(), { maximumFractionDigits: MEDIAN_DIGITS });
   return [
-    { label: 'Tasks', sub: 'by root session', value: (c) => c.tasks?.tasks ?? null, text: (c) => (c.tasks?.tasks ?? 0).toLocaleString(), kind: 'multiple' },
+    { label: 'Tasks', sub: 'by root session', value: (c) => c.tasks?.tasks ?? null, text: (c) => (c.tasks?.tasks ?? 0).toLocaleString(appLocale()), kind: 'multiple' },
     { label: 'Cost per task', sub: 'median', value: (c) => perTask(c, (t) => t.medianCostUsd), text: (c) => <b>{shown(perTask(c, (t) => t.medianCostUsd), (v) => usd(v))}</b>, kind: 'multiple' },
     { label: '', sub: 'mean', value: (c) => perTask(c, (t) => t.meanCostUsd), text: (c) => shown(perTask(c, (t) => t.meanCostUsd), (v) => usd(v)), kind: 'multiple' },
     { label: '', sub: '90th percentile', value: (c) => perTask(c, (t) => t.p90CostUsd), text: (c) => shown(perTask(c, (t) => t.p90CostUsd), (v) => usd(v)), kind: 'multiple' },
@@ -119,7 +120,7 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
       </tbody>
       <Show when={unknown().requests > 0}>
         <tfoot><tr><td colSpan={span()}>
-          Not in any column: {unknown().requests.toLocaleString()} requests with no recorded effort, {costText(unknown())} ({unknown().models.map((m) => `${modelName(m.model)}: ${m.requests.toLocaleString()} requests, ${costText(m)}`).join(' · ')}).
+          Not in any column: {unknown().requests.toLocaleString(appLocale())} requests with no recorded effort, {costText(unknown())} ({unknown().models.map((m) => `${modelName(m.model)}: ${m.requests.toLocaleString(appLocale())} requests, ${costText(m)}`).join(' · ')}).
         </td></tr></tfoot>
       </Show>
     </table>

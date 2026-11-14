@@ -6,6 +6,7 @@ import { clockText, resetParts } from '@shared/resetTime';
 import type { Credential, ResetCreditOutcome, ResetCredits } from '@shared/types';
 import { dateTime } from '../lib/format';
 import { now } from '../store';
+import { appLocale } from '@shared/timeFormat';
 
 /** Spending a credit cannot be undone, so it takes a deliberate four-second hold. */
 const RESET_HOLD_MS = 4_000;
@@ -66,8 +67,8 @@ export function ResetCreditButton(props: {
   return (
     <>
       <HoverTip title="Rate-limit reset credits" focusable={false} note={action()} rows={[
-        { label: 'Held', value: credits().available.toLocaleString() },
-        { label: 'Usable now', value: credits().applicable.toLocaleString() },
+        { label: 'Held', value: credits().available.toLocaleString(appLocale()) },
+        { label: 'Usable now', value: credits().applicable.toLocaleString(appLocale()) },
         ...upcoming(credits(), now()).map((t) => ({ label: 'Expires', value: dateTime(t) })),
         ...(soonest() ? [{ label: 'First expires in', value: resetParts(soonest()!, now()).left }] : []),
         { label: 'Checked', value: dateTime(credits().checkedAt) },

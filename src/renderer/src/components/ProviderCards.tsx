@@ -9,6 +9,7 @@ import { now, settings, snapshot } from '../store';
 import type { PoolLine, ProviderPool } from './poolModel';
 import { HoverTip } from './ChartTip';
 import { ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 /** Selection id for every provider at once. */
 export const ALL_PROVIDERS = 'all';
@@ -51,7 +52,7 @@ export function ProviderCards(props: CardsProps) {
               <div class="pool-card-top">
                 {/* The card's keyboard target; its click bubbles to the card. */}
                 <HoverTip title={providerLabel(p.id)} layout="contents" rows={[
-                  { label: 'Accounts', value: p.count().toLocaleString() },
+                  { label: 'Accounts', value: p.count().toLocaleString(appLocale()) },
                   ...(p.lines()[0]?.model.plans() ? [{ label: 'Plans', value: p.lines()[0]!.model.plans() }] : []),
                   ...(rate() != null ? [
                     ...(chosen() ? [{ label: 'Window', value: chosen()!.label() }] : []),

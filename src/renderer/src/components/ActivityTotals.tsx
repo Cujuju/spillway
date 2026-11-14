@@ -8,13 +8,14 @@ import { costText } from './activityFormat';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
 import { createActivityReload } from '../lib/activityReload';
+import { appLocale } from '@shared/timeFormat';
 
 const sum = (rows: ActivityCounts[]): ActivityCounts => {
   const total = emptyCounts();
   for (const r of rows) addCounts(total, r);
   return total;
 };
-const n = (v: number) => v.toLocaleString();
+const n = (v: number) => v.toLocaleString(appLocale());
 const COLUMN_COUNT = 9;
 
 /** `provider` is unset on a day row, which sums every provider. */

@@ -5,6 +5,7 @@ import { costText, formatMetric, hitRate, metricLabel } from './activityFormat';
 import { HoverTip } from './ChartTip';
 import { TokenCell } from './TokenCell';
 import { ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const NUMERIC_COLUMNS = ['Requests', 'Input', 'Output', 'Cache read', 'Cache write', 'Cache hit', 'API cost'];
 /** Name, the numeric columns, and Share. */
@@ -37,7 +38,7 @@ export function BreakdownTable(props: { heading: string; rows: BreakdownRow[]; t
           {(r) => (
             <tr>
               <td><div class="cell-name"><Show when={r.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show><span class="tabular">{r.name || '—'}</span></div></td>
-              <td class="tabular num">{r.summary.requests.toLocaleString()}</td>
+              <td class="tabular num">{r.summary.requests.toLocaleString(appLocale())}</td>
               <TokenCell v={r.summary.inputTokens} />
               <TokenCell v={r.summary.outputTokens} />
               <TokenCell v={r.summary.cachedTokens} />

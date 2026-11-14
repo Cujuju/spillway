@@ -85,6 +85,9 @@ const config: Configuration = {
     artifactName: linuxAppImageName('${version}'),
     icon: 'resources/icon-1024.png',
     category: 'Development',
+    // The builder's default desktop entry passes --no-sandbox, disabling Chromium's sandbox for every process.
+    // Its AppRun adds that flag only where unprivileged user namespaces are unavailable (docs/linux.md).
+    executableArgs: [],
   },
 };
 

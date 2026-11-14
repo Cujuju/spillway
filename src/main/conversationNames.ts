@@ -8,7 +8,7 @@ import { clientHomes } from './clientHomes';
 /** Titles change after a conversation starts (T3 Code renames threads), so title lists are reread at most this often. */
 const TITLE_LIST_REFRESH_MS = 30_000;
 /** Bounds one renderer request; a day of requests holds far fewer conversations. */
-const MAX_IDS_PER_CALL = 1000;
+export const MAX_IDS_PER_CALL = 1000;
 /** Proxy session IDs: "<client>:<native id>", plus ":agent:<id>" for subagents (docs/desktop-api.md in the fork). */
 const SESSION_ID = /^(claude|codex):(.+?)(?::agent:.+)?$/;
 /** Claude Code names transcripts by session UUID; checked before it becomes part of a path. */

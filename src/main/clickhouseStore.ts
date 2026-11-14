@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, type ClickHouseBatch, type ClickHouseConfig, type ClickHouseStatus } from '@shared/clickhouse';
+import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES, DEFAULT_CLICKHOUSE_CONFIG, validateClickHouseConfig, type ClickHouseBatch, type ClickHouseConfig, type ClickHouseStatus, type ClickHouseStoreName } from '@shared/clickhouse';
 import type { Db } from './activityDb';
 import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore';
 import { pieceBytes, rebuild, type PieceDetail } from './archivePieces';
-import { encodeClickHouseLine, outboxBytes, CLICKHOUSE_SINGLE_FACT_BYTES, type OutboxRow } from './clickhouseLine';
+import { encodeClickHouseLine, encodeRecordLine, outboxBytes, CLICKHOUSE_SINGLE_FACT_BYTES, type OutboxRow } from './clickhouseLine';
+import { backfillRecords, mirrorRecords, recordSpec, resolveRecord, restartRecordCursors, syncRecordTriggers, type MirrorPrune, type MirrorRecord } from './clickhouseRecords';
 
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
 const RETRY_JITTER_FRACTION = 0.5;
@@ -29,7 +30,7 @@ CREATE TRIGGER IF NOT EXISTS clickhouse_outbox_delete AFTER DELETE ON clickhouse
  UPDATE clickhouse_export SET queued_rows=queued_rows-1,queued_bytes=queued_bytes-OLD.bytes;
 END;`;
 export const clickhouseDestination = (c: ClickHouseConfig): string => createHash('sha256').update(JSON.stringify([c.endpoint, c.database, c.tablePrefix])).digest('hex');
-type State = { source_id: string; config: string; acknowledged: number; discarded: number; oversized: number; content_expired: number; last_ack: string | null; error: string | null; attempts: number; next_attempt: number; backfill_cursor: string | null };
+type State = { source_id: string; config: string; record_cursors: string; acknowledged: number; discarded: number; oversized: number; content_expired: number; last_ack: string | null; error: string | null; attempts: number; next_attempt: number; backfill_cursor: string | null };
 
 export class ClickHouseStore implements ArchiveFactSink {
   constructor(private db: Db, private archive: ArchiveStore) {}
@@ -40,15 +41,21 @@ export class ClickHouseStore implements ArchiveFactSink {
     const next = validateClickHouseConfig(raw), prev = this.config();
     this.db.transaction(() => {
       const changed = clickhouseDestination(next) !== clickhouseDestination(prev);
-      if (changed) this.db.exec('UPDATE archive_pieces SET sent=0');
-      if (changed && this.totals().n) throw new Error('Clear the upload queue before changing destination');
+      if (changed) {
+        // Queued rows belong to the old destination; backfill below re-sends everything still stored locally.
+        this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,attempts=0,next_attempt=0').run(this.totals().n);
+        this.db.exec('DELETE FROM clickhouse_outbox; UPDATE archive_pieces SET sent=0');
+      }
       this.db.prepare('UPDATE clickhouse_export SET config=?,error=NULL').run(JSON.stringify(next));
-      if (next.enabled && (!prev.enabled || changed || !prev.includeBodies && next.includeBodies)) this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(JSON.stringify(['', '']));
+      const everything = !prev.enabled || changed;
+      if (next.enabled && next.stores.traces && (everything || !prev.stores.traces || !prev.includeBodies && next.includeBodies)) this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(JSON.stringify(['', '']));
+      if (next.enabled) restartRecordCursors(this.db, prev, next, everything);
+      syncRecordTriggers(this.db, next);
     })();
   }
   append(fact: ArchiveFact): void {
     const config = this.config();
-    if (!config.enabled) return;
+    if (!config.enabled || !config.stores.traces) return;
     this.db.transaction(() => {
       const record = JSON.stringify(fact.record), content = fact.content === null ? null : JSON.stringify(fact.content);
       const thread = fact.content ? (fact.content as PieceDetail).thread : (this.db.prepare('SELECT thread_id FROM archive_entries WHERE trace_id=?').get(fact.traceId) as { thread_id: string | null } | undefined)?.thread_id;
@@ -90,12 +97,12 @@ export class ClickHouseStore implements ArchiveFactSink {
   prepare(): ClickHouseBatch | null {
     if (!this.config().enabled || this.state().next_attempt > Date.now()) return null;
     return this.db.transaction(() => {
-      this.archive.prune(); this.backfill();
+      this.archive.prune(); this.backfill(); backfillRecords(this.db, this.config());
       const config = this.config(), state = this.state();
       const captureBodies = this.archive.status().policy.captureBodies;
       const content = config.includeBodies && captureBodies ? 'content' : 'NULL AS content';
-      const pending = this.db.prepare(`SELECT seq,kind,trace_id,at,capture_state,record,expired,thread_id,${content} FROM clickhouse_outbox ORDER BY seq LIMIT ?`).iterate(CLICKHOUSE_BATCH_ROWS) as IterableIterator<OutboxRow>;
-      const oversized: number[] = [];
+      const pending = this.db.prepare(`SELECT seq,kind,record_key,trace_id,at,capture_state,record,expired,thread_id,${content} FROM clickhouse_outbox ORDER BY seq LIMIT ?`).iterate(CLICKHOUSE_BATCH_ROWS) as IterableIterator<OutboxRow>;
+      const oversized: number[] = [], gone: number[] = [];
       let facts = '', pieces = '', bytes = 0, rows = 0, last = 0;
       const sent = new Set<number>();
       // One cache per batch: revisions share dictionary ancestry, and the batch row limit bounds its size.
@@ -104,7 +111,12 @@ export class ClickHouseStore implements ArchiveFactSink {
         let additions = '', pieceRows = 0;
         const ids: number[] = [];
         let resolved: { response: string; frames: unknown[] } | undefined;
-        let unavailable = false;
+        let unavailable = false, line: string;
+        if (recordSpec(r.kind)) {
+          const record = resolveRecord(this.db, r.kind, r.record_key ?? '', config.includeBodies);
+          if (!record) { gone.push(r.seq); continue; }
+          line = encodeRecordLine(r, record, config, state.source_id);
+        } else {
         if (r.content && config.includeBodies && captureBodies) {
           try {
             const refs = JSON.parse(r.content) as PieceDetail;
@@ -117,8 +129,9 @@ export class ClickHouseStore implements ArchiveFactSink {
             }
           } catch { unavailable = true; additions = ''; pieceRows = 0; ids.length = 0; resolved = undefined; }
         }
-        let line = encodeClickHouseLine(unavailable ? { ...r, content: null, expired: 1 } : r, config, state.source_id, captureBodies, resolved);
+        line = encodeClickHouseLine(unavailable ? { ...r, content: null, expired: 1 } : r, config, state.source_id, captureBodies, resolved);
         if (Buffer.byteLength(line + additions) > CLICKHOUSE_SINGLE_FACT_BYTES || pieceRows + 1 > CLICKHOUSE_BATCH_ROWS) { additions = ''; pieceRows = 0; ids.length = 0; line = encodeClickHouseLine({ ...r, content: null }, config, state.source_id, captureBodies, undefined, 'omitted-size-limit'); }
+        }
         if (JSON.parse(line).content_policy !== 'included') { additions = ''; pieceRows = 0; ids.length = 0; }
         const size = Buffer.byteLength(line + additions);
         if (!rows && size > (JSON.parse(line).content_policy === 'included' ? CLICKHOUSE_SINGLE_FACT_BYTES : CLICKHOUSE_BATCH_BYTES)) {
@@ -131,6 +144,9 @@ export class ClickHouseStore implements ArchiveFactSink {
       }
       for (const seq of oversized) this.db.prepare('DELETE FROM clickhouse_outbox WHERE seq=?').run(seq);
       if (oversized.length) this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,oversized=oversized+?').run(oversized.length, oversized.length);
+      // A queued record whose row left local storage before upload (retention, clear) can no longer be sent.
+      for (const seq of gone) this.db.prepare('DELETE FROM clickhouse_outbox WHERE seq=?').run(seq);
+      if (gone.length) this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?').run(gone.length);
       if (!rows) return null;
       const destination = clickhouseDestination(config);
       return { token: `${destination}:${last}:${[...sent].join(',')}`, destination, pieces, facts, rows, attempts: state.attempts, nextAttemptAt: state.next_attempt };
@@ -150,16 +166,17 @@ export class ClickHouseStore implements ArchiveFactSink {
     const delay = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** Math.min(this.state().attempts, RETRY_MAX_EXPONENT));
     this.db.prepare('UPDATE clickhouse_export SET attempts=attempts+1,next_attempt=?,error=?').run(now + delay * (1 - RETRY_JITTER_FRACTION * Math.random()), error.slice(0, 256));
   }
+  mirror(store: ClickHouseStoreName, records: MirrorRecord[], prune: MirrorPrune): void { mirrorRecords(this.db, this.config(), store, records, prune); }
   retry(): void { this.db.exec('UPDATE clickhouse_export SET next_attempt=0'); }
   clear(): void {
     this.db.transaction(() => {
-      this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,error=NULL,backfill_cursor=NULL').run(this.totals().n);
+      this.db.prepare("UPDATE clickhouse_export SET discarded=discarded+?,error=NULL,backfill_cursor=NULL,record_cursors='{}'").run(this.totals().n);
       this.db.exec('DELETE FROM clickhouse_outbox');
     })();
   }
   status(): Omit<ClickHouseStatus, 'hasCredentials' | 'running' | 'paused'> {
     const r = this.state(), totals = this.totals();
     const oldest = this.db.prepare('SELECT at FROM clickhouse_outbox ORDER BY seq LIMIT 1').get() as { at: string } | undefined;
-    return { config: this.config(), queued: totals.n, queuedBytes: totals.bytes, oldestQueuedAt: oldest?.at ?? null, acknowledged: r.acknowledged, discarded: r.discarded, oversized: r.oversized, contentExpired: r.content_expired, attempts: r.attempts, nextAttemptAt: r.next_attempt, lastAcknowledgedAt: r.last_ack, error: r.error, backfilling: r.backfill_cursor !== null };
+    return { config: this.config(), queued: totals.n, queuedBytes: totals.bytes, oldestQueuedAt: oldest?.at ?? null, acknowledged: r.acknowledged, discarded: r.discarded, oversized: r.oversized, contentExpired: r.content_expired, attempts: r.attempts, nextAttemptAt: r.next_attempt, lastAcknowledgedAt: r.last_ack, error: r.error, backfilling: this.config().enabled && (r.backfill_cursor !== null || r.record_cursors !== '{}') };
   }
 }

@@ -1,4 +1,4 @@
-# Called by scripts/dev-shortcut.mjs: writes a Start Menu shortcut with an app ID and a tile manifest.
+# Called by scripts/dev-shortcut.mts: writes a Start Menu shortcut with an app ID and a tile manifest.
 # Electron's shell.writeShortcutLink can't set the manifest hint, which gives the Start tile its large logo.
 # -ElectronExe: also writes Electron's notification shortcut, hidden (see Save-ElectronShortcut).
 param(

@@ -3,6 +3,7 @@ import type { CompareReport } from '@shared/activityCompare';
 import { comboRow } from '../lib/comboSelection';
 import { money, spanText } from '../lib/compareFormat';
 import { usd } from '../lib/format';
+import { appLocale } from '@shared/timeFormat';
 
 /** One combination: median cost per task in kept requests, a ledger from its tasks' cost to its own spend, then whole-range spend. */
 export function ComboCard(props: { report: CompareReport; combo: string }) {
@@ -22,8 +23,8 @@ export function ComboCard(props: { report: CompareReport; combo: string }) {
         </Show>
       </div>
       <dl class="combo-ledger">
-        <dt>Tasks started here · {(tasks()?.tasks ?? 0).toLocaleString()}</dt><dd>{usd(tasks()?.costUsd ?? 0)}</dd>
-        <dt>Other models inside them · {(tasks()?.mixed ?? 0).toLocaleString()} mixed</dt><dd>{money(-(tasks()?.otherCostUsd ?? 0))}</dd>
+        <dt>Tasks started here · {(tasks()?.tasks ?? 0).toLocaleString(appLocale())}</dt><dd>{usd(tasks()?.costUsd ?? 0)}</dd>
+        <dt>Other models inside them · {(tasks()?.mixed ?? 0).toLocaleString(appLocale())} mixed</dt><dd>{money(-(tasks()?.otherCostUsd ?? 0))}</dd>
         <dt>As subagents in other tasks</dt><dd>+ {money(row().asSubagentCostUsd)}</dd>
         <dt class="sum">Spent here, {kept()}</dt><dd class="sum">{money(covered())}</dd>
         <dt>Spent here, whole range</dt><dd>{usd(row().whole.costUsd)}</dd>

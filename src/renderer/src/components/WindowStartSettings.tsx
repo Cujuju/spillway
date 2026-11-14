@@ -5,6 +5,7 @@ import { providerLabel } from '@shared/trayValues';
 import { WINDOW_START_PROVIDERS, WINDOW_START_REQUEST, type WindowStartProvider } from '@shared/windowStartSettings';
 import { settings, snapshot, updateSettings } from '../store';
 import { Seg, Select, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const set = (fn: (d: AppSettings) => void) => void updateSettings(fn);
 
@@ -47,7 +48,7 @@ export function WindowStartSettings() {
           {(e) => <p class="list-row-help error">{label(e().credentialId)}: {e().message}</p>}
         </Show>
         <Show when={status()?.lastStart}>
-          {(s) => <p class="list-row-help muted">Last rolled {label(s().credentialId)} at {new Date(s().at).toLocaleTimeString()}, using {s().model}.</p>}
+          {(s) => <p class="list-row-help muted">Last rolled {label(s().credentialId)} at {new Date(s().at).toLocaleTimeString(appLocale())}, using {s().model}.</p>}
         </Show>
       </SettingsGroup>
       <SettingsGroup title="Model">

@@ -6,6 +6,7 @@ import { AccountFilter } from './AccountFilter';
 import { ClientFilter } from './ClientFilter';
 import { ChoiceChip } from './ScopeChip';
 import { RESET_TRACE_FILTERS, TraceScopeParts, traceFiltersNarrowed, type TraceFilters } from './TraceScopeParts';
+import { appLocale } from '@shared/timeFormat';
 
 export type UsageSource = 'proxy' | 'all';
 /** The effort filter's "every effort" value; '' is requests with no recorded effort. */
@@ -28,7 +29,7 @@ const RANGE_OPTIONS: readonly { value: Range; label: string; phrase: string }[] 
 
 const shortDay = (day: string) => {
   const [y, m, d] = day.split('-').map(Number);
-  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(y!, m! - 1, d!).toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' });
 };
 
 /** A view's time frame: a preset, or inclusive days up to `today`. `ranges` limits the presets; `maxDays` the custom span. */

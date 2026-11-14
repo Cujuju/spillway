@@ -1,3 +1,5 @@
+import { HOUR_CYCLE_ARG } from '@shared/timeFormat';
+import { systemHourCycle } from './hourCycle';
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
@@ -79,13 +81,17 @@ export function showMainWindow(): void {
   w.focus();
 }
 
-/** Every renderer page runs sandboxed behind the same preload (window.api). */
-export const rendererPreferences: Electron.WebPreferences = {
-  preload: path.join(import.meta.dirname, '../preload/index.cjs'),
-  contextIsolation: true,
-  nodeIntegration: false,
-  sandbox: true,
-};
+/** Every renderer page runs sandboxed behind the same preload (window.api). Built per window: the OS clock read needs app ready. */
+export function rendererPreferences(): Electron.WebPreferences {
+  return {
+    preload: path.join(import.meta.dirname, '../preload/index.cjs'),
+    // Renderers format times with the OS clock setting, read once at launch.
+    additionalArguments: [HOUR_CYCLE_ARG + (systemHourCycle() ?? '')],
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+  };
+}
 
 /** Loads a renderer page from the dev server in development, else from the build. */
 export function loadRendererPage(w: BrowserWindow, page: 'index.html' | 'notice.html'): void {
@@ -117,7 +123,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     backgroundColor: themeBackground(),
     icon: shellIconPath(),
     title: APP_NAME,
-    webPreferences: rendererPreferences,
+    webPreferences: rendererPreferences(),
   });
   if (saved?.maximized) win.maximize();
   win.setMenuBarVisibility(false);

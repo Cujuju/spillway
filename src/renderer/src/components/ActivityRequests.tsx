@@ -11,6 +11,7 @@ import { createRequestOrder, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextS
 import { now } from '../store';
 import { costText } from './activityFormat';
 import { REQUEST_COLUMN_COUNT, RequestRow } from './RequestRow';
+import { appLocale } from '@shared/timeFormat';
 
 export type RequestFilter = 'all' | 'failed';
 const CHEVRON_PX = 13;
@@ -154,7 +155,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
                       </Show>
                       <span>{dayName(day)}</span>
                       <span class="muted">
-                        {(summary()?.requests ?? 0).toLocaleString()} requests · {(summary()?.failed ?? 0).toLocaleString()} failed · {summary() ? costText(summary()!) : '—'}
+                        {(summary()?.requests ?? 0).toLocaleString(appLocale())} requests · {(summary()?.failed ?? 0).toLocaleString(appLocale())} failed · {summary() ? costText(summary()!) : '—'}
                       </span>
                     </button>
                   </td>

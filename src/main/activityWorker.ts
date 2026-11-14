@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { ActivityLog } from './activityStore';
 import { conversationNames } from './conversationNames';
 import { startClientLogSync } from './clientLogSync';
+import { startTitleExport } from './titleExport';
 import type { ActivityMethods, EvalMethods, Request, WorkerConfig } from './activityProtocol';
 const port = parentPort!;
 const log = new ActivityLog(workerData as WorkerConfig, (value) => port.postMessage({ event: 'migration', value }));
@@ -14,6 +15,7 @@ const startSync = () => startClientLogSync(log, () => {
   port.postMessage({ event: 'reset' });
 }, (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
+const titles = startTitleExport(log);
 const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise<void> } = {
   thinkingTestPrepare: (req) => log.thinkingTestPrepare(req), thinkingTestSave: (test) => log.thinkingTestSave(test), thinkingTests: () => log.thinkingTests(),
   priceSnapshot: () => log.priceSnapshot(),
@@ -40,12 +42,12 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(),
   archiveExportPrepare: (o) => log.archiveExportPrepare(o), archiveExportStatus: (id) => log.archiveExportStatus(id),
   archiveExportStart: (id, file) => log.archiveExportStart(id, file), archiveExportCancel: (id) => log.archiveExportCancel(id),
-  clickhouseStatus: () => log.clickhouseStatus(), clickhouseConfigure: (c) => log.clickhouseConfigure(c),
+  clickhouseStatus: () => log.clickhouseStatus(), clickhouseConfigure: (c) => { log.clickhouseConfigure(c); titles.refresh(); },
   clickhousePrepare: () => log.clickhousePrepare(), clickhouseAcknowledge: (t, d) => log.clickhouseAcknowledge(t, d),
-  clickhouseFail: (t, n, e) => log.clickhouseFail(t, n, e), clickhouseRetry: () => log.clickhouseRetry(), clickhouseClear: () => log.clickhouseClear(),
+  clickhouseFail: (t, n, e) => log.clickhouseFail(t, n, e), clickhouseRetry: () => log.clickhouseRetry(), clickhouseClear: () => log.clickhouseClear(), clickhouseMirrorUsage: (r, o) => log.clickhouseMirrorUsage(r, o),
   diagnosticSnapshot: (id, bodies) => log.diagnosticSnapshot(id, bodies),
   traceQuery: (q) => log.traceQuery(q), traceAttempts: (q) => log.traceAttempts(q),
-  close: async () => { await stop(); await log.archiveExportDispose(); log.close(); },
+  close: async () => { await titles.stop(); await stop(); await log.archiveExportDispose(); log.close(); },
 };
 let queue = Promise.resolve();
 port.on('message', (request: Request) => {

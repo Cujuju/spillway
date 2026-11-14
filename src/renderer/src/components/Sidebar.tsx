@@ -6,6 +6,7 @@ import { activityImport, archiveMigration, page, setPage, settings, snapshot, up
 import { isMac } from '../lib/platform';
 import { BuildCard } from './BuildCard';
 import { ProxyStateIcon, proxyStatusText } from './ProxyState';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 15;
 const TOGGLE_ICON_PX = 12;
@@ -59,13 +60,13 @@ export function Sidebar() {
     ? [{ label: 'Status', value: proxyStatusText() }]
     : item.id === 'activity' && migrating()
       ? [
-        { label: 'Upgraded requests', value: archiveMigration().done.toLocaleString() },
-        { label: 'Total requests', value: archiveMigration().total.toLocaleString() },
+        { label: 'Upgraded requests', value: archiveMigration().done.toLocaleString(appLocale()) },
+        { label: 'Total requests', value: archiveMigration().total.toLocaleString(appLocale()) },
       ]
     : item.id === 'activity' && activityImport().state === 'importing'
       ? [
-        { label: 'Completed files', value: activityImport().filesDone.toLocaleString() },
-        { label: 'Total files', value: activityImport().filesTotal.toLocaleString() },
+        { label: 'Completed files', value: activityImport().filesDone.toLocaleString(appLocale()) },
+        { label: 'Total files', value: activityImport().filesTotal.toLocaleString(appLocale()) },
       ] : [];
   return (
     <nav class="sidebar" classList={{ collapsed: collapsed() }}>

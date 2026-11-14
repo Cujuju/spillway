@@ -1,11 +1,14 @@
 import { For, Show } from 'solid-js';
 import { deliversTo, MAX_CONSOLE_LINES, MIN_CONSOLE_LINES, type NoticeDelivery, type NoticeStyle } from '@cujuju/electron-notices';
+import { overlaySupported } from '@shared/notice';
 import type { AppSettings } from '@shared/settings';
 import { TRAY_NAME } from '../lib/platform';
 import { settings, updateSettings } from '../store';
 import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 
 type Notifications = AppSettings['notifications'];
+/** Fixed for the app's lifetime. */
+const OVERLAY = overlaySupported(window.api.platform);
 type EventKey = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyCrashed';
 
 const DELIVERIES: readonly { value: NoticeDelivery; label: string; help: string }[] = [
@@ -41,10 +44,16 @@ export function NotificationSettings() {
   return (
     <>
       <SettingsGroup title="Delivery">
-        <SettingRow label="Show with" help={helpOf(DELIVERIES, n().delivery)}>
-          <Seg label="Show with" value={n().delivery} options={DELIVERIES} onChange={(v) => set((d) => void (d.delivery = v))} />
-        </SettingRow>
-        <Show when={deliversTo(n().delivery).overlay}>
+        <Show when={OVERLAY} fallback={
+          <SettingRow label="Show with" help="Your desktop’s notifications. Spillway’s own notifications need macOS or Windows: on Linux they can’t let clicks through or stay in place on Wayland.">
+            <span class="secondary">System</span>
+          </SettingRow>
+        }>
+          <SettingRow label="Show with" help={helpOf(DELIVERIES, n().delivery)}>
+            <Seg label="Show with" value={n().delivery} options={DELIVERIES} onChange={(v) => set((d) => void (d.delivery = v))} />
+          </SettingRow>
+        </Show>
+        <Show when={OVERLAY && deliversTo(n().delivery).overlay}>
           <SettingRow label="Style" help={helpOf(STYLES, n().style)}>
             <Seg label="Style" value={n().style} options={STYLES} onChange={(v) => set((d) => void (d.style = v))} />
           </SettingRow>

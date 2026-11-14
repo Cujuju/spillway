@@ -65,13 +65,13 @@ it('does not restart an older paused operation after a later Cancel', async () =
   await started; const cancelled = service.cancelClickHouse(); finish(); await operation; await cancelled;
   expect(service.clickhouseUploader.paused).toBe(true);
 });
-it('keeps old credentials when live traffic makes a destination change fail its atomic backlog check', async () => {
+it('changes destination while live traffic keeps queuing: discards the old queue and binds new credentials', async () => {
   const { config } = await setup(); mock.log!.clickhouseClear();
   mock.beforeConfigure = () => mock.log!.archiveObserve(parseActivityEvent('{"request_id":"racing-event","trace_id":"full-trace-race"}')!);
-  await expect(service.saveClickHouse({ ...config, endpoint: 'http://127.0.0.1:1' }, { username: 'new', password: 'new-secret' })).rejects.toThrow(/Clear/);
+  const next = { ...config, endpoint: 'http://127.0.0.1:1' };
+  await expect(service.saveClickHouse(next, { username: 'new', password: 'new-secret' })).resolves.toMatchObject({ config: next, hasCredentials: true });
   await service.cancelClickHouse();
-  expect(mock.credentials).toMatchObject({ password: 'old-password', endpoint: config.endpoint });
-  expect(mock.log!.clickhouseStatus().config).toEqual(config);
+  expect(mock.credentials).toMatchObject({ username: 'new', password: 'new-secret', endpoint: next.endpoint });
 });
 it('leaves a staged destination disabled after secrets failure, with no old credential binding', async () => {
   const { config } = await setup(); mock.log!.clickhouseClear(); mock.secretFailure = true;

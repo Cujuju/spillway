@@ -5,11 +5,12 @@ import { shownText } from '../store';
 import { compactNumber, dateTime } from '../lib/format';
 import { costText, KIND_BADGE, nodeLabel, ORIGIN_BADGE } from '../lib/traceFormat';
 import { HoverTip, InfoTip } from './ChartTip';
+import { appLocale } from '@shared/timeFormat';
 
 const EVIDENCE_NOTE = 'Parents come only from proxy parent-session metadata; subagents carry a claude:/codex: …:agent: ID. Retention removes old attempts: archived links keep session, effort, transport and account; tokens and cost come from the matching usage record while it lasts. Pages are a live read; refresh after new traffic. Range: up to 90 days, 7 by default.';
 
 const ICON_PX = 14;
-const shortDay = (at: string) => new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const shortDay = (at: string) => new Date(at).toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' });
 
 /** Ranked trace nodes: name and own cost, then kind, failures and volume. */
 export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNode[]; busy: boolean; more: boolean; selected?: string; onSelect: (n: TraceNode) => void; onMore: () => void; onRefresh: () => void }) {
@@ -17,7 +18,7 @@ export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNod
     <section class="card trace-branches">
       <div class="panel-head">
         <h2 class="card-title">Branches</h2>
-        <span class="panel-count">{props.nodes.length.toLocaleString()}{props.more ? '+' : ''}</span>
+        <span class="panel-count">{props.nodes.length.toLocaleString(appLocale())}{props.more ? '+' : ''}</span>
         <span class="panel-head-end panel-count">
         <Show when={props.coverage}>{(c) => (
           <>
@@ -25,9 +26,9 @@ export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNod
             <InfoTip title="Coverage" rows={[
               { label: 'From', value: dateTime(c().from) },
               { label: 'To', value: dateTime(c().to) },
-              { label: 'Requests read', value: c().scanned.toLocaleString() },
-              { label: 'Read limit', value: c().limit.toLocaleString() },
-              { label: 'Invalid links dropped', value: c().rejected.toLocaleString() },
+              { label: 'Requests read', value: c().scanned.toLocaleString(appLocale()) },
+              { label: 'Read limit', value: c().limit.toLocaleString(appLocale()) },
+              { label: 'Invalid links dropped', value: c().rejected.toLocaleString(appLocale()) },
             ]} note={EVIDENCE_NOTE} />
           </>
         )}</Show>
@@ -51,7 +52,7 @@ export function TraceBranches(props: { coverage?: TraceCoverage; nodes: TraceNod
                     <span class="badge compact amber">{n.conflictingParents ? 'Conflict' : 'Cycle'}</span>
                   </HoverTip>
                 </Show>
-                <span>{n.metrics.attempts.toLocaleString()} req</span>
+                <span>{n.metrics.attempts.toLocaleString(appLocale())} req</span>
                 <Show when={n.metrics.tokens !== null}><span>{compactNumber(n.metrics.tokens!)} tok</span></Show>
                 <span class="trace-node-time">{dateTime(n.lastAt)}</span>
               </span>

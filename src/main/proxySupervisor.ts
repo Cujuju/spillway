@@ -15,12 +15,15 @@ const READY_TIMEOUT_MS = 30_000;
 const READY_POLL_MS = 250;
 /** Time for the shutdown endpoint to flush auth and cooldown state before a hard kill. */
 const GRACEFUL_STOP_MS = 8_000;
+/** Assumption: an uncatchable kill is reported within milliseconds; longer means the OS can't end it (stuck in the kernel). */
+const KILL_EXIT_WAIT_MS = 2_000;
 /** Crash loop guard: give up after this many restarts inside the window below. */
 const MAX_CRASH_RESTARTS = 5;
 const CRASH_WINDOW_MS = 10 * 60_000;
 const RESTART_BACKOFF_BASE_MS = 1_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const exitsWithin = (exited: Promise<void>, ms: number) => Promise.race([exited.then(() => true), sleep(ms).then(() => false)]);
 
 /** Launch switch: use the proxy already at this endpoint (e.g. `scripts/demo`). The app never starts or stops it; it authenticates with the stable management key. */
 const ATTACH_SWITCH = 'proxy-endpoint';
@@ -218,12 +221,15 @@ class ProxySupervisor extends EventEmitter {
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
     const accepted = await management.shutdown();
     this.log('app', `stopping proxy (graceful request ${accepted ? 'accepted' : 'unavailable'})`);
-    const timedOut = await Promise.race([exited.then(() => false), sleep(GRACEFUL_STOP_MS).then(() => true)]);
-    if (timedOut && this.proc === child) {
-      this.log('app', 'proxy did not exit in time; killing');
-      child.kill();
-      await exited;
-    }
+    if (await exitsWithin(exited, GRACEFUL_STOP_MS) || this.proc !== child) return;
+    // Plain kill() is SIGTERM on macOS and Linux, which the proxy handles; SIGKILL can't be caught (TerminateProcess on Windows).
+    this.log('app', 'proxy did not exit in time; killing');
+    const signalled = child.kill('SIGKILL');
+    if (await exitsWithin(exited, KILL_EXIT_WAIT_MS) || this.proc !== child) return;
+    // Callers (Quit, Restart, update install) must not hang on a process the OS won't end.
+    const lastError = `Proxy (pid ${child.pid}) did not exit after ${signalled ? 'SIGKILL' : 'a failed kill'}`;
+    this.log('app', lastError);
+    this.setStatus({ lastError });
   }
 
   async restart(): Promise<void> {

@@ -1,4 +1,6 @@
 import './identity';
+import { setHourCycle } from '@shared/timeFormat';
+import { systemHourCycle } from './hourCycle';
 import { spillwayNotice } from '@shared/notice';
 import { app, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
@@ -7,6 +9,7 @@ import { minuteToClock } from '@shared/windowStartSettings';
 import { history } from './historyStore';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
+import { promptSecretsRecovery } from './secretsRecovery';
 
 if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
@@ -18,6 +21,7 @@ async function startNormalApp(): Promise<void> {
   const { activity } = await import('./activityStream');
   const { archiveSync } = await import('./archiveSync');
   const { clickhouseUploader, cancelClickHouse } = await import('./clickhouseService');
+  const { exportUsage } = await import('./usageExport');
   const { drainActivity } = await import('./activityShutdown');
   const { registerIpc } = await import('./ipc');
   const { stopDiagnosticExport } = await import('./diagnosticService');
@@ -60,6 +64,8 @@ async function startNormalApp(): Promise<void> {
 
   function wireEvents(): void {
     usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
+    // Snapshots follow history.add, so the newest sample is already stored.
+    usage.on('snapshot', () => exportUsage(false));
     usage.on('error', (m) => send(EVENTS.onUsageError, m));
     windowStarter.attach();
     canaryService.on('change', (s) => send(EVENTS.onCanaryChange, s));
@@ -132,12 +138,18 @@ async function startNormalApp(): Promise<void> {
     app.on('activate', reveal);
 
     void app.whenReady().then(async () => {
-      await loadSecrets();
+      setHourCycle(systemHourCycle());
+      try { await loadSecrets(promptSecretsRecovery); } catch (err) {
+        console.error('[startup] secrets unavailable, quitting:', err);
+        app.exit(1);
+        return;
+      }
       registerIpc();
       wireEvents();
       installAppMenu(() => openSettingsSection('about'));
       activityLog.start();
       clickhouseUploader.start();
+      exportUsage(true);
       applyLoginItem();
       // The tray is always present: it hosts the limit icons and the hidden-start entry point.
       ensureAppTray();

@@ -4,7 +4,11 @@
 
 Linux x64 ships as `Spillway-<version>-x86_64.AppImage` in [stable releases](https://github.com/Cujuju/spillway/releases). Download it to a folder you can write to, mark it executable in your file manager, and open it. AppImage needs FUSE support from your distribution; see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
+Spillway keeps Chromium's sandbox on Linux. An AppImage can't ship the setuid sandbox helper, so Chromium needs unprivileged user namespaces. Where the system blocks them (`unshare -Ur true` fails, for example under an AppArmor restriction), the AppImage launcher starts Spillway with `--no-sandbox` rather than failing to start.
+
 The tray uses Electron's StatusNotifierItem support, with a GtkStatusIcon fallback. Your desktop must provide a tray host; GNOME commonly needs an AppIndicator extension. The registered tray menu opens the window, controls the proxy, selects accounts and quits. Activation can be a click or double-click, depending on the desktop.
+
+Notices use your desktop's notifications (a notification daemon is required). Spillway's own overlay needs Electron features Linux lacks: clicks passing through its transparent margins, and on Wayland, placement and staying on top.
 
 Settings → Startup → Launch at login writes `$XDG_CONFIG_HOME/autostart/dev.cujuju.spillway.desktop` (default `~/.config/autostart/`). It launches the original AppImage, with `--hidden` when Start minimized is on. Disabling launch at login removes that entry. After moving the AppImage, open it once to refresh the entry.
 

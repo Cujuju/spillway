@@ -9,6 +9,7 @@ import { costText, EXCHANGE_LAYOUT_OPTIONS, KIND_BADGE, meanText, modelLabel, no
 import { HoverTip, InfoTip } from './ChartTip';
 import { TraceAttempts, type BundlePicks } from './TraceAttempts';
 import { CopyButton, Seg } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 const EXPORT_NOTE = 'Recorded exchanges of this branch in the time frame, as a portable JSON Lines file.';
@@ -19,23 +20,23 @@ function Stats(props: { n: TraceNode }) {
   const m = () => props.n.metrics;
   return (
     <div class="stat-strip inset">
-      <HoverTip layout="block" title="Cost" rows={[{ label: 'Priced', value: m().priced.toLocaleString() }, { label: 'Unpriced', value: m().unpriced.toLocaleString() }]}>
+      <HoverTip layout="block" title="Cost" rows={[{ label: 'Priced', value: m().priced.toLocaleString(appLocale()) }, { label: 'Unpriced', value: m().unpriced.toLocaleString(appLocale()) }]}>
         <div class="stat-cell"><div class="stat-label">Own cost</div><div class="stat-value">{costText(m().costUsd)}</div><div class="stat-sub">{m().unpriced ? `${m().unpriced} unpriced` : 'all priced'}</div></div>
       </HoverTip>
       <HoverTip layout="block" title="Requests" rows={[
-        { label: 'Via proxy', value: m().proxyAttempts.toLocaleString() },
-        { label: 'Imported', value: m().importedAttempts.toLocaleString() },
-        { label: 'Outcome unknown', value: m().unknownOutcomes.toLocaleString() },
-        { label: 'Account moves', value: m().accountMoves.toLocaleString() },
-        { label: 'Exchanges', value: props.n.exchanges.toLocaleString() },
+        { label: 'Via proxy', value: m().proxyAttempts.toLocaleString(appLocale()) },
+        { label: 'Imported', value: m().importedAttempts.toLocaleString(appLocale()) },
+        { label: 'Outcome unknown', value: m().unknownOutcomes.toLocaleString(appLocale()) },
+        { label: 'Account moves', value: m().accountMoves.toLocaleString(appLocale()) },
+        { label: 'Exchanges', value: props.n.exchanges.toLocaleString(appLocale()) },
       ]}>
-        <div class="stat-cell"><div class="stat-label">Requests</div><div class="stat-value">{m().attempts.toLocaleString()}</div>
+        <div class="stat-cell"><div class="stat-label">Requests</div><div class="stat-value">{m().attempts.toLocaleString(appLocale())}</div>
           <div class="stat-sub" classList={{ 'danger-text': m().failed > 0 }}>{m().failed ? `${m().failed} failed` : 'none failed'}</div></div>
       </HoverTip>
-      <HoverTip layout="block" title="Tokens" rows={[{ label: 'With usage', value: m().usageKnown.toLocaleString() }, { label: 'Without usage', value: m().missingUsage.toLocaleString() }]}>
+      <HoverTip layout="block" title="Tokens" rows={[{ label: 'With usage', value: m().usageKnown.toLocaleString(appLocale()) }, { label: 'Without usage', value: m().missingUsage.toLocaleString(appLocale()) }]}>
         <div class="stat-cell"><div class="stat-label">Tokens</div><div class="stat-value">{m().tokens === null ? '—' : compactNumber(m().tokens!)}</div><div class="stat-sub">{m().missingUsage ? `${m().missingUsage} without usage` : 'all reported'}</div></div>
       </HoverTip>
-      <HoverTip layout="block" title="Latency" rows={[{ label: 'Samples', value: m().latencyCount.toLocaleString() }, { label: 'TTFT samples', value: m().ttftCount.toLocaleString() }]}>
+      <HoverTip layout="block" title="Latency" rows={[{ label: 'Samples', value: m().latencyCount.toLocaleString(appLocale()) }, { label: 'TTFT samples', value: m().ttftCount.toLocaleString(appLocale()) }]}>
         <div class="stat-cell"><div class="stat-label">Avg latency</div><div class="stat-value">{meanText(m().latencySumMs, m().latencyCount)}</div><div class="stat-sub">TTFT {meanText(m().ttftSumMs, m().ttftCount)}</div></div>
       </HoverTip>
       <div class="stat-cell"><div class="stat-label">Active</div><div class="stat-value">{dateTime(props.n.lastAt)}</div><div class="stat-sub">since {dateTime(props.n.firstAt)}</div></div>
@@ -97,7 +98,7 @@ export function TraceDetail(props: {
 
       <div class="panel-head trace-attempts-head">
         <h3 class="section-label">Attempts</h3>
-        <span class="panel-count">{props.attempts.length.toLocaleString()}{props.more ? '+' : ''}</span>
+        <span class="panel-count">{props.attempts.length.toLocaleString(appLocale())}{props.more ? '+' : ''}</span>
         <Show when={props.picks.picked.length}>{(n) => (
           <div class="panel-head-end">
             <span class="panel-count">{n()} of {DIAGNOSTIC_LIMITS.records} picked</span>

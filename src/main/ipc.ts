@@ -20,6 +20,7 @@ import { applyManagedPolicy, managedPolicyStatus, undoManagedPolicy } from './ma
 import { exportLoginFile, importLoginFiles } from './credentialFiles';
 import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@shared/settings';
 import { history } from './historyStore';
+import { exportUsage } from './usageExport';
 import { management } from './managementClient';
 import { appPaths, PROXY_EXE_NAME } from './paths';
 import { ensureUserConfigFile, readUserConfig, writeUserConfig } from './proxyLaunch';
@@ -237,7 +238,7 @@ const handlers: Handlers = {
   archivePolicy: (p) => withClickHousePaused(async () => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; }),
   archiveClear: () => withClickHousePaused(async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.refresh(); await activityLog.call('archiveClear'); }),
   clickhouseStatus,
-  clickhouseSave: saveClickHouse, clickhouseDiagnose: diagnoseClickHouse, clickhouseRetry: retryClickHouse, clickhouseClear: clearClickHouse,
+  clickhouseSave: async (config, credentials) => { const status = await saveClickHouse(config, credentials); exportUsage(true); return status; }, clickhouseDiagnose: diagnoseClickHouse, clickhouseRetry: retryClickHouse, clickhouseClear: clearClickHouse,
   clickhouseCancel: () => cancelClickHouse(),
   activityBucketSnapshot: (days) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));

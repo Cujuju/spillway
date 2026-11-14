@@ -5,6 +5,7 @@ import { byteSize } from '../lib/format';
 import { HoverTip, InfoTip } from './ChartTip';
 import { Dialog, SettingRow, Toggle } from './ui';
 import '../styles/archive.css';
+import { appLocale } from '@shared/timeFormat';
 
 /** Writing a file reports progress this often. */
 const POLL_MS = 500;
@@ -12,7 +13,7 @@ const EXPORT_NOTE = 'A versioned JSON Lines file for inspection, eval or replay 
 const PRIVACY_NOTE = 'Files are unencrypted and keep original text, including emails and secrets in prompts; screen masking does not apply. Auth files, credentials, headers and query strings are never exported.';
 const LIVE_STATES: readonly ArchiveExportJob['state'][] = ['preview', 'writing', 'finalizing'];
 const FAILED_STATES: readonly ArchiveExportJob['state'][] = ['canceled', 'expired', 'failed'];
-const clock = (at: string) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const clock = (at: string) => new Date(at).toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' });
 
 /** Portable export of `selection` (a query or exact archive IDs): preview a frozen snapshot, then save it. Closing cancels an unsaved preview. */
 export function PortableExportDialog(props: { selection: Pick<ArchiveExportOptions, 'query' | 'ids'>; subject: string; onClose: () => void }) {
@@ -75,18 +76,18 @@ export function PortableExportDialog(props: { selection: Pick<ArchiveExportOptio
     </div>
     <Show when={job()}>{(j) => <div class="export-job" aria-live="polite">
       <div class="stat-strip inset">
-        <div class="stat-cell"><div class="stat-label">Exchanges</div><div class="stat-value">{j().manifest.records.toLocaleString()}</div>
+        <div class="stat-cell"><div class="stat-label">Exchanges</div><div class="stat-value">{j().manifest.records.toLocaleString(appLocale())}</div>
           <div class="stat-sub">{j().manifest.unresolvedIds.length ? `${j().manifest.unresolvedIds.length} unavailable` : 'all resolved'}</div></div>
         <div class="stat-cell"><div class="stat-label">Snapshot</div><div class="stat-value">{byteSize(j().manifest.snapshotBytes)}</div>
           <div class="stat-sub">{j().manifest.rawPayloads === 'omitted' ? 'no bodies' : 'with bodies'}</div></div>
-        <HoverTip layout="block" title="Capture states" rows={Object.entries(j().manifest.captureStates).filter(([, n]) => n > 0).map(([state, n]) => ({ label: state, value: n.toLocaleString() }))}
+        <HoverTip layout="block" title="Capture states" rows={Object.entries(j().manifest.captureStates).filter(([, n]) => n > 0).map(([state, n]) => ({ label: state, value: n.toLocaleString(appLocale()) }))}
           note="Missing, expired and partial exchanges keep their state; malformed payloads are marked.">
           <div class="stat-cell"><div class="stat-label">Expires</div><div class="stat-value">{clock(j().manifest.expiresAt)}</div>
             <div class="stat-sub">frozen {clock(j().manifest.createdAt)}</div></div>
         </HoverTip>
         <Show when={working() || j().state === 'complete'}>
           <div class="stat-cell"><div class="stat-label">{j().state === 'complete' ? 'Saved' : j().state === 'finalizing' ? 'Finishing' : 'Writing'}</div>
-            <div class="stat-value">{j().writtenRecords.toLocaleString()} / {j().manifest.records.toLocaleString()}</div>
+            <div class="stat-value">{j().writtenRecords.toLocaleString(appLocale())} / {j().manifest.records.toLocaleString(appLocale())}</div>
             <div class="stat-sub">{byteSize(j().writtenBytes)}</div></div>
         </Show>
       </div>

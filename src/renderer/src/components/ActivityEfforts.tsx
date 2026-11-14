@@ -4,6 +4,7 @@ import { compactNumber } from '../lib/format';
 import { costText } from './activityFormat';
 import { InfoTip } from './ChartTip';
 import { ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const mean = (sum: number, count: number) => {
   const ms = timingMean(sum, count);
@@ -30,14 +31,14 @@ export function EffortsTable(props: { rows: ModelEffortRow[] }) {
           {(r) => <tr>
             <td><div class="cell-name"><ProviderGlyph provider={r.provider} size="sm" /><span>{r.model || 'Unknown'}{!r.effectiveKnown && <span class="muted"> (requested; effective unknown)</span>}</span></div></td>
             <td>{r.effort ?? 'Unknown'}</td>
-            <td class="tabular num">{r.summary.requests.toLocaleString()}<div class="muted">{r.summary.failed.toLocaleString()} failed</div></td>
+            <td class="tabular num">{r.summary.requests.toLocaleString(appLocale())}<div class="muted">{r.summary.failed.toLocaleString(appLocale())} failed</div></td>
             <td class="tabular num">{compactNumber(r.summary.inputTokens)}</td>
             <td class="tabular num">{compactNumber(r.summary.outputTokens)}</td>
             <td class="tabular num">{compactNumber(r.summary.cachedTokens)}</td>
             <td class="tabular num">{compactNumber(r.summary.cacheWriteTokens)}</td>
             <td class="tabular num" title={`${r.summary.unpricedRequests} unpriced requests excluded`}>{costText(r.summary)}</td>
-            <td class="tabular num">{mean(r.summary.ttftSumMs, r.summary.ttftCount)}<div class="muted">n={r.summary.ttftCount.toLocaleString()}</div></td>
-            <td class="tabular num">{mean(r.summary.latencySumMs, r.summary.latencyCount)}<div class="muted">n={r.summary.latencyCount.toLocaleString()}</div></td>
+            <td class="tabular num">{mean(r.summary.ttftSumMs, r.summary.ttftCount)}<div class="muted">n={r.summary.ttftCount.toLocaleString(appLocale())}</div></td>
+            <td class="tabular num">{mean(r.summary.latencySumMs, r.summary.latencyCount)}<div class="muted">n={r.summary.latencyCount.toLocaleString(appLocale())}</div></td>
           </tr>}
         </For>
       </tbody>

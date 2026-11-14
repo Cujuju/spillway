@@ -2,6 +2,7 @@ import { repairMatchedIdentities } from './usageLedger';
 import { clientLogKey } from './clientLogPaths';
 import { ARCHIVE_SCHEMA } from './archiveStore';
 import { CLICKHOUSE_SCHEMA } from './clickhouseStore';
+import { installClickHouseRecords } from './clickhouseRecords';
 import { TRACE_SCHEMA } from './traceStore';
 import { EVAL_SCHEMA } from './evalCaseStore';
 import Database from 'better-sqlite3-multiple-ciphers';
@@ -109,6 +110,7 @@ export function openActivityDb(file: string, hexKey: string): Db {
       db.exec(CLICKHOUSE_SCHEMA);
       db.exec(TRACE_SCHEMA);
       db.exec(EVAL_SCHEMA);
+      installClickHouseRecords(db);
       if (!db.prepare("SELECT 1 FROM meta WHERE key = 'checkpoint-paths-normalized'").get()) {
         const rows = db.prepare('SELECT path, state FROM client_log_checkpoints ORDER BY json_extract(state, \'$.mtime\'), json_extract(state, \'$.offset\'), path').all() as { path: string; state: string }[];
         db.exec('DELETE FROM client_log_checkpoints');

@@ -9,6 +9,7 @@ import { minuteToClock } from '@shared/windowStartSettings';
 import { history } from './historyStore';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
+import { promptSecretsRecovery } from './secretsRecovery';
 
 if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
@@ -138,7 +139,11 @@ async function startNormalApp(): Promise<void> {
 
     void app.whenReady().then(async () => {
       setHourCycle(systemHourCycle());
-      await loadSecrets();
+      try { await loadSecrets(promptSecretsRecovery); } catch (err) {
+        console.error('[startup] secrets unavailable, quitting:', err);
+        app.exit(1);
+        return;
+      }
       registerIpc();
       wireEvents();
       installAppMenu(() => openSettingsSection('about'));

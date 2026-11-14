@@ -69,50 +69,72 @@ async function encode(value: Secrets): Promise<Buffer> {
   return (await safeStorage.isAsyncEncryptionAvailable()) ? safeStorage.encryptStringAsync(json) : Buffer.from(json, 'utf8');
 }
 
-async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean } | null> {
-  try {
-    let json = buf.toString('utf8');
-    let reEncrypt = false;
-    if (await safeStorage.isAsyncEncryptionAvailable()) {
-      const r = await safeStorage.decryptStringAsync(buf);
-      json = r.result;
-      reEncrypt = r.shouldReEncrypt;
+/** Parses secrets JSON; null when the text isn't a secrets object (ciphertext, corruption). */
+function parseSecrets(json: string): { value: Secrets; complete: boolean } | null {
+  let parsed: Partial<Secrets>;
+  try { parsed = JSON.parse(json) as Partial<Secrets>; } catch { return null; }
+  if (typeof parsed?.clientApiKey !== 'string') return null;
+  let clickhouse: Secrets['clickhouse'];
+  if (parsed.clickhouse) {
+    try {
+      if (typeof parsed.clickhouse.endpoint !== 'string') throw new Error('Missing credential binding');
+      clickhouse = { ...validateClickHouseCredentials(parsed.clickhouse), endpoint: parsed.clickhouse.endpoint };
     }
-    const parsed = JSON.parse(json) as Partial<Secrets>;
-    if (typeof parsed.clientApiKey !== 'string') return null;
-    // Files from older versions lack later keys; they get them and are rewritten.
-    const complete = present(parsed.managementKey) && present(parsed.databaseKey);
-    let clickhouse: Secrets['clickhouse'];
-    if (parsed.clickhouse) {
-      try {
-        if (typeof parsed.clickhouse.endpoint !== 'string') throw new Error('Missing credential binding');
-        clickhouse = { ...validateClickHouseCredentials(parsed.clickhouse), endpoint: parsed.clickhouse.endpoint };
-      }
-      catch { console.error('[settings] invalid ClickHouse credentials ignored'); }
-    }
-    return {
-      value: {
-        clientApiKey: parsed.clientApiKey,
-        managementKey: present(parsed.managementKey) ? parsed.managementKey : newSecret(),
-        databaseKey: present(parsed.databaseKey) ? parsed.databaseKey : newDatabaseKey(),
-        ...(clickhouse ? { clickhouse } : {}),
-      },
-      reEncrypt: reEncrypt || !complete,
-    };
-  } catch (err) {
-    console.error('[settings] secrets unreadable:', err);
+    catch { console.error('[settings] invalid ClickHouse credentials ignored'); }
   }
-  return null;
+  return {
+    value: {
+      clientApiKey: parsed.clientApiKey,
+      managementKey: present(parsed.managementKey) ? parsed.managementKey : newSecret(),
+      databaseKey: present(parsed.databaseKey) ? parsed.databaseKey : newDatabaseKey(),
+      ...(clickhouse ? { clickhouse } : {}),
+    },
+    // Files from older versions lack later keys; they get them and are rewritten.
+    complete: present(parsed.managementKey) && present(parsed.databaseKey),
+  };
 }
+
+/** Reads an existing secrets file; throws when it can't (OS store locked or unavailable, corruption). */
+async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean }> {
+  const encrypting = await safeStorage.isAsyncEncryptionAvailable();
+  // Plain JSON was written while OS encryption was unavailable; encrypt it once it is.
+  const plain = parseSecrets(buf.toString('utf8'));
+  if (plain) return { value: plain.value, reEncrypt: encrypting || !plain.complete };
+  if (!encrypting) throw new Error('OS encryption is unavailable');
+  const r = await safeStorage.decryptStringAsync(buf);
+  const decrypted = parseSecrets(r.result);
+  if (!decrypted) throw new Error('decrypted secrets are malformed');
+  return { value: decrypted.value, reEncrypt: r.shouldReEncrypt || !decrypted.complete };
+}
+
+/** What to do with a secrets file that can't be read: try again, set it aside and start new keys, or give up. */
+export type SecretsRecovery = (error: unknown) => Promise<'retry' | 'reset' | 'quit'>;
 
 let secrets: Secrets | null = null;
 
-/** Reads or creates the secrets file. Call once after app ready, before getSecrets(). */
-export async function loadSecrets(): Promise<Secrets> {
+/**
+ * Reads or creates the secrets file. Call once after app ready, before getSecrets().
+ * An existing unreadable file is never replaced silently: `recover` decides; without it, or on quit, this throws.
+ */
+export async function loadSecrets(recover?: SecretsRecovery): Promise<Secrets> {
   const file = appPaths.secretsFile;
-  const decoded = existsSync(file) ? await decode(readFileSync(file)) : null;
+  let decoded: { value: Secrets; reEncrypt: boolean } | null = null;
+  while (existsSync(file)) {
+    try {
+      decoded = await decode(readFileSync(file));
+      break;
+    } catch (err) {
+      console.error('[settings] secrets unreadable:', err);
+      const choice = recover ? await recover(err) : 'quit';
+      if (choice === 'quit') throw err;
+      if (choice === 'retry') continue;
+      const aside = `${file}.unreadable-${Date.now()}`;
+      renameSync(file, aside);
+      console.error(`[settings] secrets reset; old file kept at ${aside}`);
+    }
+  }
   secrets = decoded?.value ?? { clientApiKey: newSecret(), managementKey: newSecret(), databaseKey: newDatabaseKey() };
-  // Rewrite when new, unreadable, or encrypted under a rotated key.
+  // Rewrite when new, stored as plain text, or encrypted under a rotated key.
   if (!decoded || decoded.reEncrypt) writeFileAtomic(file, await encode(secrets));
   return secrets;
 }

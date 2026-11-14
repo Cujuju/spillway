@@ -24,22 +24,46 @@ if (process.argv[2] === 'nightly') {
   ensureNightlyRelease(releaseDetails(), process.argv.includes('--dry-run'));
 }
 
-/** A stable release refreshes the README screenshots from fake data, then commits and pushes them to main. */
+/** A stable release refreshes the README screenshots and opens an auto-merge PR; promote needn't wait, its tag stays on the nightly's commit. */
 const README_BRANCH = 'main';
 if (process.argv[2] === 'promote' && !process.argv.includes('--dry-run')) {
   const git = (args: string[]) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
-  if (git(['branch', '--show-current']) !== README_BRANCH) {
-    console.error(`Promote from ${README_BRANCH}: it commits and pushes the refreshed screenshots there.`);
+  const version = process.argv[3]?.replace(/^v/, '');
+  if (!version) {
+    console.error('usage: promote <version> [--dry-run]');
+    process.exit(1);
+  }
+  git(['fetch', 'origin', README_BRANCH]);
+  if (git(['branch', '--show-current']) !== README_BRANCH || git(['rev-parse', 'HEAD']) !== git(['rev-parse', `origin/${README_BRANCH}`])) {
+    console.error(`Promote from ${README_BRANCH} at origin/${README_BRANCH}: the screenshot PR is based on it.`);
     process.exit(1);
   }
   execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
   await capture();
   if (git(['status', '--porcelain', '--', IMAGES_DIR])) {
-    git(['add', '--', IMAGES_DIR]);
-    git(['commit', '-m', `docs: refresh screenshots for ${process.argv[3] ?? 'release'}`, '--', IMAGES_DIR]);
+    const branch = `release/screenshots-v${version}`;
+    const title = `docs: refresh screenshots for v${version}`;
+    // Any failure here (branch, commit, push, PR) stops the promote before anything is published.
+    git(['switch', '-C', branch]);
+    try {
+      git(['add', '--', IMAGES_DIR]);
+      git(['commit', '-m', title, '--', IMAGES_DIR]);
+      // A rerun replaces this release's earlier screenshots.
+      execFileSync('git', ['push', '--force', '-u', 'origin', branch], { cwd: ROOT, stdio: 'inherit' });
+    } finally {
+      git(['switch', README_BRANCH]);
+    }
+    const gh = (args: string[]) => execFileSync('gh', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+    const open = gh(['pr', 'list', '--repo', UPDATE_REPO, '--head', branch, '--state', 'open', '--json', 'url', '--jq', '.[0].url']);
+    const url = open || gh(['pr', 'create', '--repo', UPDATE_REPO, '--base', README_BRANCH, '--head', branch, '--title', title,
+      '--body', `Demo screenshots refreshed by \`pnpm release promote ${version}\`. The release doesn't depend on it.`]);
+    console.log(`Screenshot PR: ${url}`);
+    try {
+      gh(['pr', 'merge', url, '--auto', '--squash']);
+    } catch {
+      console.warn(`Couldn't enable auto-merge; merge ${url} by hand.`);
+    }
   }
-  // A rejected push (main behind origin) stops the promote before anything is published.
-  execFileSync('git', ['push', 'origin', README_BRANCH], { cwd: ROOT, stdio: 'inherit' });
 }
 
 await runReleaseCli({

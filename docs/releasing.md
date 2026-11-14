@@ -38,9 +38,9 @@ An incomplete prerelease remains published with its existing assets when main ad
 
 ## Stable releases
 
-Once a nightly has all three platform manifests, run `pnpm release promote <version>` from main. It builds the fake-data demo screenshots, commits changed images, pushes main, and only then promotes the existing nightly. A rejected push stops promotion. `--dry-run` skips the screenshot writes and publication.
+Once a nightly has all three platform manifests, run `pnpm release promote <version>` from main at origin/main. It builds the fake-data demo screenshots, commits changed images on `release/screenshots-v<version>`, pushes that branch, opens a PR with auto-merge enabled, and only then promotes the existing nightly. A failed commit, push or PR creation stops promotion. Promotion doesn't wait for the PR to merge: the release tag stays on the nightly's commit. `--dry-run` skips the screenshot writes and publication.
 
-Promotion emits `release: released`, triggering the same workflow to build and attach macOS dmg/zip installers for both architectures from the release tag's source commit. Windows Setup exe and Linux x64 AppImage installers already shipped with the nightly are preserved. The screenshot commit does not change that source tag. Updates retain their existing signatures and files.
+Promotion emits `release: released`, triggering the same workflow to build and attach macOS dmg/zip installers for both architectures from the release tag's source commit. Windows Setup exe and Linux x64 AppImage installers already shipped with the nightly are preserved. The screenshot PR does not change that source tag. Updates retain their existing signatures and files.
 
 macOS keeps both DMG and ZIP downloads for manual installation. ZIP archives provide an alternative to mounting a disk image; macOS updates still rebuild the unpacked app bundle and do not use either installer format.
 

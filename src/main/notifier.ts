@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, nativeTheme, Notification, screen } from 'elect
 import { createNoticeOverlay, createNotifier, handleNoticeIpc, OVERLAY_WINDOW_OPTIONS, type NoticeInput } from '@cujuju/electron-notices';
 import { APP_NAME } from '@shared/app';
 import { EVENTS } from '@shared/ipc';
-import { noticeView, spillwayNotice } from '@shared/notice';
+import { noticeDelivery, noticeView, spillwayNotice } from '@shared/notice';
 import { appIconPath } from './paths';
 import { getSettings, onSettingsChange } from './settingsStore';
 import { loadRendererPage, rendererPreferences, showMainWindow, showWindowAndSend } from './window';
@@ -14,7 +14,7 @@ export const noticeOverlay = createNoticeOverlay({
     return w;
   },
   primaryDisplay: () => screen.getPrimaryDisplay(),
-  view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors),
+  view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors, process.platform),
   platform: process.platform,
   onOpen: (n) => openNoticeTarget(n.target),
 });
@@ -25,7 +25,7 @@ export function openNoticeTarget(target: string | undefined): void {
 }
 const notifier = createNotifier({
   overlay: noticeOverlay,
-  delivery: () => getSettings().notifications.delivery,
+  delivery: () => noticeDelivery(getSettings(), process.platform),
   system(input) {
     if (!Notification.isSupported()) return;
     const n = new Notification({ title: input.title, body: input.body, icon: appIconPath() });

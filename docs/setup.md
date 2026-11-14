@@ -27,7 +27,7 @@ Launch at login only applies to installed builds.
 
 `pnpm demo` opens the built app on fake data: a throwaway profile and home folder, and a fake proxy (`scripts/demo/`) that serves generated accounts, 2 weeks of usage history and 4 weeks of requests. Nothing from your own profile, logins or client logs loads. The data is seeded, so every run draws the same numbers relative to the current time.
 
-The demo uses the maintainer's UI settings (`scripts/demo/launch.mts`): theme, window size (1842×1179), Dashboard options and Activity board. Screenshots grow to a page's full height. `pnpm demo --screenshots` captures the Dashboard, Activity and Providers pages from it in a dark and a light theme into `docs/images/`, then quits. `pnpm release promote` runs it, commits changed images and pushes `main`. 5-hour windows follow the local clock, so run it during the day to show live ones.
+The demo uses the maintainer's UI settings (`scripts/demo/launch.mts`): theme, window size (1842×1179), Dashboard options and Activity board. Screenshots grow to a page's full height. `pnpm demo --screenshots` captures the Dashboard, Activity and Providers pages from it in a dark and a light theme into `docs/images/`, then quits. `pnpm release promote` runs it and opens an auto-merge PR with the changed images. 5-hour windows follow the local clock, so run it during the day to show live ones.
 
 `pnpm smoke` builds the app, boots it the same way, opens every page and quits. It exits non-zero if Electron is missing, the app exits or the window never draws, or a page crashes or throws an uncaught error. It runs the built app, not the `pnpm dev` server.
 

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { appLocale, parseHourCycle, setHourCycle } from './timeFormat';
-import { linuxHourCycle, localeHourCycle, macHourCycle, systemHourCycle, windowsHourCycle } from '../main/hourCycle';
+import { linuxHourCycle, localeHourCycle, macHourCycle, readHourCycle, windowsHourCycle } from '../main/hourCycle';
 
 afterEach(() => setHourCycle(null));
 const AFTERNOON = new Date(2026, 0, 1, 15, 5);
@@ -23,10 +23,12 @@ it('falls back to the locale default, reading POSIX names and C as 24-hour', () 
 
 it('reads the macOS toggle, else the region default', () => {
   const defaults = (values: Record<string, string>) => (key: string) => values[key] ?? null;
-  expect(macHourCycle(defaults({ AppleICUForce24HourTime: '1' }), 'en-US')).toBe('h23');
-  expect(macHourCycle(defaults({ AppleICUForce12HourTime: '1' }), 'en-DE')).toBe('h12');
-  expect(macHourCycle(defaults({ AppleICUForce24HourTime: '0' }), 'en-DE')).toBe('h12');
-  expect([macHourCycle(defaults({}), 'en-DE'), macHourCycle(defaults({}), 'en-US')]).toEqual(['h23', 'h12']);
+  // An explicit toggle decides without the region, so the ready-only locale getter is never called.
+  const unread = () => { throw new Error('region read'); };
+  expect(macHourCycle(defaults({ AppleICUForce24HourTime: '1' }), unread)).toBe('h23');
+  expect(macHourCycle(defaults({ AppleICUForce12HourTime: '1' }), unread)).toBe('h12');
+  expect(macHourCycle(defaults({ AppleICUForce24HourTime: '0' }), unread)).toBe('h12');
+  expect([macHourCycle(defaults({}), () => 'en-DE'), macHourCycle(defaults({}), () => 'en-US')]).toEqual(['h23', 'h12']);
 });
 
 it('reads the GNOME or Cinnamon clock, else LC_TIME, ignoring GNOME settings on other desktops', () => {
@@ -41,7 +43,12 @@ it('reads the GNOME or Cinnamon clock, else LC_TIME, ignoring GNOME settings on 
 
 // Every Windows profile has a short time pattern, so a null here means the registry read failed.
 it.runIf(process.platform === 'win32')('reads the hour cycle from the Windows registry', () => {
-  expect(systemHourCycle()).not.toBeNull();
+  expect(readHourCycle(() => { throw new Error('locale fallback used'); })).not.toBeNull();
+});
+
+// Runs the real `defaults` reads; a 12/24-hour toggle or the fixed region always decides.
+it.runIf(process.platform === 'darwin')('reads the clock with the native macOS tools', () => {
+  expect(['h23', 'h12']).toContain(readHourCycle(() => 'en-US'));
 });
 
 const SRC = path.join(import.meta.dirname, '..');

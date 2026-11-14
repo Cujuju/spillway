@@ -9,7 +9,7 @@ import { loadRendererPage, rendererPreferences, showMainWindow, showWindowAndSen
 
 export const noticeOverlay = createNoticeOverlay({
   createWindow() {
-    const w = new BrowserWindow({ ...OVERLAY_WINDOW_OPTIONS, title: `${APP_NAME} notifications`, webPreferences: rendererPreferences });
+    const w = new BrowserWindow({ ...OVERLAY_WINDOW_OPTIONS, title: `${APP_NAME} notifications`, webPreferences: rendererPreferences() });
     loadRendererPage(w, 'notice.html');
     return w;
   },

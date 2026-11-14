@@ -19,11 +19,11 @@ export function localeHourCycle(locale: string | undefined): HourCycle {
 }
 
 /** macOS: the Date & Time "24-hour time" toggle when set, else the region's default. */
-export function macHourCycle(readDefault: (key: string) => string | null, regionLocale: string): HourCycle {
+export function macHourCycle(readDefault: (key: string) => string | null, regionLocale: () => string): HourCycle {
   if (readDefault('AppleICUForce24HourTime') === '1') return 'h23';
   if (readDefault('AppleICUForce12HourTime') === '1') return 'h12';
   if (readDefault('AppleICUForce24HourTime') === '0') return 'h12';
-  return localeHourCycle(regionLocale);
+  return localeHourCycle(regionLocale());
 }
 
 type Gsettings = (schema: string, key: string) => string | null;
@@ -48,15 +48,19 @@ const run = (command: string, args: string[]): string | null => {
   return out.status === 0 ? out.stdout.trim() : null;
 };
 
-let cached: HourCycle | undefined;
-/** The OS clock preference, read once per launch. */
-export function systemHourCycle(): HourCycle { return cached === undefined ? cached = readHourCycle() : cached; }
-
-function readHourCycle(): HourCycle {
+/** This OS's clock setting; `systemLocale` is called only when no explicit setting decides. */
+export function readHourCycle(systemLocale: () => string): HourCycle {
   if (process.platform === 'win32') {
     const pattern = /sShortTime\s+REG_SZ\s+(.+)/.exec(run('reg', ['query', String.raw`HKCU\Control Panel\International`, '/v', 'sShortTime']) ?? '')?.[1]?.trim();
-    return pattern ? windowsHourCycle(pattern) : localeHourCycle(app.getSystemLocale());
+    return pattern ? windowsHourCycle(pattern) : localeHourCycle(systemLocale());
   }
-  if (process.platform === 'darwin') return macHourCycle((key) => run('defaults', ['read', '-g', key]), app.getSystemLocale());
+  if (process.platform === 'darwin') return macHourCycle((key) => run('defaults', ['read', '-g', key]), systemLocale);
   return linuxHourCycle(process.env, (schema, key) => run('gsettings', ['get', schema, key]));
+}
+
+let cached: HourCycle | undefined;
+/** The OS clock preference, read once per launch. Throws before app ready on every OS: Electron's system locale needs it. */
+export function systemHourCycle(): HourCycle {
+  if (!app.isReady()) throw new Error('systemHourCycle() called before app ready');
+  return cached === undefined ? cached = readHourCycle(() => app.getSystemLocale()) : cached;
 }

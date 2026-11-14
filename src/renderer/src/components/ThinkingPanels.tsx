@@ -7,6 +7,7 @@ import { Matched } from './ThinkingTest';
 import {
   alternativeMethod, alternativeName, cheaperModel, estimatedLowerEffort, KIND_TEXT, lowerEffort, mixedOption, perWeek, settingName, share,
 } from '../lib/thinkingReport';
+import { appLocale } from '@shared/timeFormat';
 
 const BUCKET_NAME = { light: 'Light', typical: 'Typical', heavy: 'Heavy' } as const;
 
@@ -119,7 +120,7 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
                 return (
                   <tr>
                     <td class="name">{KIND_TEXT[kind].name}<small>{KIND_TEXT[kind].rule}</small></td>
-                    <td class="num">{Math.round(perWeek(props.report, k().turns)).toLocaleString()}<span class="sub">{share(props.s.turns ? k().turns / props.s.turns : 0)}</span></td>
+                    <td class="num">{Math.round(perWeek(props.report, k().turns)).toLocaleString(appLocale())}<span class="sub">{share(props.s.turns ? k().turns / props.s.turns : 0)}</span></td>
                     <td class="num">{usd(perWeek(props.report, k().costUsd), 0)}<span class="sub">{share(k().costShare)}</span></td>
                     <td class="num">{share(k().thinkingShare)}</td>
                     <td class="num">{k().lowerEffortSavingUsdPerWeek === null ? <span class="muted">not enough data</span> : usd(k().lowerEffortSavingUsdPerWeek!, 0)}</td>
@@ -130,7 +131,7 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
             </For>
           </tbody>
           <tfoot><tr>
-            <td>All turns</td><td class="num">{Math.round(perWeek(props.report, props.s.turns)).toLocaleString()}</td><td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
+            <td>All turns</td><td class="num">{Math.round(perWeek(props.report, props.s.turns)).toLocaleString(appLocale())}</td><td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
             <td class="num">{share(props.s.thinkingShare)}</td><td class="num">{saved() > 0 ? usd(saved(), 0) : '—'}</td>
             <td class="num"><Matched result={tested()} /></td>
           </tr></tfoot>

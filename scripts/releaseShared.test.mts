@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { Arch, archFromString, LinuxPackager, MacPackager, Packager, WinPackager } from 'electron-builder';
@@ -87,6 +88,17 @@ it('matches release sources and installers to electron-builder artifact expansio
       mac.expandArtifactNamePattern(config.mac, 'zip', archFromString(arch)),
     ]));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+it('keeps Chromium sandboxing in the AppImage desktop entry', async () => {
+  // Not a direct dependency: resolve the builder's own AppImage target, the code that writes the entry.
+  const builderRequire = createRequire(createRequire(import.meta.url).resolve('electron-builder'));
+  const { default: AppImageTarget } = builderRequire('app-builder-lib/out/targets/appimage/AppImageTarget') as {
+    default: new (...args: unknown[]) => { desktopEntry: { value: Promise<string> } };
+  };
+  const packager = { platformSpecificBuildOptions: config.linux, config, appInfo: { buildVersion: '0.1.0' } };
+  const helper = { computeDesktopEntry: async (_options: unknown, exec: string) => exec };
+  expect(await new AppImageTarget(null, packager, helper, os.tmpdir()).desktopEntry.value).toBe('AppRun %U');
 });
 
 it('restores missing origin/HEAD for clean CI siblings and still rejects dirty or stale siblings', () => {

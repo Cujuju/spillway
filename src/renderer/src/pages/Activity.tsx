@@ -22,6 +22,7 @@ import { persistedSignal } from '../lib/persisted';
 import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
 import { activityBuckets, now, proxyStatus, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
+import { appLocale } from '@shared/timeFormat';
 
 const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'drift', label: 'Drift' }, { value: 'totals', label: 'Totals' }, { value: 'thinking', label: 'Thinking' }, { value: 'evals', label: 'Evals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
@@ -75,8 +76,8 @@ export function Activity() {
   const days = createDaySummaries(scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
-    { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString()}` },
-    { value: 'failed' as const, label: `Failed ${days.stored().failed.toLocaleString()}` },
+    { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString(appLocale())}` },
+    { value: 'failed' as const, label: `Failed ${days.stored().failed.toLocaleString(appLocale())}` },
   ]);
 
   // snapshot() is already masked when "Show emails" is off.

@@ -87,14 +87,16 @@ it('retries identical bytes, preserves new rows during upload, and binds acknowl
   const { store } = setup(); enable(store); store.append(fact()); const b = store.prepare()!;
   store.fail(b.token, Date.now(), 'offline'); expect(store.prepare()).toBeNull(); store.retry(); expect(store.prepare()!.facts).toBe(b.facts);
   store.append(fact(1)); store.acknowledge(b.token, 'wrong'); expect(store.status().queued).toBe(2);
-  expect(() => store.configure({ ...config, tablePrefix: 'other' })).toThrow(/Clear/);
   store.acknowledge(b.token, b.destination); expect(store.status()).toMatchObject({ queued: 1, acknowledged: 1, attempts: 0 });
+  // A new destination discards the old queue instead of refusing; an old-destination acknowledgment no longer applies.
+  const late = store.prepare()!; store.configure({ ...config, tablePrefix: 'other' }); expect(store.status()).toMatchObject({ queued: 0, discarded: 1 });
+  store.acknowledge(late.token, late.destination); expect(store.status().acknowledged).toBe(1);
 });
 it('applies current label and content policy at prepare time without changing stored content', () => {
   const { archive, store, db } = setup(); archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true }); enable(store); ingest(archive);
   expect(lines(store.prepare()!.facts)[0].content_policy).toBe('metadata-only');
   store.configure({ ...config, includeBodies: true, sourceLabel: 'desk' }); store.clear(); ingest(archive, record(2));
-  let line = lines(store.prepare()!.facts)[0]; expect(line).toMatchObject({ content_policy: 'included', source_label: 'desk', schema_version: 1 });
+  let line = lines(store.prepare()!.facts)[0]; expect(line).toMatchObject({ content_policy: 'included', source_label: 'desk', schema_version: 2 });
   expect(line.at).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/);
   archive.setPolicy(DEFAULT_ARCHIVE_POLICY); expect(lines(store.prepare()!.facts)[0].content_policy).toBe('source-unavailable');
   expect((db.prepare('SELECT content FROM clickhouse_outbox LIMIT 1').get() as { content: string }).content).not.toContain('private-content');
@@ -180,7 +182,7 @@ it('drops all v1 tables and triggers on open and preserves v2 rows', () => {
 it('accepts unversioned plain/shared/replicated engines and validates exact schema keys', async () => {
   const s = await server(), c = { ...config, endpoint: s.endpoint }, signal = new AbortController().signal;
   for (const engine of ['ReplacingMergeTree', 'ReplacingMergeTree()', "SharedReplacingMergeTree('/path,comma','replica') ORDER BY (source_id, at, seq)", "ReplicatedReplacingMergeTree('/path','{replica}')"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).resolves.toBeUndefined(); }
-  for (const engine of ['MergeTree()', 'ReplacingMergeTree(revision)', "SharedReplacingMergeTree('/path','replica',seq)"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow(/schema v1/); }
+  for (const engine of ['MergeTree()', 'ReplacingMergeTree(revision)', "SharedReplacingMergeTree('/path','replica',seq)"]) { s.behavior.engine = engine; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow(/schema v2/); }
   s.behavior.engine = 'ReplacingMergeTree'; s.behavior.partition = ''; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();
   s.behavior.partition = 'toYYYYMM(at)'; s.behavior.sorting = 'source_id,seq'; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();
   s.behavior.sorting = 'source_id,at,seq'; s.behavior.schema = false; await expect(checkClickHouseSchema(c, undefined, signal)).rejects.toThrow();

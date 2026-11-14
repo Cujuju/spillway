@@ -7,7 +7,7 @@ class Child extends EventEmitter {
   stdout = new EventEmitter();
   stderr = new EventEmitter();
   constructor(readonly pid: number | undefined) { super(); }
-  kill = vi.fn(() => { this.emit('exit', 0, null); return true; });
+  kill = vi.fn((_signal?: NodeJS.Signals) => { this.emit('exit', 0, null); return true; });
 }
 let settings: AppSettings;
 const children: Child[] = [];
@@ -90,6 +90,28 @@ describe('proxy lifecycle', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     expect(spawn).toHaveBeenCalledOnce();
     expect(proxy.getStatus().state).toBe('stopped');
+  });
+
+  it('hard-kills a proxy that ignores the shutdown request and SIGTERM, and never waits forever', async () => {
+    await proxy.start();
+    const child = children[0]!;
+    shutdown.mockResolvedValueOnce(false);
+    // POSIX semantics: the proxy handles SIGTERM, so only SIGKILL ends it.
+    child.kill.mockImplementation((signal?: NodeJS.Signals) => { if (signal === 'SIGKILL') child.emit('exit', null, 'SIGKILL'); return true; });
+    const stopping = proxy.stop();
+    await vi.advanceTimersByTimeAsync(8_000);
+    await stopping;
+    expect(child.kill.mock.calls).toEqual([['SIGKILL']]);
+    expect(proxy.getStatus().state).toBe('stopped');
+
+    await proxy.start();
+    const stuck = children[1]!;
+    shutdown.mockResolvedValueOnce(false);
+    stuck.kill.mockImplementation(() => true);
+    const stuckStop = proxy.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await stuckStop;
+    expect(proxy.getStatus().lastError).toMatch(/did not exit after SIGKILL/);
   });
 
   it('still restarts a crashed proxy when enabled', async () => {

@@ -17,6 +17,10 @@ import './styles/help.css';
 import './styles/about.css';
 import { App } from './App';
 import { initStore } from './store';
+import { setHourCycle } from '@shared/timeFormat';
+
+// Before the first render: every date and time format reads it through appLocale().
+setHourCycle(window.api.hourCycle);
 
 // Platform-specific CSS (macOS title bar) keys off this.
 document.documentElement.dataset.platform = window.api.platform;

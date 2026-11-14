@@ -11,6 +11,7 @@ import { ActivityBoard, type PendingChart } from './ActivityBoard';
 import { ActivityInfo } from './ActivityInfo';
 import { costText, countRows, hitRate, savings } from './activityFormat';
 import type { ActivityData } from './activityPanels';
+import { appLocale } from '@shared/timeFormat';
 
 function Stat(props: { label: string; value: string; sub: string; title?: string; info?: JSX.Element }) {
   return (
@@ -64,7 +65,7 @@ export function ActivityOverview(props: {
       <div class="card stat-strip">
         <Stat label="API cost" value={costText(total())} sub="at list prices" info={<ActivityInfo unpriced={unpriced()} />} />
         <Stat label="Tokens" value={compactNumber(total().totalTokens)} sub={`${compactNumber(total().outputTokens)} output`} />
-        <Stat label="Requests" value={total().requests.toLocaleString()} sub={`${total().failed.toLocaleString()} failed`} />
+        <Stat label="Requests" value={total().requests.toLocaleString(appLocale())} sub={`${total().failed.toLocaleString(appLocale())} failed`} />
         <Stat label="Cache hit" value={hitRate(total())} sub={`${compactNumber(total().cachedTokens)} from cache`} title="Prompt tokens served from the prompt cache" />
         <Stat label="Cache savings" value={usd(savings(total()))} sub="vs. no caching" title="List-price cost with every prompt token uncached, minus the estimate" />
       </div>

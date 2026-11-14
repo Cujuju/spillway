@@ -2,6 +2,7 @@ import { shownText } from '../store';
 import { conversationLabel } from '../lib/conversationNames';
 import { HoverTip } from './ChartTip';
 import { ChoiceChip, ScopeChip, ScopeField } from './ScopeChip';
+import { appLocale } from '@shared/timeFormat';
 
 export type TraceSort = 'cost' | 'failed' | 'recent';
 /** The Traces view's own filters; the usage source and time frame are the sentence's other phrases. */
@@ -23,9 +24,9 @@ export const sessionNode = (sessionId: string) => `${SESSION_NODE}${sessionId}`;
 /** The Traces row cap, beside the sentence; hover explains it. */
 export function TraceLimitNote(props: { limit: number }) {
   return (
-    <HoverTip title="Request limit" rows={[{ label: 'Shown', value: `Newest ${props.limit.toLocaleString()}` }, { label: 'Totals', value: 'Partial' }]}
+    <HoverTip title="Request limit" rows={[{ label: 'Shown', value: `Newest ${props.limit.toLocaleString(appLocale())}` }, { label: 'Totals', value: 'Partial' }]}
       note="Narrow the time frame or pick one session for complete totals.">
-      <span class="badge compact amber trace-limit">Newest {props.limit.toLocaleString()} only</span>
+      <span class="badge compact amber trace-limit">Newest {props.limit.toLocaleString(appLocale())} only</span>
     </HoverTip>
   );
 }

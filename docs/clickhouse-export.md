@@ -1,6 +1,6 @@
-# Optional ClickHouse event destination (schema v1)
+# Optional ClickHouse long-term store (schema v2)
 
-Settings → Data → ClickHouse exports immutable archive facts. Export and content inclusion are independently opt-in. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check (and Create tables, offered when Check finds them missing) handles both `<prefix>_facts` and `<prefix>_pieces`; types compare without layout whitespace, since ClickHouse 26 pretty-prints named tuples. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
+Settings → Data → ClickHouse keeps a long-term copy of Spillway's local stores; local retention stays short-term. Export, each store and content inclusion are independently opt-in; turning export on selects every store. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check (and Create tables, offered when Check finds them missing) handles both `<prefix>_facts` and `<prefix>_pieces`; types compare without layout whitespace, since ClickHouse 26 pretty-prints named tuples. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
 
 ## First setup
 
@@ -14,7 +14,27 @@ GRANT ALL ON spillway.* TO spillway;
 
 Then in Spillway: enter endpoint, database, username and password, Save, Check (then Create tables if offered), and turn on Export requests. Named tuples in `request_pieces` are sent as JSON objects, the JSONEachRow default. Errors report status only: 401/403 means credentials or grants; 404 means the database or tables are missing.
 
-Credentials remain in `secrets.bin` and are sent only in ClickHouse authentication headers. Redirects are rejected. Diagnostics hide server responses. Changing destinations requires an empty queue and pauses delivery. Local unreleased v2 state, outbox and triggers are dropped once with no migration; remote v2 tables are left alone. A fresh local source identity is created.
+Credentials remain in `secrets.bin` and are sent only in ClickHouse authentication headers. Redirects are rejected. Diagnostics hide server responses. Changing destination discards the unsent queue (counted as Discarded) and re-sends everything stored locally; delivery pauses during the change. Local unreleased v2 state, outbox and triggers are dropped once with no migration; remote v2 tables are left alone. A fresh local source identity is created.
+
+## Stores and records
+
+| Store | Kinds | Key (`record_key`) |
+|---|---|---|
+| Traces | `attempt`, `capture`, `finalized`, `snapshot` (immutable facts) | empty |
+| Requests | `request` (Activity `ActivityEvent`: tokens, cost, account, effort, latency, status), `request-settings` | local row id, settings hash |
+| Conversation titles | `conversation-title` (`{sessionId,title}`) from T3 Code, Codex and Claude Code | session ID |
+| Hourly and daily totals | `total` (`{key,total}`); `at` is the hour start, or local midnight for day totals | total key |
+| Usage limits | `usage-sample`, `usage-window`, `usage-span` | sample time; credential\|window\|first reset; credential\|window\|start |
+| Drift checks | `canary` | result id |
+| Evals and thinking tests | `eval-case` (one per revision; `capture` only with content), `thinking-test` | `id:revision`, setting key |
+
+Keyed records change locally (usage merges, repricing, running totals, re-run tests), so each change queues the record again; the newest `seq` per `(source_id, kind, record_key)` is current. SQLite triggers queue a reference on every insert or update of an exported table, so no write path skips export; delivery reads the row's current value. Usage history lives in main-process files and titles in other apps' data, so both are mirrored into `clickhouse_mirror` for the same path. Titles of sessions active in the last day are re-read every five minutes; all retained sessions on startup and when export or the store turns on. Spillway never deletes, alters rows in or truncates ClickHouse tables; local deletes (retention, clears) are not exported, and removing remote data is the user's choice. A queued record whose row is gone before upload counts as Discarded. Enabling export or a store, or changing destination, backfills existing rows.
+
+```sql
+-- Current requests.
+SELECT * FROM spillway_facts FINAL WHERE kind = 'request'
+ORDER BY seq DESC LIMIT 1 BY source_id, record_key;
+```
 
 ## Facts and content references
 
@@ -35,6 +55,7 @@ CREATE TABLE IF NOT EXISTS default.spillway_facts (
  source_label LowCardinality(String),
  seq UInt64,
  kind LowCardinality(String),
+ record_key String,
  trace_id String,
  thread_id String,
  at DateTime64(3, 'UTC'),
@@ -57,7 +78,7 @@ CREATE TABLE IF NOT EXISTS default.spillway_pieces (
 PARTITION BY toYYYYMM(at) ORDER BY (source_id, thread_id, seq);
 ```
 
-Checks require exact columns and types, no defaults, these sorting/partition keys, and an unversioned ReplacingMergeTree-family engine. Shared and Replicated variants accept quoted coordination arguments. `schema_version` is 1. Piece sequence IDs are immutable local piece IDs and never reused. Source identity survives clears; replacing the database changes it. Source labels are applied at preparation time.
+Checks require exact columns and types, no defaults, these sorting/partition keys, and an unversioned ReplacingMergeTree-family engine. Schema v1 facts tables (no `record_key`) get Upgrade tables, which runs `ALTER TABLE … ADD COLUMN IF NOT EXISTS record_key String AFTER kind`; existing rows read `''`. Shared and Replicated variants accept quoted coordination arguments. `schema_version` is 2 on new rows. Piece sequence IDs are immutable local piece IDs and never reused. Source identity survives clears; replacing the database changes it. Source labels are applied at preparation time.
 
 ## Delivery and reconstruction
 

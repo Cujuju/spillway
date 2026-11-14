@@ -2,13 +2,14 @@ import { Show } from 'solid-js';
 import { now, settings, updateSettings } from '../store';
 import { createRhythmZipDraft } from '../lib/rhythmZipDraft';
 import { createZipSunTimes, type SunTimes } from '../lib/solarTimes';
+import { appLocale } from '@shared/timeFormat';
 
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 const HELP = 'US ZIP code for Rhythm’s sunrise and sunset; blank uses 6 AM and 6 PM. It never leaves this machine.';
 
 const clockLabel = (hour: number) =>
-  new Date(2000, 0, 1, 0, Math.round(hour * MINUTES_PER_HOUR)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  new Date(2000, 0, 1, 0, Math.round(hour * MINUTES_PER_HOUR)).toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' });
 
 function describe(times: SunTimes) {
   if (times.sunset - times.sunrise === HOURS_PER_DAY) return 'Today the sun stays up all day.';

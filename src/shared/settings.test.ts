@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_CONSOLE_LINES, MIN_CONSOLE_LINES } from '@cujuju/electron-notices';
+import { noticeDelivery, noticeView } from './notice';
 import { DEFAULT_SETTINGS, DEFAULT_TRAY_LOOK, DEFAULT_UPDATE_INSTALL_MINUTE, UPDATE_INSTALL_MODES, normalizeSettings, proxyConfigChanged } from './settings';
 
 describe('normalizeSettings', () => {
@@ -9,6 +10,14 @@ describe('normalizeSettings', () => {
     expect(bad).toMatchObject({ delivery: 'overlay', style: 'tray', dripLip: false, consoleLines: MIN_CONSOLE_LINES });
     expect(normalizeSettings({ notifications: { consoleLines: 40 } }).notifications.consoleLines).toBe(MAX_CONSOLE_LINES);
     expect(normalizeSettings({ notifications: { delivery: 'both', style: 'drip', dripLip: true } }).notifications).toMatchObject({ delivery: 'both', style: 'drip', dripLip: true });
+  });
+
+  it('delivers through system notifications where the overlay is unsupported, keeping the saved choice', () => {
+    const both = normalizeSettings({ notifications: { delivery: 'both', style: 'drip', dripLip: true } });
+    expect(['darwin', 'win32', 'linux'].map((platform) => noticeDelivery(both, platform))).toEqual(['both', 'both', 'system']);
+    // A drip lip opens the overlay window by itself, so the view must carry the effective delivery too.
+    expect(noticeView(both, false, 'linux').config.delivery).toBe('system');
+    expect(both.notifications.delivery).toBe('both');
   });
 
   it('defaults and validates the optional Rhythm ZIP format', () => {

@@ -3,6 +3,7 @@ import type { Metric, Summary } from '../lib/activityStats';
 import { metricValue } from '../lib/activityStats';
 import { compactNumber, pct, usd } from '../lib/format';
 import type { TipRow } from './ChartTip';
+import { appLocale } from '@shared/timeFormat';
 
 export const METRIC_OPTIONS = [{ value: 'cost', label: 'API cost' }, { value: 'tokens', label: 'Tokens' }, { value: 'requests', label: 'Requests' }] as const;
 export const metricLabel = (m: Metric) => METRIC_OPTIONS.find((o) => o.value === m)!.label;
@@ -19,7 +20,7 @@ export const savings = (s: Summary) => Math.max(0, s.uncachedCostUsd - s.costUsd
 /** Hover readout for one bucket or cell. */
 export const countRows = (s: Summary): TipRow[] => [
   { label: 'API cost', value: costText(s) },
-  { label: 'Requests', value: `${s.requests.toLocaleString()}${s.failed ? ` (${s.failed} failed)` : ''}` },
+  { label: 'Requests', value: `${s.requests.toLocaleString(appLocale())}${s.failed ? ` (${s.failed} failed)` : ''}` },
   { label: 'Input', value: compactNumber(s.inputTokens) },
   { label: 'Output', value: compactNumber(s.outputTokens) },
   { label: 'Cache read', value: compactNumber(s.cachedTokens) },

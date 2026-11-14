@@ -4,6 +4,7 @@ import { dayLabel } from '../lib/format';
 import { changeText, METRIC_META, RECENT_DAYS, signedPercent, type MetricSummary } from '../lib/driftView';
 import { DriftChart, type DriftMarker } from './DriftChart';
 import { InfoTip, type TipRow } from './ChartTip';
+import { appLocale } from '@shared/timeFormat';
 
 const CHART_HEIGHT_PX = 150;
 const FEATURED_CHART_HEIGHT_PX = 210;
@@ -29,7 +30,7 @@ export function DriftMetric(props: { series: DriftSeries; summary: MetricSummary
     const rows: TipRow[] = [{ label: meta().label, value: p.value === null ? 'Too few replies' : f(p.value) }];
     if (p.baseline !== null) rows.push({ label: 'Baseline', value: f(p.baseline) }, { label: 'Normal range', value: `${f(Math.max(0, p.low!))} – ${f(p.high!)}` });
     if (p.z !== null) rows.push({ label: 'Deviation', value: `${p.z > 0 ? '+' : ''}${p.z.toFixed(1)}σ${p.flagged ? ' · unusual' : ''}` });
-    rows.push({ label: 'Replies', value: d.replies.toLocaleString() });
+    rows.push({ label: 'Replies', value: d.replies.toLocaleString(appLocale()) });
     for (const c of props.series.changes.filter((c) => c.day === d.day)) rows.push({ label: c.kind === 'settings' ? 'Settings' : 'Version', value: changeText(c) });
     return { title: dayLabel(d.day), rows };
   };

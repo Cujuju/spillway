@@ -3,6 +3,7 @@ import { addCounts, emptyCounts } from '@shared/activityCounts';
 import { accountKey, clientKey } from '@shared/activityScope';
 import { promptTokens } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityCounts } from '@shared/types';
+import { appLocale } from '@shared/timeFormat';
 
 export type Metric = ActivityMetric;
 
@@ -113,4 +114,4 @@ export const byAccount = (rows: ActivityBucket[]): AccountRow[] =>
   groupSummaries(rows, (r) => accountKey(r.authIndex)).map(({ first, summary }) => ({ provider: first.provider, authIndex: first.authIndex, summary }));
 
 /** Hour of day, local clock, for chart and grid labels. */
-export const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+export const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString(appLocale(), { hour: 'numeric' });

@@ -1,4 +1,5 @@
 import { dayLabel } from './format';
+import { appLocale } from '@shared/timeFormat';
 
 /** Daily totals roll up into weeks, months or years; keys sort newest first as strings. */
 export const TOTALS_PERIODS = [
@@ -33,7 +34,7 @@ export function periodKey(day: string, period: TotalsPeriod): string {
 /** "Sat, Oct 25", "Week of Oct 20", "October 2026", "2026". */
 export function periodLabel(key: string, period: TotalsPeriod): string {
   if (period === 'year') return key;
-  if (period === 'month') return parseDay(`${key}-01`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  if (period === 'week') return `Week of ${parseDay(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  if (period === 'month') return parseDay(`${key}-01`).toLocaleDateString(appLocale(), { month: 'long', year: 'numeric' });
+  if (period === 'week') return `Week of ${parseDay(key).toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' })}`;
   return dayLabel(key);
 }

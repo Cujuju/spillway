@@ -9,6 +9,7 @@ import { attemptStatus, CAPTURE_LABEL, CAPTURE_TONE, captureReasonText, costText
 import { onRowActivate, REVEAL_ROW } from '../lib/exchangeNav';
 import { HoverTip, type TipRow } from './ChartTip';
 import { ProviderGlyph } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const or = (v: string | null | undefined) => (v ? shownText(v) : '—');
 
@@ -80,10 +81,10 @@ function AttemptRow(props: { a: TraceAttempt; account: (id: string | null) => st
       <td class="num tabular">
         <Show when={tokens()} fallback={<span class="muted">—</span>}>{(t) => (
           <HoverTip title="Tokens" rows={[
-            { label: 'Input', value: t().inputTokens.toLocaleString() },
-            { label: 'Output', value: t().outputTokens.toLocaleString() },
-            { label: 'Cache read', value: t().cachedTokens.toLocaleString() },
-            { label: 'Cache write', value: t().cacheWriteTokens.toLocaleString() },
+            { label: 'Input', value: t().inputTokens.toLocaleString(appLocale()) },
+            { label: 'Output', value: t().outputTokens.toLocaleString(appLocale()) },
+            { label: 'Cache read', value: t().cachedTokens.toLocaleString(appLocale()) },
+            { label: 'Cache write', value: t().cacheWriteTokens.toLocaleString(appLocale()) },
           ]}>{compactNumber(promptTokens(a().provider ?? '', t()))} / {compactNumber(t().outputTokens)}</HoverTip>
         )}</Show>
       </td>

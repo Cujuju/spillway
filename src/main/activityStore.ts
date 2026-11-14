@@ -9,6 +9,7 @@ import { activityPriceSnapshot, invalidateActivityPrices } from './activityRepri
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
+import type { MirrorRecord } from './clickhouseRecords';
 import type { ClickHouseConfig } from '@shared/clickhouse';
 import { diagnosticSnapshot } from './diagnosticSnapshot';
 import type { ArchivePolicy, CapturePage } from '@shared/archive';
@@ -133,6 +134,14 @@ export class ActivityLog {
   clickhouseFail(token: string, now: number, error: string): void { this.clickhouse.fail(token, now, error); }
   clickhouseRetry(): void { this.clickhouse.retry(); }
   clickhouseClear(): void { this.clickhouse.clear(); }
+  clickhouseMirrorUsage(records: MirrorRecord[], oldestAt: string): void { this.clickhouse.mirror('usage', records, { before: oldestAt }); }
+  clickhouseMirrorTitles(records: MirrorRecord[], complete: boolean): void { this.clickhouse.mirror('titles', records, complete ? { notPushed: true } : null); }
+  /** Sessions in retained requests, optionally only those active since a time, with their first request time. */
+  clickhouseSessions(sinceMs: number | null): { sessionId: string; at: string }[] {
+    return this.db.prepare(`SELECT json_extract(event,'$.sessionId') AS sessionId, min(json_extract(event,'$.at')) AS at FROM requests
+      WHERE day>=? AND json_extract(event,'$.sessionId') IS NOT NULL GROUP BY 1`).all(sinceMs === null ? '' : localDay(sinceMs)) as { sessionId: string; at: string }[];
+  }
+  clickhouseExportsTitles(): boolean { const c = this.clickhouse.config(); return c.enabled && c.stores.titles; }
   diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
   traceQuery(q: TraceQuery) { this.archive.prune(); return new TraceStore(this.db).query(q); }
   traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }

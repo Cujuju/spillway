@@ -10,6 +10,7 @@ import { LimitBar } from './LimitBar';
 import { HoverTip } from './ChartTip';
 import { ResetCreditButton } from './ResetCreditButton';
 import { ProviderGlyph, ResetTime } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 13;
 /** Providers the proxy's on-demand usage lookup (POST /usage/refresh) supports. */
@@ -87,7 +88,7 @@ export function AccountRow(props: {
         </div>
         <div class="account-meta">
           <Show when={c().apiKey}>
-            {(key) => <HoverTip title="Requests since proxy start" rows={[{ label: 'Succeeded', value: key().success.toLocaleString() }, { label: 'Failed', value: key().failed.toLocaleString() }]}><div>{key().success} succeeded · {key().failed} failed</div></HoverTip>}
+            {(key) => <HoverTip title="Requests since proxy start" rows={[{ label: 'Succeeded', value: key().success.toLocaleString(appLocale()) }, { label: 'Failed', value: key().failed.toLocaleString(appLocale()) }]}><div>{key().success} succeeded · {key().failed} failed</div></HoverTip>}
           </Show>
           <Show when={shownEmail() || c().resetCredits?.available}>
             <div class="account-meta-line">

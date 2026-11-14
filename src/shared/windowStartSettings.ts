@@ -1,3 +1,4 @@
+import { appLocale } from '@shared/timeFormat';
 /** Settings for starting each account's 5-hour window as soon as it resets. */
 
 export const MINUTES_PER_HOUR = 60;
@@ -78,7 +79,7 @@ export const minuteToTime = (m: number) => `${String(Math.floor(m / MINUTES_PER_
 export function minuteToClock(minute: number): string {
   const at = new Date();
   at.setHours(0, minute, 0, 0);
-  return at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return at.toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' });
 }
 
 /** Minutes after midnight from "HH:MM"; null when malformed. */

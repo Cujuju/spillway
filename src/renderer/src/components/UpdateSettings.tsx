@@ -6,6 +6,7 @@ import type { UpdateChannel } from '@shared/updateFeed';
 import { minuteToClock } from '@shared/windowStartSettings';
 import { settings, updateSettings } from '../store';
 import { Seg, SettingRow, SettingsGroup, TimeField, Toggle } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 type Of<K extends UpdateStatus['state']> = Extract<UpdateStatus, { state: K }>;
 
@@ -61,7 +62,7 @@ export function UpdateSettings() {
         <Switch
           fallback={
             <>
-              <Show when={when('up-to-date')}>{(u) => <span class="muted">Up to date · checked {new Date(u().checkedAt).toLocaleTimeString()}</span>}</Show>
+              <Show when={when('up-to-date')}>{(u) => <span class="muted">Up to date · checked {new Date(u().checkedAt).toLocaleTimeString(appLocale())}</span>}</Show>
               {checkButton()}
             </>
           }

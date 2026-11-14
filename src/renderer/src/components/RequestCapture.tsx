@@ -5,6 +5,7 @@ import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
 import { migrating, migrationLabel, MIGRATION_NOTE } from './ActivityImport';
 import { Dialog, Notice, NumberField, SettingRow, SettingsGroup, Toggle } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 const MiB = 1024 * 1024;
 /** Bounds from normalizeArchivePolicy (src/shared/archive.ts). */
@@ -23,19 +24,19 @@ function Losses(props: { status: ArchiveStatus }) {
   const s = () => props.status;
   return <>
     <Show when={s().dropped > 0 || s().gaps > 0}>
-      <HoverTip title="Dropped" rows={[{ label: 'Dropped', value: s().dropped.toLocaleString() }, { label: 'Sequence gaps', value: s().gaps.toLocaleString() }, { label: 'Proxy restarts', value: s().restarts.toLocaleString() }]}
+      <HoverTip title="Dropped" rows={[{ label: 'Dropped', value: s().dropped.toLocaleString(appLocale()) }, { label: 'Sequence gaps', value: s().gaps.toLocaleString(appLocale()) }, { label: 'Proxy restarts', value: s().restarts.toLocaleString(appLocale()) }]}
         note="Captures the proxy could not hand over, from overflow, disconnects or crashes. Gaps overlap drops; don't add them.">
-        <span class="badge compact red">{s().dropped ? `${s().dropped.toLocaleString()} dropped` : `${s().gaps.toLocaleString()} gaps`}</span>
+        <span class="badge compact red">{s().dropped ? `${s().dropped.toLocaleString(appLocale())} dropped` : `${s().gaps.toLocaleString(appLocale())} gaps`}</span>
       </HoverTip>
     </Show>
     <Show when={s().overBudgetThreads > 0}>
-      <HoverTip title="Over budget" rows={[{ label: 'Conversations', value: s().overBudgetThreads.toLocaleString() }]} note={OVER_BUDGET_NOTE}>
-        <span class="badge compact amber">{s().overBudgetThreads.toLocaleString()} over budget</span>
+      <HoverTip title="Over budget" rows={[{ label: 'Conversations', value: s().overBudgetThreads.toLocaleString(appLocale()) }]} note={OVER_BUDGET_NOTE}>
+        <span class="badge compact amber">{s().overBudgetThreads.toLocaleString(appLocale())} over budget</span>
       </HoverTip>
     </Show>
     <Show when={s().rejected > 0}>
-      <HoverTip title="Rejected" rows={[{ label: 'Records', value: s().rejected.toLocaleString() }]} note="Captures the app refused as malformed or over its limits.">
-        <span class="badge compact red">{s().rejected.toLocaleString()} rejected</span>
+      <HoverTip title="Rejected" rows={[{ label: 'Records', value: s().rejected.toLocaleString(appLocale()) }]} note="Captures the app refused as malformed or over its limits.">
+        <span class="badge compact red">{s().rejected.toLocaleString(appLocale())} rejected</span>
       </HoverTip>
     </Show>
   </>;
@@ -78,16 +79,16 @@ export function RequestCaptureSettings() {
         <SettingRow label="Storage">
           <Losses status={s()} />
           <HoverTip title="Storage" rows={[
-            { label: 'Exchanges', value: s().entries.toLocaleString() },
-            { label: 'With text', value: s().bodies.toLocaleString() },
-            { label: 'Conversations', value: s().threads.toLocaleString() },
+            { label: 'Exchanges', value: s().entries.toLocaleString(appLocale()) },
+            { label: 'With text', value: s().bodies.toLocaleString(appLocale()) },
+            { label: 'Conversations', value: s().threads.toLocaleString(appLocale()) },
             { label: 'Text size', value: byteSize(s().bytes) },
             { label: 'Stored', value: byteSize(s().storedBytes) },
-            ...s().diffFallbacks ? [{ label: 'Full copies', value: s().diffFallbacks.toLocaleString() }] : [],
+            ...s().diffFallbacks ? [{ label: 'Full copies', value: s().diffFallbacks.toLocaleString(appLocale()) }] : [],
             { label: 'Budget', value: byteSize(s().policy.maxBytes) },
             { label: 'Keep bodies', value: `${s().policy.retentionDays} days` },
           ]} note={`${STORED_NOTE} ${LIMITS_NOTE}`}>
-            <span class="tabular secondary">{s().bodies.toLocaleString()} with text · {byteSize(s().bytes)} text · {byteSize(s().storedBytes)} of {byteSize(s().policy.maxBytes)} stored</span>
+            <span class="tabular secondary">{s().bodies.toLocaleString(appLocale())} with text · {byteSize(s().bytes)} text · {byteSize(s().storedBytes)} of {byteSize(s().policy.maxBytes)} stored</span>
           </HoverTip>
         </SettingRow>
         <SettingRow label="Delete recorded bodies" help={DELETE_NOTE}>

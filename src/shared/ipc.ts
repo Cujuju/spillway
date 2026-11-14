@@ -1,3 +1,4 @@
+import type { HourCycle } from './timeFormat';
 export interface ArchiveMigrationState { state: 'idle' | 'migrating'; done: number; total: number }
 export interface ActivityImportState { state: 'idle' | 'importing'; filesDone: number; filesTotal: number; recordsImported: number; error: string | null }
 import type { ArchiveDetail, ArchivePolicy, ArchiveStatus } from './archive';
@@ -67,6 +68,8 @@ export interface DesktopApi {
   traceQuery(query: TraceQuery): Promise<TracePage>;
   traceAttempts(query: TraceAttemptQuery): Promise<TraceAttemptPage>;
   platform: string;
+  /** OS clock setting (src/shared/timeFormat.ts). */
+  hourCycle: HourCycle;
 
   /** Spillway's own version and build. */
   appBuild(): Promise<BuildInfo>;

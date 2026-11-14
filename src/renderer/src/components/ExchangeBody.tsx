@@ -5,6 +5,7 @@ import { shownText } from '../store';
 import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
 import { Seg } from './ui';
+import { appLocale } from '@shared/timeFormat';
 
 /** Raw characters laid out per step; a multi-MiB body never renders at once. */
 const RENDER_CHUNK = 32 * 1024;
@@ -22,7 +23,7 @@ const HALF_TEXT = byteSize(CAPTURE_BODY_LIMIT / 2);
 const CUT_NOTE = `The proxy records up to ${LIMIT_TEXT} of each side. A larger body keeps its first and last ${HALF_TEXT}, so the newest messages stay; the middle is not recorded. Older captures kept only the start.`;
 const gapText = (gap: ExchangeGap) => gap.omitted === null ? 'Not recorded from here on.' : `${byteSize(gap.omitted)} not recorded here.`;
 const badgeText = (side: ExchangeSide) => side.cut?.omitted != null ? `${byteSize(side.cut.omitted)} gap`
-  : side.cut ? 'Cut' : `${side.gaps.toLocaleString()} ${side.gaps === 1 ? 'gap' : 'gaps'}`;
+  : side.cut ? 'Cut' : `${side.gaps.toLocaleString(appLocale())} ${side.gaps === 1 ? 'gap' : 'gaps'}`;
 const PART_LABEL: Record<ExchangePart['kind'], string> = { text: '', thinking: 'Thinking', 'tool-call': 'Tool call', 'tool-result': 'Tool result', media: 'Attachment', gap: '' };
 
 /** Long text shows a preview with its own expander, so one huge tool result can't swamp the list. */
@@ -32,7 +33,7 @@ function PartText(props: { text: string }) {
   const long = () => text().length > PART_PREVIEW;
   return <>
     <div class="exchange-text">{open() || !long() ? text() : `${text().slice(0, PART_PREVIEW)}…`}</div>
-    <Show when={long()}><button class="exchange-more" type="button" onClick={() => setOpen((v) => !v)}>{open() ? 'Show less' : `Show all ${text().length.toLocaleString()} characters`}</button></Show>
+    <Show when={long()}><button class="exchange-more" type="button" onClick={() => setOpen((v) => !v)}>{open() ? 'Show less' : `Show all ${text().length.toLocaleString(appLocale())} characters`}</button></Show>
   </>;
 }
 
@@ -96,7 +97,7 @@ export function ExchangeBody(props: { label: string; side: ExchangeSide; type: s
       <Show when={props.side.cut || props.side.gaps}>
         <HoverTip title="Partly recorded" rows={[
           ...props.side.cut?.omitted != null ? [{ label: 'Not recorded', value: byteSize(props.side.cut.omitted) }] : [],
-          ...props.side.gaps ? [{ label: 'Message gaps', value: props.side.gaps.toLocaleString() }] : [],
+          ...props.side.gaps ? [{ label: 'Message gaps', value: props.side.gaps.toLocaleString(appLocale()) }] : [],
         ]} note={CUT_NOTE}>
           <span class="badge compact amber">{badgeText(props.side)}</span>
         </HoverTip>

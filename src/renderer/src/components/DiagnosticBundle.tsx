@@ -4,6 +4,7 @@ import { shownText } from '../store';
 import { InfoTip } from './ChartTip';
 import { Dialog } from './ui';
 import '../styles/diagnosticBundle.css';
+import { appLocale } from '@shared/timeFormat';
 
 const PAGE = 32 * 1024;
 const SCOPE_NOTE = `Selected requests only, at most ${DIAGNOSTIC_LIMITS.records}. Nothing is uploaded. The preview is the exact file content and ignores the email display setting; account and conversation IDs become bundle-local aliases.`;
@@ -68,9 +69,9 @@ export function DiagnosticBundle(props: { traceIds: string[]; onClose: () => voi
           <div class="stat-cell"><div class="stat-label">Records</div><div class="stat-value">{p().counts.included} / {p().counts.selected}</div><div class="stat-sub">{p().counts.unavailable} unavailable · {p().counts.partial} partial</div></div>
           <div class="stat-cell"><div class="stat-label">Bodies</div><div class="stat-value">{p().counts.bodiesIncluded}</div><div class="stat-sub">{p().counts.bodiesUnavailable} missing · {p().counts.bodiesOmitted} omitted</div></div>
           <div class="stat-cell"><div class="stat-label">Redacted</div><div class="stat-value">{p().counts.redacted}</div><div class="stat-sub">{p().counts.omitted} omitted</div></div>
-          <div class="stat-cell"><div class="stat-label">Size</div><div class="stat-value">{(p().bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB</div><div class="stat-sub">expires {new Date(p().expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</div></div>
+          <div class="stat-cell"><div class="stat-label">Size</div><div class="stat-value">{(p().bytes / 1024).toLocaleString(appLocale(), { maximumFractionDigits: 1 })} KiB</div><div class="stat-sub">expires {new Date(p().expiresAt).toLocaleTimeString(appLocale(), { hour: 'numeric', minute: '2-digit' })}</div></div>
         </div>
-        <div class="diagnostic-pages"><button class="btn ghost" type="button" disabled={!page()} onClick={() => setPage((n) => n - 1)}>Previous</button><span class="muted">{(page() * PAGE + 1).toLocaleString()}–{Math.min((page() + 1) * PAGE, p().json.length).toLocaleString()} of {p().json.length.toLocaleString()} chars</span><button class="btn ghost" type="button" disabled={(page() + 1) * PAGE >= p().json.length} onClick={() => setPage((n) => n + 1)}>Next</button></div>
+        <div class="diagnostic-pages"><button class="btn ghost" type="button" disabled={!page()} onClick={() => setPage((n) => n - 1)}>Previous</button><span class="muted">{(page() * PAGE + 1).toLocaleString(appLocale())}–{Math.min((page() + 1) * PAGE, p().json.length).toLocaleString(appLocale())} of {p().json.length.toLocaleString(appLocale())} chars</span><button class="btn ghost" type="button" disabled={(page() + 1) * PAGE >= p().json.length} onClick={() => setPage((n) => n + 1)}>Next</button></div>
         <pre class="diagnostic-json" tabIndex={0}>{p().json.slice(page() * PAGE, (page() + 1) * PAGE)}</pre>
         <label><input type="checkbox" checked={reviewed()} onChange={(e) => setReviewed(e.currentTarget.checked)} /> I reviewed this content.</label>
       </>}</Show>

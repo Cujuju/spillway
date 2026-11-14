@@ -11,6 +11,7 @@ import { settings, updateSettings } from '../store';
 import { Select } from './ui';
 import { createTileBoard, TileBoard, type PendingTile, type TileDef } from './TileBoard';
 import { AlternativesTable, KindsTable, ThinkingMethod, ThinkingMix, Verdict } from './ThinkingPanels';
+import { appLocale } from '@shared/timeFormat';
 
 /** Tile chrome (padding, border, header) is 52px; each minimum adds the body that must show without scrolling. */
 /** A verdict: sentence, two savings, and a status line that wraps once tested. */
@@ -101,7 +102,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
           <div class="section-label"><Show when={at(spec)} fallback={`Setting ${rankOf(spec) + 1}`}>
             {(s) => <span class={`think-title ${series(rankOf(spec))}`}><span class="swatch" />{settingName(s().setting)}</span>}
           </Show></div>
-          <Show when={at(spec) && props.report}>{(r) => <span class="chart-head-note num">{usd(at(spec)!.costUsdPerWeek, 0)} a week · {Math.round(perWeek(r(), at(spec)!.turns)).toLocaleString()} turns</span>}</Show>
+          <Show when={at(spec) && props.report}>{(r) => <span class="chart-head-note num">{usd(at(spec)!.costUsdPerWeek, 0)} a week · {Math.round(perWeek(r(), at(spec)!.turns)).toLocaleString(appLocale())} turns</span>}</Show>
         </>
       ),
       createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} kinds={s().kinds} onTest={() => setTesting(s())} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
@@ -137,7 +138,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
       <p class="think-est">
         Costs are estimates at API list prices. On a subscription, read them as how fast you use your limits.
         <Show when={props.report?.untracked.requests}>
-          {' '}Not counted: {props.report!.untracked.requests.toLocaleString()} requests ({usd(props.report!.untracked.costUsd)}) with no recorded effort or from before turns were recorded.
+          {' '}Not counted: {props.report!.untracked.requests.toLocaleString(appLocale())} requests ({usd(props.report!.untracked.costUsd)}) with no recorded effort or from before turns were recorded.
         </Show>
       </p>
       <TileBoard class="activity-board" state={state} def={(kind) => DEFS[kind]} same={sameSpec} placing={props.placing} onPlacingEnd={props.onPlacingEnd}

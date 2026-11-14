@@ -1,4 +1,4 @@
-import { BASIC_TONES, DEFAULT_NOTICE_CONFIG, type NoticeInput, type NoticeView } from '@cujuju/electron-notices';
+import { BASIC_TONES, DEFAULT_NOTICE_CONFIG, type NoticeDelivery, type NoticeInput, type NoticeView } from '@cujuju/electron-notices';
 import type { AppSettings } from './settings';
 import { darkTheme, resolveTheme, type Palette } from './themes';
 
@@ -22,9 +22,15 @@ const vars = (p: Palette): Record<string, string> => ({
   '--notice-accent': p.accentLight, '--notice-info': p.accentLight,
   '--notice-ok': p.green, '--notice-warn': p.amber, '--notice-error': p.red,
 });
-export function noticeView(settings: AppSettings, prefersDark: boolean): NoticeView {
+/** The overlay needs free placement, always-on-top, unfocused showing and click-through margins: Electron forwards clicks only on macOS and Windows; native Wayland lacks the rest. */
+export const overlaySupported = (platform: string): boolean => platform === 'darwin' || platform === 'win32';
+/** The delivery in effect: the setting, or system notifications where the overlay is unsupported. */
+export const noticeDelivery = (settings: AppSettings, platform: string): NoticeDelivery =>
+  overlaySupported(platform) ? settings.notifications.delivery : 'system';
+export function noticeView(settings: AppSettings, prefersDark: boolean, platform: string): NoticeView {
   const theme = resolveTheme(settings.general.theme, prefersDark);
-  const { delivery, style, dripLip, consoleLines } = settings.notifications;
+  const { style, dripLip, consoleLines } = settings.notifications;
+  const delivery = noticeDelivery(settings, platform);
   return { tones: BASIC_TONES, config: { ...DEFAULT_NOTICE_CONFIG, delivery, style, dripLip, consoleLines },
     appearance: { vars: vars(theme.palette), dripVars: vars(darkTheme(theme).palette), colorScheme: theme.scheme } };
 }

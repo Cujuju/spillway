@@ -9,6 +9,7 @@ import { now, proxyStatus, setPage } from '../store';
 import { LimitBar } from './LimitBar';
 import { HoverTip } from './ChartTip';
 import { ResetCreditButton } from './ResetCreditButton';
+import { hasResetCredits } from '../lib/resetGrants';
 import { ProviderGlyph, ResetTime } from './ui';
 import { appLocale } from '@shared/timeFormat';
 
@@ -90,10 +91,10 @@ export function AccountRow(props: {
           <Show when={c().apiKey}>
             {(key) => <HoverTip title="Requests since proxy start" rows={[{ label: 'Succeeded', value: key().success.toLocaleString(appLocale()) }, { label: 'Failed', value: key().failed.toLocaleString(appLocale()) }]}><div>{key().success} succeeded · {key().failed} failed</div></HoverTip>}
           </Show>
-          <Show when={shownEmail() || c().resetCredits?.available}>
+          <Show when={shownEmail() || hasResetCredits(c())}>
             <div class="account-meta-line">
               <Show when={shownEmail()}>{(email) => <span class="truncate">{email()}</span>}</Show>
-              <Show when={c().resetCredits?.available}>
+              <Show when={hasResetCredits(c())}>
                 <ResetCreditButton
                   credential={c()}
                   disabled={proxyStatus()?.state !== 'running'}

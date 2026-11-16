@@ -7,6 +7,7 @@ import { providerLabel } from '@shared/trayValues';
 import { AddAccountDialog } from './AddAccountDialog';
 import { CredentialActions, renewSummary } from './CredentialActions';
 import { ResetCreditButton } from './ResetCreditButton';
+import { hasResetCredits } from '../lib/resetGrants';
 import { ShowEmailsButton } from './ShowEmailsButton';
 import { Dialog, Notice, NumberField, ProviderGlyph, Toggle } from './ui';
 import { providerVar } from '../lib/providers';
@@ -152,7 +153,7 @@ export function LoginsSection() {
                         ...(c.plan?.label ? [{ label: 'Plan', value: c.plan.label }] : []),
                         ...(c.plan?.tier ? [{ label: 'Tier', value: c.plan.tier }] : []),
                       ]}><span>{providerLabel(c.provider)}{c.plan ? ` · ${c.plan.label}` : ''}</span></HoverTip>
-                      <Show when={c.resetCredits?.available}>
+                      <Show when={hasResetCredits(c)}>
                         <ResetCreditButton
                           credential={c}
                           disabled={!running()}

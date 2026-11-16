@@ -38,7 +38,15 @@ export interface ApiKeyRef {
   id: string;
   masked: string;
   disabled?: boolean;
+  claudeIdentity?: ClaudeApiIdentity;
 }
+
+export type ClaudeApiIdentity = 'api' | 'client' | 'custom';
+export const CLAUDE_API_IDENTITY_DEFAULT = 'api' as const;
+export const CLAUDE_API_IDENTITY_OPTIONS = [
+  { value: 'api' as const, label: 'API identity (default)' },
+  { value: 'client' as const, label: 'Automatic client identity' },
+];
 
 export interface ApiModelAlias {
   /** Upstream model name. */
@@ -70,6 +78,8 @@ export interface ApiProviderDraft {
   /** Ids of kept keys switched off; the other kept keys are on. */
   offKeys: string[];
   newKeys: string[];
+  claudeIdentities?: Record<string, ClaudeApiIdentity>;
+  newClaudeIdentity?: Exclude<ClaudeApiIdentity, 'custom'>;
   models: ApiModelAlias[];
 }
 
@@ -102,6 +112,10 @@ export function validateDraft(draft: ApiProviderDraft, groups: ApiProviderGroup[
   if (!url && FAMILY_INFO[draft.family].baseUrlRequired) return 'Enter the base URL.';
   if (url && !isHttpUrl(url)) return 'The base URL must start with http:// or https://.';
   if (/\s/.test(draft.prefix.trim())) return 'The prefix cannot contain spaces.';
+  if (draft.family === 'claude' && (
+    (draft.newClaudeIdentity !== undefined && !['api', 'client'].includes(draft.newClaudeIdentity)) ||
+    Object.values(draft.claudeIdentities ?? {}).some((value) => !['api', 'client', 'custom'].includes(value))
+  )) return 'Choose a valid request identity.';
   // A keyless OpenAI-compatible group is registered by its URL (a local server); other families need a key.
   const keyCount = draft.keepKeys.length + draft.newKeys.filter((k) => k.trim()).length;
   if (keyCount === 0 && !FAMILY_INFO[draft.family].keysOptional) return 'Add at least one API key.';

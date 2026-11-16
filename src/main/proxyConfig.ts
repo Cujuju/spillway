@@ -1,6 +1,7 @@
 import { Document, isMap, isSeq, parseDocument } from 'yaml';
 import { APP_NAME } from '@shared/app';
 import type { ApiKeyOrder, AppSettings, ServerErrorAction } from '@shared/settings';
+import { ensureClaudeApiIdentity } from './apiProviders';
 
 export interface ProxyConfigInput {
   settings: AppSettings['proxy'];
@@ -99,6 +100,7 @@ export function buildProxyConfig(input: ProxyConfigInput): ProxyConfigResult {
     if (target.contents === null) target.contents = target.createNode({});
     for (const [path, value] of appOwnedValues(input)) target.setIn(path, value);
     ensureClientKeys(target, input.clientApiKeys);
+    ensureClaudeApiIdentity(target);
   };
   try {
     apply(doc);

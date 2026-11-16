@@ -28,8 +28,8 @@ describe('readGroups', () => {
     const [g] = readGroups(parseForEdit(USER));
     expect(g).toMatchObject({ family: 'claude', name: 'work', baseUrl: null, models: [{ name: 'claude-opus-5-5', alias: 'opus' }] });
     expect(g!.keys).toEqual([
-      { id: keyId('sk-ant-aaaaaaaaaaaa1111'), masked: 'sk-a…1111' },
-      { id: keyId('sk-ant-bbbbbbbbbbbb2222'), masked: 'sk-a…2222' },
+      { id: keyId('sk-ant-aaaaaaaaaaaa1111'), masked: 'sk-a…1111', claudeIdentity: 'api' },
+      { id: keyId('sk-ant-bbbbbbbbbbbb2222'), masked: 'sk-a…2222', claudeIdentity: 'api' },
     ]);
   });
 
@@ -98,8 +98,8 @@ describe('removeGroup', () => {
     setKeyEnabled(doc, 'claude', 'work', first, false);
     const reopened = parseForEdit(doc.toString());
     expect(readGroups(reopened)[0]!.keys).toEqual([
-      { id: first, masked: 'sk-a…1111', disabled: true },
-      { id: keyId('sk-ant-bbbbbbbbbbbb2222'), masked: 'sk-a…2222' },
+      { id: first, masked: 'sk-a…1111', disabled: true, claudeIdentity: 'api' },
+      { id: keyId('sk-ant-bbbbbbbbbbbb2222'), masked: 'sk-a…2222', claudeIdentity: 'api' },
     ]);
     expect(reopened.toString()).toContain('weight: 3');
     expect(reopened.toString()).toContain('# keep me');
@@ -121,5 +121,33 @@ describe('parseForEdit', () => {
   it('refuses a file with a syntax error instead of rewriting it', () => {
     expect(() => parseForEdit('a: [1, 2')).toThrow(/Fix config.user.yaml first/);
     expect(() => parseForEdit('- just\n- a list')).toThrow(/mapping/);
+  });
+});
+
+describe('Claude request identity', () => {
+  it('defaults existing and new Claude keys to API identity on save', () => {
+    const doc = parseForEdit(USER);
+    const ids = readGroups(doc)[0]!.keys.map((k) => k.id);
+    expect(readGroups(doc)[0]!.keys.every((k) => k.claudeIdentity === 'api')).toBe(true);
+    applyDraft(doc, draft({ keepKeys: ids, newKeys: ['fixture-added-key'] }), { family: 'claude', name: 'work' });
+    const keys = doc.getIn(['api-keys', 'claude', 0, 'keys']) as import('yaml').YAMLSeq;
+    expect((keys.toJSON() as { cloak: unknown }[]).map((k) => k.cloak)).toEqual([
+      { mode: 'uncloak' }, { mode: 'uncloak' }, { mode: 'uncloak' },
+    ]);
+  });
+
+  it('saves per-key choices, preserves custom policies and other key settings', () => {
+    const doc = parseForEdit(USER);
+    const first = keyId('sk-ant-aaaaaaaaaaaa1111');
+    const second = keyId('sk-ant-bbbbbbbbbbbb2222');
+    doc.setIn(['api-keys', 'claude', 0, 'keys', 1, 'fingerprint-profile'], 'claude-code-cli');
+    expect(readGroups(doc)[0]!.keys[1]!.claudeIdentity).toBe('custom');
+    applyDraft(doc, draft({ keepKeys: [first, second], claudeIdentities: { [first]: 'client', [second]: 'custom' } }), { family: 'claude', name: 'work' });
+    expect(doc.getIn(['api-keys', 'claude', 0, 'keys', 0, 'cloak', 'mode'])).toBe('auto');
+    expect(doc.getIn(['api-keys', 'claude', 0, 'keys', 0, 'weight'])).toBe(3);
+    expect(doc.getIn(['api-keys', 'claude', 0, 'keys', 1, 'fingerprint-profile'])).toBe('claude-code-cli');
+    applyDraft(doc, draft({ keepKeys: [first, second], claudeIdentities: { [first]: 'client', [second]: 'api' } }), { family: 'claude', name: 'work' });
+    expect(doc.getIn(['api-keys', 'claude', 0, 'keys', 1, 'fingerprint-profile'])).toBeUndefined();
+    expect(readGroups(doc)[0]!.keys.map((k) => k.claudeIdentity)).toEqual(['client', 'api']);
   });
 });

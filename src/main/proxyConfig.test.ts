@@ -18,6 +18,36 @@ const build = (over: Partial<typeof base> = {}) => buildProxyConfig({ ...base, .
 const parsed = (over: Partial<typeof base> = {}) => parse(build(over).yaml);
 
 describe('buildProxyConfig', () => {
+  it('defaults unspecified Claude keys to API identity without changing explicit policies or other providers', () => {
+    const userConfig = `api-keys:
+  claude:
+    - name: work
+      keys:
+        - api-key: fixture-default
+        - api-key: fixture-client
+          cloak: { mode: auto }
+        - api-key: fixture-profile
+          fingerprint-profile: claude-code-cli
+        - api-key: fixture-custom
+          cloak: { mode: always, strict-mode: true }
+  codex:
+    - name: work
+      keys:
+        - api-key: fixture-codex
+`;
+    const result = build({ userConfig });
+    expect(result.userConfigError).toBeNull();
+    const cfg = parse(result.yaml);
+    expect(cfg['api-keys'].claude[0].keys).toEqual([
+      { 'api-key': 'fixture-default', cloak: { mode: 'uncloak' } },
+      { 'api-key': 'fixture-client', cloak: { mode: 'auto' } },
+      { 'api-key': 'fixture-profile', 'fingerprint-profile': 'claude-code-cli' },
+      { 'api-key': 'fixture-custom', cloak: { mode: 'always', 'strict-mode': true } },
+    ]);
+    expect(cfg['api-keys'].codex[0].keys).toEqual([{ 'api-key': 'fixture-codex' }]);
+    expect(build({ userConfig: result.yaml }).yaml).toContain('mode: uncloak');
+  });
+
   it('writes app-owned keys from settings', () => {
     const cfg = parsed();
     expect(cfg['config-version']).toBe(8);

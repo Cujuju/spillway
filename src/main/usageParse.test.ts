@@ -87,4 +87,20 @@ describe('windows and weight', () => {
   it('drops an unknown cadence', () => {
     expect(parseOne({ windows: [{ key: 'k', reset_cadence: 'monthly' }] }).windows[0]!.resetCadence).toBeNull();
   });
+  it('preserves distinct reset grants and disables unknown or malformed scope data', () => {
+    const grant = { id: 'fable', label: 'Fable reset', scope: 'fable', available: 2, applicable: 2,
+      expires_at: '2027-03-09T07:59:00Z', clears: ['five_hour', 'seven_day_overage_included'], gives_back_weekly: true, unavailable_reason: null };
+    const credits = parseOne({ reset_credits: { available: 4, applicable: 4, checked_at: '2026-11-15T12:00:00Z', grants: [
+      grant, { ...grant, id: 'general', scope: 'general', gives_back_weekly: false },
+      { ...grant, id: 'unknown', scope: 'new_scope' }, { ...grant, id: 'bad-expiry', expires_at: 'invalid' },
+      { ...grant, id: '', available: 1 }, { ...grant, id: 'bad-count', available: -1 },
+    ] } }).resetCredits!;
+    expect(credits.grants).toHaveLength(4);
+    expect(credits.grants![0]).toEqual({ id: 'fable', label: 'Fable reset', scope: 'fable', available: 2, applicable: 2,
+      expiresAt: grant.expires_at, clears: grant.clears, givesBackWeekly: true, unavailableReason: null });
+    expect(credits.grants![1]).toMatchObject({ id: 'general', scope: 'general', givesBackWeekly: false });
+    expect(credits.grants![2]).toMatchObject({ scope: 'unknown', applicable: 0 });
+    expect(credits.grants![3]).toMatchObject({ expiresAt: null, applicable: 0 });
+    expect(parseOne({ reset_credits: { available: 1, checked_at: 'x', grants: null } }).resetCredits?.grants).toEqual([]);
+  });
 });

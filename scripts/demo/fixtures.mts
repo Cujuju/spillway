@@ -1,6 +1,7 @@
 /** Fake accounts, usage history and requests: a seeded simulation, the same relative to each start time. Emails use reserved example domains (RFC 2606). */
 import { CHANGE_MAX_REQUESTS } from '../../src/shared/thinking.ts';
 import type { HistorySample } from '../../src/shared/types.ts';
+import { demoResetCredits } from './resetCredits.mts';
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -289,7 +290,7 @@ export function userConfigYaml(): string {
 const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : null);
 const status = (used: number) => (used >= FULL_PERCENT ? 'rejected' : used >= WARNING_PERCENT ? 'allowed_warning' : 'allowed');
 /** The proxy's GET /usage/windows payload (docs/desktop-api.md in the fork). */
-export function usageWindows(data: DemoData, preferred: Map<string, string>): unknown {
+export function usageWindows(data: DemoData, preferred: Map<string, string>, spent = new Map<string, number>()): unknown {
   const nextPick = new Map<string, string>();
   for (const a of ACCOUNTS) if (!nextPick.has(a.provider) && !a.apiKey) nextPick.set(a.provider, preferred.get(a.provider) ?? a.authIndex);
   return {
@@ -299,7 +300,7 @@ export function usageWindows(data: DemoData, preferred: Map<string, string>): un
       ...(a.email ? { email: a.email } : {}),
       ...(a.apiKey ? { api_key: { masked: a.apiKey.masked, success: 412, failed: 3 } } : {}),
       disabled: false, status: 'active', status_message: '', priority: 0, cooldown_until: null, weight: 1, plan: a.plan,
-      reset_credits: a.provider === 'codex' ? { available: 1, applicable: 0, checked_at: iso(data.now), expiries: [iso(data.now + 24 * DAY_MS)] } : null,
+      reset_credits: demoResetCredits(a.provider, a.authIndex, data.now, spent),
       observed_at: iso(data.now), last_used_at: iso(data.lastUsed.get(a.authIndex)),
       next_pick: nextPick.get(a.provider) === a.authIndex, preferred: preferred.get(a.provider) === a.authIndex,
       windows: a.windows.map((spec) => {

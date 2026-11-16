@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { CAPTURE_BODY_LIMIT } from '../../src/shared/archive.ts';
 import { ACCOUNTS, usageWindows, type DemoData } from './fixtures.mts';
+import { demoResetCredits } from './resetCredits.mts';
 
 const MANAGEMENT_PREFIX = '/v8/management';
 /** Shown as the proxy version on the sidebar card, so screenshots never claim a real release. */
@@ -55,7 +56,8 @@ const json = (res: ServerResponse, body: unknown, status = 200) => {
 
 export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
   const preferred = new Map<string, string>();
-  const usage = () => usageWindows(data, preferred);
+  const spent = new Map<string, number>();
+  const usage = () => usageWindows(data, preferred, spent);
   let replayed = false;
   let captureEnabled = false;
   const captureEpoch = 'demo-capture-epoch';
@@ -132,7 +134,16 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
       case 'GET /usage/windows':
       case 'POST /usage/refresh': return json(res, usage());
       case 'GET /usage/events': return events(res);
-      case 'POST /usage/reset-credit': return json(res, { code: 'nothing_to_reset', windows_reset: 0, usage: usage() });
+      case 'POST /usage/reset-credit': {
+        const body = await readBody(req);
+        const account = ACCOUNTS.find((a) => a.authIndex === body.auth_index);
+        if (!account) return json(res, { error: 'Account not found' }, 404);
+        if (account.provider === 'codex') return json(res, { code: 'nothing_to_reset', windows_reset: 0, usage: usage() });
+        const grant = demoResetCredits(account.provider, account.authIndex, data.now, spent)?.grants?.find((g) => g.id === body.grant_id);
+        if (!grant?.applicable) return json(res, { code: 'no_credit', windows_reset: 0, usage: usage() });
+        spent.set(grant.id, (spent.get(grant.id) ?? 0) + 1);
+        return json(res, { code: 'reset', windows_reset: 0, usage: usage() });
+      }
       case 'POST /usage/start-window': return json(res, { usage: usage() });
       case 'GET /routing/preferred-auth':
       case 'PUT /routing/preferred-auth': {

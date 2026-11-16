@@ -18,8 +18,8 @@ export class ManagementError extends Error {
 
 /** A refresh can update some accounts while others fail. Keep both results. */
 export class UsageRefreshError extends Error {
-  constructor(readonly snapshot: UsageSnapshot, failures: string[]) {
-    super(`Could not refresh ${failures.length} account(s): ${[...new Set(failures)].join('; ')}`);
+  constructor(readonly snapshot: UsageSnapshot, failures: string[], message?: string) {
+    super(message ?? `Could not refresh ${failures.length} account(s): ${[...new Set(failures)].join('; ')}`);
   }
 }
 
@@ -92,11 +92,17 @@ class ManagementClient {
   }
 
   /** Spends one reset credit; the proxy answers with the provider's outcome and fresh usage. */
-  async useResetCredit(authIndex: string): Promise<{ outcome: ResetCreditOutcome; snapshot: UsageSnapshot }> {
-    const res = (await this.request('POST', '/usage/reset-credit', { auth_index: authIndex }, REFRESH_TIMEOUT_MS)) as { code?: unknown; usage?: unknown };
+  async useResetCredit(authIndex: string, grantId?: string): Promise<{ outcome: ResetCreditOutcome; snapshot: UsageSnapshot }> {
+    const res = (await this.request('POST', '/usage/reset-credit', { auth_index: authIndex, ...(grantId === undefined ? {} : { grant_id: grantId }) }, REFRESH_TIMEOUT_MS)) as { code?: unknown; usage?: unknown; refresh_error?: unknown };
     const outcome = RESET_CREDIT_OUTCOMES.find((o) => o === res.code);
     if (!outcome) throw new Error(`Unexpected reset outcome: ${String(res.code)}`);
-    return { outcome, snapshot: parseUsageSnapshot(res.usage) };
+    const snapshot = parseUsageSnapshot(res.usage);
+    if (typeof res.refresh_error === 'string' && res.refresh_error) {
+      throw new UsageRefreshError(snapshot, [res.refresh_error], outcome === 'reset'
+        ? 'Reset applied, but usage refresh failed. Refresh usage before spending another.'
+        : 'Usage refresh failed. Refresh usage before trying another reset.');
+    }
+    return { outcome, snapshot };
   }
 
   /** Sends one minimal request through the account so its 5-hour window starts now; answers with fresh usage. */

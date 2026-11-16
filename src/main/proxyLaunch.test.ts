@@ -1,10 +1,11 @@
 import { createServer, type Server } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./paths', () => ({ appPaths: {}, USER_CONFIG_NAME: 'config.user.yaml' }));
 vi.mock('./settingsStore', () => ({}));
 
-const { newSupervisorPassword, portInUse } = await import('./proxyLaunch');
+const { captureJournalKey, newSupervisorPassword, portInUse } = await import('./proxyLaunch');
 
 /** Proxy minimum (handler.go MinSupervisorPasswordLength). */
 const PROXY_MIN_PASSWORD_LENGTH = 32;
@@ -35,4 +36,9 @@ describe('newSupervisorPassword', () => {
     expect(a.length).toBeGreaterThanOrEqual(PROXY_MIN_PASSWORD_LENGTH);
     expect(newSupervisorPassword()).not.toBe(a);
   });
+});
+it('derives a stable journal key with a separate encryption context', () => {
+  const databaseKey = randomBytes(32).toString('hex'), key = captureJournalKey(databaseKey);
+  expect(key).toMatch(/^[0-9a-f]{64}$/); expect(key).not.toBe(databaseKey);
+  expect(captureJournalKey(databaseKey)).toBe(key); expect(captureJournalKey(randomBytes(32).toString('hex'))).not.toBe(key);
 });

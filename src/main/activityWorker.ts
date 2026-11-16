@@ -39,7 +39,7 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   names: (ids) => conversationNames.names(ids),
   archiveObserve: (e) => log.archiveObserve(e), archiveIngest: (p) => log.archiveIngest(p),
   archiveDetail: (id) => log.archiveDetail(id),
-  archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(),
+  archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(), archiveClearAcknowledged: () => log.archiveClearAcknowledged(),
   archiveExportPrepare: (o) => log.archiveExportPrepare(o), archiveExportStatus: (id) => log.archiveExportStatus(id),
   archiveExportStart: (id, file) => log.archiveExportStart(id, file), archiveExportCancel: (id) => log.archiveExportCancel(id),
   clickhouseStatus: () => log.clickhouseStatus(), clickhouseConfigure: (c) => { log.clickhouseConfigure(c); titles.refresh(); },

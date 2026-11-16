@@ -17,6 +17,18 @@ import { totalKey } from './activityTotals';
 export { totalKey } from './activityTotals';
 
 export type Db = Database.Database;
+/** SQLite's FULL mode synchronizes WAL commits before source journals can release acknowledged bytes. */
+export function durableTransaction<T>(db: Db, work: () => T): T {
+  const FULL = 2;
+  const previous = Number(db.pragma('synchronous', { simple: true }));
+  if (db.inTransaction) {
+    if (previous !== FULL) throw new Error('Capture requires a durable outer transaction');
+    return db.transaction(work)();
+  }
+  if (previous !== FULL) db.pragma('synchronous = FULL');
+  try { return db.transaction(work)(); }
+  finally { if (previous !== FULL) db.pragma(`synchronous = ${previous}`); }
+}
 
 /** SQLite3 Multiple Ciphers' ChaCha20-Poly1305 scheme, named so a change of library default can't strand the file. */
 const CIPHER = 'chacha20';
@@ -98,7 +110,7 @@ export function openActivityDb(file: string, hexKey: string): Db {
   }
   try {
     db.pragma('journal_mode = WAL');
-    // SQLite recommends WAL + NORMAL: app crashes preserve commits; power loss may drop recent commits without corrupting the database.
+    // Capture ingestion and explicit deletion use durableTransaction before acknowledging external journals.
     db.pragma('synchronous = NORMAL');
     db.transaction(() => {
       db.exec(SCHEMA);

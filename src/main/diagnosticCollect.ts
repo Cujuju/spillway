@@ -52,7 +52,7 @@ function body(source: DiagnosticSource, enabled: boolean, s: DiagnosticSanitizer
   if (Buffer.byteLength(JSON.stringify(content)) > DIAGNOSTIC_LIMITS.bodyBytes) return { disposition: 'omitted', reason: 'export-body-byte-limit', partial: true };
   const parts = content.frames ? content.frames.map((f) => f.payload) : [content.request!, content.response!];
   const any = parts.some((p) => p.content !== undefined);
-  const partial = parts.some((p) => p.partial) || d.state === 'pending' || d.state === 'partial' || !!d.requestCut || !!d.responseCut || d.frames.some((f) => f.truncated || !!f.cut);
+  const partial = parts.some((p) => p.partial) || d.previewOnly === true || d.state === 'pending' || d.state === 'partial' || !!d.requestCut || !!d.responseCut || d.frames.some((f) => f.truncated || !!f.cut);
   return { disposition: any ? 'included' : 'omitted', reason: any ? 'structurally-redacted-user-inspected-content' : 'no-supported-structured-content', partial, content };
 }
 function logClass(text: string): string {

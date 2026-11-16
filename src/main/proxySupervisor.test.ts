@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { parseBuildInfo } from '@shared/buildInfo';
@@ -10,6 +11,7 @@ class Child extends EventEmitter {
   kill = vi.fn((_signal?: NodeJS.Signals) => { this.emit('exit', 0, null); return true; });
 }
 let settings: AppSettings;
+const journalDatabaseKey = randomBytes(32).toString('hex');
 const children: Child[] = [];
 const spawn = vi.fn(() => {
   const child = new Child(children.length + 1);
@@ -22,11 +24,12 @@ vi.mock('node:child_process', () => ({ spawn }));
 vi.mock('node:fs', () => ({ existsSync: () => false, createWriteStream: () => ({ write: vi.fn(), end: vi.fn() }) }));
 vi.mock('electron', () => ({ app: { commandLine: { getSwitchValue: () => '' } } }));
 vi.mock('./paths', () => ({ appPaths: {}, resolveProxyExecutable: () => 'test-proxy' }));
-vi.mock('./proxyLaunch', () => ({
+vi.mock('./proxyLaunch', async (importOriginal) => ({
+  captureJournalKey: (await importOriginal<typeof import('./proxyLaunch')>()).captureJournalKey,
   newSupervisorPassword: () => 'test-password', portInUse: async () => false, SUPERVISOR_PASSWORD_ENV: 'TEST_PASSWORD',
   watchUserConfig: () => ({}), writeProxyConfig: () => null,
 }));
-vi.mock('./settingsStore', () => ({ getSettings: () => settings }));
+vi.mock('./settingsStore', () => ({ getSettings: () => settings, getSecrets: () => ({ databaseKey: journalDatabaseKey }) }));
 vi.mock('./managementClient', () => ({ management: { configure: vi.fn(), ping, shutdown } }));
 
 let proxy: (typeof import('./proxySupervisor'))['proxy'];

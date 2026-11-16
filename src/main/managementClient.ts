@@ -24,10 +24,15 @@ export class UsageRefreshError extends Error {
 }
 
 class ManagementClient {
-  async captureLease(enabled: boolean): Promise<void> { await this.request('PUT', '/observability/captures/lease', { enabled }); }
+  async captureLease(enabled: boolean): Promise<void> {
+    const reply = await this.request('PUT', '/observability/captures/lease', { enabled, version: 2 }) as { version?: number };
+    if (enabled && reply?.version !== 2) throw new Error('Proxy does not support complete body capture; update the proxy binary');
+  }
   async captures(after: number): Promise<import('@shared/archive').CapturePage> {
     return await this.request('GET', `/observability/captures?after=${after}`) as import('@shared/archive').CapturePage;
   }
+  async acknowledgeCaptures(epoch: string, sequence: number): Promise<void> { await this.request('POST', '/observability/captures/ack', { epoch, sequence }); }
+  async clearCaptures(): Promise<void> { await this.request('DELETE', '/observability/captures'); }
   private base = '';
   private key = '';
 

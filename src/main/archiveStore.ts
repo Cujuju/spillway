@@ -1,8 +1,9 @@
 import type { ArchiveMigrationState } from '@shared/ipc';
-import type { Db } from './activityDb';
+import { durableTransaction, type Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage, type CaptureCut } from '@shared/archive';
 import { sessionKind, type ActivityEvent } from '@shared/types';
-import { PIECE_SCHEMA, migratePieces, storeBody, readBody, expireThread, storedBytes, refreshThread } from './archivePieces';
+import { EVICTABLE_THREAD, PIECE_SCHEMA, migratePieces, storeBody, readBody, expireThread, storedBytes, refreshThread } from './archivePieces';
+import { WIRE_SCHEMA, ingestWire } from './archiveStreams';
 import { normalizeTransport } from '@shared/activityTransport';
 
 export const ARCHIVE_SCHEMA = `
@@ -19,9 +20,9 @@ CREATE TABLE IF NOT EXISTS archive_attempts (identity TEXT PRIMARY KEY, trace_id
 CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
 
 CREATE TABLE IF NOT EXISTS archive_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-` + PIECE_SCHEMA;
+` + PIECE_SCHEMA + WIRE_SCHEMA;
 export interface ArchiveFactSink { append(fact: ArchiveFact): void }
-export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot'; traceId: string; at: string; captureState: string; record: object; content: object | null };
+export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot' | 'capture-start' | 'capture-chunk' | 'capture-end'; traceId: string; at: string; captureState: string; record: object; content: object | null };
 type Row = { id: string; trace_id: string; at: string; state: ArchiveEntry['state']; reason: string; session_id: string | null; model: string; provider: string; client: string | null; capture_id: string | null; capture_epoch: string | null; capture_sequence: number | null; method: string; path: string; status: number; bytes: number; detail: string };
 const ENTRY_COLUMNS = 'id,trace_id,at,state,reason,session_id,model,provider,client,capture_id,capture_epoch,capture_sequence,method,path,status,bytes';
 const entry = (r: Row): ArchiveEntry => ({ schemaVersion: 1, captureEpoch: r.capture_epoch, captureSequence: r.capture_sequence, id: r.id, traceId: r.trace_id, at: r.at, state: r.state, reason: r.reason, sessionId: r.session_id, model: r.model, provider: r.provider, client: r.client, captureId: r.capture_id, method: r.method, path: r.path, status: r.status, bytes: r.bytes });
@@ -59,7 +60,7 @@ export class ArchiveStore {
   private settle(reason: string, before?: string): void {
     this.db.transaction(() => {
       const state = before ? "'missing'" : "CASE WHEN bytes>0 THEN 'partial' ELSE 'missing' END";
-      const rows = this.db.prepare(`UPDATE archive_entries SET state=${state},reason=? WHERE state='pending' ${before ? "AND reason <> 'websocket-open' AND at < ?" : ''} RETURNING trace_id,at,state`).all(reason, ...before ? [before] : []) as { trace_id: string; at: string; state: string }[];
+      const rows = this.db.prepare(`UPDATE archive_entries SET state=${state},reason=? WHERE state='pending' AND coalesce(json_extract(detail,'$.wire'),0)<>2 ${before ? "AND reason <> 'websocket-open' AND at < ?" : ''} RETURNING trace_id,at,state`).all(reason, ...before ? [before] : []) as { trace_id: string; at: string; state: string }[];
       for (const r of rows) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: r.state, record: { state: r.state, reason }, content: null });
     })();
   }
@@ -69,14 +70,14 @@ export class ArchiveStore {
   }
   private write(key: string, value: unknown): void { this.db.prepare('INSERT INTO archive_meta VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
   setPolicy(raw: ArchivePolicy): ArchiveStatus {
-    return this.db.transaction(() => {
+    return durableTransaction(this.db, () => {
       if (this.policy.maxBytes !== normalizeArchivePolicy(raw).maxBytes) this.db.exec("UPDATE archive_threads SET over_budget=0");
       this.policy = normalizeArchivePolicy(raw);
       this.write('policy', this.policy);
       if (!this.policy.captureBodies) this.settle('capture-disabled');
       this.prune(Date.now(), true);
       return this.status();
-    })();
+    });
   }
   observe(e: ActivityEvent): void {
     if (e.source !== 'proxy' || !e.traceId || !TRACE.test(e.traceId)) return;
@@ -96,19 +97,27 @@ export class ArchiveStore {
     })();
   }
   ingest(page: CapturePage): void {
-    if (!this.policy.captureBodies) return;
-    if (page?.version !== 1 || typeof page.epoch !== 'string' || page.epoch.length > 128 || !Array.isArray(page.records) || page.records.length > 4) throw new Error('Invalid capture page');
-    this.db.transaction(() => {
+    if (page?.version === 2 && this.read('proxyClearPending', false)) throw new Error('Capture journal deletion is pending');
+    if (!this.policy.captureBodies && page?.version !== 2) return;
+    if (![1, 2].includes(page?.version) || typeof page.epoch !== 'string' || page.epoch.length > 128 || !Array.isArray(page.records) || page.records.length > 4) throw new Error('Invalid capture page');
+    const commit = (work: () => void) => page.version === 2 ? durableTransaction(this.db, work) : this.db.transaction(work)();
+    commit(() => {
       const previous = this.read<string | null>('epoch', null);
       let sequence = previous === page.epoch ? this.read('sequence', 0) : 0;
       if (previous && previous !== page.epoch) {
         this.write('dropBaseline', 0);
         this.write('restarts', this.read('restarts', 0) + 1);
         this.settle('proxy-restarted-before-capture');
+        const orphaned = this.db.prepare("UPDATE archive_entries SET state='partial',reason='capture-journal-reset' WHERE state='pending' AND json_extract(detail,'$.wire')=2 AND capture_epoch<>? RETURNING trace_id,at").all(page.epoch) as { trace_id: string; at: string }[];
+        for (const r of orphaned) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: 'partial', record: { state: 'partial', reason: 'capture-journal-reset' }, content: null });
       }
       for (const r of page.records) {
         if (!r || !Number.isSafeInteger(r.sequence) || r.sequence < 1) throw new Error('Invalid capture cursor');
         if (r.sequence <= sequence) continue;
+        if (page.version === 2) {
+          if (r.epoch !== page.epoch || r.sequence !== sequence + 1) throw new Error('Capture journal sequence gap');
+          ingestWire(this.db, r, this.sink); sequence = r.sequence; continue;
+        }
         if (r.sequence !== sequence + 1) this.write('gaps', this.read('gaps', 0) + r.sequence - sequence - 1);
         sequence = r.sequence;
         const valid = typeof r.traceId === 'string' && TRACE.test(r.traceId) && typeof r.id === 'string' && r.id.length <= 128 && validDate(r.startedAt) && r.epoch === page.epoch && ['complete', 'partial', 'missing', 'pending'].includes(r.state)
@@ -130,21 +139,12 @@ export class ArchiveStore {
         if (request || response || frames.length) {
           const existing = this.db.prepare('SELECT thread_id,session_id,model FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null; session_id: string | null; model: string };
           const thread = existing.thread_id ?? JSON.stringify(existing.session_id ? [existing.session_id, existing.model] : [id]);
-          const flagged = this.db.prepare('SELECT over_budget FROM archive_threads WHERE id=?').get(thread) as { over_budget: number } | undefined;
-          this.db.exec('SAVEPOINT capture_pieces');
-          if (!flagged?.over_budget) refs = storeBody(this.db, id, captured);
+          refs = storeBody(this.db, id, captured);
           while (refs && storedBytes(this.db) > this.policy.maxBytes) {
-            const oldest = this.db.prepare('SELECT id FROM archive_threads WHERE id<>? ORDER BY last_at,id LIMIT 1').get(thread) as { id: string } | undefined;
+            const oldest = this.db.prepare(`SELECT id FROM archive_threads WHERE id<>? AND ${EVICTABLE_THREAD} ORDER BY last_at,id LIMIT 1`).get(thread) as { id: string } | undefined;
             if (!oldest) break;
             expireThread(this.db, oldest.id);
           }
-          if (!refs || storedBytes(this.db) > this.policy.maxBytes) {
-            this.db.exec('ROLLBACK TO capture_pieces'); refs = null;
-            this.db.prepare('INSERT INTO archive_threads(id,first_at,last_at,over_budget) VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET over_budget=1,last_at=max(last_at,excluded.last_at)').run(thread, r.startedAt, r.startedAt);
-            this.db.prepare("UPDATE archive_entries SET state='missing',reason='thread-over-budget',bytes=0,stored_bytes=0,detail='{}',thread_id=? WHERE id=?").run(thread, id);
-            this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
-          }
-          this.db.exec('RELEASE capture_pieces');
         } else {
           this.db.prepare('UPDATE archive_entries SET stored_bytes=0 WHERE id=?').run(id);
           this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
@@ -159,26 +159,27 @@ export class ArchiveStore {
       const drops = Number.isSafeInteger(page.dropped) && page.dropped >= 0 ? page.dropped : 0;
       this.write('proxyDropped', drops); this.write('dropped', Math.max(0, drops - this.read('dropBaseline', 0)));
       this.prune(Date.now(), true);
-    })();
+    });
   }
   prune(now = Date.now(), force = false): void {
     if (!force && now - this.lastPruned < 60_000) return;
     const cutoff = new Date(now - this.policy.retentionDays * 86_400_000).toISOString();
     this.db.transaction(() => {
-      for (const r of this.db.prepare('SELECT id FROM archive_threads WHERE last_at < ?').all(cutoff) as { id: string }[]) expireThread(this.db, r.id);
+      for (const r of this.db.prepare(`SELECT id FROM archive_threads WHERE last_at < ? AND ${EVICTABLE_THREAD}`).all(cutoff) as { id: string }[]) expireThread(this.db, r.id);
       while (storedBytes(this.db) > this.policy.maxBytes) {
-        const oldest = this.db.prepare('SELECT id FROM archive_threads ORDER BY last_at,id LIMIT 1').get() as { id: string } | undefined;
+        const oldest = this.db.prepare(`SELECT id FROM archive_threads WHERE ${EVICTABLE_THREAD} AND id<>(SELECT id FROM archive_threads ORDER BY last_at DESC,id DESC LIMIT 1) ORDER BY last_at,id LIMIT 1`).get() as { id: string } | undefined;
         if (!oldest) break;
         expireThread(this.db, oldest.id);
       }
       this.settle('capture-unavailable-or-interrupted', new Date(now - 10 * 60_000).toISOString());
       const count = (this.db.prepare('SELECT count(*) AS n FROM archive_entries').get() as { n: number }).n;
-      const obsolete = count > MAX_METADATA ? this.db.prepare('SELECT id,trace_id,thread_id,stored_bytes,bytes FROM archive_entries ORDER BY at,id LIMIT ?').all(count - MAX_METADATA) as { id: string; trace_id: string; thread_id: string | null; stored_bytes: number; bytes: number }[] : [];
+      const obsolete = count > MAX_METADATA ? this.db.prepare("SELECT id,trace_id,thread_id,stored_bytes,bytes FROM archive_entries WHERE state<>'pending' AND NOT EXISTS(SELECT 1 FROM clickhouse_export WHERE backfill_cursor IS NOT NULL AND json_extract(config,'$.includeBodies')=1) AND NOT EXISTS(SELECT 1 FROM clickhouse_outbox q WHERE q.trace_id=archive_entries.trace_id AND q.content IS NOT NULL) ORDER BY at,id LIMIT ?").all(count - MAX_METADATA) as { id: string; trace_id: string; thread_id: string | null; stored_bytes: number; bytes: number }[] : [];
       for (const r of obsolete) {
         this.db.prepare('UPDATE archive_threads SET stored_bytes=stored_bytes-?,logical_bytes=logical_bytes-? WHERE id=?').run(r.stored_bytes, r.bytes, r.thread_id);
         this.db.prepare('DELETE FROM archive_attempts WHERE trace_id=?').run(r.trace_id);
         this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(r.id);
         this.db.prepare('DELETE FROM archive_entries WHERE id=?').run(r.id);
+        this.db.prepare('DELETE FROM archive_wire WHERE entry_id=?').run(r.id);
         this.db.prepare('DELETE FROM archive_search_keys WHERE entry_id=?').run(r.id);
       }
     })();
@@ -220,17 +221,19 @@ export class ArchiveStore {
   status(): ArchiveStatus {
     const totals = this.db.prepare('SELECT count(*) AS entries, coalesce(sum(bytes),0) AS bytes, count(CASE WHEN bytes>0 THEN 1 END) AS bodies FROM archive_entries').get() as { entries: number; bytes: number; bodies: number };
     const threads = this.db.prepare('SELECT count(CASE WHEN base IS NOT NULL THEN 1 END) AS threads,coalesce(sum(over_budget),0) AS overBudgetThreads FROM archive_threads').get() as { threads: number; overBudgetThreads: number };
-    return { policy: this.policy, ...totals, ...threads, storedBytes: storedBytes(this.db), diffFallbacks: this.read('diffFallbacks', 0), epoch: this.read('epoch', null), sequence: this.read('sequence', 0), dropped: this.read('dropped', 0), gaps: this.read('gaps', 0), restarts: this.read('restarts', 0), rejected: this.read('rejected', 0) };
+    return { clearPending: this.read('proxyClearPending', false), policy: this.policy, ...totals, ...threads, storedBytes: storedBytes(this.db), diffFallbacks: this.read('diffFallbacks', 0), epoch: this.read('epoch', null), sequence: this.read('sequence', 0), dropped: this.read('dropped', 0), gaps: this.read('gaps', 0), restarts: this.read('restarts', 0), rejected: this.read('rejected', 0) };
   }
+  clearAcknowledged(): void { durableTransaction(this.db, () => this.write('proxyClearPending', false)); }
   clear(): void {
-    this.db.transaction(() => {
+    durableTransaction(this.db, () => {
       this.db.exec(ARCHIVE_CLEAR_SQL);
-    })();
+    });
     this.lastPruned = 0;
   }
 }
 export const ARCHIVE_CLEAR_SQL = `UPDATE clickhouse_export SET discarded=discarded+queued_rows,backfill_cursor=NULL; DELETE FROM clickhouse_outbox;
-DROP TABLE IF EXISTS archive_fts; DELETE FROM archive_search; DELETE FROM archive_search_keys; DELETE FROM archive_entries; DELETE FROM archive_attempts; UPDATE archive_pieces SET thread_id=NULL; DELETE FROM archive_threads;
+DROP TABLE IF EXISTS archive_fts; DELETE FROM archive_search; DELETE FROM archive_search_keys; DELETE FROM archive_wire; DELETE FROM archive_entries; DELETE FROM archive_attempts; UPDATE archive_pieces SET thread_id=NULL; DELETE FROM archive_threads;
 DELETE FROM archive_pieces WHERE id NOT IN (SELECT piece_id FROM archive_pins);
 INSERT OR REPLACE INTO archive_meta VALUES ('dropBaseline', coalesce((SELECT value FROM archive_meta WHERE key='proxyDropped'),'0'));
+INSERT OR REPLACE INTO archive_meta VALUES ('proxyClearPending','true');
 DELETE FROM archive_meta WHERE key IN ('dropped','gaps','restarts','rejected','diffFallbacks');`;

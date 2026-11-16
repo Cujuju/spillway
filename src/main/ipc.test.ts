@@ -5,14 +5,14 @@ import { normalizeSettings, type AppSettings } from '@shared/settings';
 let settings: AppSettings;
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
 const restart = vi.fn<() => Promise<void>>();
-const archiveMocks = vi.hoisted(() => ({ call: vi.fn(), refresh: vi.fn() }));
+const archiveMocks = vi.hoisted(() => ({ call: vi.fn(), refresh: vi.fn(), clear: vi.fn() }));
 vi.mock('electron', () => ({ ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler), on: vi.fn() } }));
 vi.mock('./settingsStore', () => ({ getSettings: () => settings, setSettings: (next: AppSettings) => (settings = normalizeSettings(next)) }));
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true, restart, applyConfig: vi.fn() } }));
 const thinkingMocks = vi.hoisted(() => ({ latest: vi.fn(), credentialModels: vi.fn(), useResetCredit: vi.fn() }));
 vi.mock('./usagePoller', () => ({ usage: { start: vi.fn(), latest: thinkingMocks.latest, useResetCredit: thinkingMocks.useResetCredit } }));
 vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
-vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
+vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh, clear: archiveMocks.clear } }));
 vi.mock('./diagnosticService', () => ({ diagnosticExporter: {} }));
 vi.mock('./evalService', () => ({ evalReplay: {}, forgetEvalExport: vi.fn(), invalidateEval: vi.fn(), importEvalFile: vi.fn(), prepareEvalExport: vi.fn(), prepareEvalReplay: vi.fn(), saveEvalExport: vi.fn(), withEvalDeletion: (fn: () => Promise<unknown>) => fn() }));
 vi.mock('./apiProviders', () => ({}));
@@ -39,6 +39,7 @@ beforeEach(() => {
   handlers.clear();
   restart.mockReset();
   archiveMocks.call.mockReset(); archiveMocks.refresh.mockReset();
+  archiveMocks.clear.mockReset(); archiveMocks.clear.mockImplementation(() => archiveMocks.call('archiveClear'));
   registerIpc();
 });
 
@@ -60,7 +61,7 @@ it('deleting archive preserves retention/budget and disables capture before clea
   archiveMocks.call.mockResolvedValue({ policy });
   await handlers.get(INVOKE.archiveClear)!(null);
   expect(archiveMocks.call.mock.calls).toEqual([['archiveStatus'], ['archivePolicy', { ...policy, captureBodies: false }], ['archiveClear']]);
-  expect(archiveMocks.refresh).toHaveBeenCalledOnce();
+  expect(archiveMocks.clear).toHaveBeenCalledOnce();
 });
 
 it('returns current settings after a restart instead of overwriting a later save with the old reply', async () => {

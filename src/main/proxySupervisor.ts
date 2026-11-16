@@ -5,7 +5,7 @@ import { createWriteStream, existsSync, renameSync, type FSWatcher, type WriteSt
 import type { BuildInfo } from '@shared/buildInfo';
 import type { LogLine, ProxyStatus } from '@shared/types';
 import { appPaths, resolveProxyExecutable } from './paths';
-import { newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
+import { captureJournalKey, newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
 import { getSecrets, getSettings } from './settingsStore';
 import { management } from './managementClient';
 import { LogBuffer } from './logBuffer';
@@ -121,7 +121,7 @@ class ProxySupervisor extends EventEmitter {
       cwd: appPaths.proxyDir,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, [SUPERVISOR_PASSWORD_ENV]: password },
+      env: { ...process.env, [SUPERVISOR_PASSWORD_ENV]: password, SPILLWAY_CAPTURE_DIR: appPaths.proxyDir, SPILLWAY_CAPTURE_KEY: captureJournalKey(getSecrets().databaseKey) },
     });
     this.proc = child;
     child.stdout?.on('data', (d: Buffer) => this.log('stdout', d.toString('utf8')));

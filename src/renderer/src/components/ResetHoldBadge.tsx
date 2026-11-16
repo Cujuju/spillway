@@ -1,5 +1,5 @@
 import { HoverTip, type TipRow } from './ChartTip';
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, type JSX } from 'solid-js';
 import { Lock, RotateCcw } from 'lucide-solid';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
 import { clockText, resetParts } from '@shared/resetTime';
@@ -20,6 +20,8 @@ const STATE_ICON_PX = 11;
 export function ResetHoldBadge(props: {
   /** Badge text, e.g. "2 Fable resets". */
   text: string;
+  /** Optional visual label; `text` remains the accessible description. */
+  label?: JSX.Element;
   /** The ID a hold spends; null when nothing is usable. */
   target: string | null;
   /** True while the proxy cannot take the request. */
@@ -90,7 +92,7 @@ export function ResetHoldBadge(props: {
           </Show>
           <span class="hold-label">
             {usable() ? <RotateCcw size={STATE_ICON_PX} aria-hidden="true" /> : <Lock size={STATE_ICON_PX} aria-hidden="true" />}
-            {busy() ? 'Resetting…' : props.text}
+            {busy() ? 'Resetting…' : (props.label ?? props.text)}
           </span>
         </button>
       </HoverTip>

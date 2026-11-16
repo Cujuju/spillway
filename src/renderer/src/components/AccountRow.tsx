@@ -99,6 +99,7 @@ export function AccountRow(props: {
                   credential={c()}
                   disabled={proxyStatus()?.state !== 'running'}
                   showExpiry={false}
+                  ticketLabel
                   onDone={(m) => props.onNotice?.('info', m)}
                   onError={(m) => props.onNotice?.('error', m)}
                 />

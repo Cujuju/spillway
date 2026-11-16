@@ -181,26 +181,17 @@ it('migrates existing full details in batches and resumes after its persisted cu
   expect(new ArchiveStore(db, undefined, progress).status().storedBytes).toBe(migrated.status().storedBytes);
   expect(progress).not.toHaveBeenCalled();
 });
-it('evicts whole threads and stops an over-budget thread until the policy changes', async () => {
+it('retains the newest complete conversation even when it exceeds the local budget', async () => {
   const { randomBytes } = await import('node:crypto');
   const { store } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 });
-  const noisy = () => randomBytes(350_000).toString('base64');
-  observe(store); observe(store, 'inbound-full-2');
+  const noisy = () => randomBytes(350_000).toString('base64'); observe(store); observe(store, 'inbound-full-2');
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(1, { request: noisy(), response: noisy() }), record(2, { request: noisy(), response: noisy() })] });
-  expect(store.detail('inbound-full-1')?.state).toBe('complete');
-  expect(store.detail('inbound-full-2')).toMatchObject({ state: 'missing', reason: 'thread-over-budget', bytes: 0 });
-  expect(store.status().overBudgetThreads).toBe(1);
+  expect(store.detail('inbound-full-1')?.state).toBe('complete'); expect(store.detail('inbound-full-2')?.state).toBe('complete');
+  expect(store.status()).toMatchObject({ overBudgetThreads: 0, bodies: 2 });
   store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(3, { traceId: 'inbound-full-2', request: 'tiny' })] });
-  expect(store.detail('inbound-full-2')?.state).toBe('missing');
-  store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 2 * 1024 * 1024 });
-  expect(store.status().overBudgetThreads).toBe(0);
-  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(4, { traceId: 'inbound-full-2', request: 'tiny' })] });
   expect(store.detail('inbound-full-2')?.request).toBe('tiny');
-  store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, maxBytes: 1024 * 1024 });
-  store.ingest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [record(5, { request: noisy(), response: noisy() })] });
-  expect(store.detail('inbound-full-1')?.state).toBe('expired');
-  expect(store.detail('inbound-full-2')?.state).toBe('expired');
 });
+
 it('falls back to a verified full copy when the proposed ranges rebuild incorrectly', async () => {
   const { zstdCompressSync } = await import('node:zlib');
   const { store, db } = setup(); store.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });

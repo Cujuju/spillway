@@ -33,7 +33,7 @@ import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@sha
 import {
   ACTIVITY_PAGE_SIZE, RHYTHM_LOOKBACK_DAYS, type ActivityBucket, type ActivityBucketSnapshot, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
 } from '@shared/types';
-import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, importLegacyFiles, openActivityDb, type Db } from './activityDb';
+import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, durableTransaction, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
 import { identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
 
@@ -126,6 +126,7 @@ export class ActivityLog {
   archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
   archiveClear(): void { this.exporter?.cancelCurrent(); this.archive.clear(); }
+  archiveClearAcknowledged(): void { this.archive.clearAcknowledged(); }
   private get clickhouse() { return new ClickHouseStore(this.db, this.archive); }
   clickhouseStatus() { return this.clickhouse.status(); }
   clickhouseConfigure(c: ClickHouseConfig): void { this.clickhouse.configure(c); }
@@ -406,11 +407,11 @@ export class ActivityLog {
 
   clear(): void {
     this.exporter?.cancelCurrent();
-    this.db.transaction(() => {
+    durableTransaction(this.db, () => {
       this.db.exec("DELETE FROM thinking_tests; DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
       this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins; DELETE FROM archive_pieces WHERE thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)');
-    })();
+    });
     this.totals = new Map();
     this.conversationAccounts.clear();
   }

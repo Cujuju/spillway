@@ -125,6 +125,7 @@ export function RequestInspector(props: { traceId?: string | null; onConversatio
           <RecordBodiesOff />
         </Show>
       }>
+        <Show when={d().previewOnly}><p class="notice">Showing a limited preview. Complete captured bytes remain in the archive and are included when body export is enabled.</p></Show>
         <Show when={parseError()}>{(e) => <p class="notice error">{shownText(e())}</p>}</Show>
         <Show when={sides()} keyed fallback={<Show when={!parseError()}><p class="empty-note">Reading bodies…</p></Show>}>{(p) => (
           <div class="archive-bodies">

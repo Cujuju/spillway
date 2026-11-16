@@ -29,7 +29,7 @@ export interface PortableCapture {
   payload: { state: 'included' | 'omitted' | 'unavailable' | 'malformed'; reason: string; representation: 'downstream-protocol-v1'; sha256: string | null; data: PortablePayloadData | null };
 }
 export interface PortableManifest {
-  type: 'manifest'; format: typeof PORTABLE_ARCHIVE_FORMAT; version: 1; id: string; createdAt: string; expiresAt: string;
+  type: 'manifest'; format: typeof PORTABLE_ARCHIVE_FORMAT; version: 1 | 2; id: string; createdAt: string; expiresAt: string;
   selection: ArchiveExportOptions; unresolvedIds: string[]; records: number; snapshotBytes: number; captureStates: Record<CaptureState, number>;
   recordingPolicy: ArchivePolicy;
   captureDiagnostics: Pick<ArchiveStatus, 'epoch' | 'sequence' | 'dropped' | 'gaps' | 'restarts' | 'rejected'>;

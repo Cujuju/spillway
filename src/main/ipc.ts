@@ -237,7 +237,7 @@ const handlers: Handlers = {
   archiveDetail: (id) => activityLog.call('archiveDetail', id),
   archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
   archivePolicy: (p) => withClickHousePaused(async () => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; }),
-  archiveClear: () => withClickHousePaused(async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.refresh(); await activityLog.call('archiveClear'); }),
+  archiveClear: () => withClickHousePaused(async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.clear(); }),
   clickhouseStatus,
   clickhouseSave: async (config, credentials) => { const status = await saveClickHouse(config, credentials); exportUsage(true); return status; }, clickhouseDiagnose: diagnoseClickHouse, clickhouseRetry: retryClickHouse, clickhouseClear: clearClickHouse,
   clickhouseCancel: () => cancelClickHouse(),

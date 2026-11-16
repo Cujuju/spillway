@@ -160,9 +160,11 @@ export async function startDemoProxy(data: DemoData): Promise<DemoProxy> {
       case 'GET /server/lockouts': return json(res, { lockouts: [] });
       case 'PUT /observability/captures/lease': {
         captureEnabled = (await readBody(req)).enabled === true;
-        return json(res, { leaseSeconds: 60, bodyLimit: CAPTURE_BODY_LIMIT });
+        return json(res, { leaseSeconds: 0, version: 2, bodyLimit: CAPTURE_BODY_LIMIT });
       }
       case 'GET /observability/captures': return json(res, { version: 1, epoch: captureEpoch, dropped: 0, records: captureEnabled && data.events.length ? [demoCapture(), ...thinkingCaptures].filter((c) => c.sequence > Number(url.searchParams.get('after') ?? 0)).slice(0, DEMO_CAPTURE_PAGE_SIZE) : [] });
+      case 'POST /observability/captures/ack': return json(res, {});
+      case 'DELETE /observability/captures': return json(res, {});
       case 'DELETE /server/lockouts':
       case 'POST /server/shutdown':
       case 'PATCH /credentials/status':

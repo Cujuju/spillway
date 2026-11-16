@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { appPaths, USER_CONFIG_NAME } from './paths';
@@ -8,6 +8,8 @@ import { getSettings, writeFileAtomic } from './settingsStore';
 
 /** Environment variable the proxy reads its supervisor password from (cleared by the proxy after reading). */
 export const SUPERVISOR_PASSWORD_ENV = 'MANAGEMENT_SUPERVISOR_PASSWORD';
+/** Domain separation keeps the persistent journal key distinct from the database key. */
+export const captureJournalKey = (databaseKey: string): string => createHmac('sha256', Buffer.from(databaseKey, 'hex')).update('spillway.capture-journal.v2').digest('hex');
 /** 32 random bytes as hex: 64 characters, above the proxy's 32-character minimum. */
 const SUPERVISOR_PASSWORD_BYTES = 32;
 /** A local listener answers well inside this. */

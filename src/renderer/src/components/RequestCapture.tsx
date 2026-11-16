@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { CAPTURE_BODY_LIMIT, type ArchivePolicy, type ArchiveStatus } from '@shared/archive';
+import { type ArchivePolicy, type ArchiveStatus } from '@shared/archive';
 import { shownText } from '../store';
 import { byteSize } from '../lib/format';
 import { HoverTip } from './ChartTip';
@@ -13,10 +13,9 @@ const RETENTION_DAYS = { min: 1, max: 90 };
 const BUDGET_MIB = { min: 1, max: 1024 };
 /** Store health (drops, bytes) changes as traffic arrives. */
 const STATUS_POLL_MS = 3_000;
-const LIMIT_TEXT = byteSize(CAPTURE_BODY_LIMIT), HALF_TEXT = byteSize(CAPTURE_BODY_LIMIT / 2);
-const LIMITS_NOTE = `Exchanges counts every request seen, with or without text. HTTP: up to ${LIMIT_TEXT} of each request and response (gzip, zstd decoded); a larger body keeps its first and last ${HALF_TEXT}. Codex WebSocket: up to ${LIMIT_TEXT} per message and per direction, keeping the earliest and latest messages. Gaps are marked. Up to 20,000 requests keep their capture record. Bodies are encrypted with the Activity database key.`;
-const OVER_BUDGET_NOTE = 'Conversations larger than the whole body budget. Their new requests keep metadata only until the conversation is removed or the budget changes.';
-const STORED_NOTE = 'Each request stores only what changed since the previous request in its conversation, compressed. The budget counts stored bytes.';
+const LIMITS_NOTE = 'Records complete downstream request and response bodies and WebSocket messages. Interrupted transfers and storage failures are reported. Headers and query strings are excluded. Older captures may contain gaps.';
+const OVER_BUDGET_NOTE = 'Older captures omitted by the previous body budget. New captures retain complete bodies.';
+const STORED_NOTE = 'Bodies are encrypted and compressed. Active captures, the newest conversation and content waiting for ClickHouse can exceed the budget. Delivered bodies follow local retention.';
 const DELETE_NOTE ='Deletes every recorded request and response and turns Record bodies off. Activity history and eval cases stay.';
 
 /** Drops, sequence gaps and rejections, shown only when any happened. A restart alone loses nothing. */
@@ -95,6 +94,7 @@ export function RequestCaptureSettings() {
           <button class="btn danger" type="button" disabled={busy() || s().entries === 0} onClick={() => setConfirming(true)}>Delete…</button>
         </SettingRow>
         <Show when={s().syncError}>{(e) => <Notice tone="error">Capture sync failed: {shownText(e())}</Notice>}</Show>
+        <Show when={s().clearPending}><Notice>Local bodies deleted. Proxy journal deletion is pending and will finish before capture resumes.</Notice></Show>
         <Show when={s().exportWarning}>{(w) => <Notice>Export cleanup: {shownText(w())}</Notice>}</Show>
       </>}</Show>
       <Show when={error()}>{(e) => <Notice tone="error">{shownText(e())}</Notice>}</Show>

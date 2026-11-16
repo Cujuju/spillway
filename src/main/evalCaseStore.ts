@@ -73,7 +73,8 @@ export class EvalCaseStore {
     return this.db.transaction(() => {
       const repeated = this.repeated(operation); if (repeated) return repeated;
       const d = this.archive.detail(traceId); if (!d) throw new Error('Selected archive identity is no longer available');
-      const { requestCut, responseCut, request, response, requestType, responseType, requestEncoding, responseEncoding, format, requestDecoded, responseDecoded, frames, attempts, ...entry } = d;
+      const { previewOnly, requestCut, responseCut, request, response, requestType, responseType, requestEncoding, responseEncoding, format, requestDecoded, responseDecoded, frames, attempts, ...entry } = d;
+      if (includeBodies && previewOnly) throw new Error('This capture has a limited display preview. Export its complete wire bodies; a preview cannot become a replay case.');
       const capture = portableCapture(entry, JSON.stringify({ requestCut, responseCut, request, response, requestType, responseType, requestEncoding, responseEncoding, format, requestDecoded, responseDecoded, frames }), JSON.stringify(attempts), includeBodies === true);
       const c = this.fromCapture(capture, validateAnnotation(annotation), null, `case:${operation}`);
       this.insert(c, operation); return c;

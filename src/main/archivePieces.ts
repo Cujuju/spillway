@@ -4,6 +4,7 @@ import type { ArchiveMigrationState } from '@shared/ipc';
 import type { Db } from './activityDb';
 import type { ArchiveDetail } from '@shared/archive';
 import { archiveSearchText } from '@shared/archiveContent';
+import { readWireBody, type WireDetail } from './archiveStreams';
 export type Range = [number, number, number];
 export type Body = Pick<ArchiveDetail, 'requestCut' | 'responseCut' | 'request' | 'response' | 'frames' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'format' | 'requestDecoded' | 'responseDecoded'>;
 export type PieceDetail = Omit<Body, 'request' | 'response' | 'frames'> & { thread: string; request: Range[]; response: Range[]; frames: Range[] };
@@ -58,6 +59,7 @@ export function rebuild(db: Db, refs: PieceDetail, requestOnly = false, cache: M
 }
 export function readBody(db: Db, text: string, cache: Map<number, Buffer> = new Map()): Body {
   const value = JSON.parse(text);
+  if (value.wire === 2) return readWireBody(db, (value as WireDetail).entryId, value);
   return Array.isArray(value.request) ? rebuild(db, value, false, cache) : value;
 }
 export function sliceRanges(ranges: Range[], start: number, length: number): Range[] {
@@ -192,7 +194,11 @@ export function migratePieces(db: Db, progress?: (state: ArchiveMigrationState) 
 }
 export const collectPieces = (db: Db): void => { db.exec('DELETE FROM archive_pieces WHERE (thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)) AND id NOT IN (SELECT piece_id FROM archive_pins)'); };
 export const storedBytes = (db: Db): number => (db.prepare('SELECT coalesce(sum(stored_bytes),0) AS n FROM archive_threads').get() as { n: number }).n;
+/** Active captures and unacknowledged exports own their pieces until finalization or delivery. */
+export const EVICTABLE_THREAD = "NOT EXISTS(SELECT 1 FROM clickhouse_outbox q WHERE q.thread_id=archive_threads.id AND q.content IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM archive_entries e WHERE e.thread_id=archive_threads.id AND e.state='pending') AND NOT EXISTS(SELECT 1 FROM clickhouse_export WHERE backfill_cursor IS NOT NULL AND json_extract(config,'$.includeBodies')=1)";
 export function expireThread(db: Db, thread: string): void {
+  if (!db.prepare(`SELECT 1 FROM archive_threads WHERE id=? AND ${EVICTABLE_THREAD}`).get(thread)) return;
+  db.prepare('DELETE FROM archive_wire WHERE entry_id IN (SELECT id FROM archive_entries WHERE thread_id=?)').run(thread);
   db.prepare('DELETE FROM archive_search WHERE rowid IN (SELECT search_key FROM archive_entries WHERE thread_id=?)').run(thread);
   db.prepare("UPDATE archive_entries SET state='expired',reason='retention-or-byte-budget',bytes=0,stored_bytes=0,detail='{}',thread_id=NULL WHERE thread_id=?").run(thread);
   const expired = db.prepare("SELECT seq,length(CAST(content AS BLOB)) AS content_bytes FROM clickhouse_outbox WHERE thread_id=? AND content IS NOT NULL").all(thread) as { seq: number; content_bytes: number }[];

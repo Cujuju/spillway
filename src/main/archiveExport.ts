@@ -10,6 +10,7 @@ import { DEFAULT_EXPORT_LIMITS, EXPORT_PREVIEW_TTL_MS, type ExportLimits, PORTAB
 import type { Db } from './activityDb';
 import type { ArchiveStore } from './archiveStore';
 import { normalizeTransport } from '@shared/activityTransport';
+import { snapshotWire, wireDetail, wireSnapshot, WIRE_EXPORT_SCHEMA } from './archiveWireExport';
 
 const STATES: CaptureState[] = ['unknown', 'missing', 'pending', 'partial', 'complete', 'expired'];
 const SNAPSHOT = 'portable_export_snapshot';
@@ -110,6 +111,7 @@ export class ArchiveExporter {
   private initialize(): void {
     try {
       this.db.exec(`CREATE TABLE IF NOT EXISTS ${SNAPSHOT} (ordinal INTEGER PRIMARY KEY, entry TEXT NOT NULL, detail TEXT NOT NULL, attempts TEXT NOT NULL); DELETE FROM ${SNAPSHOT};`);
+      this.db.exec(`${WIRE_EXPORT_SCHEMA}; DELETE FROM portable_export_wire`);
       this.db.exec('CREATE TABLE IF NOT EXISTS portable_export_temp (path TEXT PRIMARY KEY)');
       this.initialized = true;
       this.recoverIncomplete();
@@ -148,7 +150,7 @@ export class ArchiveExporter {
     const status = this.archive.status(), now = Date.now();
     const states = Object.fromEntries(STATES.map((s) => [s, 0])) as Record<CaptureState, number>;
     const wanted = selection.ids ? new Set(selection.ids) : null, found = new Set<string>();
-    let count = 0, bytes = 0;
+    let count = 0, bytes = 0, hasWire = false;
     const { recordBytes, snapshotBytes, records } = this.limits;
     const limit = Math.min(snapshotBytes, status.policy.maxBytes + METADATA_ALLOWANCE_BYTES);
     this.db.transaction(() => {
@@ -167,12 +169,15 @@ export class ArchiveExporter {
           const body = selection.includeRecordedBodies && e.bytes > 0;
           const saved = this.db.prepare('SELECT detail FROM archive_entries WHERE id=?').get(e.id) as { detail: string };
           let rebuilt = body ? saved.detail : '{}';
-          if (body) try { rebuilt = JSON.stringify(readBody(this.db, saved.detail, cache)); } catch { /* Preserve the malformed payload marker. */ }
+          const wire = body ? wireDetail(saved.detail) : null;
+          if (wire) hasWire = true;
+          else if (body) try { rebuilt = JSON.stringify(readBody(this.db, saved.detail, cache)); } catch { /* Preserve the malformed payload marker. */ }
           const size = Buffer.byteLength(rebuilt);
           const added = Buffer.byteLength(meta) + Buffer.byteLength(joined) + (body ? size : 2);
           if (body && size > recordBytes || added > recordBytes) throw new Error(`Archived record exceeds the ${mib(recordBytes)} export limit`);
           if (++count > records || bytes + added > limit) throw new Error(`Export snapshot limit reached (up to ${mib(snapshotBytes)} / ${records.toLocaleString('en-US')} records). Select a smaller date range or omit bodies.`);
           bytes += added; states[e.state]++; found.add(e.id);
+          if (wire) bytes += snapshotWire(this.db, count, wire, limit - bytes);
           this.db.prepare(`INSERT INTO ${SNAPSHOT} VALUES(?,?,?,?)`).run(count, meta, rebuilt, joined);
         }
         if (!page.more) break;
@@ -182,7 +187,7 @@ export class ArchiveExporter {
     const { epoch, sequence, dropped, gaps, restarts, rejected } = status;
     const id = randomUUID();
     this.current = { id, state: 'preview', writtenRecords: 0, writtenBytes: 0, path: null, error: null, warning: null, manifest: {
-      type: 'manifest', format: PORTABLE_ARCHIVE_FORMAT, version: 1, id, createdAt: new Date(now).toISOString(), expiresAt: new Date(now + EXPORT_PREVIEW_TTL_MS).toISOString(),
+      type: 'manifest', format: PORTABLE_ARCHIVE_FORMAT, version: hasWire ? 2 : 1, id, createdAt: new Date(now).toISOString(), expiresAt: new Date(now + EXPORT_PREVIEW_TTL_MS).toISOString(),
       selection, unresolvedIds: selection.ids?.filter((key) => !found.has(key)) ?? [], records: count, snapshotBytes: bytes, captureStates: states, recordingPolicy: { ...status.policy },
       captureDiagnostics: { epoch, sequence, dropped, gaps, restarts, rejected }, boundary: 'observed-downstream-only', taskOutcome: 'unknown', rawPayloads: selection.includeRecordedBodies ? 'included-if-recorded' : 'omitted',
       attemptLimit: 200, attemptCompleteness: 'bounded-recorded-links',
@@ -228,7 +233,7 @@ export class ArchiveExporter {
   cancelCurrent(): void { if (this.current) this.cancel(this.current.id); }
   private discard(): void {
     if (this.timer) clearTimeout(this.timer); this.timer = null;
-    if (this.initialized) this.db.exec(`DELETE FROM ${SNAPSHOT}`);
+    if (this.initialized) this.db.exec(`DELETE FROM ${SNAPSHOT}; DELETE FROM portable_export_wire`);
   }
   private async write(job: ArchiveExportJob, destination: string): Promise<void> {
     const temp = path.join(path.dirname(destination), `.spillway-export-${job.id}.partial`);
@@ -254,6 +259,14 @@ export class ArchiveExporter {
         check();
         const row = this.db.prepare(`SELECT entry,detail,attempts FROM ${SNAPSHOT} WHERE ordinal=?`).get(ordinal) as { entry: string; detail: string; attempts: string } | undefined;
         if (!row) throw new Error('Export snapshot record missing');
+        const wire = wireDetail(row.detail);
+        if (wire) {
+          const capture = portableCapture(JSON.parse(row.entry) as ArchiveEntry, '{}', row.attempts, false);
+          await emit({ ...capture, payload: { state: 'included', reason: 'wire-chunks-follow', representation: 'downstream-wire-v2', sha256: null, data: null } });
+          for (const chunk of wireSnapshot(this.db, ordinal)) await emit(JSON.parse(chunk.detail));
+          await emit({ type: 'wire-end', ...wire }); payloadStates.included++; job.writtenRecords++;
+          continue;
+        }
         const capture = portableCapture(JSON.parse(row.entry) as ArchiveEntry, row.detail, row.attempts, job.manifest.selection.includeRecordedBodies === true);
         await emit(capture); payloadStates[capture.payload.state]++; job.writtenRecords++;
       }

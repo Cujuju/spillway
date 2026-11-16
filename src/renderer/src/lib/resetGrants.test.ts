@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMemo, createRoot, createSignal } from 'solid-js';
 import type { Credential, ResetCreditGrant, ResetCredits } from '@shared/types';
-import { createHoldBinding, groupGrants, type GrantGroup, hasResetCredits, outcomeText, resetMode, unusableNote } from './resetGrants';
+import { createHoldBinding, groupGrants, restoresText, type GrantGroup, hasResetCredits, outcomeText, resetMode, unusableNote } from './resetGrants';
 
 const AT = Date.parse('2026-11-15T12:00:00Z');
 const SOON = '2026-11-20T00:00:00Z';
@@ -61,6 +61,24 @@ describe('groupGrants', () => {
     const fable = first(groupGrants([grant('f0', 'fable', { available: 0 }), grant('f1', 'fable', { expiresAt: LATER }), grant('f2', 'fable', { expiresAt: SOON })], AT));
     expect(fable.grants.map((g) => g.id)).toEqual(['f2', 'f1']);
     expect(fable.expiries).toEqual([SOON, LATER]);
+  });
+});
+
+describe('expiry and restore text', () => {
+  it('orders expiries by time, not by text', () => {
+    // Text order puts the Z time first; it is three hours later than the offset one.
+    const offset = '2026-11-20T00:00:00+05:00';
+    const utc = '2026-11-19T22:00:00Z';
+    const fable = first(groupGrants([grant('a', 'fable', { expiresAt: utc }), grant('b', 'fable', { expiresAt: offset })], AT));
+    expect(fable.expiries).toEqual([offset, utc]);
+    expect(fable.target?.id).toBe('b');
+  });
+
+  it('describes what each known scope restores in plain words', () => {
+    expect(restoresText(grant('g', 'general').clears, [])).toBe('5-hour usage, weekly usage, Fable weekly usage');
+    expect(restoresText(grant('f', 'fable').clears, [])).toBe('5-hour usage, Fable weekly usage');
+    const windows = [{ key: 'monthly', label: 'Monthly', usedPercent: null, resetsAt: null, status: null, durationMs: null, scoped: false, resetCadence: null }];
+    expect(restoresText(['monthly', 'mystery'], windows)).toBe('Monthly, mystery');
   });
 });
 

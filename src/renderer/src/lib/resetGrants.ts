@@ -1,5 +1,5 @@
 import { createEffect, on, type Accessor } from 'solid-js';
-import type { Credential, ResetCreditGrant, ResetCreditOutcome } from '@shared/types';
+import type { Credential, LimitWindow, ResetCreditGrant, ResetCreditOutcome } from '@shared/types';
 
 export type GrantScope = ResetCreditGrant['scope'];
 
@@ -58,10 +58,21 @@ export function groupGrants(grants: readonly ResetCreditGrant[], at: number): Gr
       applicable: usable.reduce((n, g) => n + g.applicable, 0),
       grants: held,
       target: usable[0] ?? null,
-      expiries: held.flatMap((g) => (g.expiresAt && Date.parse(g.expiresAt) > at ? [g.expiresAt] : [])).toSorted(),
+      expiries: held.flatMap((g) => (g.expiresAt && Date.parse(g.expiresAt) > at ? [g.expiresAt] : [])).toSorted((a, b) => Date.parse(a) - Date.parse(b)),
     }];
   });
 }
+
+/** What clearing each known provider limit gives back. `seven_day_overage_included` is the Fable weekly allowance. */
+const RESTORED_USAGE: Record<string, string> = {
+  five_hour: '5-hour usage',
+  seven_day: 'weekly usage',
+  seven_day_overage_included: 'Fable weekly usage',
+};
+
+/** The usage a grant restores, in plain words; an unrecognized key falls back to the account's window label. */
+export const restoresText = (clears: readonly string[], windows: readonly LimitWindow[]): string =>
+  clears.map((k) => RESTORED_USAGE[k] ?? windows.find((w) => w.key === k)?.label ?? k).join(', ');
 
 /** Why a group cannot be spent, for its tooltip. */
 export function unusableNote(group: GrantGroup, at: number): string {

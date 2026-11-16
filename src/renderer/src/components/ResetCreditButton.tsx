@@ -2,7 +2,7 @@ import { createMemo, For, Match, Show, Switch } from 'solid-js';
 import type { Credential, ResetCredits } from '@shared/types';
 import { appLocale } from '@shared/timeFormat';
 import { dateTime } from '../lib/format';
-import { groupGrants, outcomeText, resetMode, SCOPE_NOUN, unusableNote, type GrantGroup, type GrantScope } from '../lib/resetGrants';
+import { groupGrants, outcomeText, resetMode, restoresText, SCOPE_NOUN, unusableNote, type GrantGroup, type GrantScope } from '../lib/resetGrants';
 import { now } from '../store';
 import { ResetHoldBadge } from './ResetHoldBadge';
 
@@ -42,10 +42,6 @@ export function ResetCreditButton(props: {
     }
   };
 
-  /** Window labels for the keys a grant clears, as the account reports them. */
-  const clearsText = (keys: string[]) =>
-    keys.map((k) => props.credential.windows.find((w) => w.key === k)?.label ?? k).join(', ');
-
   const grantRows = (g: GrantGroup) => {
     // Grants in one scope share what they clear; describe the one a hold spends, else the first held.
     const shown = g.target ?? g.grants[0];
@@ -53,8 +49,7 @@ export function ResetCreditButton(props: {
       { label: 'Held', value: count(g.available) },
       { label: 'Usable now', value: count(g.applicable) },
       ...(g.target ? [{ label: 'Spends', value: g.target.label }] : []),
-      ...(shown?.clears.length ? [{ label: 'Clears', value: clearsText(shown.clears) }] : []),
-      ...(shown && shown.givesBackWeekly !== null ? [{ label: 'Weekly use', value: shown.givesBackWeekly ? 'Given back' : 'Kept' }] : []),
+      ...(shown?.clears.length ? [{ label: 'Restores', value: restoresText(shown.clears, props.credential.windows) }] : []),
       checked(),
     ];
   };

@@ -31,7 +31,20 @@ export interface CredentialPlan {
   multiplier: number | null;
 }
 
-/** A Codex account's rate-limit reset credits as of the proxy's last lookup. */
+/** One provider grant; scope describes what a reset restores, independently of its campaign label. */
+export interface ResetCreditGrant {
+  id: string;
+  label: string;
+  scope: 'fable' | 'general' | 'unknown';
+  available: number;
+  applicable: number;
+  expiresAt: string | null;
+  clears: string[];
+  givesBackWeekly: boolean | null;
+  unavailableReason: string | null;
+}
+
+/** An account's rate-limit reset credits as of the proxy's last lookup. */
 export interface ResetCredits {
   /** Credits the account holds. */
   available: number;
@@ -40,6 +53,8 @@ export interface ResetCredits {
   checkedAt: string;
   /** When held credits expire (ISO), soonest first. May be shorter than `available`: some credits never expire, or the list lookup failed. */
   expiries: string[];
+  /** Claude grants; absent for Codex and older proxies. */
+  grants?: ResetCreditGrant[];
 }
 
 /** The provider's answer to spending a reset credit: spent, nothing to clear, none usable, or a replayed request. */
@@ -79,7 +94,7 @@ export interface Credential {
   weight: number;
   /** Subscription plan from the provider's profile; null when unknown. */
   plan: CredentialPlan | null;
-  /** Codex only; null when never reported. Claude has no such credit. */
+  /** Null when never reported. */
   resetCredits: ResetCredits | null;
   windows: LimitWindow[];
 }

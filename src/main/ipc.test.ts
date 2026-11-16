@@ -9,8 +9,8 @@ const archiveMocks = vi.hoisted(() => ({ call: vi.fn(), refresh: vi.fn() }));
 vi.mock('electron', () => ({ ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler), on: vi.fn() } }));
 vi.mock('./settingsStore', () => ({ getSettings: () => settings, setSettings: (next: AppSettings) => (settings = normalizeSettings(next)) }));
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true, restart, applyConfig: vi.fn() } }));
-const thinkingMocks = vi.hoisted(() => ({ latest: vi.fn(), credentialModels: vi.fn() }));
-vi.mock('./usagePoller', () => ({ usage: { start: vi.fn(), latest: thinkingMocks.latest } }));
+const thinkingMocks = vi.hoisted(() => ({ latest: vi.fn(), credentialModels: vi.fn(), useResetCredit: vi.fn() }));
+vi.mock('./usagePoller', () => ({ usage: { start: vi.fn(), latest: thinkingMocks.latest, useResetCredit: thinkingMocks.useResetCredit } }));
 vi.mock('./activityService', () => ({ activityLog: { call: archiveMocks.call } }));
 vi.mock('./archiveSync', () => ({ archiveSync: { refresh: archiveMocks.refresh } }));
 vi.mock('./diagnosticService', () => ({ diagnosticExporter: {} }));
@@ -40,6 +40,19 @@ beforeEach(() => {
   restart.mockReset();
   archiveMocks.call.mockReset(); archiveMocks.refresh.mockReset();
   registerIpc();
+});
+
+it('requires a selected Claude grant and passes its exact identity to the usage poller', async () => {
+  thinkingMocks.latest.mockReturnValue({ credentials: [{ id: 'claude', authIndex: 'claude-index', provider: 'claude' },
+    { id: 'codex', authIndex: 'codex-index', provider: 'codex' }] });
+  thinkingMocks.useResetCredit.mockReset().mockResolvedValue('reset');
+  const redeem = handlers.get(INVOKE.useResetCredit)!;
+  expect(() => redeem(null, 'claude')).toThrow('Choose a reset type first');
+  expect(thinkingMocks.useResetCredit).not.toHaveBeenCalled();
+  await expect(redeem(null, 'claude', 'fable-grant')).resolves.toBe('reset');
+  expect(thinkingMocks.useResetCredit).toHaveBeenLastCalledWith('claude-index', 'fable-grant');
+  await redeem(null, 'codex');
+  expect(thinkingMocks.useResetCredit).toHaveBeenLastCalledWith('codex-index', undefined);
 });
 
 it('deleting archive preserves retention/budget and disables capture before clearing data', async () => {

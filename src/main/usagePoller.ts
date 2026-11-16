@@ -120,12 +120,17 @@ class UsagePoller extends EventEmitter {
   }
 
   /** Spends one of a Codex or Claude account's reset credits, then publishes the usage that follows. */
-  async useResetCredit(authIndex: string): Promise<ResetCreditOutcome> {
+  async useResetCredit(authIndex: string, grantId?: string): Promise<ResetCreditOutcome> {
     if (!proxy.isRunning()) throw new Error('Start the proxy first');
     return this.enqueue(async () => {
-      const { outcome, snapshot } = await management.useResetCredit(authIndex);
-      this.acceptMutation(snapshot);
-      return outcome;
+      try {
+        const { outcome, snapshot } = await management.useResetCredit(authIndex, grantId);
+        this.acceptMutation(snapshot);
+        return outcome;
+      } catch (err) {
+        if (err instanceof UsageRefreshError) this.acceptMutation(err.snapshot);
+        throw err;
+      }
     });
   }
 

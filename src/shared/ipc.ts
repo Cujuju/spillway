@@ -107,8 +107,8 @@ export interface DesktopApi {
 
   usageLatest(): Promise<{ snapshot: UsageSnapshot | null; error: string | null }>;
   usageRefresh(credentialId?: string): Promise<UsageSnapshot | null>;
-  /** Spends one of a Codex account's rate-limit reset credits. */
-  useResetCredit(credentialId: string): Promise<ResetCreditOutcome>;
+  /** Spends the selected Claude grant, or a Codex reset credit. */
+  useResetCredit(credentialId: string, grantId?: string): Promise<ResetCreditOutcome>;
   /** The latest automatic 5-hour window start and failure. */
   windowStartStatus(): Promise<WindowStartStatus>;
   usageHistory(): Promise<HistorySample[]>;

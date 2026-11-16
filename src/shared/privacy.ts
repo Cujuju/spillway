@@ -20,7 +20,10 @@ const maybe = (text: string | null) => (text === null ? null : maskEmails(text))
 
 /** Every human-readable account field masked; ids and numbers untouched. */
 export function maskCredential(c: Credential): Credential {
-  return { ...c, name: maskEmails(c.name), label: maskEmails(c.label), note: maybe(c.note), email: maybe(c.email), statusMessage: maybe(c.statusMessage) };
+  return { ...c, name: maskEmails(c.name), label: maskEmails(c.label), note: maybe(c.note), email: maybe(c.email), statusMessage: maybe(c.statusMessage),
+    resetCredits: c.resetCredits && { ...c.resetCredits, ...(c.resetCredits.grants ? { grants: c.resetCredits.grants.map((g) => ({
+      ...g, label: maskEmails(g.label), unavailableReason: maybe(g.unavailableReason),
+    })) } : {}) } };
 }
 
 export const maskSnapshot = (s: UsageSnapshot): UsageSnapshot => ({ ...s, credentials: s.credentials.map(maskCredential) });

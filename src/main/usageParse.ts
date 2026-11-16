@@ -1,4 +1,4 @@
-import type { Credential, CredentialPlan, LimitWindow, ResetCredits, UsageSnapshot } from '@shared/types';
+import type { Credential, CredentialPlan, LimitWindow, ResetCreditGrant, ResetCredits, UsageSnapshot } from '@shared/types';
 
 /** Maps the proxy's snake_case /usage/windows payload to the app's types, dropping malformed entries. */
 
@@ -56,6 +56,25 @@ function parsePlan(raw: unknown): CredentialPlan | null {
   return { tier, label, multiplier: multiplier !== null && multiplier > 0 ? multiplier : null };
 }
 
+function parseResetGrant(raw: unknown): ResetCreditGrant | null {
+  const g = obj(raw);
+  const id = s(g.id);
+  const available = n(g.available);
+  if (!id || available === null || available < 0 || !Number.isInteger(available)) return null;
+  const scope = g.scope === 'fable' || g.scope === 'general' ? g.scope : 'unknown';
+  const expiry = s(g.expires_at);
+  const validExpiry = g.expires_at === null || (expiry !== null && Number.isFinite(Date.parse(expiry)));
+  const applicable = Math.min(available, Math.max(0, Math.floor(n(g.applicable) ?? 0)));
+  return {
+    id, label: s(g.label) ?? id, scope, available,
+    applicable: scope !== 'unknown' && validExpiry ? applicable : 0,
+    expiresAt: validExpiry ? expiry : null,
+    clears: (Array.isArray(g.clears) ? g.clears : []).filter((key): key is string => typeof key === 'string'),
+    givesBackWeekly: typeof g.gives_back_weekly === 'boolean' ? g.gives_back_weekly : null,
+    unavailableReason: validExpiry ? s(g.unavailable_reason) : 'Invalid reset expiry',
+  };
+}
+
 function parseResetCredits(raw: unknown): ResetCredits | null {
   const r = obj(raw);
   const available = n(r.available);
@@ -65,7 +84,11 @@ function parseResetCredits(raw: unknown): ResetCredits | null {
     .map(s)
     .filter((t): t is string => t !== null && !Number.isNaN(Date.parse(t)))
     .sort((a, b) => Date.parse(a) - Date.parse(b));
-  return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt, expiries };
+  const grants = 'grants' in r
+    ? (Array.isArray(r.grants) ? r.grants : []).map(parseResetGrant).filter((g): g is ResetCreditGrant => g !== null)
+    : undefined;
+  return { available, applicable: Math.min(available, Math.max(0, n(r.applicable) ?? 0)), checkedAt, expiries,
+    ...(grants === undefined ? {} : { grants }) };
 }
 
 /** The proxy keeps a provider's raw error body; show its message, e.g. `{"error":{"message":"…"}}` → "…". */

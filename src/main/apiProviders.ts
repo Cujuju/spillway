@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Document, isMap, isSeq, parseDocument, YAMLMap, YAMLSeq } from 'yaml';
 import {
-  API_KEY_FAMILIES, validateDraft, type ApiKeyFamily, type ApiProviderDraft, type ApiProviderGroup, type ApiProviderTarget,
+  API_KEY_FAMILIES, CLAUDE_API_IDENTITY_DEFAULT, validateDraft, type ClaudeApiIdentity, type ApiKeyFamily, type ApiProviderDraft, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
 
 /** 64 bits of the key's hash: enough to tell a group's keys apart, too little to recover the key. */
@@ -18,6 +18,36 @@ export const maskKey = (key: string) =>
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const keyOf = (node: unknown): string | null => (isMap(node) ? str(node.get('api-key')) : null);
+
+function claudeIdentity(node: YAMLMap): ClaudeApiIdentity {
+  if (!node.has('cloak') && !node.has('fingerprint-profile')) return CLAUDE_API_IDENTITY_DEFAULT;
+  if (node.get('fingerprint-profile')) return 'custom';
+  const mode = node.getIn(['cloak', 'mode']);
+  if (mode === 'never' || mode === 'uncloak') return 'api';
+  return mode === 'auto' ? 'client' : 'custom';
+}
+
+function setClaudeIdentity(node: YAMLMap, identity: ClaudeApiIdentity): void {
+  if (identity === 'custom') return;
+  node.delete('fingerprint-profile');
+  if (!isMap(node.get('cloak'))) node.set('cloak', new YAMLMap());
+  node.setIn(['cloak', 'mode'], identity === 'api' ? 'uncloak' : 'auto');
+}
+
+/** Unconfigured Claude API keys use API identity; explicit proxy policies remain authoritative. */
+export function ensureClaudeApiIdentity(doc: Document): void {
+  const groups = doc.getIn([ROOT, 'claude']);
+  if (!isSeq(groups)) return;
+  for (const group of groups.items) {
+    const keys = isMap(group) ? group.get('keys') : null;
+    if (!isSeq(keys)) continue;
+    for (const node of keys.items) {
+      if (isMap(node) && keyOf(node) && !node.has('cloak') && !node.has('fingerprint-profile')) {
+        setClaudeIdentity(node, CLAUDE_API_IDENTITY_DEFAULT);
+      }
+    }
+  }
+}
 
 /** Parses config.user.yaml for editing; throws its first error rather than rewriting a file the user broke. */
 export function parseForEdit(text: string): Document {
@@ -42,7 +72,8 @@ export function readGroups(doc: Document): ApiProviderGroup[] {
       if (!name) continue;
       const keys = isSeq(item.get('keys')) ? (item.get('keys') as YAMLSeq).items.flatMap((node) => {
         const key = keyOf(node);
-        return key ? [{ id: keyId(key), masked: maskKey(key), ...(isMap(node) && node.get('disabled') === true ? { disabled: true } : {}) }] : [];
+        return key ? [{ id: keyId(key), masked: maskKey(key), ...(isMap(node) && node.get('disabled') === true ? { disabled: true } : {}),
+          ...(family === 'claude' && isMap(node) ? { claudeIdentity: claudeIdentity(node) } : {}) }] : [];
       }) : [];
       const models = isSeq(item.get('models'))
         ? (item.get('models') as YAMLSeq).items.flatMap((m) => {
@@ -168,11 +199,21 @@ export function applyDraft(doc: Document, draft: ApiProviderDraft, target: ApiPr
   if (draft.family === 'openai-compatibility' && draft.disabled) group.set('disabled', true);
   else group.delete('disabled');
   const keys = nextKeys(group, draft.keepKeys, draft.offKeys, draft.newKeys);
+  if (draft.family === 'claude') {
+    for (const node of keys.items) {
+      const key = keyOf(node);
+      if (!key || !isMap(node)) continue;
+      const id = keyId(key);
+      const identity = draft.keepKeys.includes(id) ? draft.claudeIdentities?.[id] : draft.newClaudeIdentity ?? CLAUDE_API_IDENTITY_DEFAULT;
+      if (identity) setClaudeIdentity(node, identity);
+    }
+  }
   if (keys.items.length) group.set('keys', keys);
   else group.delete('keys');
   const models = nextModels(group, draft.models);
   if (models.items.length) group.set('models', models);
   else group.delete('models');
+  ensureClaudeApiIdentity(doc);
 }
 
 /** Removes a group; drops the family list and the `api-keys` section once empty. */

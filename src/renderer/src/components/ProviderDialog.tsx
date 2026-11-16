@@ -1,7 +1,7 @@
 import { Plus, X } from 'lucide-solid';
 import { createSignal, createUniqueId, For, Index, onMount, Show, untrack } from 'solid-js';
 import {
-  API_KEY_FAMILIES, FAMILY_INFO, MODEL_LISTS, validateDraft, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
+  API_KEY_FAMILIES, CLAUDE_API_IDENTITY_DEFAULT, CLAUDE_API_IDENTITY_OPTIONS, FAMILY_INFO, MODEL_LISTS, validateDraft, type ClaudeApiIdentity, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,
 } from '@shared/apiProviders';
 import type { CredentialModel } from '@shared/types';
 import { ModelFamilyList } from './ModelFamilyList';
@@ -26,6 +26,10 @@ export function ProviderDialog(props: {
   const [disabled, setDisabled] = createSignal(start?.disabled ?? false);
   const [keepKeys, setKeepKeys] = createSignal(start?.keys.map((k) => k.id) ?? []);
   const [offKeys, setOffKeys] = createSignal(start?.keys.filter((k) => k.disabled).map((k) => k.id) ?? []);
+  const [claudeIdentities, setClaudeIdentities] = createSignal<Record<string, ClaudeApiIdentity>>(
+    Object.fromEntries(start?.keys.map((k) => [k.id, k.claudeIdentity ?? CLAUDE_API_IDENTITY_DEFAULT]) ?? []),
+  );
+  const [newClaudeIdentity, setNewClaudeIdentity] = createSignal<'api' | 'client'>(CLAUDE_API_IDENTITY_DEFAULT);
   const [newKey, setNewKey] = createSignal('');
   const [newKeys, setNewKeys] = createSignal<string[]>([]);
   const [models, setModels] = createSignal<ApiModelAlias[]>(start?.models ?? []);
@@ -85,6 +89,7 @@ export function ProviderDialog(props: {
       keepKeys: keepKeys(),
       offKeys: offKeys().filter((id) => keepKeys().includes(id)),
       newKeys: pending ? [...newKeys(), pending] : newKeys(),
+      ...(family() === 'claude' ? { claudeIdentities: claudeIdentities(), newClaudeIdentity: newClaudeIdentity() } : {}),
       models: models().map((m) => ({ name: m.name.trim(), alias: m.alias?.trim() || null })),
     };
     const problem = validateDraft(draft, props.groups, props.target);
@@ -138,6 +143,11 @@ export function ProviderDialog(props: {
             {(k) => (
               <div class="form-list-row">
                 <span class="spacer">{k.masked}</span>
+                <Show when={family() === 'claude'}>
+                  <Select label={`Request identity for ${k.masked}`} value={claudeIdentities()[k.id] ?? CLAUDE_API_IDENTITY_DEFAULT}
+                    options={[...CLAUDE_API_IDENTITY_OPTIONS, ...(k.claudeIdentity === 'custom' ? [{ value: 'custom' as const, label: 'Custom configuration' }] : [])]}
+                    onChange={(value) => setClaudeIdentities({ ...claudeIdentities(), [k.id]: value })} />
+                </Show>
                 <Toggle
                   value={!offKeys().includes(k.id)}
                   label={`Use key ${k.masked}`}
@@ -161,8 +171,14 @@ export function ProviderDialog(props: {
           </For>
           <div class="form-list-row">
             <input class="input spacer" type="password" autocomplete="off" value={newKey()} placeholder="Paste a key" onInput={(e) => setNewKey(e.currentTarget.value)} onChange={() => !available().length && void loadModels()} onKeyDown={(e) => e.key === 'Enter' && addKey()} />
+            <Show when={family() === 'claude'}>
+              <Select label="Request identity for new keys" value={newClaudeIdentity()} options={CLAUDE_API_IDENTITY_OPTIONS} onChange={setNewClaudeIdentity} />
+            </Show>
             <button class="btn ghost icon-btn" title="Add key" onClick={addKey}><Plus size={ICON_PX} /></button>
           </div>
+          <Show when={family() === 'claude'}>
+            <span class="form-help">API identity removes Claude Code client and billing tags. Automatic keeps Claude Code identity for Claude Code requests.</span>
+          </Show>
         </div>
 
         <div class="form-field">

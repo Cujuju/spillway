@@ -1,5 +1,4 @@
 import { createMemo, For, Match, Show, Switch } from 'solid-js';
-import { Ticket } from 'lucide-solid';
 import type { Credential, ResetCredits } from '@shared/types';
 import { appLocale } from '@shared/timeFormat';
 import { dateTime } from '../lib/format';
@@ -12,8 +11,6 @@ const PROVIDER_DEFAULT = 'provider-default';
 
 const TIP_TITLE: Record<GrantScope, string> = { fable: 'Fable resets', general: 'General resets', unknown: 'Unrecognized resets' };
 const SCOPE_LABEL: Record<GrantScope, string> = { fable: 'Fable', general: 'general', unknown: 'unknown' };
-/** Matches the badge's state icon at its 10px text size. */
-const TICKET_ICON_PX = 11;
 
 const count = (n: number) => n.toLocaleString(appLocale());
 const plural = (n: number, noun: string) => `${count(n)} ${noun}${n === 1 ? '' : 's'}`;
@@ -30,17 +27,14 @@ export function ResetCreditButton(props: {
   disabled: boolean;
   /** False hides the "expires …" text where width is tight; the tooltip still lists expiries. */
   showExpiry?: boolean;
-  /** Replace the visible reset noun with a ticket icon. */
-  ticketLabel?: boolean;
+  /** Drops the reset noun from per-scope badges ("1 Fable") where width is tight. */
+  shortLabel?: boolean;
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
   const credits = () => props.credential.resetCredits!;
   const checked = () => ({ label: 'Checked', value: dateTime(credits().checkedAt) });
   const groups = createMemo(() => groupGrants(credits().grants ?? [], now()));
-  const label = (available: number, scope?: GrantScope) => props.ticketLabel
-    ? <>{count(available)}{scope ? ` ${SCOPE_LABEL[scope]}` : ''} <Ticket size={TICKET_ICON_PX} aria-hidden="true" /></>
-    : undefined;
 
   const spend = async (grantId: string | undefined, scope?: GrantScope) => {
     try {
@@ -74,7 +68,7 @@ export function ResetCreditButton(props: {
               <Show when={groups().some((x) => x.scope === scope)}>
                 <ResetHoldBadge
                   text={plural(g().available, SCOPE_NOUN[scope])}
-                  label={label(g().available, scope)}
+                  label={props.shortLabel ? `${count(g().available)} ${SCOPE_LABEL[scope]}` : undefined}
                   target={g().target?.id ?? null}
                   disabled={props.disabled}
                   tipTitle={TIP_TITLE[scope]}
@@ -93,7 +87,6 @@ export function ResetCreditButton(props: {
       <Match when={resetMode(props.credential) === 'untyped'}>
         <ResetHoldBadge
           text={plural(credits().available, 'reset')}
-          label={label(credits().available)}
           target={null}
           disabled={props.disabled}
           tipTitle="Rate-limit resets"
@@ -107,7 +100,6 @@ export function ResetCreditButton(props: {
       <Match when={resetMode(props.credential) === 'credits'}>
         <ResetHoldBadge
           text={plural(credits().available, 'reset')}
-          label={label(credits().available)}
           target={credits().applicable > 0 ? PROVIDER_DEFAULT : null}
           disabled={props.disabled}
           tipTitle="Rate-limit reset credits"

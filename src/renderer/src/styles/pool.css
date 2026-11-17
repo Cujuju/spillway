@@ -256,16 +256,31 @@
   position: relative;
   overflow: hidden;
   border: 0;
+  padding: 0;
   cursor: pointer;
 }
 .hold-badge:disabled {
   cursor: default;
 }
 
-/* Keeps the label above the hold progress fill. */
-.hold-label {
+/* Square cap holding the state icon; solid accent only while a hold can spend. */
+.hold-cap {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
+  justify-content: center;
+  align-self: stretch;
+  width: var(--badge-height);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+.hold-badge.accent:not(:disabled) .hold-cap {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* Keeps the label above the hold progress fill. */
+.hold-label {
+  position: relative;
+  padding: 0 var(--badge-pad-x);
 }

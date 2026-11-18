@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { buildManifest } from '@cujuju/electron-updates/node';
 import { expect, it } from 'vitest';
 
-// Real Electron is needed: Node's fs does not intercept .asar paths.
+// Electron's Node mode keeps ASAR filesystem behavior without opening a desktop session.
 it.skipIf(process.platform === 'linux')('downloads and stages ASAR bundle bytes in Electron', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'spillway-updater-test-'));
   try {
@@ -38,11 +38,8 @@ it.skipIf(process.platform === 'linux')('downloads and stages ASAR bundle bytes 
     const moduleUrl = import.meta.resolve('@cujuju/electron-updates');
     const script = join(dir, 'main.cjs');
     await writeFile(script, `
-const {app}=require('electron');
 const fs=require('original-fs');
-app.setPath('userData',${JSON.stringify(join(dir, 'userdata'))});
-app.disableHardwareAcceleration();
-app.whenReady().then(async()=>{try{
+(async()=>{try{
   const {createUpdater}=await import(${JSON.stringify(moduleUrl)});
   const assets=${JSON.stringify(['update-darwin.json', listing.name, pack])}.map(name=>({name,browser_download_url:name}));
   const fetch=async(url,init)=>{
@@ -59,12 +56,11 @@ app.whenReady().then(async()=>{try{
     dir:${JSON.stringify(join(dir, 'updates'))},fetch,platform:'darwin',arch:'arm64',exe:${JSON.stringify(join(source, 'Contents', 'MacOS', 'Spillway').replaceAll('\\', '/'))}});
   await updater.check();await updater.download();
   if(updater.status().state!=='ready')throw Error(JSON.stringify(updater.status()));
-  console.log('update ready');app.exit(0);
-}catch(error){console.error(error);app.exit(1)}});
+  console.log('update ready');
+}catch(error){console.error(error);process.exitCode=1}})();
 `);
-    const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
-    const { stdout } = await promisify(execFile)(require('electron') as string, [script], { env, timeout: 20_000 });
+    const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    const { stdout } = await promisify(execFile)(require('electron') as string, [script], { env, timeout: 20_000, windowsHide: true });
     expect(stdout).toContain('update ready');
     const rebuilt = join(dir, 'updates', 'staged', 'Spillway.app', 'Contents', 'Resources');
     expect(await readFile(join(rebuilt, 'app.asar'))).toEqual(asar);

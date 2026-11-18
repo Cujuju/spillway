@@ -8,6 +8,7 @@ import { importLegacyFiles, openActivityDb, totalKey, type Db } from './activity
 import { rebuildRetainedTotals } from './activityMigration';
 import { dailyTotals, readTotals, storedTotalKey, type ActivityTotal } from './activityTotals';
 import { reconcileUsage, rememberUsage } from './usageLedger';
+import { ACTIVITY_FIXTURE_REQUESTS } from './test/activityFixtureSize';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-migration-'));
 const key = 'cd'.repeat(32);
@@ -173,10 +174,10 @@ it('keeps removal attached to the filed baseline day after a time-zone mismatch'
   expect(rows()).toEqual([old]);
 });
 
-/** Encryption and 150k ledger inserts can exceed Vitest's default timeout on CI. */
+/** Encryption and bulk fixture inserts can exceed Vitest's default timeout. */
 const LARGE_MIGRATION_TIMEOUT_MS = 30_000;
-it('rebuilds 150,000 requests with one ordered request scan', () => {
-  const requestCount = 150_000;
+it('rebuilds the bulk fixture with one ordered request scan', () => {
+  const requestCount = ACTIVITY_FIXTURE_REQUESTS;
   const dayCount = 30;
   const insert = db.prepare('INSERT INTO requests (day, failed, event) VALUES (?, 0, ?)');
   db.transaction(() => {
@@ -191,7 +192,7 @@ it('rebuilds 150,000 requests with one ordered request scan', () => {
   const prepare = vi.spyOn(db, 'prepare');
   const started = performance.now();
   db.transaction(() => rebuildRetainedTotals(db))();
-  console.info(`150k rebuild: ${Math.round(performance.now() - started)} ms`);
+  console.info(`${requestCount} requests rebuild: ${Math.round(performance.now() - started)} ms`);
   const scans = prepare.mock.calls.filter(([sql]) => /SELECT .*FROM requests/i.test(sql));
   expect(scans).toHaveLength(1);
   prepare.mockRestore();

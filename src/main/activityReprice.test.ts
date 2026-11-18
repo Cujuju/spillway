@@ -14,6 +14,7 @@ import { exportActivityEvents } from './activityTransfer';
 import { ActivityLog } from './activityStore';
 import { matchLegacyUsage } from './legacyUsage';
 import { TraceStore } from './traceStore';
+import { ACTIVITY_FIXTURE_REQUESTS } from './test/activityFixtureSize';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-reprice-'));
 const key = 'ab'.repeat(32);
@@ -152,8 +153,8 @@ it('skips equal costs independently for totals, requests, owners and matched par
 
 /** Encrypted fixture creation and repricing can exceed the default timeout on CI. */
 const LARGE_REPRICE_TIMEOUT_MS = 60_000;
-it.each([5, 100])('reprices 150,000 requests and 300,000 identities (%i% changed) with bounded indexed reads', (percentChanged) => {
-  const requestCount = 150_000;
+it.each([5, 100])('reprices the bulk fixture (%i% changed) with bounded indexed reads', (percentChanged) => {
+  const requestCount = ACTIVITY_FIXTURE_REQUESTS;
   const percentScale = 100;
   const bytesPerMiB = 1024 * 1024;
   const e = event('2026-10-08T12:00:00Z', { costUsd: 99, uncachedCostUsd: 199 } as Partial<ActivityEvent>);
@@ -178,7 +179,7 @@ it.each([5, 100])('reprices 150,000 requests and 300,000 identities (%i% changed
   const prepare = vi.spyOn(db, 'prepare');
   const started = performance.now();
   repriceActivity(db);
-  console.info(`150k ${percentChanged}% reprice: ${Math.round(performance.now() - started)} ms; peak RSS ${Math.round(process.resourceUsage().maxRSS * 1024 / bytesPerMiB)} MiB`);
+  console.info(`${requestCount} requests, ${percentChanged}% reprice: ${Math.round(performance.now() - started)} ms; peak RSS ${Math.round(process.resourceUsage().maxRSS * 1024 / bytesPerMiB)} MiB`);
   const scans = prepare.mock.calls.filter(([sql]) => /SELECT id, day, event FROM requests/i.test(sql));
   expect(scans).toHaveLength(1);
   const lookups = prepare.mock.calls.filter(([sql]) => /SELECT .*FROM usage_identities WHERE matched/i.test(sql));

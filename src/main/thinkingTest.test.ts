@@ -8,6 +8,7 @@ import type { ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { ActivityLog } from './activityStore';
 import { assembleResponse, exactTools, nextMove, parseJudge, responseTokens, rewriteTestBody } from './thinkingTestCodec';
+import { group } from './retainedTurns';
 import { capturedRequest, prepareTest, stratify, TEST_PLAN_TTL_MS, type PreparedTest } from './thinkingTestPlan';
 import { JUDGE_ARGUMENT_VALUE_CHARS, JUDGE_DATA_CHARS, ThinkingTestRunner, testResults } from './thinkingTestRunner';
 import { tokenCost } from '@shared/modelPrices';
@@ -184,11 +185,11 @@ it('loads only sampled bodies and replaces invalid candidates within their turn 
     provider: setting.provider, model: setting.model, reasoningEffort: setting.effort,
     inputTokens: 100, outputTokens: 20, cachedTokens: 0, failed: false,
   } as ActivityEvent))).flat();
-  const db = { prepare: () => ({ all: () => events.map((event) => ({ event: JSON.stringify(event) })) }) } as unknown as Db;
+  const db = {} as Db, retained = { get: () => group(events) };
   const detail = vi.fn(() => ({ state: 'complete', method: 'POST', path: '/v1/messages', format: 'http', request: JSON.stringify(body), response, requestEncoding: '', responseEncoding: '' } as ArchiveDetail));
   const archive = { captureMetadata: vi.fn(() => ({ state: 'complete' as const, method: 'POST', path: '/v1/messages', format: 'http' as const, bytes: 100 })), detail };
   const req = { setting, alternatives: [alternative], turns: 10, query: { from: Date.parse(at), to: Date.parse(at), scope: { accounts: null, clients: null } } };
-  const plan = prepareTest(db, archive, req);
+  const plan = prepareTest(db, archive, req, retained);
   expect(plan.samples).toHaveLength(req.turns);
   expect(detail).toHaveBeenCalledTimes(req.turns);
   expect(plan.plan.replayableTurns).toBe(retainedTurns);
@@ -199,14 +200,14 @@ it('loads only sampled bodies and replaces invalid candidates within their turn 
     rejectedSession ??= session;
     return { state: 'complete', method: 'POST', path: '/v1/messages', format: 'http', request: session === rejectedSession ? '{' : JSON.stringify(body), response, requestEncoding: '', responseEncoding: '' } as ArchiveDetail;
   });
-  const replaced = prepareTest(db, archive, req);
+  const replaced = prepareTest(db, archive, req, retained);
   expect(detail).toHaveBeenCalledTimes(req.turns + 2);
   expect(replaced.samples).toHaveLength(req.turns);
   expect(replaced.plan.replayableTurns).toBe(retainedTurns - 1);
   expect(replaced.plan.skipped).toEqual([{ reason: 'body incomplete', turns: 1 }]);
   detail.mockClear();
   detail.mockImplementation(() => ({ state: 'complete', method: 'POST', path: '/v1/messages', format: 'http', request: detail.mock.calls.length === 1 ? '{' : JSON.stringify(body), response, requestEncoding: '', responseEncoding: '' } as ArchiveDetail));
-  const recovered = prepareTest(db, archive, req);
+  const recovered = prepareTest(db, archive, req, retained);
   expect(detail).toHaveBeenCalledTimes(req.turns + 1);
   expect(recovered.plan.replayableTurns).toBe(retainedTurns);
   expect(recovered.plan.skipped).toEqual([]);

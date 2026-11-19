@@ -2,14 +2,21 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { app, dialog } from 'electron';
 import { APP_NAME } from '@shared/app';
+import { takeQuitReason } from './quitReason';
 import { getSettings } from './settingsStore';
 
 const CONFIRM_BUTTON = 0;
+/** One confirmation at a time: a second Quit while it is open does nothing. */
+let confirming = false;
 
 /** Quits the app, or restarts it with `relaunch`, asking first when the user enabled quit confirmation. */
 export async function requestQuit({ relaunch = false } = {}): Promise<void> {
   if (getSettings().general.confirmQuit) {
+    if (confirming) return;
+    confirming = true;
     const verb = relaunch ? 'Restart' : 'Quit';
+    // A Dock Quit can arrive while another app is in front; the dialog must be seen to be answered.
+    if (process.platform === 'darwin') app.focus({ steal: true });
     const r = await dialog.showMessageBox({
       type: 'question',
       buttons: [verb, 'Cancel'],
@@ -20,7 +27,7 @@ export async function requestQuit({ relaunch = false } = {}): Promise<void> {
       detail: relaunch
         ? 'The proxy restarts too, so Claude Code and other clients lose their connection briefly.'
         : 'The proxy stops too, so Claude Code and other clients lose their connection.',
-    });
+    }).finally(() => { confirming = false; });
     if (r.response !== CONFIRM_BUTTON) return;
   }
   if (relaunch) {
@@ -33,6 +40,11 @@ export async function requestQuit({ relaunch = false } = {}): Promise<void> {
     else relaunchDev();
   }
   app.quit();
+}
+
+/** macOS Dock Quit (or a script's quit) arrives as before-quit; true when it should ask first. Logout, restart and shutdown never ask. */
+export function confirmsSystemQuit(): boolean {
+  return takeQuitReason() === 'quit' && getSettings().general.confirmQuit;
 }
 
 /** `pnpm dev` exits with the dev app, so a detached launcher reruns it once this app exits; that also rebuilds the proxy. */

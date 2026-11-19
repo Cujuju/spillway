@@ -106,6 +106,9 @@ jobs:
         working-directory: solidjs-toolkit
         run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
+      # Electron 45 downloads its binary on first require; tests that launch it in parallel would race the extraction.
+      - name: Download Electron
+        run: node -e "require('electron')"
       - run: node scripts/build-linked.mjs
       - name: Build the proxy
         shell: bash
@@ -118,8 +121,18 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Smoke
+        if: matrix.platform == 'darwin'
+        run: pnpm smoke
       - name: Package
         run: pnpm package
+      # Both macOS packages start, open native SQLite and run their bundled proxy; x64 runs under Rosetta on the arm64 runner.
+      - name: Launch both macOS packages
+        if: matrix.platform == 'darwin'
+        run: |
+          /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          node scripts/packagedCheck.mts dist/mac-arm64/Spillway.app
+          node scripts/packagedCheck.mts dist/mac/Spillway.app --rosetta
       - name: Stage update signing key
         if: needs.plan.outputs.mode == 'nightly' && !matrix.published
         env:

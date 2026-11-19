@@ -1,6 +1,8 @@
 import type { ActivityRpc } from './activityRpc';
 /** 25 seconds covers management timeout (10s), proxy grace (8s), and seven seconds for stream/SQLite flushing. */
 export const ACTIVITY_QUIT_DEADLINE_MS = 25_000;
+/** After the deadline, how long the worker may take to close before it is terminated. */
+export const ACTIVITY_WORKER_CLOSE_GRACE_MS = 3_000;
 
 /** One budget covers proxy shutdown, stream draining and the worker queue. */
 export async function drainActivity(
@@ -13,7 +15,6 @@ export async function drainActivity(
     timer = setTimeout(() => {
       expired = true;
       report(`[activity] Quit deadline reached: ${rpc.unacknowledgedEvents} unacknowledged events lost.`);
-      rpc.cancel();
       void stopStream(false).catch(console.error);
       resolve();
     }, ACTIVITY_QUIT_DEADLINE_MS);
@@ -25,5 +26,8 @@ export async function drainActivity(
     if (!expired) await rpc.close();
   };
   try { await Promise.race([drain(), deadline]); }
-  finally { clearTimeout(timer!); rpc.cancel(); }
+  finally {
+    clearTimeout(timer!);
+    await rpc.abandon(ACTIVITY_WORKER_CLOSE_GRACE_MS);
+  }
 }

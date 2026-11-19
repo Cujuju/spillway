@@ -1,8 +1,9 @@
 import { HOUR_CYCLE_ARG } from '@shared/timeFormat';
 import { systemHourCycle } from './hourCycle';
+import { supportsNoticeOverlay } from '@cujuju/electron-notices';
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import { APP_NAME } from '@shared/app';
-import { EVENTS } from '@shared/ipc';
+import { EVENTS, NOTICE_OVERLAY_ARG } from '@shared/ipc';
 import { resolveTheme } from '@shared/themes';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -81,12 +82,19 @@ export function showMainWindow(): void {
   w.focus();
 }
 
+export const noticeOverlayEnvironment = {
+  platform: process.platform,
+  sessionType: process.env.XDG_SESSION_TYPE,
+  ozonePlatform: app.commandLine.getSwitchValue('ozone-platform'),
+};
+export const noticeOverlaySupported = supportsNoticeOverlay(noticeOverlayEnvironment);
+
 /** Every renderer page runs sandboxed behind the same preload (window.api). Built per window: the OS clock read needs app ready. */
 export function rendererPreferences(): Electron.WebPreferences {
   return {
     preload: path.join(import.meta.dirname, '../preload/index.cjs'),
     // Renderers format times with the OS clock setting, read once at launch.
-    additionalArguments: [HOUR_CYCLE_ARG + (systemHourCycle() ?? '')],
+    additionalArguments: [HOUR_CYCLE_ARG + (systemHourCycle() ?? ''), ...(noticeOverlaySupported ? [NOTICE_OVERLAY_ARG] : [])],
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,

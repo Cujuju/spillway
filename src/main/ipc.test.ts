@@ -31,7 +31,7 @@ vi.mock('./quit', () => ({}));
 vi.mock('./tray', () => ({}));
 vi.mock('./updater', () => ({}));
 vi.mock('./windowStarter', () => ({}));
-vi.mock('./window', () => ({}));
+vi.mock('./window', () => ({ noticeOverlayEnvironment: { platform: 'linux' }, noticeOverlaySupported: false }));
 const { registerIpc } = await import('./ipc');
 
 beforeEach(() => {

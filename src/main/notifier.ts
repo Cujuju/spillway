@@ -5,7 +5,7 @@ import { EVENTS } from '@shared/ipc';
 import { noticeDelivery, noticeView, spillwayNotice } from '@shared/notice';
 import { appIconPath } from './paths';
 import { getSettings, onSettingsChange } from './settingsStore';
-import { loadRendererPage, rendererPreferences, showMainWindow, showWindowAndSend } from './window';
+import { loadRendererPage, noticeOverlayEnvironment, noticeOverlaySupported, rendererPreferences, showMainWindow, showWindowAndSend } from './window';
 
 export const noticeOverlay = createNoticeOverlay({
   createWindow() {
@@ -14,8 +14,8 @@ export const noticeOverlay = createNoticeOverlay({
     return w;
   },
   primaryDisplay: () => screen.getPrimaryDisplay(),
-  view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors, process.platform),
-  platform: process.platform,
+  view: () => noticeView(getSettings(), nativeTheme.shouldUseDarkColors, noticeOverlaySupported),
+  ...noticeOverlayEnvironment,
   onOpen: (n) => openNoticeTarget(n.target),
 });
 export function openNoticeTarget(target: string | undefined): void {
@@ -25,7 +25,7 @@ export function openNoticeTarget(target: string | undefined): void {
 }
 const notifier = createNotifier({
   overlay: noticeOverlay,
-  delivery: () => noticeDelivery(getSettings(), process.platform),
+  delivery: () => noticeDelivery(getSettings(), noticeOverlaySupported),
   system(input) {
     if (!Notification.isSupported()) return;
     const n = new Notification({ title: input.title, body: input.body, icon: appIconPath() });

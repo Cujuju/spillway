@@ -1,6 +1,5 @@
 import { For, Show } from 'solid-js';
 import { deliversTo, MAX_CONSOLE_LINES, MIN_CONSOLE_LINES, type NoticeDelivery, type NoticeStyle } from '@cujuju/electron-notices';
-import { overlaySupported } from '@shared/notice';
 import type { AppSettings } from '@shared/settings';
 import { TRAY_NAME } from '../lib/platform';
 import { settings, updateSettings } from '../store';
@@ -8,7 +7,7 @@ import { Seg, SettingRow, SettingsGroup, Toggle } from './ui';
 
 type Notifications = AppSettings['notifications'];
 /** Fixed for the app's lifetime. */
-const OVERLAY = overlaySupported(window.api.platform);
+const OVERLAY = window.api.noticeOverlaySupported;
 type EventKey = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyCrashed';
 
 const DELIVERIES: readonly { value: NoticeDelivery; label: string; help: string }[] = [
@@ -45,7 +44,7 @@ export function NotificationSettings() {
     <>
       <SettingsGroup title="Delivery">
         <Show when={OVERLAY} fallback={
-          <SettingRow label="Show with" help="Your desktop’s notifications. Spillway’s own notifications need macOS or Windows: on Linux they can’t let clicks through or stay in place on Wayland.">
+          <SettingRow label="Show with" help="This session uses your desktop’s notifications. The Spillway overlay is available in X11 sessions on Linux.">
             <span class="secondary">System</span>
           </SettingRow>
         }>

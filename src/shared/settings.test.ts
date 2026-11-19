@@ -14,9 +14,10 @@ describe('normalizeSettings', () => {
 
   it('delivers through system notifications where the overlay is unsupported, keeping the saved choice', () => {
     const both = normalizeSettings({ notifications: { delivery: 'both', style: 'drip', dripLip: true } });
-    expect(['darwin', 'win32', 'linux'].map((platform) => noticeDelivery(both, platform))).toEqual(['both', 'both', 'system']);
+    expect(noticeDelivery(both, true)).toBe('both');
+    expect(noticeDelivery(both, false)).toBe('system');
     // A drip lip opens the overlay window by itself, so the view must carry the effective delivery too.
-    expect(noticeView(both, false, 'linux').config.delivery).toBe('system');
+    expect(noticeView(both, false, false).config.delivery).toBe('system');
     expect(both.notifications.delivery).toBe('both');
   });
 

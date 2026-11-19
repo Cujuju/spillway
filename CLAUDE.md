@@ -49,5 +49,11 @@ Never report done, or commit, without a passing `pnpm smoke` this session; quote
 `pnpm typecheck` first rebuilds the `link:` toolkit packages (`scripts/build-linked.mjs`): their types come from their gitignored `dist/`.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.
 
+## Worktrees
+`.claude/hooks/guard.mjs` enforces these.
+- Every worktree runs its own `pnpm install --frozen-lockfile`. Never link `node_modules` from another checkout: a pnpm run through the link rewrites that checkout's package links, and deleting the worktree strands them.
+- Never purge or delete the main checkout's `node_modules`, and never install there while Electron runs from it: an install can wipe the folder, stop at the locked `electron.exe`, and leave packages half deleted.
+- Remove worktrees with `node scripts/remove-worktree.mts <path> --delete-branch`, never `git worktree remove`. It unlinks every link inside first (targets untouched), then deletes, and names any process holding a locked file. `--orphan` removes a folder git no longer tracks.
+
 ## Commits
 Commit your own changes as soon as the checks pass, without being asked. Other sessions share this checkout, so stage only your own paths and hunks.

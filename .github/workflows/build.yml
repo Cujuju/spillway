@@ -124,6 +124,9 @@ jobs:
       - name: Smoke
         if: matrix.platform == 'darwin'
         run: pnpm smoke
+      - name: Smoke test on Linux
+        if: matrix.platform == 'linux'
+        run: xvfb-run --auto-servernum pnpm smoke
       - name: Package
         run: pnpm package
       # Both macOS packages start, open native SQLite and run their bundled proxy; x64 runs under Rosetta on the arm64 runner.

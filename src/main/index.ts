@@ -10,6 +10,8 @@ import { history } from './historyStore';
 import { getSettings, loadSecrets, onSettingsChange } from './settingsStore';
 import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
 import { promptSecretsRecovery } from './secretsRecovery';
+import { confirmsSystemQuit, requestQuit } from './quit';
+import { watchQuitEvents } from './quitReason';
 
 if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
@@ -144,6 +146,7 @@ async function startNormalApp(): Promise<void> {
         app.exit(1);
         return;
       }
+      watchQuitEvents();
       registerIpc();
       wireEvents();
       installAppMenu(() => openSettingsSection('about'));
@@ -168,6 +171,7 @@ async function startNormalApp(): Promise<void> {
       if (isQuitting()) return;
       // Stop the proxy gracefully before the process exits.
       e.preventDefault();
+      if (confirmsSystemQuit()) return void requestQuit();
       markQuitting();
       // Writes the renderer's saved view state (localStorage) to disk before exit.
       session.defaultSession.flushStorageData();

@@ -37,6 +37,8 @@ The app's `--proxy-endpoint=<url>` switch makes it use a proxy already running a
 
 Build on a Mac (electron-builder can't make macOS apps on Windows): `pnpm install`, `pnpm proxy:build darwin-arm64 darwin-x64`, `pnpm package`.
 
+- `pnpm build` also compiles a small universal Node-API addon (`native/darwin/quitReason.m`, Xcode's command-line tools) that lets "Confirm before quitting" catch the Dock's Quit. Logout, restart and shutdown still quit without asking. Without the tools, the build warns and the Dock's Quit doesn't ask.
+
 - The app is ad-hoc signed, which Apple Silicon needs to launch it. A build made on your Mac runs as is; a copy downloaded from elsewhere is blocked by Gatekeeper. Distributing it needs a Developer ID and notarization (see `electron-builder.ts`).
 - The window uses the native traffic lights. While the window is hidden in the menu bar, the app leaves the Dock.
 - "Start minimized" applies to login launches via `wasOpenedAtLogin`. macOS may ask you to approve the login item in System Settings → General → Login Items.

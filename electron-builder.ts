@@ -40,6 +40,7 @@ const config: Configuration = {
       { file: path.join(proxyDir, 'LICENSE'), fix: 'pnpm proxy:build for this target' },
       { file: path.join(proxyDir, 'licenses'), fix: 'pnpm proxy:build for this target' },
       ...['main', 'preload', 'renderer'].map((b) => ({ file: path.join(npmDir, `npm-${b}.txt`), fix: 'pnpm build' })),
+      ...(context.electronPlatformName === 'darwin' ? [{ file: path.join(import.meta.dirname, 'resources', 'native', 'darwin', 'quit-reason.node'), fix: "pnpm build with Xcode's command-line tools" }] : []),
     ];
     for (const { file, fix } of required) if (!existsSync(file)) throw new Error(`${file} is missing. Run ${fix}.`);
   },
@@ -71,6 +72,8 @@ const config: Configuration = {
       { target: 'zip', arch: ['arm64', 'x64'] },
     ],
     icon: 'resources/icon-1024.png',
+    // Universal Dock Quit addon (scripts/build-native.mjs, src/main/quitReason.ts).
+    extraResources: [{ from: 'resources/native/darwin', to: 'native', filter: ['quit-reason.node'] }],
     category: 'public.app-category.developer-tools',
     darkModeSupport: true,
     // Ad-hoc signature: Apple Silicon refuses unsigned apps; no Developer ID set. Works on the building

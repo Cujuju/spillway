@@ -3,4 +3,5 @@ out/
 dist/
 out-dev/
 resources/bin/
+resources/native/
 *.log

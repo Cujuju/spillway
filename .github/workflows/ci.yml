@@ -96,6 +96,9 @@ jobs:
         working-directory: solidjs-toolkit
         run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
+      # Electron 45 downloads its binary on first require; tests that launch it in parallel would race the extraction.
+      - name: Download Electron
+        run: node -e "require('electron')"
       - run: node scripts/build-linked.mjs
       - name: Build the proxy for both architectures
         env:

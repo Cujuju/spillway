@@ -22,6 +22,8 @@ import type {
 } from './types';
 import type { ManagedPolicyStatus } from './types';
 
+export const NOTICE_OVERLAY_ARG = '--spillway-notice-overlay';
+
 /** Renderer-callable API exposed by the preload as `window.api`. */
 export interface DesktopApi {
   evalList(): Promise<EvalCaseSummary[]>;
@@ -69,6 +71,7 @@ export interface DesktopApi {
   traceQuery(query: TraceQuery): Promise<TracePage>;
   traceAttempts(query: TraceAttemptQuery): Promise<TraceAttemptPage>;
   platform: string;
+  noticeOverlaySupported: boolean;
   /** OS clock setting (src/shared/timeFormat.ts). */
   hourCycle: HourCycle;
 

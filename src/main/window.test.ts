@@ -1,4 +1,5 @@
 import { afterAll, expect, it, vi } from 'vitest';
+import { NOTICE_OVERLAY_ARG } from '@shared/ipc';
 import { HOUR_CYCLE_ARG } from '@shared/timeFormat';
 
 const electron = vi.hoisted(() => ({ ready: false }));
@@ -28,5 +29,5 @@ it('reads the OS clock only after app ready, so importing window modules never t
   const { systemHourCycle } = await import('./hourCycle');
   expect(() => systemHourCycle()).toThrow(/before app ready/);
   electron.ready = true;
-  expect(rendererPreferences().additionalArguments).toEqual([`${HOUR_CYCLE_ARG}h12`]);
+  expect(rendererPreferences().additionalArguments).toEqual([`${HOUR_CYCLE_ARG}h12`, NOTICE_OVERLAY_ARG]);
 });

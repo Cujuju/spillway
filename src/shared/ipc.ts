@@ -8,6 +8,7 @@ import type { ClickHouseConfig, ClickHouseCredentials, ClickHouseStatus } from '
 import type { TraceQuery, TracePage, TraceAttemptQuery, TraceAttemptPage } from './sessionTrace';
 import type { ApiKeyFamily, ApiProviderDraft, ApiProviderGroup, ApiProviderList, ApiProviderTarget, UpstreamModelsRequest } from './apiProviders';
 import type { ActivityScope } from './activityScope';
+import type { OlderBuckets, OlderDays, OlderDaysQuery, OlderPage, OlderPageQuery, OlderRead } from './activityOlder';
 import type { ThinkingQuery, ThinkingReport } from './thinking';
 import type { CompareQuery, CompareReport } from './activityCompare';
 import type { BuildInfo } from './buildInfo';
@@ -118,6 +119,9 @@ export interface DesktopApi {
   clearHistory(): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
+  activityOlderBuckets(span: { from: number; to: number }): Promise<OlderRead<OlderBuckets>>;
+  activityOlderDays(query: OlderDaysQuery): Promise<OlderRead<OlderDays>>;
+  activityOlderPage(query: OlderPageQuery): Promise<OlderRead<OlderPage>>;
   /** All of one day's attempts, newest first; for orders the database can't page. */
   activityDay(day: string, failedOnly: boolean, scope: ActivityScope): Promise<StoredActivityEvent[]>;
   /** Each local day with stored requests from `accounts`, newest first. */
@@ -241,6 +245,9 @@ export const INVOKE = {
   usageObservedSpans: 'usage:observed-spans',
   clearHistory: 'usage:clear-history',
   activityPage: 'activity:page',
+  activityOlderBuckets: 'activity:older-buckets',
+  activityOlderDays: 'activity:older-days',
+  activityOlderPage: 'activity:older-page',
   activityDay: 'activity:day',
   activityDaySummaries: 'activity:day-summaries',
   activityTotals: 'activity:totals',

@@ -3,6 +3,7 @@ import type { conversationNames } from './conversationNames';
 import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
 export type ActivityMethods = Pick<ActivityLog, 'thinkingTestPrepare' | 'thinkingTestSave' | 'thinkingTests' | 'priceSnapshot' | 'pricesChanged' | 'canaryLastRunAt' | 'driftQuery' | 'canarySave' | 'canaryResults' | 'append' | 'page' | 'day' | 'days' | 'daySummaries' | 'totalsList' | 'thinking' | 'compare' | 'buckets' | 'bucketSnapshot' | 'coverage' | 'clear' | 'prune' | 'setRetention' | 'archiveObserve' | 'archiveIngest' | 'archiveDetail' | 'archiveStatus' | 'archivePolicy' | 'archiveClear' | 'archiveClearAcknowledged' | 'archiveExportPrepare' | 'archiveExportStatus' | 'archiveExportStart' | 'archiveExportCancel' | 'clickhouseStatus' | 'clickhouseConfigure' | 'clickhousePrepare' | 'clickhouseAcknowledge' | 'clickhouseFail' | 'clickhouseRetry' | 'clickhouseClear' | 'clickhouseMirrorUsage' | 'diagnosticSnapshot' | 'traceQuery' | 'traceAttempts'> & {
   names: typeof conversationNames.names;
+  activityOlderBoundaries: ActivityLog['activityOlderBoundaries'];
   close(): Promise<void>;
 };
 export type EvalMethods = Pick<ActivityLog, 'evalList' | 'evalGet' | 'evalCreate' | 'evalRevise' | 'evalDelete' | 'evalExport' | 'evalImport'>;

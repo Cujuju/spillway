@@ -36,6 +36,16 @@ SELECT * FROM spillway_facts FINAL WHERE kind = 'request'
 ORDER BY seq DESC LIMIT 1 BY source_id, record_key;
 ```
 
+## Read-through
+
+Activity Overview reads exported totals before local midnight of the earliest local total's day. With no local totals, it reads the full selected range. Requests reads days strictly before the local request retention cutoff, with 30 local days per summary window. Day summaries omit cost and indicate whether more history exists.
+
+Reads include all source IDs in the facts table. Within each bounded range and kind, Spillway selects the highest sequence for each `(source_id, record_key)`, so retries and repeated exports of a record count once. Requests also key on `at`, so a local row ID reused after Clear activity stays a separate request.
+
+Limits are 10,000 total rows per range, 5,000 request rows per day before filtering, 10,000 summary groups per window, and 16 MiB per response. Total and request reads report truncation. A summary window that exceeds its cap reports unavailability.
+
+Read-through runs only SELECTs and never imports data into the local database. Results distinguish disabled or unconfigured export (`off`) from a failed configured read (`unavailable`). Errors show status only.
+
 ## Facts and content references
 
 `attempt`, `capture`, `finalized` and backfill `snapshot` facts are appended transactionally with archive writes. The encrypted outbox stores metadata and immutable revision range references, never another body copy. Unacknowledged facts are never evicted by byte budget. The 1 GiB threshold only pauses further backfill; live capture references continue queuing. Facts have monotonically increasing sequence IDs. Enabling export or content, or changing destination, backfills retained entries in `(at,id)` order. Clear queue stops backfill; archive clear also clears the queue. Neither retracts remote data.

@@ -2,11 +2,19 @@ import { validateClickHouseConfig, validateClickHouseCredentials, type ClickHous
 import { activityLog } from './activityService';
 import { getSecrets, setClickHouseCredentials } from './settingsStore';
 import { ClickHouseUploader } from './clickhouseUploader';
+import { ClickHouseActivityReader } from './clickhouseRead';
 
+const credentialsFor = (config: ClickHouseConfig) => {
+  const c = getSecrets().clickhouse;
+  return c?.endpoint === config.endpoint ? c : undefined;
+};
+export const clickhouseActivityReader = new ClickHouseActivityReader(
+  () => activityLog.call('clickhouseStatus'), () => activityLog.call('activityOlderBoundaries'), credentialsFor,
+);
 export const clickhouseUploader = new ClickHouseUploader({
   status: () => activityLog.call('clickhouseStatus'), prepare: () => activityLog.call('clickhousePrepare'),
   acknowledge: (token, destination) => activityLog.call('clickhouseAcknowledge', token, destination), fail: (token, now, error) => activityLog.call('clickhouseFail', token, now, error),
-}, (config) => { const c = getSecrets().clickhouse; return c?.endpoint === config.endpoint ? c : undefined; });
+}, credentialsFor);
 let operations = Promise.resolve();
 let pauseGeneration = 0;
 let shuttingDown = false;
@@ -31,6 +39,7 @@ export async function clickhouseStatus(): Promise<ClickHouseStatus> {
 }
 export async function cancelClickHouse(shutdown = false): Promise<void> {
   pauseGeneration++; shuttingDown ||= shutdown; cancelled = true;
+  if (shutdown) clickhouseActivityReader.stop();
   await clickhouseUploader.stop();
   await operations;
 }

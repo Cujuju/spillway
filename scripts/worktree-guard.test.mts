@@ -46,6 +46,7 @@ const CASES: [boolean, string, string, string, string?][] = [
   [BLOCK, 'recursive delete of main node_modules', 'Remove-Item -Recurse -Force node_modules', MAIN],
   [ALLOW, 'deleting node_modules in a worktree', 'rm -rf node_modules', WT],
   [ALLOW, 'a heredoc body naming the purge flag', "cat > pr.md <<'EOF'\nblocks `confirmModulesPurge`\nrm -rf node_modules\nEOF\ngh pr create --body-file pr.md", MAIN],
+  [BLOCK, 'a heredoc fed to a shell is code', "bash <<'EOF'\nrm -rf node_modules\nEOF", MAIN],
   [BLOCK, 'a real command after a heredoc', "cat > x <<'EOF'\nnotes\nEOF\nrm -rf node_modules", MAIN],
   [BLOCK, 'install while Electron runs from the main checkout', 'pnpm install', MAIN, MAIN_ELECTRON],
   [ALLOW, 'install with the app closed', 'pnpm install', MAIN],

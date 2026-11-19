@@ -25,9 +25,12 @@ function toFsPath(p) {
   return process.platform === 'win32' ? `${drive[1]}:${drive[2]}` : `/mnt/${drive[1]}${drive[2]}`;
 }
 
-/** Removes quoted text and heredoc bodies so a commit message, echo or PR body cannot trip a verb match. */
+/**
+ * Removes quoted text, and heredoc bodies fed to cat/tee/git/gh, so a commit message or PR body cannot trip a verb match.
+ * A heredoc fed to a shell or interpreter is code and stays.
+ */
 function stripLiterals(cmd) {
-  return cmd.replace(/<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\s*\1(?=\s|$)/g, ' ').replace(/@'[\s\S]*?'@/g, ' ').replace(/@"[\s\S]*?"@/g, ' ').replace(/'[^']*'/g, ' ').replace(/"[^"]*"/g, ' ');
+  return cmd.replace(/(\b(?:cat|tee|git|gh)\b[^\n]*?)<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\s*\2(?=\s|$)/g, '$1 ').replace(/@'[\s\S]*?'@/g, ' ').replace(/@"[\s\S]*?"@/g, ' ').replace(/'[^']*'/g, ' ').replace(/"[^"]*"/g, ' ');
 }
 
 /** The command's last absolute cd / Set-Location / -C / --dir hop, else cwd. Quotes are dropped, not their contents. */

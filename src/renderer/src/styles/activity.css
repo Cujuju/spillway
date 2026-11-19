@@ -310,29 +310,40 @@ th[aria-sort] .sort-btn {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* Pinned headers sit this far past the edge above them. At fractional display scales that edge falls mid-pixel, and rows showed through the part left open. */
+  --pin-overlap: var(--border-width);
+  --head-pin-top: calc(-1 * var(--pin-overlap));
+  /* Day headers pin under the column header's bottom edge; ActivityRequests sets its measured height. */
+  --day-pin-top: calc(var(--head-pin-top) + var(--requests-head-height, 0px) - var(--pin-overlap));
 }
 /* The scrollbar starts under the column header, and its track matches the day headers, so a pinned one reaches the card's right edge. */
 .requests-card::-webkit-scrollbar-track:vertical {
-  margin-top: var(--requests-head-height, var(--corner-radius));
+  margin-top: var(--day-pin-top);
   background: var(--color-surface-sunken);
 }
-/* Collapsed borders belong to the table and stay behind when a cell pins, letting rows show past it. */
+/* Collapsed borders belong to the table and stay behind when a row pins, letting rows show past it. */
 .requests-card .table {
   border-collapse: separate;
   border-spacing: 0;
 }
-.requests-card thead th {
+/* The row pins as one piece: cells pinned one by one snap to pixels separately and leave seams between columns. */
+.requests-card thead {
   position: sticky;
-  top: 0;
+  top: var(--head-pin-top);
   /* Above the day headers, which tuck under it. */
   z-index: calc(var(--z-raised) + 1);
+}
+.requests-card thead th {
   background: var(--color-surface);
+  /* Each cell's fill reaches under the next, closing the mid-pixel seam between columns. */
+  box-shadow: var(--pin-overlap) 0 0 var(--color-surface);
+}
+.requests-card tr.day-row {
+  position: sticky;
+  top: var(--day-pin-top);
+  z-index: var(--z-raised);
 }
 .table.dense tr.day-row td {
-  position: sticky;
-  /* Set by ActivityRequests from the column header's measured height. */
-  top: var(--requests-head-height, 0px);
-  z-index: var(--z-raised);
   padding: 0;
 }
 .day-toggle {

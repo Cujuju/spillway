@@ -10,7 +10,10 @@ import path from 'node:path';
 import { Cdp, freePort, sleep, until } from './demo/cdp.mts';
 
 const QUIT_TIMEOUT_MS = 30_000;
-const SQLITE_PLAIN_HEADER = 'SQLite format 3\0';
+// Cleanup retries ride out writes still landing from processes that are exiting.
+const CLEANUP_RETRIES = 5;
+const CLEANUP_RETRY_DELAY_MS = 200;
+const SQLITE_PLAIN_HEADER ='SQLite format 3\0';
 // Rosetta translates each x64 binary on first launch: CI runners took 37s to over 60s before DevTools answered.
 const ROSETTA_READY_TIMEOUT_MS = 180_000;
 
@@ -85,5 +88,8 @@ try {
   throw err;
 } finally {
   await Promise.race([exited, sleep(5_000)]);
-  rmSync(scratch, { recursive: true, force: true });
+  // A killed app's helpers and proxy may still be writing; a leftover temp folder must not replace the real failure.
+  try { rmSync(scratch, { recursive: true, force: true, maxRetries: CLEANUP_RETRIES, retryDelay: CLEANUP_RETRY_DELAY_MS }); } catch (err) {
+    console.warn(`packaged: left ${scratch} behind: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

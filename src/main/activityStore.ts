@@ -411,6 +411,7 @@ export class ActivityLog {
 
   clear(): void {
     this.exporter?.cancelCurrent();
+    this.retainedTurns.clear();
     durableTransaction(this.db, () => {
       this.db.exec("DELETE FROM thinking_tests; DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);

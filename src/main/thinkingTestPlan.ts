@@ -5,7 +5,8 @@ import { promptTokens, tokenCost } from '@shared/modelPrices';
 import { settingKey, TURN_KINDS, type TurnKind, type ThinkingSetting } from '@shared/thinking';
 import { TEST_TURN_CHOICES, type TestPlan, type TestPlanRequest } from '@shared/thinkingTest';
 import type { ActivityEvent } from '@shared/types';
-import { group, kind, setting, type Turn } from './activityThinking';
+import { kind, setting } from './activityThinking';
+import { RetainedTurns, type Turn } from './retainedTurns';
 import type { Db } from './activityDb';
 import type { ArchiveStore } from './archiveStore';
 import { object } from './evalCaseCodec';
@@ -49,12 +50,11 @@ export function coldCost(s: ThinkingSetting, inputTokens: number, outputTokens: 
   const priced = tokenCost(s.provider, s.model, Date.now(), { inputTokens, outputTokens, cachedTokens: 0, cacheWriteTokens: 0 });
   if (!priced) throw new Error(`No list price for ${s.model}`); return priced.usd;
 }
-export function prepareTest(db: Db, archive: Pick<ArchiveStore, 'captureMetadata' | 'detail'>, req: TestPlanRequest): PreparedTest {
+export function prepareTest(db: Db, archive: Pick<ArchiveStore, 'captureMetadata' | 'detail'>, req: TestPlanRequest, retained: Pick<RetainedTurns, 'get'> = new RetainedTurns()): PreparedTest {
   if (!req || !TEST_TURN_CHOICES.some((n) => n === req.turns) || !req.alternatives.length || !Number.isFinite(req.query.from) || !Number.isFinite(req.query.to) || req.query.from > req.query.to) throw new Error('Invalid thinking test request');
   if (req.alternatives.some((a) => a.provider !== req.setting.provider) || new Set(req.alternatives.map(settingKey)).size !== req.alternatives.length) throw new Error('Alternatives must be distinct settings from the same provider');
-  const events = (db.prepare("SELECT event FROM requests ORDER BY julianday(json_extract(event, '$.at')), id").all() as { event: string }[]).map((r) => JSON.parse(r.event) as ActivityEvent);
   const scope = normalizeScope(req.query.scope);
-  const turns = group(events).turns.filter((t) => Date.parse(t.first.at) >= req.query.from && Date.parse(t.first.at) <= req.query.to && settingKey(setting(t.first)) === settingKey(req.setting) && t.requests.some((e) => inScope(scope, e)));
+  const turns = retained.get(db, req.query.from, req.query.to).turns.filter((t) => Date.parse(t.first.at) >= req.query.from && Date.parse(t.first.at) <= req.query.to && settingKey(setting(t.first)) === settingKey(req.setting) && t.requests.some((e) => inScope(scope, e)));
   const available: { turn: Turn; kind: TurnKind; candidates: ActivityEvent[] }[] = [], skipped = new Map<string, number>();
   const skip = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
   for (const t of turns) {

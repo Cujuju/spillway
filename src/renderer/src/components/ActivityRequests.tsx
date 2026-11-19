@@ -18,6 +18,8 @@ import { appLocale } from '@shared/timeFormat';
 export type RequestFilter = 'all' | 'failed';
 const CHEVRON_PX = 13;
 const SORT_ARROW_PX = 11;
+/** The column header's height; day headers pin below it (activity.css). */
+const HEAD_HEIGHT_VAR = '--requests-head-height';
 
 /** One day's rows loaded so far. */
 interface Section {
@@ -143,10 +145,20 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
     }));
   });
 
+  let card!: HTMLDivElement;
+  let head!: HTMLTableSectionElement;
+  onMount(() => {
+    // Column labels wrap, so the header's height varies. Rounded down: a day header tucks under it, never leaving a seam.
+    const pinDayHeaders = () => card.style.setProperty(HEAD_HEIGHT_VAR, `${Math.floor(head.getBoundingClientRect().height)}px`);
+    const observer = new ResizeObserver(pinDayHeaders);
+    observer.observe(head);
+    onCleanup(() => observer.disconnect());
+  });
+
   return (
-    <div class="card table-card requests-card">
+    <div class="card table-card requests-card" ref={card}>
       <table class="table dense">
-        <thead>
+        <thead ref={head}>
           <tr>
             <For each={REQUEST_COLUMNS}>
               {(col) => (

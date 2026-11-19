@@ -305,16 +305,34 @@
 th[aria-sort] .sort-btn {
   color: var(--color-text);
 }
-/* Requests: the card scrolls on its own, so each day's header stays pinned above its rows. */
+/* Requests: the card scrolls on its own; the column header pins at its top and each day's header below that. */
 .requests-card {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
-.table.dense tr.day-row td {
+/* The scrollbar starts under the column header, and its track matches the day headers, so a pinned one reaches the card's right edge. */
+.requests-card::-webkit-scrollbar-track:vertical {
+  margin-top: var(--requests-head-height, var(--corner-radius));
+  background: var(--color-surface-sunken);
+}
+/* Collapsed borders belong to the table and stay behind when a cell pins, letting rows show past it. */
+.requests-card .table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.requests-card thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  /* Above the day headers, which tuck under it. */
+  z-index: calc(var(--z-raised) + 1);
+  background: var(--color-surface);
+}
+.table.dense tr.day-row td {
+  position: sticky;
+  /* Set by ActivityRequests from the column header's measured height. */
+  top: var(--requests-head-height, 0px);
+  z-index: var(--z-raised);
   padding: 0;
 }
 .day-toggle {

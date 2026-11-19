@@ -3,7 +3,7 @@ import { inScope, normalizeScope } from '@shared/activityScope';
 import { currentRates, tokenCost } from '@shared/modelPrices';
 import { CHANGE_MAX_REQUESTS, LIGHT_THINKING_MAX, MIN_RATIO_TURNS, QUESTION_MAX_REQUESTS, THINKING_BUCKETS, TURN_KINDS, TYPICAL_THINKING_MAX, settingKey, type Alternative, type ThinkingQuery, type ThinkingReport, type ThinkingSetting, type TurnKind } from '@shared/thinking';
 import type { Db } from './activityDb';
-import { RetainedTurns, type Request, type Turn } from './retainedTurns';
+import { loadRetainedTurns, type RetainedTurns, type Request, type Turn } from './retainedTurns';
 
 export interface OfferedModel { id: string; provider: string; created?: number | null }
 const EFFORTS = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none'];
@@ -59,7 +59,7 @@ function measure(turn: Turn): Measured {
 const bucket = (t: Measured) => t.thinkingTokens <= LIGHT_THINKING_MAX ? 'light' : t.thinkingTokens <= TYPICAL_THINKING_MAX ? 'typical' : 'heavy';
 
 /** Retained turns use their first root request's setting; scoped requests contribute their stored cost. */
-export function thinkingActivity(db: Db, raw: Partial<ThinkingQuery> | undefined, models: OfferedModel[], retained: Pick<RetainedTurns, 'get'> = new RetainedTurns()): ThinkingReport | null {
+export function thinkingActivity(db: Db, raw: Partial<ThinkingQuery> | undefined, models: OfferedModel[], retained: Pick<RetainedTurns, 'get'> = { get: loadRetainedTurns }): ThinkingReport | null {
   if (typeof raw?.from !== 'number' || typeof raw.to !== 'number' || !Number.isFinite(raw.from) || !Number.isFinite(raw.to) || raw.from > raw.to) return null;
   const q = { from: raw.from, to: raw.to, scope: normalizeScope(raw.scope) };
   const { turns: all, excluded } = retained.get(db, q.from, q.to);

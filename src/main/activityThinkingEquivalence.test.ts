@@ -12,6 +12,7 @@ import { ActivityLog } from './activityStore';
 import { kind, setting, type OfferedModel } from './activityThinking';
 import { dayWindow, group, RETAINED_TURNS_SQL, type Request, type Turn } from './retainedTurns';
 import { identityKey, identityKeySql } from './usageLedger';
+import { thinkingEvent as event } from './activityThinkingFixtures';
 
 const KEY = 'ab'.repeat(32);
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-thinking-equivalence-'));
@@ -140,12 +141,6 @@ function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296; };
 }
-const event = (at: number, patch: Partial<ActivityEvent>): ActivityEvent => ({
-  at: new Date(at).toISOString(), requestId: `r${sequence++}`, selectionId: null, upstreamId: null, source: 'proxy',
-  provider: 'claude', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', reasoningEffort: 'high', authIndex: 'a', stream: true, failed: false,
-  statusCode: 200, error: null, latencyMs: 10, ttftMs: 1, inputTokens: 1000, outputTokens: 500, cachedTokens: 0, cacheWriteTokens: 0,
-  sessionId: null, movedFrom: null, userAgent: null, client: 'cli', ...patch,
-});
 const MODELS: OfferedModel[] = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-sonnet-4-6'].map((id, created) => ({ id, provider: 'claude', created }));
 const SCOPES: ActivityScope[] = [{ accounts: null, clients: null }, { accounts: ['a'], clients: null }, { accounts: null, clients: ['sdk'], source: 'proxy' }];
 
@@ -269,7 +264,7 @@ it('builds the identity key in SQL exactly as identityKey does', () => {
 });
 
 it('reads the window and its session trees through indexes', () => {
-  const params = { inWindow: ['', ''], sessionSizes: ['[]'], restOfSessions: ['[]', '', ''], childSessions: ['[]'] };
+  const params = { inWindow: ['', ''], sessionSizes: ['[]'], restOfSessions: ['[]', '', ''], childSessions: ['[]'], changedRows: ['[]'] };
   for (const [name, sql] of Object.entries(RETAINED_TURNS_SQL)) {
     const plan = (other.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params[name as keyof typeof params]) as { detail: string }[]).map((r) => r.detail).join('\n');
     expect(plan, name).not.toMatch(/SCAN (requests|i)\b/);

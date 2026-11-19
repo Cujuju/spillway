@@ -11,6 +11,8 @@ import { Cdp, freePort, sleep, until } from './demo/cdp.mts';
 
 const QUIT_TIMEOUT_MS = 30_000;
 const SQLITE_PLAIN_HEADER = 'SQLite format 3\0';
+// Rosetta translates each x64 binary on first launch: CI runners took 37s to over 60s before DevTools answered.
+const ROSETTA_READY_TIMEOUT_MS = 180_000;
 
 const [bundle, ...flags] = process.argv.slice(2);
 if (!bundle || process.platform !== 'darwin') {
@@ -48,10 +50,13 @@ const child = rosetta ? spawn('/usr/bin/arch', ['-x86_64', exe, ...args], { env,
 const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
 const gone = () => (child.exitCode === null && child.signalCode === null ? null : `the app exited (${child.exitCode ?? child.signalCode})`);
 
+// Undefined keeps the native startup budget.
+const readyTimeoutMs = rosetta ? ROSETTA_READY_TIMEOUT_MS : undefined;
+
 try {
-  const cdp = await Cdp.mainWindow(debugPort, gone);
-  await until('the page navigation', () => cdp.eval<number>(`document.querySelectorAll('button.nav-btn').length`).then((n) => n || null), gone);
-  const days = await until('the activity database', () => cdp.eval<unknown[]>('window.api.activityDaySummaries("all")'), gone);
+  const cdp = await Cdp.mainWindow(debugPort, gone, readyTimeoutMs);
+  await until('the page navigation', () => cdp.eval<number>(`document.querySelectorAll('button.nav-btn').length`).then((n) => n || null), gone, readyTimeoutMs);
+  const days = await until('the activity database', () => cdp.eval<unknown[]>('window.api.activityDaySummaries("all")'), gone, readyTimeoutMs);
   const db = path.join(profile, 'activity.db');
   if (!existsSync(db)) throw new Error('activity.db was not created');
   const header = Buffer.alloc(16);
@@ -60,7 +65,7 @@ try {
   closeSync(fd);
   if (header.toString('latin1') === SQLITE_PLAIN_HEADER) throw new Error('activity.db is not encrypted');
   const status = await until('the bundled proxy', () => cdp.eval<{ state: string; pid: number | null; executablePath: string | null; build: unknown }>('window.api.proxyStatus()')
-    .then((s) => (s.state === 'running' ? s : null)), gone);
+    .then((s) => (s.state === 'running' ? s : null)), gone, readyTimeoutMs);
   if (status.executablePath !== bundledProxy) throw new Error(`proxy ran from ${status.executablePath}, not the bundle`);
   const reply = await fetch(`http://127.0.0.1:${proxyPort}/v1/models`);
   cdp.close();

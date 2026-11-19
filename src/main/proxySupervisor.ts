@@ -56,6 +56,11 @@ class ProxySupervisor extends EventEmitter {
     this.setStatus({ userConfigError });
   }
 
+  /** True when the proxy was started elsewhere (`--proxy-endpoint`): the app never stops it, so its event stream doesn't end on quit. */
+  get attached(): boolean {
+    return attachEndpoint !== null;
+  }
+
   getStatus(): ProxyStatus {
     return { ...this.status };
   }

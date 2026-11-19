@@ -18,6 +18,7 @@ export class ActivityRpc extends EventEmitter {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private closed = false;
   private closing = false;
+  private closeRequest: Promise<void> | undefined;
   constructor(private factory: () => RpcPort) { super(); }
   start(): void {
     if (this.closed || this.port) return;
@@ -95,9 +96,22 @@ export class ActivityRpc extends EventEmitter {
     void port?.terminate?.();
     for (const item of this.pending.splice(0)) item.reject(new Error('Activity worker closed'));
   }
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.closing = true;
-    await this.call('close');
-    clearTimeout(this.retry);
+    return this.closeRequest ??= this.call('close').then(() => clearTimeout(this.retry));
+  }
+  /**
+   * Quit deadline: drops queued calls, gives the worker `graceMs` to close, then terminates it.
+   * Closing stops its macOS file watchers; terminating a worker with one open hangs the app's exit.
+   */
+  async abandon(graceMs: number): Promise<void> {
+    if (!this.closed && this.port) {
+      clearTimeout(this.retry);
+      for (const item of this.pending.splice(this.inFlight ? 1 : 0)) item.reject(new Error('Activity worker closed'));
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([this.close().catch(() => undefined), new Promise<void>((resolve) => { timer = setTimeout(resolve, graceMs); })]);
+      clearTimeout(timer);
+    }
+    this.cancel();
   }
 }

@@ -92,6 +92,8 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort, clickhouse
   for (const name of [...CLIENT_HOME_VARS, 'ELECTRON_RUN_AS_NODE']) delete env[name];
   const electron = createRequire(import.meta.url)('electron') as string;
   const args = ['.', `--user-data-dir=${profile}`, `--proxy-endpoint=${proxy.endpoint}`];
+  // The throwaway home has no login keychain, so macOS would block startup on a Keychain prompt; Chromium's mock keychain stands in.
+  if (process.platform === 'darwin') args.push('--use-mock-keychain');
   if (debuggingPort) args.push(`--remote-debugging-port=${debuggingPort}`);
   const child = spawn(electron, args, { cwd: ROOT, env, stdio: 'inherit' });
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));

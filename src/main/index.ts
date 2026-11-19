@@ -176,7 +176,7 @@ async function startNormalApp(): Promise<void> {
       invalidateEval();
       archiveSync.stop();
       void Promise.allSettled([
-        thinkingTestRunner.clear().then(() => stopActivityReprice()).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain), activityLog)),
+        thinkingTestRunner.clear().then(() => stopActivityReprice()).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain && !proxy.attached), activityLog)),
         stopDiagnosticExport(),
       ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
         destroyTrays();

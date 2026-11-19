@@ -28,12 +28,16 @@ export function httpFailureHint(status: number): string {
   if (status === 404) return 'database or tables missing: create the database in ClickHouse, then use Create table';
   return 'server or schema failure';
 }
+interface ReadOptions { params: Record<string, number | string>; maxBytes: number }
 /** Never expose server responses: they can echo passwords, submitted SQL or captured content. */
-export async function clickhouseRequest(config: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, sql: string, signal: AbortSignal): Promise<string> {
+export async function clickhouseRequest(config: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, sql: string, signal: AbortSignal, read?: ReadOptions): Promise<string> {
   const c = validateClickHouseConfig(config);
   if (!c.endpoint) throw new Error('Configure an endpoint first');
   const auth = credentials ? validateClickHouseCredentials(credentials) : { username: 'default', password: '' };
-  const endpoint = new URL(c.endpoint); endpoint.searchParams.set('wait_end_of_query', '1');
+  const endpoint = new URL(c.endpoint);
+  if (read) {
+    for (const [key, value] of Object.entries(read.params)) endpoint.searchParams.set(`param_${key}`, String(value));
+  } else endpoint.searchParams.set('wait_end_of_query', '1');
   try {
     const timeout = sql.startsWith('INSERT') ? clickhouseTimeout(Buffer.byteLength(sql)) : QUERY_TIMEOUT_MS;
     const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]), headers: {
@@ -43,17 +47,18 @@ export async function clickhouseRequest(config: ClickHouseConfig, credentials: C
     if (response.headers.get('X-ClickHouse-Exception-Code') && response.headers.get('X-ClickHouse-Exception-Code') !== '0') {
       await response.body?.cancel(); throw new Error('ClickHouse reported a query failure');
     }
-    const reader = response.body?.getReader(); let result = '', bytes = 0;
+    const reader = response.body?.getReader(), decoder = new TextDecoder();
+    let result = '', bytes = 0;
     if (reader) for (;;) {
       const { value, done } = await reader.read(); if (done) break;
       bytes += value.byteLength;
-      if (bytes > RESPONSE_LIMIT_BYTES) { await reader.cancel(); throw new Error('ClickHouse diagnostic response exceeded limit'); }
-      result += Buffer.from(value).toString('utf8');
+      if (bytes > (read?.maxBytes ?? RESPONSE_LIMIT_BYTES)) { await reader.cancel(); throw new Error(`ClickHouse ${read ? 'read' : 'diagnostic'} response exceeded limit`); }
+      result += decoder.decode(value, { stream: true });
     }
-    return result;
+    return result + decoder.decode();
   } catch (e) {
-    if (signal.aborted) throw new Error('ClickHouse operation cancelled; delivery may be uncertain');
-    if (e instanceof Error && /^ClickHouse (HTTP|reported|diagnostic)/.test(e.message)) throw e;
+    if (signal.aborted) throw new Error(read ? 'ClickHouse read cancelled' : 'ClickHouse operation cancelled; delivery may be uncertain');
+    if (e instanceof Error && /^ClickHouse (HTTP|reported|diagnostic|read response)/.test(e.message)) throw e;
     throw new Error('ClickHouse connection failed or timed out; check endpoint, TLS and network');
   }
 }

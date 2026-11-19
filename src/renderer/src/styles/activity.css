@@ -337,6 +337,17 @@ th[aria-sort] .sort-btn {
   padding: var(--spacing-2_5);
   text-align: center;
 }
+/* Older days read from ClickHouse: the prompt under the stored days, and why a read returned nothing. */
+.older-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2_5);
+}
+.older-note {
+  color: var(--color-amber);
+}
 /* Info icon (InfoTip): its tooltip holds explanations too long for the page. */
 .activity-info {
   display: inline-flex;

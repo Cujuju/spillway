@@ -35,6 +35,7 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   page: (q) => log.page(q), day: (...args) => log.day(...args), days: () => log.days(),
   daySummaries: (scope) => log.daySummaries(scope), totalsList: () => log.totalsList(), thinking: (q, models) => log.thinking(q, models), compare: (q) => log.compare(q),
   buckets: (days) => log.buckets(days), bucketSnapshot: (days) => log.bucketSnapshot(days), coverage: () => log.coverage(),
+  activityOlderBoundaries: () => log.activityOlderBoundaries(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),
   names: (ids) => conversationNames.names(ids),
   archiveObserve: (e) => log.archiveObserve(e), archiveIngest: (p) => log.archiveIngest(p),

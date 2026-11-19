@@ -36,18 +36,8 @@ import {
 import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, durableTransaction, importLegacyFiles, openActivityDb, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
 import { identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
+import { toStored, type RequestRow } from './activityRequestRow';
 
-interface RequestRow {
-  id: number;
-  event: string;
-}
-function toStored(r: RequestRow): StoredActivityEvent {
-  // Requests stored before conversations or clients were recorded lack these fields.
-  const e = JSON.parse(r.event) as Omit<ActivityEvent, 'sessionId' | 'movedFrom' | 'userAgent' | 'client'> & Partial<ActivityEvent>;
-  return { ...e, ...normalizeTransport(e), effectiveModel: e.effectiveModel ?? null, reasoningEffort: e.reasoningEffort ?? null, parentSessionId: e.parentSessionId ?? null, sessionKind: e.sessionKind ?? null,
-    latencyMs: e.source === 'client-log' ? null : e.latencyMs ?? null, ttftMs: e.source === 'client-log' ? null : e.ttftMs ?? null,
-    source: e.source ?? 'proxy', upstreamId: e.upstreamId ?? null, cacheWriteTokens: e.cacheWriteTokens ?? 0, sessionId: e.sessionId ?? null, movedFrom: e.movedFrom ?? null, userAgent: e.userAgent ?? null, client: e.client ?? null, id: r.id };
-}
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
 const statementsFor = connectionStatements({
   saveSettings: 'INSERT OR IGNORE INTO request_settings VALUES (?, ?, ?)',
@@ -369,6 +359,18 @@ export class ActivityLog {
 
   totalsList(): ActivityDayTotal[] {
     return dailyTotals(this.loadTotals().values());
+  }
+
+  /** First local day held by each Activity store. */
+  activityOlderBoundaries(): { totals: string | null; requests: string } {
+    let totals: string | null = null;
+    for (const total of this.loadTotals().values()) {
+      if (totals === null || total.day < totals) totals = total.day;
+    }
+    // A day past retention stays stored until the next prune, so the oldest stored day bounds remote reads too.
+    const kept = oldestKeptDay(Date.now(), this.config.retentionDays);
+    const stored = (this.db.prepare('SELECT min(day) AS day FROM requests').get() as { day: string | null }).day;
+    return { totals, requests: stored !== null && stored < kept ? stored : kept };
   }
 
   /** Totals for the latest `days` local days; null returns all. */

@@ -26,12 +26,13 @@ export function addToTotals(totals: Map<string, ActivityTotal>, e: ActivityEvent
   return row;
 }
 
+export function normalizeTotal(t: ActivityTotal): ActivityTotal {
+  return { ...emptyCounts(), ...t, client: t.client ?? null, source: t.source ?? 'proxy' };
+}
+
 export function readTotalRows(db: Db, day?: string): { key: string; total: ActivityTotal }[] {
   const rows = db.prepare(`SELECT key, total FROM activity_totals${day === undefined ? "" : " WHERE json_extract(total, '$.day') = ?"}`).all(...(day === undefined ? [] : [day])) as { key: string; total: string }[];
-  return rows.map((r) => {
-    const t = JSON.parse(r.total) as ActivityTotal;
-    return { key: r.key, total: { ...emptyCounts(), ...t, client: t.client ?? null, source: t.source ?? 'proxy' as const } };
-  });
+  return rows.map((r) => ({ key: r.key, total: normalizeTotal(JSON.parse(r.total) as ActivityTotal) }));
 }
 
 export function readTotals(db: Db): Map<string, ActivityTotal> {

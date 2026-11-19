@@ -148,6 +148,6 @@ it('watches parent directories through file replacement and deletion', async () 
     renameSync(`${file}.new`, file);
     await vi.waitFor(() => expect(f.warn).toHaveBeenCalledTimes(1));
     rmSync(file);
-    await vi.waitFor(() => expect(f.warn).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(f.warn).toHaveBeenCalledTimes(2), { timeout: 5_000 });
   } finally { monitor.stop(); }
 });

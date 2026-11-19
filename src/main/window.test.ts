@@ -15,8 +15,10 @@ vi.mock('electron', () => ({
   BrowserWindow: class {}, ipcMain: {}, nativeTheme: {}, Notification: {}, screen: {}, shell: {}, safeStorage: {},
 }));
 
+// `defaults` reports no clock toggle, so macOS falls through to the region locale whatever this host sets.
+vi.mock('node:child_process', () => ({ spawnSync: () => ({ status: 1, stdout: '' }) }));
+
 const realPlatform = process.platform;
-// macOS falls through to the region locale when `defaults` has no clock toggle (absent here).
 Object.defineProperty(process, 'platform', { value: 'darwin' });
 afterAll(() => Object.defineProperty(process, 'platform', { value: realPlatform }));
 

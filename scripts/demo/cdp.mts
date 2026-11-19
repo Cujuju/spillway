@@ -20,8 +20,8 @@ export function freePort(): Promise<number> {
 }
 
 /** Polls until probe returns a value; fails early when `abort` returns a reason. */
-export async function until<T>(what: string, probe: () => Promise<T | null | undefined>, abort?: () => string | null): Promise<T> {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
+export async function until<T>(what: string, probe: () => Promise<T | null | undefined>, abort?: () => string | null, timeoutMs = READY_TIMEOUT_MS): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const reason = abort?.();
     if (reason) throw new Error(`${reason} while waiting for ${what}`);
@@ -65,11 +65,11 @@ export class Cdp {
   }
 
   /** The app's main window target on a debugging port. */
-  static async mainWindow(port: number, abort?: () => string | null): Promise<Cdp> {
+  static async mainWindow(port: number, abort?: () => string | null, timeoutMs?: number): Promise<Cdp> {
     const target = await until('the app window', async () => {
       const list = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
       return list.find((t) => t.type === 'page' && t.url.includes('index.html'));
-    }, abort);
+    }, abort, timeoutMs);
     return Cdp.connect(target.webSocketDebuggerUrl);
   }
 

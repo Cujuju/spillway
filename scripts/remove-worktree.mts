@@ -2,7 +2,7 @@
 // Usage: node scripts/remove-worktree.mts <path> [--delete-branch] [--orphan] [--repo <main checkout>]
 // --orphan: a leftover folder git no longer tracks.
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, readdirSync, rmSync, rmdirSync, unlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, realpathSync, rmSync, rmdirSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +18,16 @@ export interface RemoveOptions { target: string; repo: string; deleteBranch: boo
 export interface RemoveReport { target: string; links: string[]; lockers: string[]; removed: boolean; branch: string | null }
 interface Worktree { path: string; branch?: string }
 
-const canon = (p: string): string => path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+/** Where p really is: links and Windows short names resolved, as far down as the path exists. */
+function realLocation(p: string): string {
+  const full = path.resolve(p);
+  try { return realpathSync.native(full); } catch { /* missing: resolve the parent instead */ }
+  const parent = path.dirname(full);
+  return parent === full ? full : path.join(realLocation(parent), path.basename(full));
+}
+
+// Compares locations, not spellings: git lists real paths, callers may pass an alias.
+const canon = (p: string): string => realLocation(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 const contains = (outer: string, inner: string): boolean => inner === outer || inner.startsWith(`${outer}/`);
 
 function git(repo: string, args: string[]): { ok: boolean; out: string; err: string } {

@@ -51,6 +51,22 @@ it('refuses the main checkout and anything that contains it', () => {
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 }, GIT_HEAVY_TIMEOUT_MS);
 
+it('recognises the worktree and the main checkout through an alias path', () => {
+  const f = fixture();
+  const aliasDir = mkdtempSync(path.join(tmpdir(), 'remove-worktree-alias-'));
+  const alias = path.join(aliasDir, 'alias');
+  symlinkSync(f.base, alias, LINK_TYPE);
+  try {
+    expect(() => removeWorktree({ target: path.join(alias, 'main'), repo: f.repo, deleteBranch: false, orphan: true })).toThrow(/main checkout/);
+    expect(removeWorktree({ target: path.join(alias, 'wt'), repo: f.repo, deleteBranch: false, orphan: false }).removed).toBe(true);
+    expect(existsSync(path.join(f.repo, 'a.txt'))).toBe(true);
+  } finally {
+    removeLinks(aliasDir);
+    rmSync(aliasDir, { recursive: true, force: true });
+    rmSync(f.base, { recursive: true, force: true });
+  }
+}, GIT_HEAVY_TIMEOUT_MS);
+
 it('an unregistered folder needs --orphan, and is then removed without following links', () => {
   const f = fixture();
   try {

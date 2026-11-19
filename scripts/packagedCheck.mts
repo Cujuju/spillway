@@ -10,7 +10,12 @@ import path from 'node:path';
 import { Cdp, freePort, sleep, until } from './demo/cdp.mts';
 
 const QUIT_TIMEOUT_MS = 30_000;
-const SQLITE_PLAIN_HEADER = 'SQLite format 3\0';
+// Cleanup retries ride out writes still landing from processes that are exiting.
+const CLEANUP_RETRIES = 5;
+const CLEANUP_RETRY_DELAY_MS = 200;
+const SQLITE_PLAIN_HEADER ='SQLite format 3\0';
+// Rosetta translates each x64 binary on first launch: CI runners took 37s to over 60s before DevTools answered.
+const ROSETTA_READY_TIMEOUT_MS = 180_000;
 
 const [bundle, ...flags] = process.argv.slice(2);
 if (!bundle || process.platform !== 'darwin') {
@@ -48,10 +53,15 @@ const child = rosetta ? spawn('/usr/bin/arch', ['-x86_64', exe, ...args], { env,
 const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
 const gone = () => (child.exitCode === null && child.signalCode === null ? null : `the app exited (${child.exitCode ?? child.signalCode})`);
 
+// Undefined keeps the native startup budget.
+const readyTimeoutMs = rosetta ? ROSETTA_READY_TIMEOUT_MS : undefined;
+// Printed on failure: says whether the proxy was still starting, crashed, or never launched.
+let lastProxyStatus: unknown = null;
+
 try {
-  const cdp = await Cdp.mainWindow(debugPort, gone);
-  await until('the page navigation', () => cdp.eval<number>(`document.querySelectorAll('button.nav-btn').length`).then((n) => n || null), gone);
-  const days = await until('the activity database', () => cdp.eval<unknown[]>('window.api.activityDaySummaries("all")'), gone);
+  const cdp = await Cdp.mainWindow(debugPort, gone, readyTimeoutMs);
+  await until('the page navigation', () => cdp.eval<number>(`document.querySelectorAll('button.nav-btn').length`).then((n) => n || null), gone, readyTimeoutMs);
+  const days = await until('the activity database', () => cdp.eval<unknown[]>('window.api.activityDaySummaries("all")'), gone, readyTimeoutMs);
   const db = path.join(profile, 'activity.db');
   if (!existsSync(db)) throw new Error('activity.db was not created');
   const header = Buffer.alloc(16);
@@ -60,7 +70,7 @@ try {
   closeSync(fd);
   if (header.toString('latin1') === SQLITE_PLAIN_HEADER) throw new Error('activity.db is not encrypted');
   const status = await until('the bundled proxy', () => cdp.eval<{ state: string; pid: number | null; executablePath: string | null; build: unknown }>('window.api.proxyStatus()')
-    .then((s) => (s.state === 'running' ? s : null)), gone);
+    .then((s) => { lastProxyStatus = s; return s.state === 'running' ? s : null; }), gone, readyTimeoutMs);
   if (status.executablePath !== bundledProxy) throw new Error(`proxy ran from ${status.executablePath}, not the bundle`);
   const reply = await fetch(`http://127.0.0.1:${proxyPort}/v1/models`);
   cdp.close();
@@ -76,9 +86,13 @@ try {
   if (proxyAlive) throw new Error(`the proxy (pid ${status.pid}) outlived the app`);
   console.log(`packaged: ok, ${path.basename(path.dirname(app))}${rosetta ? ' under Rosetta' : ''} quit and stopped its proxy`);
 } catch (err) {
+  if (lastProxyStatus) console.error(`packaged: last proxy status ${JSON.stringify(lastProxyStatus)}`);
   if (child.exitCode === null) child.kill('SIGKILL');
   throw err;
 } finally {
   await Promise.race([exited, sleep(5_000)]);
-  rmSync(scratch, { recursive: true, force: true });
+  // A killed app's helpers and proxy may still be writing; a leftover temp folder must not replace the real failure.
+  try { rmSync(scratch, { recursive: true, force: true, maxRetries: CLEANUP_RETRIES, retryDelay: CLEANUP_RETRY_DELAY_MS }); } catch (err) {
+    console.warn(`packaged: left ${scratch} behind: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

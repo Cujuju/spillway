@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
@@ -49,6 +49,22 @@ it('refuses the main checkout and anything that contains it', () => {
     expect(() => removeWorktree({ target: f.base, repo: f.repo, deleteBranch: false, orphan: true })).toThrow(/main checkout/);
     expect(existsSync(path.join(f.repo, 'a.txt'))).toBe(true);
   } finally { rmSync(f.base, { recursive: true, force: true }); }
+}, GIT_HEAVY_TIMEOUT_MS);
+
+// Git lists worktrees by real path; a temp folder is often reached through a link or a Windows short name.
+it('matches the main checkout and a worktree reached through a link', () => {
+  const f = fixture();
+  const alias = `${f.base}-alias`;
+  symlinkSync(f.base, alias, LINK_TYPE);
+  try {
+    expect(() => removeWorktree({ target: path.join(alias, 'main'), repo: f.repo, deleteBranch: false, orphan: true })).toThrow(/main checkout/);
+    expect(removeWorktree({ target: path.join(alias, 'wt'), repo: f.repo, deleteBranch: false, orphan: false }).removed).toBe(true);
+    expect(existsSync(path.join(f.repo, 'a.txt'))).toBe(true);
+  } finally {
+    // A junction needs rmdir on Windows; neither call follows the link.
+    try { unlinkSync(alias); } catch { rmdirSync(alias); }
+    rmSync(f.base, { recursive: true, force: true });
+  }
 }, GIT_HEAVY_TIMEOUT_MS);
 
 it('an unregistered folder needs --orphan, and is then removed without following links', () => {

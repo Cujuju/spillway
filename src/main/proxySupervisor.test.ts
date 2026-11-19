@@ -66,6 +66,32 @@ describe('proxy lifecycle', () => {
     expect(proxy.getStatus().state).toBe('stopped');
   });
 
+  it('marks a live proxy running when it answers after the startup window', async () => {
+    ping.mockResolvedValue(null);
+    const starting = proxy.start();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await starting;
+    expect(proxy.getStatus()).toMatchObject({ state: 'starting', pid: 1, lastError: 'Proxy did not become ready' });
+    ping.mockResolvedValue(parseBuildInfo('1', 'test', null));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(proxy.getStatus()).toMatchObject({ state: 'running', pid: 1, lastError: null });
+    expect(spawn).toHaveBeenCalledOnce();
+    await proxy.stop();
+    expect(proxy.getStatus().state).toBe('stopped');
+  });
+
+  it('stops watching a slow proxy that exits before answering', async () => {
+    ping.mockResolvedValue(null);
+    settings = normalizeSettings({ ...settings, proxy: { ...settings.proxy, restartOnCrash: false } });
+    const starting = proxy.start();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await starting;
+    children[0]!.emit('exit', 1, null);
+    ping.mockResolvedValue(parseBuildInfo('1', 'test', null));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(proxy.getStatus().state).toBe('crashed');
+  });
+
   it('retains a live child on a non-spawn error', async () => {
     await proxy.start();
     const pid = proxy.getStatus().pid;

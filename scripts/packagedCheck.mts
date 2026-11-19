@@ -55,6 +55,8 @@ const gone = () => (child.exitCode === null && child.signalCode === null ? null 
 
 // Undefined keeps the native startup budget.
 const readyTimeoutMs = rosetta ? ROSETTA_READY_TIMEOUT_MS : undefined;
+// Printed on failure: says whether the proxy was still starting, crashed, or never launched.
+let lastProxyStatus: unknown = null;
 
 try {
   const cdp = await Cdp.mainWindow(debugPort, gone, readyTimeoutMs);
@@ -68,7 +70,7 @@ try {
   closeSync(fd);
   if (header.toString('latin1') === SQLITE_PLAIN_HEADER) throw new Error('activity.db is not encrypted');
   const status = await until('the bundled proxy', () => cdp.eval<{ state: string; pid: number | null; executablePath: string | null; build: unknown }>('window.api.proxyStatus()')
-    .then((s) => (s.state === 'running' ? s : null)), gone, readyTimeoutMs);
+    .then((s) => { lastProxyStatus = s; return s.state === 'running' ? s : null; }), gone, readyTimeoutMs);
   if (status.executablePath !== bundledProxy) throw new Error(`proxy ran from ${status.executablePath}, not the bundle`);
   const reply = await fetch(`http://127.0.0.1:${proxyPort}/v1/models`);
   cdp.close();
@@ -84,6 +86,7 @@ try {
   if (proxyAlive) throw new Error(`the proxy (pid ${status.pid}) outlived the app`);
   console.log(`packaged: ok, ${path.basename(path.dirname(app))}${rosetta ? ' under Rosetta' : ''} quit and stopped its proxy`);
 } catch (err) {
+  if (lastProxyStatus) console.error(`packaged: last proxy status ${JSON.stringify(lastProxyStatus)}`);
   if (child.exitCode === null) child.kill('SIGKILL');
   throw err;
 } finally {

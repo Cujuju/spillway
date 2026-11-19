@@ -147,6 +147,22 @@ class ProxySupervisor extends EventEmitter {
 
     const build = await this.waitReady(() => this.proc === child);
     if (build) this.markReady(build);
+    else if (this.proc === child) void this.adoptWhenReady(child);
+  }
+
+  /** A live proxy that missed the startup window (a slow disk, Rosetta translating it) still becomes `running` once it answers. */
+  private async adoptWhenReady(child: ChildProcess): Promise<void> {
+    while (this.proc === child && !this.stopping) {
+      const build = await management.ping();
+      if (build) {
+        if (this.proc !== child || this.stopping) return;
+        this.log('app', 'proxy answered after the startup window');
+        this.setStatus({ lastError: null });
+        this.markReady(build);
+        return;
+      }
+      await sleep(READY_POLL_MS);
+    }
   }
 
   private async attach(endpoint: string): Promise<void> {

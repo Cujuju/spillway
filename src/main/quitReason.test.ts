@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { QuitReasonAddon } from './quitReason';
 
@@ -26,7 +27,7 @@ it('loads the addon from the repo in dev and reports each fresh quit event once'
   const addon = fakeAddon([{ reason: 'quit', ageMs: 12 }]);
   const load = vi.fn(() => addon);
   watchQuitEvents(load);
-  expect(load).toHaveBeenCalledWith('/repo/resources/native/darwin/quit-reason.node');
+  expect(load).toHaveBeenCalledWith(path.join('/repo', 'resources', 'native', 'darwin', 'quit-reason.node'));
   expect(takeQuitReason()).toBe('quit');
   expect(takeQuitReason()).toBeNull();
 });

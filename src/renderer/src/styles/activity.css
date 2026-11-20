@@ -305,42 +305,50 @@
 th[aria-sort] .sort-btn {
   color: var(--color-text);
 }
-/* Requests: the card scrolls on its own; the column header pins at its top and each day's header below that. */
+/* Requests: the card draws the frame and doesn't scroll; the bare viewport inside it does. Pinned rows sit at the viewport's own edge, so no border straddles a pixel there. */
 .requests-card {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: clip;
+  /* The frame is drawn outside the box, so the viewport's clip edge is the card's own edge, not a border's mid-pixel. */
+  border: 0;
+  box-shadow: 0 0 0 var(--border-width) var(--color-border);
+}
+.requests-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  /* Pinned headers sit this far past the edge above them. At fractional display scales that edge falls mid-pixel, and rows showed through the part left open. */
-  --pin-overlap: var(--border-width);
-  --head-pin-top: calc(-1 * var(--pin-overlap));
-  /* Day headers pin under the column header's bottom edge; ActivityRequests sets its measured height. */
-  --day-pin-top: calc(var(--head-pin-top) + var(--requests-head-height, 0px) - var(--pin-overlap));
+  /* Labels are at most two words and wrap to at most two lines. Whole pixels, so day headers meet it exactly. */
+  --requests-head-lines: 2;
+  --requests-head-height: round(up, calc(var(--requests-head-lines) * var(--text-xxs) * var(--leading-tight) + 2 * var(--spacing-2) + var(--border-width)), 1px);
 }
 /* The scrollbar starts under the column header, and its track matches the day headers, so a pinned one reaches the card's right edge. */
-.requests-card::-webkit-scrollbar-track:vertical {
-  margin-top: var(--day-pin-top);
+.requests-scroll::-webkit-scrollbar-track:vertical {
+  margin-top: var(--requests-head-height);
   background: var(--color-surface-sunken);
 }
-/* Collapsed borders belong to the table and stay behind when a row pins, letting rows show past it. */
-.requests-card .table {
+/* Collapsed borders belong to the table and stay behind when a row pins. */
+.requests-scroll .table {
   border-collapse: separate;
   border-spacing: 0;
 }
 /* The row pins as one piece: cells pinned one by one snap to pixels separately and leave seams between columns. */
-.requests-card thead {
+.requests-scroll thead {
   position: sticky;
-  top: var(--head-pin-top);
-  /* Above the day headers, which tuck under it. */
+  top: 0;
   z-index: calc(var(--z-raised) + 1);
 }
-.requests-card thead th {
-  background: var(--color-surface);
-  /* Each cell's fill reaches under the next, closing the mid-pixel seam between columns. */
-  box-shadow: var(--pin-overlap) 0 0 var(--color-surface);
+.requests-scroll thead tr {
+  height: var(--requests-head-height);
 }
-.requests-card tr.day-row {
+.requests-scroll thead th {
+  background: var(--color-surface);
+}
+.requests-scroll tr.day-row {
   position: sticky;
-  top: var(--day-pin-top);
+  top: var(--requests-head-height);
   z-index: var(--z-raised);
 }
 .table.dense tr.day-row td {

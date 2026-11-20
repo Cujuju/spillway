@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeEach, expect, it } from 'vitest';
 import type { ThinkingReport } from '@shared/thinking';
 import { tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
-import { group, kind } from './activityThinking';
+import { kind } from './activityThinking';
+import { group } from './retainedTurns';
 import { ActivityLog } from './activityStore';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'spillway-compare-'));

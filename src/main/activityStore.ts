@@ -21,6 +21,7 @@ import { EvalCaseStore } from './evalCaseStore';
 import type { EvalAnnotation } from '@shared/evalCase';
 import { exportActivityEvents, oldestKeptDay, lastDays, preserveImportedCost } from './activityTransfer';
 import { thinkingActivity, type OfferedModel } from './activityThinking';
+import { RetainedTurns } from './retainedTurns';
 import type { ThinkingQuery } from '@shared/thinking';
 import { compareActivity } from './activityCompare';
 import type { CompareQuery } from '@shared/activityCompare';
@@ -81,7 +82,8 @@ export function scopeClause(scope: ActivityScope): { sql: string; params: string
  */
 export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
 export class ActivityLog {
-  thinkingTestPrepare(req: TestPlanRequest) { return prepareTest(this.db, this.archive, req); }
+  private retainedTurns = new RetainedTurns();
+  thinkingTestPrepare(req: TestPlanRequest) { return prepareTest(this.db, this.archive, req, this.retainedTurns); }
   thinkingTestSave(test: ThinkingTest): void { this.db.prepare('INSERT OR REPLACE INTO thinking_tests VALUES (?,?)').run(settingKey(test.setting), JSON.stringify(test)); }
   thinkingTests(): Record<string, ThinkingTest> { return Object.fromEntries((this.db.prepare('SELECT setting_key, test FROM thinking_tests').all() as { setting_key: string; test: string }[]).map((r) => [r.setting_key, JSON.parse(r.test)])); }
   driftQuery(q: DriftQuery) { return queryDrift(this.db, q); }
@@ -353,7 +355,7 @@ export class ActivityLog {
   }
 
   /** Thinking costs and alternatives from retained turns; null for a malformed query. */
-  thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models); }
+  thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models, this.retainedTurns); }
   /** Combination cards and Compare table for the Overview; null for a malformed query. */
   compare(q: CompareQuery) { return compareActivity(this.db, this.loadTotals().values(), q, Date.now()); }
 
@@ -409,6 +411,7 @@ export class ActivityLog {
 
   clear(): void {
     this.exporter?.cancelCurrent();
+    this.retainedTurns.clear();
     durableTransaction(this.db, () => {
       this.db.exec("DELETE FROM thinking_tests; DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
@@ -422,6 +425,7 @@ export class ActivityLog {
   close(): void {
     this.exporter?.cancelCurrent(); this.exporter = null;
     this.exportStartupWarning = null;
+    this.retainedTurns.clear();
     this.conn?.close();
     this.conn = null;
     this.archiveStore = null;

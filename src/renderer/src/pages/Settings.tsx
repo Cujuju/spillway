@@ -1,5 +1,4 @@
-import { FolderOpen } from 'lucide-solid';
-import { createSignal, For, Match, Show, Switch } from 'solid-js';
+import { createSignal, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
 import { AboutSection } from '../components/AboutSection';
 import { ActivityStorageSettings } from '../components/ActivityStorage';
@@ -13,16 +12,16 @@ import { UpdateSettings } from '../components/UpdateSettings';
 import { WindowStartSettings } from '../components/WindowStartSettings';
 import { RhythmZipSetting } from '../components/RhythmZipSetting';
 import { OS_NAME, TASKBAR_NAME, TRAY_NAME } from '../lib/platform';
-import { Dialog, NumberField, Seg, Select, SettingRow, SettingsGroup, Toggle } from '../components/ui';
-import { setHistory, setSettingsSection as setSection, settings, settingsSection as section, updateSettings, setObservedSpans, setWindowSummaries, type SettingsSection } from '../store';
+import { NumberField, Seg, Select, SettingRow, SettingsGroup, Toggle } from '../components/ui';
+import { setSettingsSection as setSection, settings, settingsSection as section, updateSettings, type SettingsSection } from '../store';
 
 const ICON_PX = 14;
 
 const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Rolling windows' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'Data', items: [{ id: 'capture', label: 'Request capture' }, { id: 'storage', label: 'Storage', title: 'Activity storage' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
-  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About', gapBefore: true }] },
+  { group: 'Data', items: [{ id: 'storage', label: 'Storage' }, { id: 'capture', label: 'Request capture' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
+  { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'about', label: 'About', gapBefore: true }] },
 ];
 
 const STRATEGIES: { value: RoutingStrategy; label: string; help: string }[] = [
@@ -176,67 +175,6 @@ function DashboardSection() {
   );
 }
 
-function Advanced() {
-  const [confirming, setConfirming] = createSignal<'usage' | 'activity' | null>(null);
-  const folders = [
-    { which: 'data', label: 'App data', help: 'Settings, encrypted keys and local app state. See Data → Storage for activity files.' },
-    { which: 'config', label: 'Proxy config', help: 'config.yaml (generated from settings and config.user.yaml) and config.user.yaml.' },
-    { which: 'auths', label: 'Account logins', help: 'OAuth credential files the proxy reads. Keep private.' },
-  ] as const;
-  return (
-    <>
-      <SettingsGroup title="Folders">
-        <For each={folders}>
-          {(f) => (
-            <SettingRow label={f.label} help={f.help}>
-              <button class="btn" onClick={() => void window.api.openPath(f.which)}><FolderOpen size={ICON_PX} /> Open folder</button>
-            </SettingRow>
-          )}
-        </For>
-      </SettingsGroup>
-      <SettingsGroup title="History">
-        <SettingRow label="Usage history" help="Samples behind the chart, drain rate and past windows.">
-          <button class="btn danger" onClick={() => setConfirming('usage')}>Clear history</button>
-        </SettingRow>
-        <SettingRow label="Keep requests for" help="Per-request activity; daily totals stay until cleared.">
-          <NumberField value={settings().activity.retentionDays} unit="d" onCommit={(v) => set((d) => void (d.activity.retentionDays = v))} />
-        </SettingRow>
-        <SettingRow label="Activity history" help="Requests and daily totals behind the Activity page.">
-          <button class="btn danger" onClick={() => setConfirming('activity')}>Clear history</button>
-        </SettingRow>
-      </SettingsGroup>
-      <Show when={confirming() === 'usage'}>
-        <Dialog
-          title="Clear usage history?"
-          onClose={() => setConfirming(null)}
-          actions={
-            <>
-              <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearHistory().then(() => { setHistory([]); setWindowSummaries([]); setObservedSpans([]); setConfirming(null); })}>Clear</button>
-            </>
-          }
-        >
-          <p class="secondary">The chart, drain rate and past windows start over. Accounts and settings are kept.</p>
-        </Dialog>
-      </Show>
-      <Show when={confirming() === 'activity'}>
-        <Dialog
-          title="Clear activity history?"
-          onClose={() => setConfirming(null)}
-          actions={
-            <>
-              <button class="btn" onClick={() => setConfirming(null)}>Cancel</button>
-              <button class="btn danger" onClick={() => void window.api.clearActivity().then(() => setConfirming(null))}>Clear</button>
-            </>
-          }
-        >
-          <p class="secondary">Every stored request, daily total, recorded body and pinned eval case (all revisions) is deleted. Pending eval exports and replays are canceled. Accounts and settings are kept.</p>
-        </Dialog>
-      </Show>
-    </>
-  );
-}
-
 export function Settings() {
   return (
     <SectionedPage nav={NAV} section={section()} onSelect={setSection}>
@@ -252,7 +190,6 @@ export function Settings() {
         <Match when={section() === 'capture'}><RequestCaptureSettings /></Match>
         <Match when={section() === 'storage'}><ActivityStorageSettings /></Match>
         <Match when={section() === 'clickhouse'}><ClickHouseSettings /></Match>
-        <Match when={section() === 'advanced'}><Advanced /></Match>
         <Match when={section() === 'about'}><AboutSection /></Match>
       </Switch>
     </SectionedPage>

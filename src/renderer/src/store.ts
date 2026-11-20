@@ -18,10 +18,15 @@ const api = window.api;
 
 export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
-const SETTINGS_SECTIONS = ['general', 'appearance', 'trayIcons', 'proxy', 'windowStart', 'dashboard', 'notifications', 'updates', 'capture', 'storage', 'clickhouse', 'advanced', 'about'] as const;
+const SETTINGS_SECTIONS = ['general', 'appearance', 'trayIcons', 'proxy', 'windowStart', 'dashboard', 'notifications', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 /** Lives here, not in the Settings page, so other views can open a section directly. */
-export const [settingsSection, setSettingsSection] = persistedSignal<SettingsSection>('settingsSection', 'general', SETTINGS_SECTIONS);
+const [storedSection, setStoredSection] = persistedSignal<SettingsSection | 'advanced'>('settingsSection', 'general', [...SETTINGS_SECTIONS, 'advanced']);
+export const settingsSection = (): SettingsSection => {
+  const section = storedSection();
+  return section === 'advanced' ? 'storage' : section;
+};
+export const setSettingsSection = (section: SettingsSection) => setStoredSection(section);
 export function openSettings(section: SettingsSection): void {
   setSettingsSection(section);
   setPage('settings');

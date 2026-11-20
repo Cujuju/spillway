@@ -2,6 +2,7 @@ import { FolderOpen } from 'lucide-solid';
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import type { ApiKeyOrder, AppSettings, RoutingStrategy, ServerErrorAction } from '@shared/settings';
 import { AboutSection } from '../components/AboutSection';
+import { ActivityStorageSettings } from '../components/ActivityStorage';
 import { ClickHouseSettings } from '../components/ClickHouseSettings';
 import { RequestCaptureSettings } from '../components/RequestCapture';
 import { NotificationSettings } from '../components/NotificationSettings';
@@ -20,7 +21,7 @@ const ICON_PX = 14;
 const NAV: NavGroup<SettingsSection>[] = [
   { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Rolling windows' }, { id: 'dashboard', label: 'Dashboard' }] },
-  { group: 'Data', items: [{ id: 'capture', label: 'Request capture' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
+  { group: 'Data', items: [{ id: 'capture', label: 'Request capture' }, { id: 'storage', label: 'Storage', title: 'Activity storage' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'advanced', label: 'Advanced' }, { id: 'about', label: 'About', gapBefore: true }] },
 ];
 
@@ -178,8 +179,8 @@ function DashboardSection() {
 function Advanced() {
   const [confirming, setConfirming] = createSignal<'usage' | 'activity' | null>(null);
   const folders = [
-    { which: 'data', label: 'App data', help: 'Settings, encrypted keys, usage and activity history.' },
-    { which: 'config', label: 'Proxy config', help: 'config.yaml (generated from settings and config.user.yaml), config.user.yaml and the proxy log.' },
+    { which: 'data', label: 'App data', help: 'Settings, encrypted keys and local app state. See Data → Storage for activity files.' },
+    { which: 'config', label: 'Proxy config', help: 'config.yaml (generated from settings and config.user.yaml) and config.user.yaml.' },
     { which: 'auths', label: 'Account logins', help: 'OAuth credential files the proxy reads. Keep private.' },
   ] as const;
   return (
@@ -249,6 +250,7 @@ export function Settings() {
         <Match when={section() === 'notifications'}><NotificationSettings /></Match>
         <Match when={section() === 'updates'}><UpdateSettings /></Match>
         <Match when={section() === 'capture'}><RequestCaptureSettings /></Match>
+        <Match when={section() === 'storage'}><ActivityStorageSettings /></Match>
         <Match when={section() === 'clickhouse'}><ClickHouseSettings /></Match>
         <Match when={section() === 'advanced'}><Advanced /></Match>
         <Match when={section() === 'about'}><AboutSection /></Match>

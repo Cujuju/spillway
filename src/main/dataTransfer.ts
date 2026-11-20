@@ -7,7 +7,7 @@ import type { ActivityEvent } from '@shared/types';
 import { ActivityLog } from './activityStore';
 import { history } from './historyStore';
 import { mergeHistory, type TransferHistory } from './historyMerge';
-import { appPaths } from './paths';
+import { activityStorage, appPaths } from './paths';
 import { getSecrets, getSettings, loadSecrets, writeFileAtomic } from './settingsStore';
 
 export const TRANSFER_EXIT = { ok: 0, failed: 1, appRunning: 20, invalidArguments: 21 } as const;
@@ -98,6 +98,8 @@ export async function runTransferMode(): Promise<void> {
       return;
     }
     await app.whenReady();
+    const storageWarning = await activityStorage().initialize();
+    if (storageWarning) console.error(storageWarning);
     await loadSecrets();
     log = new ActivityLog({ activityDb: appPaths.activityDb, legacyActivityDir: appPaths.legacyActivityDir,
       databaseKey: getSecrets().databaseKey, retentionDays: getSettings().activity.retentionDays });

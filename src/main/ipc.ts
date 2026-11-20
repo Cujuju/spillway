@@ -8,6 +8,7 @@ import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
 import { activityLog, activityImportState, archiveMigrationState } from './activityService';
+import type { StorageDestination } from './activityStorage';
 import { archiveSync } from './archiveSync';
 import { clickhouseActivityReader, clickhouseStatus, saveClickHouse, diagnoseClickHouse, retryClickHouse, clearClickHouse, cancelClickHouse, withClickHousePaused } from './clickhouseService';
 import { diagnosticExporter } from './diagnosticService';
@@ -22,7 +23,7 @@ import { proxyConfigChanged, proxyRestartNeeded, type AppSettings } from '@share
 import { history } from './historyStore';
 import { exportUsage } from './usageExport';
 import { management } from './managementClient';
-import { appPaths, PROXY_EXE_NAME } from './paths';
+import { activityStorage, appPaths, PROXY_EXE_NAME } from './paths';
 import { ensureUserConfigFile, readUserConfig, writeUserConfig } from './proxyLaunch';
 import { proxy } from './proxySupervisor';
 import { proxyIdentity } from './proxyIdentity';
@@ -33,7 +34,7 @@ import { updates } from './updater';
 import { usage } from './usagePoller';
 import { canaryService } from './canaryService';
 import { windowStarter } from './windowStarter';
-import { mainWindow } from './window';
+import { isQuitting, mainWindow } from './window';
 import { previewNotice } from './notifier';
 
 type Handlers = { [K in keyof typeof INVOKE]: (...args: Parameters<DesktopApi[K]>) => ReturnType<DesktopApi[K]> | Awaited<ReturnType<DesktopApi[K]>> };
@@ -107,9 +108,44 @@ const OPEN_PATHS = {
   data: () => appPaths.root,
   config: () => appPaths.proxyDir,
   auths: () => proxyIdentity().authDir,
-  logs: () => appPaths.proxyDir,
+  logs: () => appPaths.captureDir,
   userConfig: () => ensureUserConfigFile(),
+  activityStorage: () => activityStorage().directory,
 } as const;
+
+let movingStorage = false;
+let storageDestination: StorageDestination | undefined;
+export const requestedStorageDestination = () => storageDestination;
+
+async function moveActivityStorage(useDefault?: boolean): Promise<void> {
+  if (movingStorage || storageDestination || isQuitting()) return;
+  movingStorage = true;
+  try {
+    const storage = activityStorage();
+    const window = mainWindow();
+    const choose: Electron.OpenDialogOptions = {
+      title: 'Choose where to create the Spillway Data folder',
+      defaultPath: storage.directory,
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const selection = useDefault === true ? undefined : window
+      ? await dialog.showOpenDialog(window, choose) : await dialog.showOpenDialog(choose);
+    const selected = selection?.filePaths[0];
+    if (useDefault !== true && (!selected || selection?.canceled)) return;
+    const destination = await storage.destination(selected ?? '', useDefault === true);
+    if (!destination) return;
+    const confirm: Electron.MessageBoxOptions = {
+      type: 'question', buttons: ['Move and restart', 'Cancel'], defaultId: 1, cancelId: 1,
+      title: 'Move activity data', message: 'Move activity data and restart Spillway?',
+      detail: `Destination\n${destination.directory}\n\nSpillway will stop its proxy and move saved activity, captures and usage history. The window reopens when the move finishes.`,
+    };
+    const result = window ? await dialog.showMessageBox(window, confirm) : await dialog.showMessageBox(confirm);
+    if (result.response !== 0 || isQuitting()) return;
+    storageDestination = destination;
+    try { await requestQuit({ relaunch: true, confirmed: true }); }
+    catch (error) { storageDestination = undefined; throw error; }
+  } finally { movingStorage = false; }
+}
 
 const handlers: Handlers = {
   evalList: () => activityLog.call('evalList'), evalGet: (id, revision) => activityLog.call('evalGet', id, revision),
@@ -216,6 +252,11 @@ const handlers: Handlers = {
   usageWindowSummaries: () => history.summaries(),
   usageObservedSpans: () => history.observed(),
   clearHistory: () => history.clear(),
+  activityStorageStatus: () => {
+    const { directory, defaultDirectory } = activityStorage();
+    return { directory, defaultDirectory };
+  },
+  moveActivityStorage,
   activityImportState: () => activityImportState(),
   archiveMigrationState: () => archiveMigrationState(),
   activityPage: (query) => activityLog.call('page', query),
@@ -300,7 +341,9 @@ const handlers: Handlers = {
   },
   openPath: async (which) => {
     const target = OPEN_PATHS[which]?.();
-    if (target) await shell.openPath(target);
+    if (!target) return;
+    const error = await shell.openPath(target);
+    if (which === 'activityStorage' && error) throw new Error(error);
   },
   copyText: (text) => clipboard.writeText(text),
   noticePreview: () => previewNotice(),
@@ -309,7 +352,10 @@ const handlers: Handlers = {
 export function registerIpc(): void {
   for (const [method, channel] of Object.entries(INVOKE) as [keyof typeof INVOKE, string][]) {
     const handler = handlers[method] as (...args: unknown[]) => unknown;
-    ipcMain.handle(channel, (_e, ...args: unknown[]) => handler(...args));
+    ipcMain.handle(channel, (_e, ...args: unknown[]) => {
+      if (storageDestination && isQuitting()) throw new Error('Spillway is moving activity storage');
+      return handler(...args);
+    });
   }
   const fromSender = (e: Electron.IpcMainEvent) => BrowserWindow.fromWebContents(e.sender);
   ipcMain.on(SEND.windowMinimize, (e) => fromSender(e)?.minimize());

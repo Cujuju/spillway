@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { ACTIVITY_FILES, ActivityStorage } from './activityStorage';
 
 const userDataOverride = app.commandLine.getSwitchValue('user-data-dir');
 if (userDataOverride) app.setPath('userData', path.resolve(userDataOverride));
@@ -9,7 +10,9 @@ export const USER_CONFIG_NAME = 'config.user.yaml';
 
 export const PROXY_EXE_NAME = process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
 
-/** All app-owned state lives under Electron's per-user data folder. */
+let storage: ActivityStorage | undefined;
+export const activityStorage = () => storage ??= new ActivityStorage(appPaths.root);
+
 export const appPaths = {
   get root() {
     return app.getPath('userData');
@@ -21,21 +24,21 @@ export const appPaths = {
     return path.join(this.root, 'secrets.bin');
   },
   get historyFile() {
-    return path.join(this.root, 'usage-history.json');
+    return path.join(activityStorage().directory, ACTIVITY_FILES.history);
   },
   get windowSummariesFile() {
-    return path.join(this.root, 'window-summaries.json');
+    return path.join(activityStorage().directory, ACTIVITY_FILES.summaries);
   },
   get observedSpansFile() {
-    return path.join(this.root, 'observed-spans.json');
+    return path.join(activityStorage().directory, ACTIVITY_FILES.observed);
   },
   /** Encrypted request log and daily totals (activityDb.ts). */
   get activityDb() {
-    return path.join(this.root, 'activity.db');
+    return path.join(activityStorage().directory, ACTIVITY_FILES.database);
   },
   /** Pre-database per-day request files; imported once, then deleted. */
   get legacyActivityDir() {
-    return path.join(this.root, 'activity');
+    return path.join(activityStorage().directory, ACTIVITY_FILES.legacy);
   },
   /** Downloaded and staged updates; the updater owns and clears it. */
   get updatesDir() {
@@ -58,7 +61,10 @@ export const appPaths = {
     return path.join(this.proxyDir, 'auths');
   },
   get proxyLogFile() {
-    return path.join(this.proxyDir, 'proxy.log');
+    return path.join(this.captureDir, 'proxy.log');
+  },
+  get captureDir() {
+    return path.join(activityStorage().directory, ACTIVITY_FILES.proxy);
   },
 };
 

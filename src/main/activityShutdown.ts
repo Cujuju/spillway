@@ -8,7 +8,7 @@ export const ACTIVITY_WORKER_CLOSE_GRACE_MS = 3_000;
 export async function drainActivity(
   stopProxy: () => Promise<void>, stopStream: (drain?: boolean) => Promise<void>,
   rpc: ActivityRpc, report: (message: string) => void = console.error,
-): Promise<void> {
+): Promise<boolean> {
   let expired = false;
   let timer: ReturnType<typeof setTimeout>;
   const deadline = new Promise<void>((resolve) => {
@@ -30,4 +30,5 @@ export async function drainActivity(
     clearTimeout(timer!);
     await rpc.abandon(ACTIVITY_WORKER_CLOSE_GRACE_MS);
   }
+  return !expired;
 }

@@ -23,7 +23,7 @@ export function ActivityStorageSettings() {
   };
   const open = () => void window.api.openPath('activityStorage').catch((e) => setError(String(e)));
   return (
-    <SettingsGroup title="Activity storage">
+    <SettingsGroup>
       <SettingRow stacked label="Database folder" help={custom() ? 'Custom location.' : 'Default location, inside the app data folder.'}>
         <input class="input wide tabular" readOnly aria-label="Activity database folder" value={status()?.directory ?? ''} placeholder="Loading…" />
         <button class="btn" disabled={busy() || !status()} onClick={open}><FolderOpen size={ICON_PX} /> Open folder</button>

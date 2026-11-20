@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UsageSnapshot } from '@shared/types';
 
-vi.mock('./paths', () => ({ appPaths: { historyFile: 'unused', windowSummariesFile: 'unused-summaries', observedSpansFile: 'unused-spans' } }));
+vi.mock('./paths', () => ({ activityStorage: () => ({ verifyActive: vi.fn() }),
+  appPaths: { historyFile: 'unused', windowSummariesFile: 'unused-summaries', observedSpansFile: 'unused-spans' } }));
 /** A 60 s refresh; stored samples are 5 min apart, so readings within 10 min count as watching. */
 vi.mock('./settingsStore', () => ({ writeFileAtomic: () => undefined, getSettings: () => ({ dashboard: { refreshIntervalSeconds: 60 } }) }));
 

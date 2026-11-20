@@ -23,6 +23,12 @@ When production Spillway is installed, Spillway Dev's proxy uses production's cl
 
 Launch at login only applies to installed builds.
 
+## Activity storage
+
+Open **Settings → Data → Storage** to move local activity, saved request captures, usage history and proxy console logs to another drive. Choose a drive or parent folder. Spillway creates a `Spillway Data` folder there and reopens when the move finishes. **Restore default** moves the files into `Spillway Data` inside the app profile.
+
+The app installation, settings, encryption keys and account logins stay in their original locations. Keep the selected drive connected when using Spillway. The proxy writes its optional diagnostic request logs separately from saved request captures.
+
 ## Demo and screenshots
 
 `pnpm demo` opens the built app on fake data: a throwaway profile and home folder, and a fake proxy (`scripts/demo/`) that serves generated accounts, 2 weeks of usage history and 4 weeks of requests. Nothing from your own profile, logins or client logs loads. The data is seeded, so every run draws the same numbers relative to the current time.

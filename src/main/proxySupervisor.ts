@@ -4,7 +4,7 @@ import { app } from 'electron';
 import { createWriteStream, existsSync, renameSync, type FSWatcher, type WriteStream } from 'node:fs';
 import type { BuildInfo } from '@shared/buildInfo';
 import type { LogLine, ProxyStatus } from '@shared/types';
-import { appPaths, resolveProxyExecutable } from './paths';
+import { activityStorage, appPaths, resolveProxyExecutable } from './paths';
 import { captureJournalKey, newSupervisorPassword, portInUse, SUPERVISOR_PASSWORD_ENV, watchUserConfig, writeProxyConfig } from './proxyLaunch';
 import { getSecrets, getSettings } from './settingsStore';
 import { management } from './managementClient';
@@ -84,6 +84,7 @@ class ProxySupervisor extends EventEmitter {
     const file = appPaths.proxyLogFile;
     if (existsSync(file)) renameSync(file, file.replace(/\.log$/, '.prev.log'));
     this.logFile = createWriteStream(file, { flags: 'w' });
+    this.logFile.on('error', (error) => console.error('[proxy] could not write console log:', error));
   }
 
   isRunning(): boolean {
@@ -102,7 +103,10 @@ class ProxySupervisor extends EventEmitter {
       this.setStatus({ state: 'missing-binary', executablePath: null, port, endpoint, lastError: 'Proxy executable not found' });
       return;
     }
-    if (await portInUse(port, settings.proxy.allowLan)) {
+    this.stopping = false;
+    const inUse = await portInUse(port, settings.proxy.allowLan);
+    if (this.stopping || this.proc) return;
+    if (inUse) {
       // Not a crash: restarting cannot help until the other program exits or the port changes.
       const lastError = `Port ${port} is already in use by another program`;
       this.log('app', lastError);
@@ -116,8 +120,11 @@ class ProxySupervisor extends EventEmitter {
     });
     const password = newSupervisorPassword();
     management.configure(endpoint, password);
-    this.stopping = false;
-    this.rotateLogFile();
+    try { activityStorage().verifyActive(); this.rotateLogFile(); }
+    catch (error) {
+      this.setStatus({ state: 'crashed', lastError: String(error) });
+      return;
+    }
     this.setStatus({ state: 'starting', executablePath: exe, port, endpoint, lastError: null, pid: null, startedAt: null, build: null });
     this.log('app', `starting ${exe} on port ${port}`);
 
@@ -126,7 +133,7 @@ class ProxySupervisor extends EventEmitter {
       cwd: appPaths.proxyDir,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, [SUPERVISOR_PASSWORD_ENV]: password, SPILLWAY_CAPTURE_DIR: appPaths.proxyDir, SPILLWAY_CAPTURE_KEY: captureJournalKey(getSecrets().databaseKey) },
+      env: { ...process.env, [SUPERVISOR_PASSWORD_ENV]: password, SPILLWAY_CAPTURE_DIR: appPaths.captureDir, SPILLWAY_CAPTURE_KEY: captureJournalKey(getSecrets().databaseKey) },
     });
     this.proc = child;
     child.stdout?.on('data', (d: Buffer) => this.log('stdout', d.toString('utf8')));

@@ -10,8 +10,8 @@ const CONFIRM_BUTTON = 0;
 let confirming = false;
 
 /** Quits the app, or restarts it with `relaunch`, asking first when the user enabled quit confirmation. */
-export async function requestQuit({ relaunch = false } = {}): Promise<void> {
-  if (getSettings().general.confirmQuit) {
+export async function requestQuit({ relaunch = false, confirmed = false } = {}): Promise<void> {
+  if (!confirmed && getSettings().general.confirmQuit) {
     if (confirming) return;
     confirming = true;
     const verb = relaunch ? 'Restart' : 'Quit';
@@ -37,6 +37,7 @@ export async function requestQuit({ relaunch = false } = {}): Promise<void> {
       if (installsOnQuit() && updates.status().state === 'ready') updates.installOnQuit(true);
       else app.relaunch(process.platform === 'linux' && process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {});
     }
+    else if (app.commandLine.hasSwitch('user-data-dir')) app.relaunch();
     else relaunchDev();
   }
   app.quit();

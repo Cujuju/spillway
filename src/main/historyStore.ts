@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { HistorySample, ObservedSpan, UsageSnapshot, WindowSummary } from '@shared/types';
 import { HISTORY_SAMPLE_SPACING_MS, missedReadingGapMs, resetBetween } from '@shared/usageWindows';
-import { appPaths } from './paths';
+import { activityStorage, appPaths } from './paths';
 import { getSettings, writeFileAtomic } from './settingsStore';
 import { HISTORY_RETENTION_MS } from './historyMerge';
 import { foldObserved, foldSample, pruneObserved, pruneSummaries } from './windowSummaries';
@@ -112,12 +112,15 @@ class HistoryStore {
 
   private scheduleSave(): void {
     if (this.saveTimer) return;
-    this.saveTimer = setTimeout(() => this.flush(), SAVE_DELAY_MS);
+    this.saveTimer = setTimeout(() => {
+      try { this.flush(); } catch (error) { console.error('[history] could not save:', error); }
+    }, SAVE_DELAY_MS);
   }
 
   flush(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = null;
+    if (this.samples || this.windowSummaries || this.observedSpans) activityStorage().verifyActive();
     if (this.samples) writeFileAtomic(appPaths.historyFile, JSON.stringify(this.samples));
     if (this.windowSummaries) writeFileAtomic(appPaths.windowSummariesFile, JSON.stringify(this.windowSummaries));
     if (this.observedSpans) writeFileAtomic(appPaths.observedSpansFile, JSON.stringify(this.observedSpans));

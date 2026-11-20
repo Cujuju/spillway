@@ -120,6 +120,8 @@ export interface DesktopApi {
   /** When the app was reading each account's windows, so past gaps tell no use from no reading. */
   usageObservedSpans(): Promise<ObservedSpan[]>;
   clearHistory(): Promise<void>;
+  activityStorageStatus(): Promise<{ directory: string; defaultDirectory: string }>;
+  moveActivityStorage(useDefault?: boolean): Promise<void>;
   /** One page of stored attempts, newest first. */
   activityPage(query: ActivityPageQuery): Promise<ActivityPage>;
   activityOlderBuckets(span: { from: number; to: number }): Promise<OlderRead<OlderBuckets>>;
@@ -176,7 +178,7 @@ export interface DesktopApi {
 
   openExternal(url: string): Promise<void>;
   /** userConfig creates config.user.yaml when missing and opens it in the default editor. */
-  openPath(which: 'data' | 'config' | 'auths' | 'logs' | 'userConfig'): Promise<void>;
+  openPath(which: 'data' | 'config' | 'auths' | 'logs' | 'userConfig' | 'activityStorage'): Promise<void>;
   copyText(text: string): Promise<void>;
 
   /** Shows a sample notice through the chosen delivery. */
@@ -247,6 +249,8 @@ export const INVOKE = {
   usageWindowSummaries: 'usage:window-summaries',
   usageObservedSpans: 'usage:observed-spans',
   clearHistory: 'usage:clear-history',
+  activityStorageStatus: 'activity:storage-status',
+  moveActivityStorage: 'activity:storage-move',
   activityPage: 'activity:page',
   activityOlderBuckets: 'activity:older-buckets',
   activityOlderDays: 'activity:older-days',

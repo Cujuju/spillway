@@ -2,7 +2,7 @@ import './identity';
 import { setHourCycle } from '@shared/timeFormat';
 import { systemHourCycle } from './hourCycle';
 import { spillwayNotice } from '@shared/notice';
-import { app, nativeTheme, session } from 'electron';
+import { app, dialog, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
 import { APP_ID, APP_NAME } from '@shared/app';
 import { minuteToClock } from '@shared/windowStartSettings';
@@ -12,6 +12,7 @@ import { HIDDEN_ARG, setLinuxLoginItem } from './linuxLoginItem';
 import { promptSecretsRecovery } from './secretsRecovery';
 import { confirmsSystemQuit, requestQuit } from './quit';
 import { watchQuitEvents } from './quitReason';
+import { activityStorage } from './paths';
 
 if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
@@ -25,7 +26,7 @@ async function startNormalApp(): Promise<void> {
   const { clickhouseUploader, cancelClickHouse } = await import('./clickhouseService');
   const { exportUsage } = await import('./usageExport');
   const { drainActivity } = await import('./activityShutdown');
-  const { registerIpc } = await import('./ipc');
+  const { registerIpc, requestedStorageDestination } = await import('./ipc');
   const { stopDiagnosticExport } = await import('./diagnosticService');
   const { invalidateEval } = await import('./evalService');
   const { thinkingTestRunner } = await import('./thinkingTestService');
@@ -141,6 +142,13 @@ async function startNormalApp(): Promise<void> {
 
     void app.whenReady().then(async () => {
       setHourCycle(systemHourCycle());
+      let storageWarning: string | undefined;
+      try { storageWarning = await activityStorage().initialize(); }
+      catch (error) {
+        dialog.showErrorBox('Spillway could not open activity storage', String(error));
+        app.exit(1);
+        return;
+      }
       try { await loadSecrets(promptSecretsRecovery); } catch (err) {
         console.error('[startup] secrets unavailable, quitting:', err);
         app.exit(1);
@@ -160,6 +168,7 @@ async function startNormalApp(): Promise<void> {
       if (hidden) app.dock?.hide();
       createMainWindow(!hidden);
       windowCreated = true;
+      if (storageWarning) dialog.showErrorBox('Spillway activity storage', storageWarning);
       startClientDrift();
       startNotices();
       startUpdateInstaller();
@@ -176,13 +185,26 @@ async function startNormalApp(): Promise<void> {
       // Writes the renderer's saved view state (localStorage) to disk before exit.
       session.defaultSession.flushStorageData();
       usage.stop();
-      history.flush();
+      try { history.flush(); } catch (error) { console.error('[history] could not save:', error); }
       invalidateEval();
       archiveSync.stop();
-      void Promise.allSettled([
+      const closing = Promise.allSettled([
         thinkingTestRunner.clear().then(() => stopActivityReprice()).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain && !proxy.attached), activityLog)),
         stopDiagnosticExport(),
-      ]).then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason); }).finally(() => {
+      ]);
+      void closing.then(async (results) => {
+        for (const result of results) if (result.status === 'rejected') console.error(result.reason);
+        const destination = requestedStorageDestination();
+        if (!destination) return;
+        const [drained] = results;
+        try {
+          if (drained.status !== 'fulfilled' || !drained.value || proxy.getStatus().pid !== null) {
+            throw new Error('Spillway could not close the activity database or proxy in time. Try moving the folder again after the restart.');
+          }
+          history.flush();
+          await activityStorage().schedule(destination);
+        } catch (error) { dialog.showErrorBox('Spillway could not move activity storage', String(error)); }
+      }).finally(() => {
         destroyTrays();
         noticeOverlay.destroy();
         app.quit();

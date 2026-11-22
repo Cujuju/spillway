@@ -16,7 +16,7 @@ const grant = (id: string, scope: ResetCreditGrant['scope'], patch: Partial<Rese
 });
 
 const cred = (provider: string, resetCredits: ResetCredits | null): Credential => ({
-  id: 'c', name: 'c', authIndex: 'c', provider, label: 'Acct', note: null, email: null, lastUsedAt: null, disabled: false,
+  id: 'c', name: 'c', authIndex: 'c', provider, label: 'Acct', note: null, email: null, lastUsedAt: null, disabled: false, canRefresh: true,
   status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan: null, resetCredits, windows: [],
 });

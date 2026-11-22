@@ -10,7 +10,7 @@ describe('maskEmail', () => {
 
 it('masks grant text while preserving the exact redemption identity', () => {
   const credential: Credential = { id: 'account', authIndex: 'account-index', provider: 'claude', name: 'account', label: 'Work',
-    note: null, email: null, statusMessage: null, lastUsedAt: null, disabled: false, status: 'active', priority: 0,
+    note: null, email: null, statusMessage: null, lastUsedAt: null, disabled: false, canRefresh: true, status: 'active', priority: 0,
     cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null, windows: [],
     resetCredits: { available: 1, applicable: 1, checkedAt: 'now', expiries: [], grants: [{
       id: 'grant-identity', label: 'For person@example.com', scope: 'fable', available: 1, applicable: 1,

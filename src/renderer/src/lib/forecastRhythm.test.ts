@@ -12,7 +12,7 @@ const shares = new Map([['a', { share: 1, cost: { week: 1, session: 1 } }]]);
 function credential(key: string, used: number, reset: number | null, duration: number): Credential {
   return {
     id: 'a', name: 'a', authIndex: 'a', provider: 'claude', label: 'a', note: null, email: null,
-    lastUsedAt: null, disabled: false, status: 'active', statusMessage: null, priority: 0,
+    lastUsedAt: null, disabled: false, canRefresh: true, status: 'active', statusMessage: null, priority: 0,
     cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null, resetCredits: null,
     windows: [{ key, label: key, usedPercent: used, resetsAt: reset === null ? null : iso(reset), durationMs: duration,
       status: 'allowed', scoped: false, resetCadence: 'on_use' }],

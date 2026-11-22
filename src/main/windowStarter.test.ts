@@ -13,7 +13,7 @@ vi.mock('./managementClient', () => ({ ManagementError: class extends Error {}, 
 
 let starter: (typeof import('./windowStarter'))['windowStarter'];
 const credential = (id: string): Credential => ({
-  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
+  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false, canRefresh: true,
   status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan: null, resetCredits: null,
   windows: [{ key: 'five_hour', label: '5-hour', usedPercent: 0, resetsAt: null, durationMs: 5 * 3_600_000, status: 'allowed', scoped: false, resetCadence: 'on_use' }],

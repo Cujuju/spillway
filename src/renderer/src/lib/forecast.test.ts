@@ -21,7 +21,7 @@ const win = (
   scoped: false, resetCadence: null, ...patch,
 });
 const account = (id: string, windows: LimitWindow[], patch: Partial<Credential> = {}): Credential => ({
-  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
+  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false, canRefresh: true,
   status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan: null, resetCredits: null, windows, ...patch,
 });

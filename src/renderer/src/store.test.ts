@@ -15,7 +15,7 @@ const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, 
 const { createPoolModel, poolRemaining } = await import('./components/poolModel');
 
 const cred = (id: string, usedPercent: number): Credential => ({
-  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false,
+  id, name: id, authIndex: id, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null, disabled: false, canRefresh: true,
   status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false, preferred: false,
   weight: 1, plan: null, resetCredits: null,
   windows: [{ key: '5h', label: '5h', usedPercent, resetsAt: null, durationMs: null, status: null, scoped: false, resetCadence: null }],

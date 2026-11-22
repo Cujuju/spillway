@@ -1,8 +1,8 @@
 import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, open, stat, utimes } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
+import { clientLogRoots, importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
 import type { ActivityEvent } from '@shared/types';
 import { createZstdDecompress, zstdCompressSync } from 'node:zlib';
 import { parseClientLine } from './clientLogParser';
@@ -243,6 +243,23 @@ it.each(['zero', 'large'])('compares %s filesystem identities without false repl
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+it('resolves the Antigravity ACP root from T3 userdata, T3 home, or the default home', () => {
+  const home = path.join(tmpdir(), 't3-home');
+  const userdata = path.join(tmpdir(), 't3-userdata');
+  const acpRoot = () => clientLogRoots().filter(({ provider }) => provider === 'antigravity').map(({ dir }) => dir);
+  const providerPath = ['providers', 'antigravity'];
+  vi.stubEnv('T3CODE_HOME', home);
+  vi.stubEnv('T3_USERDATA_DIR', userdata);
+  try {
+    expect(acpRoot()).toContain(path.join(userdata, ...providerPath));
+    expect(acpRoot()).not.toContain(path.join(home, 'userdata', ...providerPath));
+    vi.stubEnv('T3_USERDATA_DIR', undefined);
+    expect(acpRoot()).toContain(path.join(home, 'userdata', ...providerPath));
+    vi.stubEnv('T3CODE_HOME', undefined);
+    expect(acpRoot()).toContain(path.join(homedir(), '.t3', 'userdata', ...providerPath));
+  } finally { vi.unstubAllEnvs(); }
+});
+
 it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appends, and ignores full/chunk duplicates', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-ag-'));
   vi.stubEnv('CLAUDE_CONFIG_DIR', path.join(dir, 'claude'));
@@ -278,8 +295,8 @@ it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appe
     await idle; await stop();
     expect(progress.mock.calls.at(-1)?.[0]).toMatchObject({ state: 'idle', filesDone: 2, filesTotal: 2 });
     expect([...records.values()]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', sessionId: 'antigravity:conv-acp', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
-      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-cli', sessionId: 'antigravity:conv-cli', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', sessionId: 'agy:conv-acp', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-cli', sessionId: 'agy:conv-cli', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
     ]));
     // Resumes from checkpoint on append without re-reading earlier lines.
     await appendFile(acpFile, step(3, '2026-11-22T10:02:00Z'));

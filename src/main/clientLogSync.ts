@@ -30,10 +30,11 @@ export interface ImportSink {
 }
 export const clientLogRoots = (): { provider: ClientLogProvider; dir: string }[] => {
   const geminiHome = process.env.GEMINI_HOME || path.join(homedir(), '.gemini');
+  const t3Userdata = process.env.T3_USERDATA_DIR || path.join(process.env.T3CODE_HOME || path.join(homedir(), '.t3'), 'userdata');
   return [
     { provider: 'claude', dir: path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'projects') },
     { provider: 'codex', dir: path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'sessions') },
-    { provider: 'antigravity', dir: path.join(process.env.T3_USERDATA_DIR || path.join(homedir(), '.t3', 'userdata'), 'providers', 'antigravity') },
+    { provider: 'antigravity', dir: path.join(t3Userdata, 'providers', 'antigravity') },
     { provider: 'antigravity', dir: path.join(geminiHome, 'antigravity-cli', 'brain') },
     { provider: 'antigravity', dir: path.join(geminiHome, 'antigravity', 'brain') },
   ];
@@ -48,12 +49,12 @@ async function isDirectory(file: string): Promise<boolean> {
   try { return (await stat(file)).isDirectory(); } catch (e) { if (missing(e)) return false; throw e; }
 }
 
-async function* files(dir: string, provider: ClientLogProvider): AsyncGenerator<string> {
+export async function* clientLogFiles(dir: string, provider: ClientLogProvider): AsyncGenerator<string> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) yield* files(file, provider);
+      if (entry.isDirectory()) yield* clientLogFiles(file, provider);
       else if (entry.isFile() && isClientLogFile(entry.name, provider)) yield file;
     }
   } catch (e) { if (!missing(e)) throw e; }
@@ -212,7 +213,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
         const polling = root.watcher.fallback;
         if (full || polling) await root.watcher.refresh();
         if (full || polling || root.watcher.fallback) {
-          for await (const file of files(root.dir, root.provider)) {
+          for await (const file of clientLogFiles(root.dir, root.provider)) {
             if (stopped) return;
             pending.push({ file, root });
           }

@@ -393,7 +393,7 @@ it('watches Antigravity transcript.jsonl appends, ignores transcript_full.jsonl,
     at: firstAt, requestId: 'proxy-ag-1', upstreamId: null, source: 'proxy', selectionId: null,
     provider: 'antigravity', model: 'gemini-4-neon-medium', authIndex: 'acct-1', stream: true, failed: false,
     statusCode: 200, error: null, latencyMs: 500, ttftMs: 100, inputTokens: 500, outputTokens: 20,
-    cachedTokens: 400, cacheWriteTokens: 0, sessionId: 'antigravity:conv-1', movedFrom: null,
+    cachedTokens: 400, cacheWriteTokens: 0, sessionId: 'agy:conv-1', movedFrom: null,
     userAgent: null, client: 'antigravity-acp',
   });
   await start();

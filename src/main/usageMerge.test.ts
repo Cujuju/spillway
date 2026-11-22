@@ -85,7 +85,7 @@ it.each(['fast', 'standard', 'flex', undefined])('maps Claude transcript billing
 });
 
 it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, strips text, and deduplicates with proxy', () => {
-  const ctx = { session: 'conv-42', client: 'antigravity-acp' };
+  const ctx = { session: 'conv-42', client: 'antigravity-cli' };
   const planner = {
     step_index: 7, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE',
     created_at: '2026-11-22T22:02:12Z', model: 'gemini-4-neon-medium',
@@ -94,8 +94,8 @@ it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, s
   };
   const event = parseClientLine(JSON.stringify(planner), 'antigravity', ctx)!;
   expect(event).toMatchObject({
-    provider: 'antigravity', source: 'client-log', client: 'antigravity-acp',
-    sessionId: 'antigravity:conv-42', model: 'gemini-4-neon-medium', at: '2026-11-22T22:02:12Z',
+    provider: 'antigravity', source: 'client-log', client: 'antigravity-cli', upstreamId: null,
+    sessionId: 'agy:conv-42', model: 'gemini-4-neon-medium', at: '2026-11-22T22:02:12Z',
     inputTokens: 55_029, cachedTokens: 41_240, cacheWriteTokens: 0, outputTokens: 603,
   });
   expect(JSON.stringify(event)).not.toContain('PRIVATE_');
@@ -105,7 +105,7 @@ it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, s
   expect(parseClientLine(JSON.stringify({ step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-22T22:02:00Z' }), 'antigravity', ctx)).toBeNull();
   // Deduplicates against a matching proxied Antigravity event.
   const proxied = sampleUsage({
-    provider: 'antigravity', model: 'gemini-4-neon-medium', sessionId: 'antigravity:conv-42', client: 'antigravity-acp',
+    provider: 'antigravity', model: 'gemini-4-neon-medium', sessionId: 'agy:conv-42', client: 'antigravity-cli',
     at: '2026-11-22T22:02:10Z', inputTokens: 55_029, cachedTokens: 41_240, cacheWriteTokens: 0, outputTokens: 603,
   });
   expect(sameUsage(proxied, event)).toBe(true);

@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { readdir } from 'node:fs/promises';
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 import { emptyCounts, addEvent, localDay } from '@shared/activityCounts';
 import type { ActivityEvent } from '@shared/types';
@@ -87,14 +86,13 @@ it('keeps checkpoints and identities when requests expire', () => {
 });
 
 it.skipIf(!process.env.SPILLWAY_REVIEW_LOGS)('imports real logs read-only into a disposable database', async () => {
-  const { clientLogRoots, importClientFile } = await import('./clientLogSync');
+  const { clientLogFiles, clientLogRoots, importClientFile } = await import('./clientLogSync');
   let maxBatchMs = 0;
   const coverage: Record<string, { first: string; last: string; records: number }> = {};
   for (const root of clientLogRoots()) {
-    const counts = coverage[root.provider] = { first: '', last: '', records: 0 };
-    for (const file of await readdir(root.dir, { recursive: true })) {
-      if (!/\.jsonl(?:\.zst)?$/.test(file)) continue;
-      await importClientFile(path.join(root.dir, file), root.provider, {
+    const counts = coverage[root.provider] ??= { first: '', last: '', records: 0 };
+    for await (const file of clientLogFiles(root.dir, root.provider)) {
+      await importClientFile(file, root.provider, {
         checkpoint: (f) => activityLog.checkpoint(f),
         importBatch: (f, s, events) => {
           const start = performance.now();

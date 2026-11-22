@@ -50,6 +50,10 @@ const INCREMENTAL_VACUUM = 'incremental-vacuum-enabled';
 
 /** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
 export const CONVERSATION_KEY_SQL = `json_extract(event, '$.sessionId'), json_extract(event, '$.model')`;
+/** The session a subagent, compaction or fork request came from; queries must use this exact text to use its index. */
+export const PARENT_SESSION_SQL = `json_extract(event, '$.parentSessionId')`;
+/** Every identity by its request row. Requests read in row order then reach their identities in order, not by scattered key lookups. */
+export const IDENTITY_BY_ROW_INDEX = 'usage_identity_by_row';
 /** A request's account key (accountKey in activityScope.ts); queries must use this exact text to use its index. */
 export const ACCOUNT_KEY_SQL = `coalesce(json_extract(event, '$.authIndex'), '${NO_ACCOUNT_KEY}')`;
 /** A request's client key (clientKey in activityScope.ts); queries must use this exact text to use its index. */
@@ -67,12 +71,14 @@ CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
 CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_client ON requests (${CLIENT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_conversation ON requests (${CONVERSATION_KEY_SQL}, id);
+CREATE INDEX IF NOT EXISTS requests_by_parent ON requests (${PARENT_SESSION_SQL}) WHERE ${PARENT_SESSION_SQL} IS NOT NULL;
 CREATE INDEX IF NOT EXISTS requests_by_trace ON requests (json_extract(event, '$.traceId'), id);
 CREATE TABLE IF NOT EXISTS activity_totals (key TEXT PRIMARY KEY, total TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS client_log_checkpoints (path TEXT PRIMARY KEY, state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS usage_identities (key TEXT PRIMARY KEY, event TEXT NOT NULL, row_id INTEGER NOT NULL, matched INTEGER NOT NULL DEFAULT 0, fallback_key TEXT, upstream_id TEXT, source TEXT);
 CREATE INDEX IF NOT EXISTS usage_identity_session ON usage_identities (fallback_key, source, matched);
 CREATE INDEX IF NOT EXISTS usage_identity_row ON usage_identities (row_id) WHERE matched = 1;
+CREATE INDEX IF NOT EXISTS ${IDENTITY_BY_ROW_INDEX} ON usage_identities (row_id);
 CREATE INDEX IF NOT EXISTS usage_identity_upstream ON usage_identities (upstream_id, source, matched);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;

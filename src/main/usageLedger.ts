@@ -26,6 +26,9 @@ export function identityEvent(row: IdentityRow): ActivityEvent {
   return { ...JSON.parse(row.event), source: row.source, at: row.at, provider: row.provider, client: row.client, upstreamId: row.upstream_id };
 }
 export const identityKey = (e: ActivityEvent): string => e.source === 'client-log' ? `client-log:${e.requestId}` : `proxy:${e.requestId}:${e.authIndex ?? ''}:${e.at}`;
+/** identityKey as SQL over the stored event in column `event`, so a query can join requests to their identities. */
+export const identityKeySql = (event: string): string => `CASE WHEN json_extract(${event}, '$.source') = 'client-log' THEN 'client-log:' || json_extract(${event}, '$.requestId')
+  ELSE 'proxy:' || json_extract(${event}, '$.requestId') || ':' || coalesce(json_extract(${event}, '$.authIndex'), '') || ':' || json_extract(${event}, '$.at') END`;
 
 export type AccountedActivityEvent = ActivityEvent & Partial<Pick<ActivityCounts, 'costUsd' | 'uncachedCostUsd' | 'latencyCount' | 'latencySumMs' | 'ttftCount' | 'ttftSumMs'>>;
 /** Uses the cost actually counted when available, including migration's historical price scaling. */

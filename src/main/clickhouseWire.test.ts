@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { DEFAULT_CLICKHOUSE_CONFIG } from '@shared/clickhouse';
 import { clickhouseDDL, clickhouseRequest, clickhouseTable, insertClickHouse } from './clickhouseHttp';
 import { encodeRawPiece, rawPieceSequence } from './clickhouseWire';
@@ -23,6 +23,16 @@ it('writes a length-prefixed binary String and exact little-endian UInt64 and Da
   const encoded = encodeRawPiece('s', 't', 1, at, long);
   expect(encoded.subarray(20, 22).toString('hex')).toBe('8001');
   expect(encoded.subarray(22)).toEqual(long);
+});
+
+it('stores zoneless capture times as UTC across a month boundary', () => {
+  vi.stubEnv('TZ', 'America/Los_Angeles');
+  try {
+    const payload = Buffer.from('piece');
+    const utc = encodeRawPiece('s', 't', 1, '2026-11-30T23:30:00.123Z', payload);
+    expect(encodeRawPiece('s', 't', 1, '2026-11-30 23:30:00.123', payload)).toEqual(utc);
+    expect(encodeRawPiece('s', 't', 1, '2026-12-01T00:30:00.123+01:00', payload)).toEqual(utc);
+  } finally { vi.unstubAllEnvs(); }
 });
 
 const scratchEndpoint = process.env.SPILLWAY_TEST_CLICKHOUSE;
@@ -51,8 +61,8 @@ it.runIf(Boolean(scratchEndpoint))('reconstructs documented mixed history byte-f
     .replace('LIMIT 1;', 'LIMIT 1 FORMAT JSONEachRow').replace('spillway_facts', facts);
   const original = Buffer.from([0xff, 0, 0x80]);
   const hash = createHash('sha256').update(original).digest('hex');
-  const at = '2026-11-21 00:00:00.123';
-  const raw = encodeRawPiece('source', 'thread', 1, at + 'Z', original);
+  const at = '2026-11-30 23:30:00.123';
+  const raw = encodeRawPiece('source', 'thread', 1, at, original);
   const b64 = original.toString('base64');
   const base = { source_id: 'source', trace_id: 'trace', thread_id: 'thread', at };
   const capture = { captureId: 'capture', epoch: 'epoch' };
@@ -79,7 +89,7 @@ it.runIf(Boolean(scratchEndpoint))('reconstructs documented mixed history byte-f
         record_json: JSON.stringify({ ...capture, requestBytes: original.length, responseBytes: original.length,
           requestSha256: hash, responseSha256: hash, frameCount: 3 }) });
     await query('OPTIMIZE TABLE ' + pieces + ' FINAL');
-    expect(await query('SELECT count() FROM ' + pieces + ' FINAL')).toBe('2\n');
+    expect(await query('SELECT count(), uniqExact(at) FROM ' + pieces + ' FINAL')).toBe('2\t1\n');
     await insertClickHouse(config, undefined, JSON.stringify({ source_id: 'source', thread_id: 'thread', seq: 2, at, bytes: 'legacy' }) + '\n', signal, 'pieces');
     await sendFacts({ ...base, seq: 10, schema_version: 2, kind: 'capture', content_policy: 'included',
       request_pieces: [{ piece_seq: 2, offset: 0, length: 6 }], record_json: '{}' });

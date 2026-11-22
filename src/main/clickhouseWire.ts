@@ -29,6 +29,7 @@ export function rawPieceSequence(id: number | bigint): bigint {
 
 const VAR_UINT_CONTINUATION = 128;
 const INT64_BYTES = 8;
+const ZONELESS_CAPTURE_TIME = /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/;
 function rowBinaryString(bytes: Buffer): Buffer[] {
   const length: number[] = [];
   let remaining = bytes.length;
@@ -42,6 +43,7 @@ function rowBinaryString(bytes: Buffer): Buffer[] {
 export function encodeRawPiece(source: string, thread: string, id: number, at: string, bytes: Buffer): Buffer {
   const numbers = Buffer.allocUnsafe(INT64_BYTES * 2);
   numbers.writeBigUInt64LE(rawPieceSequence(id));
-  numbers.writeBigInt64LE(BigInt(Date.parse(at)), INT64_BYTES);
+  const utc = ZONELESS_CAPTURE_TIME.test(at) ? at.replace(' ', 'T') + 'Z' : at;
+  numbers.writeBigInt64LE(BigInt(Date.parse(utc)), INT64_BYTES);
   return Buffer.concat([...rowBinaryString(Buffer.from(source)), ...rowBinaryString(Buffer.from(thread)), numbers, ...rowBinaryString(bytes)]);
 }

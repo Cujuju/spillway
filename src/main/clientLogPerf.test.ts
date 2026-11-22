@@ -71,8 +71,12 @@ it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', a
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-perf-'));
   const oldClaude = process.env.CLAUDE_CONFIG_DIR;
   const oldCodex = process.env.CODEX_HOME;
+  const oldT3 = process.env.T3_USERDATA_DIR;
+  const oldGemini = process.env.GEMINI_HOME;
   process.env.CLAUDE_CONFIG_DIR = path.join(dir, 'claude');
   process.env.CODEX_HOME = path.join(dir, 'codex');
+  process.env.T3_USERDATA_DIR = path.join(dir, 't3');
+  process.env.GEMINI_HOME = path.join(dir, 'gemini');
   const log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 30 });
   const line = (id: string) => JSON.stringify({ type: 'assistant', sessionId: id, timestamp: new Date().toISOString(), message: { id, model: 'claude-opus-5-5', usage: { input_tokens: 10, output_tokens: 5 }, content: 'x'.repeat(2048) } }) + '\n';
   const paths: string[] = [];
@@ -142,6 +146,8 @@ it.skipIf(!process.env.SPILLWAY_BENCH)('measures a synthetic client-log poll', a
     channel.port1.close(); channel.port2.close();
     if (oldClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = oldClaude;
     if (oldCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = oldCodex;
+    if (oldT3 === undefined) delete process.env.T3_USERDATA_DIR; else process.env.T3_USERDATA_DIR = oldT3;
+    if (oldGemini === undefined) delete process.env.GEMINI_HOME; else process.env.GEMINI_HOME = oldGemini;
     await rm(dir, { recursive: true, force: true });
     console.log(`Removed ${dir}`);
     await writeFile(path.join(tmpdir(), `spillway-bench-${process.env.SPILLWAY_BENCH}.json`), JSON.stringify({ dir, removed: true, results }, null, 2));

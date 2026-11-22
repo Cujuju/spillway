@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { ClientLogWatcher } from './clientLogWatcher';
-import { clientLogKey, isClientLogFile } from './clientLogPaths';
+import { antigravityLogContext, clientLogKey, isClientLogFile, type ClientLogProvider } from './clientLogPaths';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
 
@@ -28,10 +28,17 @@ export interface ImportSink {
   /** False means only the checkpoint changed; void preserves sinks without accounting feedback. */
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean | void;
 }
-export const clientLogRoots = () => [
-  { provider: 'claude' as const, dir: path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'projects') },
-  { provider: 'codex' as const, dir: path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'sessions') },
-];
+export const clientLogRoots = (): { provider: ClientLogProvider; dir: string }[] => {
+  const geminiHome = process.env.GEMINI_HOME || path.join(homedir(), '.gemini');
+  const t3Userdata = process.env.T3_USERDATA_DIR || path.join(process.env.T3CODE_HOME || path.join(homedir(), '.t3'), 'userdata');
+  return [
+    { provider: 'claude', dir: path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'projects') },
+    { provider: 'codex', dir: path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'sessions') },
+    { provider: 'antigravity', dir: path.join(t3Userdata, 'providers', 'antigravity') },
+    { provider: 'antigravity', dir: path.join(geminiHome, 'antigravity-cli', 'brain') },
+    { provider: 'antigravity', dir: path.join(geminiHome, 'antigravity', 'brain') },
+  ];
+};
 const missing = (e: unknown) => ['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code ?? '');
 const NS_PER_SEC = 1_000_000_000n;
 const MS_PER_SEC = 1000;
@@ -42,13 +49,13 @@ async function isDirectory(file: string): Promise<boolean> {
   try { return (await stat(file)).isDirectory(); } catch (e) { if (missing(e)) return false; throw e; }
 }
 
-async function* files(dir: string): AsyncGenerator<string> {
+export async function* clientLogFiles(dir: string, provider: ClientLogProvider): AsyncGenerator<string> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) yield* files(file);
-      else if (entry.isFile() && isClientLogFile(entry.name)) yield file;
+      if (entry.isDirectory()) yield* clientLogFiles(file, provider);
+      else if (entry.isFile() && isClientLogFile(entry.name, provider)) yield file;
     }
   } catch (e) { if (!missing(e)) throw e; }
 }
@@ -69,7 +76,7 @@ async function* archiveChunks(file: string, offset: number): AsyncGenerator<Buff
 }
 
 /** Checkpoints only complete lines. Partial UTF-8 characters and partial JSON remain unread until the next scan. */
-export async function importClientFile(file: string, provider: 'claude' | 'codex', sink: ImportSink, stopped = () => false): Promise<boolean | 'directory'> {
+export async function importClientFile(file: string, provider: ClientLogProvider, sink: ImportSink, stopped = () => false): Promise<boolean | 'directory'> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     const raw = await stat(file, { bigint: true });
@@ -101,6 +108,11 @@ export async function importClientFile(file: string, provider: 'claude' | 'codex
     };
     if (cp && !archived && cp.anchor !== await anchorAt(cp.offset)) cp = undefined;
     const context = cp?.context ?? {};
+    if (provider === 'antigravity') {
+      const derived = antigravityLogContext(file);
+      context.session ??= derived.session;
+      context.client ??= derived.client;
+    }
     let offset = cp?.offset ?? 0;
     let position = offset;
     let pending = Buffer.alloc(0);
@@ -161,7 +173,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
   let active = false;
   const roots = clientLogRoots().map((root) => {
     const dirty = new Map<string, string>();
-    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.set(clientLogKey(file), file), requestReconcile) };
+    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.set(clientLogKey(file), file), requestReconcile, (file) => isClientLogFile(file, root.provider)) };
   });
   function requestReconcile() {
     if (stopped) return;
@@ -172,7 +184,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     active = true;
     let dirty = false;
     const state: import('@shared/ipc').ActivityImportState = { state: 'importing', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
-    const pending: { file: string; provider: 'claude' | 'codex' }[] = [];
+    const pending: { file: string; root: (typeof roots)[number] }[] = [];
     let lastProgress = 0;
     const reportProgress = () => {
       if (Date.now() - lastProgress < IMPORT_PROGRESS_INTERVAL_MS) return;
@@ -201,26 +213,26 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
         const polling = root.watcher.fallback;
         if (full || polling) await root.watcher.refresh();
         if (full || polling || root.watcher.fallback) {
-          for await (const file of files(root.dir)) {
+          for await (const file of clientLogFiles(root.dir, root.provider)) {
             if (stopped) return;
-            pending.push({ file, provider: root.provider });
+            pending.push({ file, root });
           }
         } else for (const file of dirtyFiles) {
-          if (isClientLogFile(file)) pending.push({ file, provider: root.provider });
+          if (isClientLogFile(file, root.provider)) pending.push({ file, root });
           // Renames can introduce populated directories; only a walk finds their children.
           else if (await isDirectory(file)) reconcile = true;
         }
       }
       state.filesTotal = pending.length;
       reportProgress();
-      for (const { file, provider } of pending) {
+      for (const { file, root } of pending) {
         if (stopped) return;
         try {
-          const result = await importClientFile(file, provider, counted, () => stopped);
+          const result = await importClientFile(file, root.provider, counted, () => stopped);
           if (result === 'directory') reconcile = true;
           else dirty = result || dirty;
         }
-        catch (e) { roots.find((root) => root.provider === provider)!.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
+        catch (e) { root.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
         reportProgress();
       }

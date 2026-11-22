@@ -22,7 +22,7 @@ export class ClientLogWatcher {
   /** Windows' Node watcher reports overflow as a null filename; elsewhere Node hides drops, so only native streams skip timed scans. */
   get needsPeriodicReconcile(): boolean { return !this.nativeStop && process.platform !== 'win32'; }
 
-  constructor(readonly dir: string, private dirty: (file: string) => void, private reconcile: () => void) {}
+  constructor(readonly dir: string, private dirty: (file: string) => void, private reconcile: () => void, private match: (file: string) => boolean = isClientLogFile) {}
 
   async refresh(): Promise<void> {
     if (this.closed || (this.fallback && Date.now() < this.retryAt)) return;
@@ -44,7 +44,8 @@ export class ClientLogWatcher {
       if (native) {
         const stop = await watchNativeClientLogs(native, parent, this.dir,
           (file) => { if (!this.closed && generation === this.generation) this.dirty(file); },
-          () => { if (!this.closed && generation === this.generation) this.reconcile(); });
+          () => { if (!this.closed && generation === this.generation) this.reconcile(); },
+          this.match);
         if (this.closed || generation !== this.generation) { await stop(); return; }
         this.nativeStop = stop;
         this.fallback = false;
@@ -58,7 +59,7 @@ export class ClientLogWatcher {
           if (filename === null || filename.toString() === path.basename(this.dir)) { this.reconcile(); return; }
           const file = path.resolve(this.dir, filename.toString());
           // A rename may be a new file or a populated directory; the poll stats it to tell.
-          if (event === 'rename' || isClientLogFile(file)) this.dirty(file);
+          if (event === 'rename' || this.match(file)) this.dirty(file);
         }));
       } catch (e) {
         if (!['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code ?? '')) throw e;

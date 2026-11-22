@@ -1,8 +1,8 @@
 import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, open, stat, utimes } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
+import { clientLogRoots, importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
 import type { ActivityEvent } from '@shared/types';
 import { createZstdDecompress, zstdCompressSync } from 'node:zlib';
 import { parseClientLine } from './clientLogParser';
@@ -149,6 +149,8 @@ it('polls without resets when unchanged or when accounting skips duplicate recor
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-poll-'));
   vi.stubEnv('CLAUDE_CONFIG_DIR', dir);
   vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  vi.stubEnv('T3_USERDATA_DIR', path.join(dir, 't3'));
+  vi.stubEnv('GEMINI_HOME', path.join(dir, 'gemini'));
   const file = path.join(dir, 'projects', 'log.jsonl');
   let state: string | undefined;
   const changed = vi.fn();
@@ -239,4 +241,67 @@ it.each(['zero', 'large'])('compares %s filesystem identities without false repl
     expect(open).toHaveBeenCalledTimes(mode === 'zero' ? 0 : 1);
     expect(parseClientLine).toHaveBeenCalledTimes(mode === 'zero' ? 0 : 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it('resolves the Antigravity ACP root from T3 userdata, T3 home, or the default home', () => {
+  const home = path.join(tmpdir(), 't3-home');
+  const userdata = path.join(tmpdir(), 't3-userdata');
+  const acpRoot = () => clientLogRoots().filter(({ provider }) => provider === 'antigravity').map(({ dir }) => dir);
+  const providerPath = ['providers', 'antigravity'];
+  vi.stubEnv('T3CODE_HOME', home);
+  vi.stubEnv('T3_USERDATA_DIR', userdata);
+  try {
+    expect(acpRoot()).toContain(path.join(userdata, ...providerPath));
+    expect(acpRoot()).not.toContain(path.join(home, 'userdata', ...providerPath));
+    vi.stubEnv('T3_USERDATA_DIR', undefined);
+    expect(acpRoot()).toContain(path.join(home, 'userdata', ...providerPath));
+    vi.stubEnv('T3CODE_HOME', undefined);
+    expect(acpRoot()).toContain(path.join(homedir(), '.t3', 'userdata', ...providerPath));
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appends, and ignores full/chunk duplicates', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-ag-'));
+  vi.stubEnv('CLAUDE_CONFIG_DIR', path.join(dir, 'claude'));
+  vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  vi.stubEnv('T3_USERDATA_DIR', path.join(dir, 't3'));
+  vi.stubEnv('GEMINI_HOME', path.join(dir, 'gemini'));
+  const acpLogs = path.join(dir, 't3', 'providers', 'antigravity', 'acct', 'antigravity-acp', 'brain', 'conv-acp', '.system_generated', 'logs');
+  const cliLogs = path.join(dir, 'gemini', 'antigravity-cli', 'brain', 'conv-cli', '.system_generated', 'logs');
+  const step = (idx: number, at: string) => JSON.stringify({
+    step_index: idx, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: at,
+    model: 'gemini-4-neon-medium', input_tokens: 100, cache_read_tokens: 400, output_tokens: 25,
+  }) + '\n';
+  const states = new Map<string, string>();
+  const records = new Map<string, ActivityEvent>();
+  const sink: ImportSink = {
+    checkpoint: (f) => states.get(f),
+    importBatch: (f, s, events) => { states.set(f, s); for (const e of events) records.set(e.requestId, e); },
+  };
+  try {
+    await mkdir(path.join(acpLogs, 'chunks', 'transcript'), { recursive: true });
+    await mkdir(cliLogs, { recursive: true });
+    const acpFile = path.join(acpLogs, 'transcript.jsonl');
+    const cliFile = path.join(cliLogs, 'transcript.jsonl');
+    await writeFile(acpFile, step(1, '2026-11-22T10:00:00Z'));
+    // Duplicate sibling files must be ignored by the scanner.
+    await writeFile(path.join(acpLogs, 'transcript_full.jsonl'), step(1, '2026-11-22T10:00:00Z'));
+    await writeFile(path.join(acpLogs, 'chunks', 'transcript', '00000000.jsonl'), step(1, '2026-11-22T10:00:00Z'));
+    await writeFile(cliFile, step(2, '2026-11-22T10:01:00Z'));
+    let done!: () => void;
+    const idle = new Promise<void>((resolve) => { done = resolve; });
+    const progress = vi.fn((p) => { if (p.state === 'idle') done(); });
+    const stop = startClientLogSync(sink, vi.fn(), progress);
+    await idle; await stop();
+    expect(progress.mock.calls.at(-1)?.[0]).toMatchObject({ state: 'idle', filesDone: 2, filesTotal: 2 });
+    expect([...records.values()]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', sessionId: 'agy:conv-acp', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-cli', sessionId: 'agy:conv-cli', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+    ]));
+    // Resumes from checkpoint on append without re-reading earlier lines.
+    await appendFile(acpFile, step(3, '2026-11-22T10:02:00Z'));
+    expect(await importClientFile(acpFile, 'antigravity', sink)).toBe(true);
+    expect(records.size).toBe(3);
+    expect(await importClientFile(acpFile, 'antigravity', sink)).toBe(false);
+  } finally { vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
 });

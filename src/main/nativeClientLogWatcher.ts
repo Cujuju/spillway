@@ -18,6 +18,7 @@ export function loadNativeClientLogEvents(): NativeClientLogEvents | null {
 export async function watchNativeClientLogs(
   native: NativeClientLogEvents, parent: string, dir: string,
   dirty: (file: string) => void, reconcile: () => void,
+  match: (file: string) => boolean = isClientLogFile,
 ): Promise<() => Promise<void>> {
   const canonical = await realpath(parent);
   const c = native.constants;
@@ -43,7 +44,7 @@ export async function watchNativeClientLogs(
     if (!logical.startsWith(`${dir}${path.sep}`)) return;
     if (flags & c.ItemIsDir) {
       if (flags & (c.ItemCreated | c.ItemRemoved | c.ItemRenamed)) dirty(logical);
-    } else if (isClientLogFile(logical)) dirty(logical);
+    } else if (match(logical)) dirty(logical);
   };
   try {
     for (const root of roots) stops.push(native.watch(root.physical, (file, flags) => receive(root.physical, root.logical, file, flags)));

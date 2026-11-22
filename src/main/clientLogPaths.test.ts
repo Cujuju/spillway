@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { clientLogKey, isClientLogFile } from './clientLogPaths';
+import { antigravityLogContext, clientLogKey, isClientLogFile } from './clientLogPaths';
 import { openActivityDb } from './activityDb';
 import { ActivityLog } from './activityStore';
 
@@ -13,6 +13,20 @@ it('normalizes Windows checkpoint keys across case, separators and dot segments'
 
 it.each(['a.jsonl', 'a.jsonl.zst', 'a.txt'])('shares the log extension contract for %s', (name) => {
   expect(isClientLogFile(name)).toBe(name !== 'a.txt');
+});
+
+it('limits Antigravity log matching to canonical transcript files and derives session and client', () => {
+  expect(isClientLogFile('transcript.jsonl', 'antigravity')).toBe(true);
+  expect(isClientLogFile('C:\\x\\logs\\transcript.jsonl.zst', 'antigravity')).toBe(true);
+  expect(isClientLogFile('transcript_full.jsonl', 'antigravity')).toBe(false);
+  expect(isClientLogFile('chunks/transcript/00000000.jsonl', 'antigravity')).toBe(false);
+  expect(isClientLogFile('history.jsonl', 'antigravity')).toBe(false);
+  expect(antigravityLogContext('C:\\Users\\u\\.t3\\userdata\\providers\\antigravity\\abc\\antigravity-acp\\brain\\conv-1\\.system_generated\\logs\\transcript.jsonl'))
+    .toEqual({ session: 'conv-1', client: 'antigravity-acp' });
+  expect(antigravityLogContext('/home/u/.gemini/antigravity-cli/brain/conv-2/.system_generated/logs/transcript.jsonl'))
+    .toEqual({ session: 'conv-2', client: 'antigravity-cli' });
+  expect(antigravityLogContext('/home/u/.gemini/antigravity/brain/conv-3/.system_generated/logs/transcript.jsonl'))
+    .toEqual({ session: 'conv-3', client: 'antigravity' });
 });
 
 it.skipIf(process.platform !== 'win32')('rekeys legacy rows transactionally and shares the key with the cache and DB', async () => {

@@ -33,7 +33,7 @@ async function startNormalApp(): Promise<void> {
   const { startClientDrift } = await import('./clientDriftService');
   const { syncPreferredAccounts } = await import('./preferredAccounts');
   const { proxy } = await import('./proxySupervisor');
-  const { destroyTrays, ensureAppTray, taskbarDark } = await import('./tray');
+  const { destroyTrays, startTrays, taskbarDark } = await import('./tray');
   const { updates } = await import('./updater');
   const { startUpdateInstaller } = await import('./updateInstaller');
   const { usage } = await import('./usagePoller');
@@ -162,8 +162,7 @@ async function startNormalApp(): Promise<void> {
       clickhouseUploader.start();
       exportUsage(true);
       applyLoginItem();
-      // The tray is always present: it hosts the limit icons and the hidden-start entry point.
-      ensureAppTray();
+      startTrays();
       const hidden = launchedHidden() && !showRequested;
       if (hidden) app.dock?.hide();
       createMainWindow(!hidden);

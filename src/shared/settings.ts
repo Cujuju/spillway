@@ -93,6 +93,7 @@ export interface AppSettings {
   };
   trayIcons: {
     enabled: boolean;
+    showAppIcon: boolean;
     value: TrayIconValue;
     warnAtPercentUsed: number;
     criticalAtPercentUsed: number;
@@ -207,6 +208,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   trayIcons: {
     enabled: true,
+    showAppIcon: true,
     value: 'remaining',
     warnAtPercentUsed: 75,
     criticalAtPercentUsed: 90,
@@ -323,6 +325,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
     },
     trayIcons: {
       enabled: bool(t.enabled, d.trayIcons.enabled),
+      showAppIcon: bool(t.showAppIcon, d.trayIcons.showAppIcon),
       value: pick(t.value, ['remaining', 'used'] as const, d.trayIcons.value),
       warnAtPercentUsed: warn,
       criticalAtPercentUsed: int(t.criticalAtPercentUsed, d.trayIcons.criticalAtPercentUsed, warn + 1, 100),

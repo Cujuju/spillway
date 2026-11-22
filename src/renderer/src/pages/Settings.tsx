@@ -18,7 +18,7 @@ import { setSettingsSection as setSection, settings, settingsSection as section,
 const ICON_PX = 14;
 
 const NAV: NavGroup<SettingsSection>[] = [
-  { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
+  { group: 'App', items: [{ id: 'startup', label: 'Startup' }, { id: 'window', label: 'Window' }, { id: 'appearance', label: 'Appearance' }, { id: 'trayIcons', label: 'Tray icons' }, { id: 'notifications', label: 'Notifications' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Rolling windows' }, { id: 'dashboard', label: 'Dashboard' }] },
   { group: 'Data', items: [{ id: 'storage', label: 'Storage' }, { id: 'capture', label: 'Request capture' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'about', label: 'About', gapBefore: true }] },
@@ -50,30 +50,34 @@ const CLIENT_DRIFT_ACTIONS: readonly { value: ClientDrift; label: string; help: 
 type Draft = AppSettings;
 const set = (fn: (d: Draft) => void) => void updateSettings(fn);
 
-function General() {
+function Startup() {
   const g = () => settings().general;
   return (
-    <>
-      <SettingsGroup title="Startup">
-        <SettingRow label="Launch at login" help={`Open when you sign in to ${OS_NAME}. Installed builds only.`}>
-          <Toggle value={g().launchAtLogin} onChange={(v) => set((d) => void (d.general.launchAtLogin = v))} />
-        </SettingRow>
-        <SettingRow label="Start minimized" help={`Open to the ${TRAY_NAME}, without the window.`}>
-          <Toggle value={g().startMinimized} onChange={(v) => set((d) => void (d.general.startMinimized = v))} />
-        </SettingRow>
-      </SettingsGroup>
-      <SettingsGroup title="Window">
-        <SettingRow label={`Close to ${TRAY_NAME}`} help={`Closing hides the window and the proxy keeps running. Quit from the ${TRAY_NAME} menu.`}>
-          <Toggle value={g().closeToTray} onChange={(v) => set((d) => void (d.general.closeToTray = v))} />
-        </SettingRow>
-        <SettingRow label={`Minimize to ${TRAY_NAME}`} help={`Minimizing hides the window from the ${TASKBAR_NAME}.`}>
-          <Toggle value={g().minimizeToTray} onChange={(v) => set((d) => void (d.general.minimizeToTray = v))} />
-        </SettingRow>
-        <SettingRow label="Confirm before quitting" help="Quitting stops the proxy and any session using it.">
-          <Toggle value={g().confirmQuit} onChange={(v) => set((d) => void (d.general.confirmQuit = v))} />
-        </SettingRow>
-      </SettingsGroup>
-    </>
+    <SettingsGroup>
+      <SettingRow label="Launch at login" help={`Open when you sign in to ${OS_NAME}. Installed builds only.`}>
+        <Toggle value={g().launchAtLogin} onChange={(v) => set((d) => void (d.general.launchAtLogin = v))} />
+      </SettingRow>
+      <SettingRow label="Start minimized" help={`Open to the ${TRAY_NAME}, without the window.`}>
+        <Toggle value={g().startMinimized} onChange={(v) => set((d) => void (d.general.startMinimized = v))} />
+      </SettingRow>
+    </SettingsGroup>
+  );
+}
+
+function WindowSettings() {
+  const g = () => settings().general;
+  return (
+    <SettingsGroup>
+      <SettingRow label={`Close to ${TRAY_NAME}`} help={`Closing hides the window and the proxy keeps running. Quit from the ${TRAY_NAME} menu.`}>
+        <Toggle value={g().closeToTray} onChange={(v) => set((d) => void (d.general.closeToTray = v))} />
+      </SettingRow>
+      <SettingRow label={`Minimize to ${TRAY_NAME}`} help={`Minimizing hides the window from the ${TASKBAR_NAME}.`}>
+        <Toggle value={g().minimizeToTray} onChange={(v) => set((d) => void (d.general.minimizeToTray = v))} />
+      </SettingRow>
+      <SettingRow label="Confirm before quitting" help="Quitting stops the proxy and any session using it.">
+        <Toggle value={g().confirmQuit} onChange={(v) => set((d) => void (d.general.confirmQuit = v))} />
+      </SettingRow>
+    </SettingsGroup>
   );
 }
 
@@ -179,7 +183,8 @@ export function Settings() {
   return (
     <SectionedPage nav={NAV} section={section()} onSelect={setSection}>
       <Switch>
-        <Match when={section() === 'general'}><General /></Match>
+        <Match when={section() === 'startup'}><Startup /></Match>
+        <Match when={section() === 'window'}><WindowSettings /></Match>
         <Match when={section() === 'appearance'}><Appearance /></Match>
         <Match when={section() === 'trayIcons'}><TrayIconSettings /></Match>
         <Match when={section() === 'proxy'}><ProxySection /></Match>

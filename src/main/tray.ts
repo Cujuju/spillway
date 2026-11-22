@@ -25,6 +25,7 @@ const MENU_BAR_ICON_PT = 18;
 export const taskbarDark = () => nativeTheme.shouldUseDarkColorsForSystemIntegratedUI;
 
 let appTray: Tray | null = null;
+let appTooltip = APP_NAME;
 const limitTrays = new Map<string, Tray>();
 let stopSettings: (() => void) | undefined;
 
@@ -112,19 +113,32 @@ function appTrayImage(): Electron.NativeImage {
   return img;
 }
 
-export function ensureAppTray(): void {
-  if (appTray) return;
-  appTray = createTray(appTrayImage(), 'app');
-  appTray.setToolTip(APP_NAME);
-  attach(appTray);
+function syncAppTray(hasLimitTray: boolean): void {
+  const { enabled, items, showAppIcon } = getSettings().trayIcons;
+  if (!showAppIcon && enabled && items.length && hasLimitTray) {
+    appTray?.destroy();
+    appTray = null;
+  } else if (!appTray) {
+    appTray = createTray(appTrayImage(), 'app');
+    appTray.setToolTip(appTooltip);
+    attach(appTray);
+  }
+}
+
+export function startTrays(): void {
+  syncAppTray(false);
+  stopSettings = onSettingsChange(() => {
+    syncAppTray(limitTrays.size > 0);
+    refreshLinuxMenus();
+  });
   if (process.platform === 'linux') {
     usage.on('snapshot', refreshLinuxMenus);
     proxy.on('status', refreshLinuxMenus);
-    stopSettings = onSettingsChange(refreshLinuxMenus);
   }
 }
 
 export function setAppTrayTooltip(text: string): void {
+  appTooltip = text;
   appTray?.setToolTip(text);
 }
 
@@ -138,11 +152,6 @@ function imageOf(i: LimitTrayImage): Electron.NativeImage {
 /** Creates, updates and removes limit icons to match exactly `images`. */
 export function syncLimitTrays(images: LimitTrayImage[]): void {
   const wanted = new Set(images.map((i) => i.id));
-  for (const [id, tray] of limitTrays) {
-    if (wanted.has(id)) continue;
-    tray.destroy();
-    limitTrays.delete(id);
-  }
   for (const i of images) {
     let tray = limitTrays.get(i.id);
     if (!tray) {
@@ -154,6 +163,13 @@ export function syncLimitTrays(images: LimitTrayImage[]): void {
     }
     tray.setToolTip(i.tooltip);
   }
+  // Keep an entry point at startup and through changes to the set of icons.
+  syncAppTray(wanted.size > 0);
+  for (const [id, tray] of limitTrays) {
+    if (wanted.has(id)) continue;
+    tray.destroy();
+    limitTrays.delete(id);
+  }
 }
 
 export function destroyTrays(): void {
@@ -163,5 +179,6 @@ export function destroyTrays(): void {
   stopSettings = undefined;
   appTray?.destroy();
   appTray = null;
-  syncLimitTrays([]);
+  for (const tray of limitTrays.values()) tray.destroy();
+  limitTrays.clear();
 }

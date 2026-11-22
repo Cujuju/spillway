@@ -126,12 +126,12 @@ A capture appends `capture-start`, `capture-chunk` and `capture-end` facts. The 
 
 Raw HTTP bodies preserve their original content encoding. WebSocket binary messages preserve application bytes. Body export still requires its own opt-in. Only a terminal `complete` record certifies a finalized observed exchange. Keep partial captures labeled partial.
 
-Select a specific capture by source ID, trace ID, capture UUID and epoch. The query returns `journal_seq UInt64, chunk String, wire_bytes String` in RowBinary. It collapses transport retries with `FINAL`, then takes the newest included fact for each original journal sequence. Zero-length markers survive the joins. Unsupported encodings, missing pieces and mismatched extents fail the query.
+Select a specific capture by source ID, trace ID, capture UUID and epoch. The query returns `journal_seq UInt64, chunk String, wire_bytes String` in RowBinary. It collapses transport retries with `FINAL`, then takes the newest included fact for each original journal sequence. Pieces match on `(source_id, thread_id, piece_seq)`, so ClickHouse can skip unrelated threads. Zero-length markers survive the joins. Unsupported encodings, missing pieces and mismatched extents fail the query.
 
 ```sql
 WITH
   chunks AS (
-    SELECT source_id, schema_version, request_pieces,
+    SELECT source_id, thread_id, schema_version, request_pieces,
            JSONExtractUInt(record_json, 'sequence') AS journal_seq,
            JSONExtractRaw(record_json, 'chunk') AS chunk,
            JSONHas(record_json, 'rawBytes') AS has_raw_size,
@@ -149,12 +149,18 @@ WITH
            ref.piece_seq AS piece_seq, ref.offset AS piece_offset, ref.length AS piece_length
     FROM chunks LEFT ARRAY JOIN request_pieces AS ref
   ),
+  matched_pieces AS (
+    SELECT source_id, thread_id, seq, bytes
+    FROM spillway_pieces FINAL
+    WHERE source_id = {source:String}
+      AND thread_id IN (SELECT thread_id FROM chunks)
+  ),
   decoded AS (
     SELECT f.*, p.seq AS stored_seq,
            substring(p.bytes, f.piece_offset + 1, f.piece_length) AS stored_bytes,
            if(f.schema_version = 3, tryBase64Decode(stored_bytes), stored_bytes) AS wire_bytes
-    FROM refs AS f LEFT JOIN spillway_pieces AS p FINAL
-      ON f.source_id = p.source_id AND f.piece_seq = p.seq
+    FROM refs AS f LEFT JOIN matched_pieces AS p
+      ON f.source_id = p.source_id AND f.thread_id = p.thread_id AND f.piece_seq = p.seq
   )
 SELECT journal_seq, chunk, wire_bytes
 FROM decoded

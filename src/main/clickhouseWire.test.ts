@@ -90,6 +90,10 @@ it.runIf(Boolean(scratchEndpoint))('reconstructs documented mixed history byte-f
           requestSha256: hash, responseSha256: hash, frameCount: 3 }) });
     await query('OPTIMIZE TABLE ' + pieces + ' FINAL');
     expect(await query('SELECT count(), uniqExact(at) FROM ' + pieces + ' FINAL')).toBe('2\t1\n');
+    const unrelated = Buffer.from([0x7f, 0, 0x81]);
+    const wrongThread = { source_id: base.source_id, thread_id: 'other-thread', seq: 1, at };
+    await insertClickHouse(config, undefined, JSON.stringify({ ...wrongThread, bytes: unrelated.toString('base64') }) + '\n', signal, 'pieces');
+    await insertClickHouse(config, undefined, encodeRawPiece(wrongThread.source_id, wrongThread.thread_id, wrongThread.seq, at, unrelated), signal, 'pieces');
     await insertClickHouse(config, undefined, JSON.stringify({ source_id: 'source', thread_id: 'thread', seq: 2, at, bytes: 'legacy' }) + '\n', signal, 'pieces');
     await sendFacts({ ...base, seq: 10, schema_version: 2, kind: 'capture', content_policy: 'included',
       request_pieces: [{ piece_seq: 2, offset: 0, length: 6 }], record_json: '{}' });

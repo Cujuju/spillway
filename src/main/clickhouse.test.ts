@@ -291,8 +291,8 @@ it('delivers large legacy pieces before their referencing fact across batches', 
   expect(batch.facts).toBe(''); store.acknowledge(batch.token, batch.destination); const terminal = store.prepare()!;
   const capture = lines(terminal.facts).find((f) => f.kind === 'capture');
   expect(capture.content_policy).toBe('included');
-  const pieces = new Map(lines(batch.pieces).map((p) => [p.seq, p.bytes]));
-  expect(capture.request_pieces.map(({ piece_seq: id, offset, length }: { piece_seq: number; offset: number; length: number }) => pieces.get(id).slice(offset, offset + length)).join('')).toBe(request);
+  const pieces = new Map(lines(batch.pieces).map((p) => [String(p.seq), p.bytes]));
+  expect(capture.request_pieces.map(({ piece_seq: id, offset, length }: { piece_seq: number | string; offset: number; length: number }) => pieces.get(String(id)).slice(offset, offset + length)).join('')).toBe(request);
   store.acknowledge(terminal.token, terminal.destination); expect(store.status().queued).toBe(0);
 });
 

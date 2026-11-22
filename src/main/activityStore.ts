@@ -109,7 +109,7 @@ export class ActivityLog {
   archiveExportCancel(id: string) { return this.exports.cancel(id); }
   async archiveExportDispose(): Promise<void> { await this.exporter?.dispose(); }
   private archiveStore: ArchiveStore | null = null;
-  private get archive() { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact) }, this.migrationProgress); }
+  private get archive(): ArchiveStore { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact), rawWireEnabled: () => this.clickhouse.rawWireEnabled() }, this.migrationProgress); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
@@ -117,7 +117,7 @@ export class ActivityLog {
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
   archiveClear(): void { this.exporter?.cancelCurrent(); this.archive.clear(); }
   archiveClearAcknowledged(): void { this.archive.clearAcknowledged(); }
-  private get clickhouse() { return new ClickHouseStore(this.db, this.archive); }
+  private get clickhouse(): ClickHouseStore { return new ClickHouseStore(this.db, this.archive); }
   clickhouseStatus() { return this.clickhouse.status(); }
   clickhouseConfigure(c: ClickHouseConfig): void { this.clickhouse.configure(c); }
   clickhousePrepare() { return this.clickhouse.prepare(); }

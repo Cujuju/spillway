@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
 
 CREATE TABLE IF NOT EXISTS archive_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ` + PIECE_SCHEMA + WIRE_SCHEMA;
-export interface ArchiveFactSink { append(fact: ArchiveFact): void }
+export interface ArchiveFactSink { append(fact: ArchiveFact): void; rawWireEnabled?(): boolean }
 export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot' | 'capture-start' | 'capture-chunk' | 'capture-end'; traceId: string; at: string; captureState: string; record: object; content: object | null };
 type Row = { id: string; trace_id: string; at: string; state: ArchiveEntry['state']; reason: string; session_id: string | null; model: string; provider: string; client: string | null; capture_id: string | null; capture_epoch: string | null; capture_sequence: number | null; method: string; path: string; status: number; bytes: number; detail: string };
 const ENTRY_COLUMNS = 'id,trace_id,at,state,reason,session_id,model,provider,client,capture_id,capture_epoch,capture_sequence,method,path,status,bytes';

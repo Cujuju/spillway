@@ -1,4 +1,4 @@
-# Optional ClickHouse long-term store (v2 tables; v2/v3 facts)
+# Optional ClickHouse long-term store (v2 tables; v2â€“v4 facts)
 
 Settings → Data → ClickHouse keeps a long-term copy of Spillway's local stores; local retention stays short-term. Export, each store and content inclusion are independently opt-in; turning export on selects every store. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check (and Create tables, offered when Check finds them missing) handles both `<prefix>_facts` and `<prefix>_pieces`; types compare without layout whitespace, since ClickHouse 26 pretty-prints named tuples. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
 
@@ -20,7 +20,7 @@ Credentials remain in `secrets.bin` and are sent only in ClickHouse authenticati
 
 | Store | Kinds | Key (`record_key`) |
 |---|---|---|
-| Traces | `attempt`, legacy `capture`, `finalized`, `snapshot`, v3 `capture-start`, `capture-chunk`, `capture-end` (immutable facts) | empty |
+| Traces | `attempt`, legacy `capture`, `finalized`, `snapshot`, wire `capture-start`, `capture-chunk`, `capture-end` (immutable facts) | empty |
 | Requests | `request` (Activity `ActivityEvent`: tokens, cost, account, effort, latency, status), `request-settings` | local row id, settings hash |
 | Conversation titles | `conversation-title` (`{sessionId,title}`) from T3 Code, Codex and Claude Code | session ID |
 | Hourly and daily totals | `total` (`{key,total}`); `at` is the hour start, or local midnight for day totals | total key |
@@ -88,26 +88,26 @@ CREATE TABLE IF NOT EXISTS default.spillway_pieces (
 PARTITION BY toYYYYMM(at) ORDER BY (source_id, thread_id, seq);
 ```
 
-Checks require exact columns and types, no defaults, these sorting/partition keys, and an unversioned ReplacingMergeTree-family engine. Schema v1 facts tables (no `record_key`) get Upgrade tables, which runs `ALTER TABLE … ADD COLUMN IF NOT EXISTS record_key String AFTER kind`; existing rows read `''`. Shared and Replicated variants accept quoted coordination arguments. `schema_version` is 2 for legacy/keyed facts and 3 for new raw-wire chunk facts. Physical table columns remain schema v2; no remote ALTER is required for capture v3. Piece sequence IDs are immutable local piece IDs and never reused. Source identity survives clears; replacing the database changes it. Source labels are applied at preparation time.
+Checks require exact columns and types, no defaults, these sorting/partition keys, and an unversioned ReplacingMergeTree-family engine. Schema v1 facts tables (no `record_key`) get Upgrade tables, which runs `ALTER TABLE … ADD COLUMN IF NOT EXISTS record_key String AFTER kind`; existing rows read `''`. Shared and Replicated variants accept quoted coordination arguments. `schema_version` is 2 for legacy/keyed facts, 3 for base64-wire chunks and capture boundaries, and 4 for raw-wire chunks. All use the schema v2 tables. Piece sequence IDs identify immutable bytes. Source identity survives clears; replacing the database changes it. Source labels are applied at preparation time.
 
 ## Delivery and reconstruction
 
-Batches target at most 1,000 total piece/fact rows and 8 MiB of uncompressed JSONEachRow lines. New raw pieces are at most 64 KiB before base64, so arbitrary body sizes span bounded batches without omission. A legacy piece/fact larger than the batch target is sent alone, preserving historical bytes. Invalid/oversized newly queued metadata is rejected and counted; retained content is never omitted to fit a batch. Pieces INSERT first, facts second, each compressed with `Content-Encoding: zstd`. Both use `async_insert=1`, `wait_for_async_insert=1`, and `wait_end_of_query=1`. Acknowledgment follows both complete empty responses. Failure or uncertain delivery retains the queue and sent flags for retry. Inserts add one second per 32 KiB to the 15-second diagnostic timeout; retries use exponential backoff capped at five minutes with equal jitter. Successful delivery drains immediately.
+Batches target at most 1,000 total piece/fact rows and 8 MiB of uncompressed encoded rows. Wire pieces are at most 64 KiB before any encoding, so arbitrary body sizes span bounded batches without omission. A legacy piece/fact larger than the batch target is sent alone, preserving historical bytes. Invalid/oversized newly queued metadata is rejected and counted; retained content is never omitted to fit a batch. Each batch inserts legacy/base64 pieces as JSONEachRow, raw pieces as RowBinary, then facts as JSONEachRow. Each request uses `Content-Encoding: zstd`, `async_insert=1`, `wait_for_async_insert=1`, and `wait_end_of_query=1`. Acknowledgment follows a complete empty response for every insert. Failure or uncertain delivery retains the queue and sent flags for retry. Inserts add one second per 32 KiB to the 15-second diagnostic timeout; retries use exponential backoff capped at five minutes with equal jitter. Successful delivery drains immediately.
 
 Delivery is at least once. Use `FINAL` or distinct source/sequence identities; facts are not request counts. Offsets are zero-based bytes in the app. ClickHouse `substring` is one-based, hence `offset + 1`:
 
-A trace can have several facts (capture revisions, backfill snapshots), so rebuild one fact, chosen by `(source_id, seq)`:
+For a legacy v2 trace, rebuild one fact chosen by `(source_id, seq)`. The trace may have several revisions and snapshots.
 
 ```sql
 -- Latest fact with content for a trace.
 SELECT source_id, max(seq) AS seq FROM spillway_facts FINAL
-WHERE trace_id = {t:String} AND content_policy = 'included' GROUP BY source_id;
+WHERE trace_id = {t:String} AND schema_version = 2 AND content_policy = 'included' GROUP BY source_id;
 
 -- That fact's request body.
 SELECT p.seq, arrayStringConcat(arrayMap(x -> x.2, arraySort(x -> x.1, groupArray((p.i, substring(c.bytes, p.offset + 1, p.length)))))) AS request
 FROM (SELECT source_id, seq, pc.piece_seq AS piece_seq, pc.offset AS offset, pc.length AS length, i
       FROM spillway_facts FINAL ARRAY JOIN request_pieces AS pc, arrayEnumerate(request_pieces) AS i
-      WHERE source_id = {s:String} AND seq = {seq:UInt64}) AS p
+      WHERE source_id = {s:String} AND seq = {seq:UInt64} AND schema_version = 2) AS p
 JOIN spillway_pieces AS c FINAL ON c.source_id = p.source_id AND c.seq = p.piece_seq
 GROUP BY p.seq;
 ```
@@ -115,36 +115,80 @@ GROUP BY p.seq;
 The synthetic demo destination supports both tables, zstd INSERT bodies, schema checks, retries, partial writes, disconnects and delayed responses without real credentials.
 
 
-## Complete raw-wire captures (fact version 3)
+## Reconstructing wire captures (facts v3 and v4)
 
-A capture appends `capture-start`, `capture-chunk` and `capture-end` facts. `record_json` carries the capture UUID/epoch and original journal sequence; chunk metadata adds direction, zero-based direction byte offset, WebSocket message index/type/time/end, `rawBytes`, and `representation: "base64-wire-v2"`. For each chunk, `request_pieces` references its base64 text in the pieces table. The field is a generic chunk reference in v3, including response chunks. Decode each chunk independently before concatenating bytes: padding makes concatenated base64 strings invalid. Empty message markers have zero raw bytes and no pieces. `response` and `frames_json` are empty for these facts.
+A capture appends `capture-start`, `capture-chunk` and `capture-end` facts. The chunk record contains the capture UUID, epoch, original journal sequence, direction, zero-based direction offset, WebSocket message index/type/time/end, and `rawBytes`. Its generic `request_pieces` field also references response chunks. Empty WebSocket messages have zero raw bytes and no piece reference. The `response` and `frames_json` columns are empty.
 
-`capture-end` contains observed request/response byte counts, SHA-256 hashes and message count. Only a terminal `complete` state certifies a finalized observed exchange. Partial restart/disconnect/storage-failure records must remain partial. Raw HTTP bodies retain original content encoding; WebSocket binary messages are lossless application bytes. Content policies still require the separate export-body opt-in. Changing the recording toggle never strips bodies already queued for export.
+- V3 chunks reference base64 text with `representation: "base64-wire-v2"`. Their reference lengths are in base64 bytes. Decode each chunk separately before concatenating.
+- V4 chunks reference original bytes with `representation: "raw-wire-v1"`. Their references have offset zero and length `rawBytes`. The piece ID sets the high bit of the original local ID, giving raw pieces an independent key in the same table. Preserve those `UInt64` values as decimal strings or 64-bit integers in clients.
 
-At-least-once delivery and backfill can produce several facts for one original chunk. Deduplicate facts by `(source_id,seq)` first, then select the newest fact per `(source_id, captureId, epoch, original journal sequence)` from `record_json`. Deduplicate pieces with FINAL as before. A request is not a fact count.
+**Raw bytes for new captures** is off by default. Enable it after updating reconstruction queries and clients. Each capture binds to its format when its start is ingested. Toggling the setting affects future starts. Queued rows and subsequent backfills keep their bound format. Use Clear outbox to discard queued rows deliberately. An older writer can replay retained chunks as v3 using a separate piece ID. A reader must therefore choose the encoding for each chunk fact.
 
-For one trace, this bounded example returns decoded chunks in original journal order. Concatenate per direction for HTTP; group by message index and preserve message boundaries for WebSocket. Verify total bytes and hashes against the newest `capture-end` before calling reconstruction complete.
+Raw HTTP bodies preserve their original content encoding. WebSocket binary messages preserve application bytes. Body export still requires its own opt-in. Only a terminal `complete` record certifies a finalized observed exchange. Keep partial captures labeled partial.
+
+Select a specific capture by source ID, trace ID, capture UUID and epoch. The query returns `journal_seq UInt64, chunk String, wire_bytes String` in RowBinary. It collapses transport retries with `FINAL`, then takes the newest included fact for each original journal sequence. Zero-length markers survive the joins. Unsupported encodings, missing pieces and mismatched extents fail the query.
 
 ```sql
-SELECT f.journal_seq, f.direction,
-       base64Decode(substring(p.bytes, f.offset + 1, f.length)) AS wire_chunk
-FROM (
-  SELECT JSONExtractUInt(record_json, 'sequence') AS journal_seq,
-         JSONExtractString(record_json, 'chunk', 'direction') AS direction,
-         pc.piece_seq AS piece_seq, pc.offset AS offset, pc.length AS length,
-         source_id
-  FROM (
-    SELECT * FROM spillway_facts FINAL
-    WHERE trace_id = {t:String} AND kind = 'capture-chunk'
-      AND content_policy = 'included'
-    ORDER BY seq DESC
-    LIMIT 1 BY source_id, JSONExtractString(record_json, 'captureId'),
-               JSONExtractString(record_json, 'epoch'), JSONExtractUInt(record_json, 'sequence')
-  ) ARRAY JOIN request_pieces AS pc
-) AS f
-JOIN spillway_pieces AS p FINAL
-  ON p.source_id = f.source_id AND p.seq = f.piece_seq
-ORDER BY f.journal_seq;
+WITH
+  chunks AS (
+    SELECT source_id, schema_version, request_pieces,
+           JSONExtractUInt(record_json, 'sequence') AS journal_seq,
+           JSONExtractRaw(record_json, 'chunk') AS chunk,
+           JSONHas(record_json, 'rawBytes') AS has_raw_size,
+           JSONExtractUInt(record_json, 'rawBytes') AS raw_size,
+           JSONExtractString(record_json, 'representation') AS representation
+    FROM spillway_facts FINAL
+    WHERE source_id = {source:String} AND trace_id = {trace:String}
+      AND JSONExtractString(record_json, 'captureId') = {capture:String}
+      AND JSONExtractString(record_json, 'epoch') = {epoch:String}
+      AND kind = 'capture-chunk' AND content_policy = 'included'
+    ORDER BY seq DESC LIMIT 1 BY journal_seq
+  ),
+  refs AS (
+    SELECT *, length(request_pieces) AS piece_count,
+           ref.piece_seq AS piece_seq, ref.offset AS piece_offset, ref.length AS piece_length
+    FROM chunks LEFT ARRAY JOIN request_pieces AS ref
+  ),
+  decoded AS (
+    SELECT f.*, p.seq AS stored_seq,
+           substring(p.bytes, f.piece_offset + 1, f.piece_length) AS stored_bytes,
+           if(f.schema_version = 3, tryBase64Decode(stored_bytes), stored_bytes) AS wire_bytes
+    FROM refs AS f LEFT JOIN spillway_pieces AS p FINAL
+      ON f.source_id = p.source_id AND f.piece_seq = p.seq
+  )
+SELECT journal_seq, chunk, wire_bytes
+FROM decoded
+WHERE throwIf(
+    schema_version NOT IN (3, 4)
+    OR representation != if(schema_version = 4, 'raw-wire-v1', 'base64-wire-v2')
+    OR NOT has_raw_size
+    OR piece_count != (raw_size > 0)
+    OR length(wire_bytes) != raw_size
+    OR (raw_size > 0 AND (
+      stored_seq = 0 OR bitTest(piece_seq, 63) != (schema_version = 4)
+      OR piece_offset != 0 OR length(stored_bytes) != piece_length
+      OR (schema_version = 3 AND base64Encode(wire_bytes) != stored_bytes)
+      OR (schema_version = 4 AND piece_length != raw_size)
+    )),
+    'Invalid wire capture chunk'
+  ) = 0
+ORDER BY journal_seq
+SETTINGS join_use_nulls = 0
+FORMAT RowBinary;
 ```
+
+Use the newest terminal fact for the same identity to verify the capture:
+
+```sql
+SELECT capture_state, record_json
+FROM spillway_facts FINAL
+WHERE source_id = {source:String} AND trace_id = {trace:String}
+  AND JSONExtractString(record_json, 'captureId') = {capture:String}
+  AND JSONExtractString(record_json, 'epoch') = {epoch:String}
+  AND kind = 'capture-end'
+ORDER BY seq DESC LIMIT 1;
+```
+
+Process chunks in journal order and verify contiguous offsets per direction, total `requestBytes` and `responseBytes`, and the two SHA-256 hashes from the terminal record. For WebSocket, also verify frame counts and continuations, including empty messages, using `frame`, `type`, `at` and `end` from the chunk JSON. Missing terminal metadata or a mismatch means reconstruction is incomplete.
 
 No server configuration or remote deletion is performed by this change. Body size is independent of insert size. Capture, export and search/display limits are separate: display/search previews can be limited while complete original bytes remain retained and exported.

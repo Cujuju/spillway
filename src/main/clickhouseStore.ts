@@ -3,11 +3,15 @@ import { CLICKHOUSE_BATCH_BYTES, CLICKHOUSE_BATCH_ROWS, CLICKHOUSE_OUTBOX_BYTES,
 import type { Db } from './activityDb';
 import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore';
 import { pieceBytes, rebuild, type PieceDetail } from './archivePieces';
+import { wireThread } from './archiveStreams';
+import { CLICKHOUSE_BASE64_WIRE, CLICKHOUSE_RAW_WIRE_VERSION, encodeRawPiece, isWireContent, wireContent, type ClickHouseWireVersion, type QueuedPieceContent } from './clickhouseWire';
 import { encodeClickHouseLine, encodeRecordLine, outboxBytes, type OutboxRow } from './clickhouseLine';
 import { backfillRecords, mirrorRecords, recordSpec, resolveRecord, restartRecordCursors, syncRecordTriggers, type MirrorPrune, type MirrorRecord } from './clickhouseRecords';
 
 const RETRY_INITIAL_MS = 1_000, RETRY_MAX_MS = 300_000, RETRY_MAX_EXPONENT = 9;
 const RETRY_JITTER_FRACTION = 0.5;
+const RAW_DELIVERY_DESTINATION = 'clickhouseRawDeliveryDestination';
+const localPieceIds = (list = '') => list.split(',').map(Number).filter((id) => Number.isSafeInteger(id) && id > 0);
 export const CLICKHOUSE_SCHEMA = `
 DROP TABLE IF EXISTS clickhouse_batch; DROP TABLE IF EXISTS clickhouse_queue; DROP TABLE IF EXISTS clickhouse_state;
 CREATE TABLE IF NOT EXISTS clickhouse_export (
@@ -36,15 +40,25 @@ export class ClickHouseStore implements ArchiveFactSink {
   constructor(private db: Db, private archive: ArchiveStore) {}
   private state(): State { return this.db.prepare('SELECT * FROM clickhouse_export').get() as State; }
   config(): ClickHouseConfig { return validateClickHouseConfig(JSON.parse(this.state().config)); }
+  rawWireEnabled(): boolean { return this.config().rawWire; }
+  private bindRawDelivery(destination: string): void {
+    const binding = this.db.prepare('SELECT value FROM archive_meta WHERE key=?').get(RAW_DELIVERY_DESTINATION) as { value: string } | undefined;
+    if (binding?.value === destination) return;
+    // Older builds reset only the base64 delivery flags when changing destinations.
+    this.db.exec('UPDATE archive_pieces SET sent_raw=0 WHERE sent_raw<>0');
+    this.db.prepare('INSERT OR REPLACE INTO archive_meta(key,value) VALUES(?,?)').run(RAW_DELIVERY_DESTINATION, destination);
+  }
   private totals(): { n: number; bytes: number } { return this.db.prepare('SELECT queued_rows AS n,queued_bytes AS bytes FROM clickhouse_export').get() as { n: number; bytes: number }; }
   configure(raw: ClickHouseConfig): void {
     const next = validateClickHouseConfig(raw), prev = this.config();
     this.db.transaction(() => {
-      const changed = clickhouseDestination(next) !== clickhouseDestination(prev);
+      const destination = clickhouseDestination(next);
+      const changed = destination !== clickhouseDestination(prev);
       if (changed) {
         // Queued rows belong to the old destination; backfill below re-sends everything still stored locally.
         this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?,attempts=0,next_attempt=0').run(this.totals().n);
-        this.db.exec('DELETE FROM clickhouse_outbox; UPDATE archive_pieces SET sent=0');
+        this.db.exec('DELETE FROM clickhouse_outbox; UPDATE archive_pieces SET sent=0, sent_raw=0');
+        this.bindRawDelivery(destination);
       }
       this.db.prepare('UPDATE clickhouse_export SET config=?,error=NULL').run(JSON.stringify(next));
       const everything = !prev.enabled || changed;
@@ -76,9 +90,14 @@ export class ClickHouseStore implements ArchiveFactSink {
       const row = this.db.prepare(`SELECT id,at,trace_id FROM archive_entries WHERE (at,id)${savedWireAfter === undefined ? '>' : '>='}(?,?) ORDER BY at,id LIMIT 1`).get(at, id) as { id: string; at: string; trace_id: string } | undefined;
       if (!row) { this.db.exec('UPDATE clickhouse_export SET backfill_cursor=NULL'); break; }
       const wireAfter = row.id === id ? savedWireAfter : undefined;
-      const savedWire = this.db.prepare('SELECT detail,capture_id,capture_epoch,capture_sequence,state,reason,method,path,status FROM archive_entries WHERE id=?').get(row.id) as { detail: string; capture_id: string; capture_epoch: string; capture_sequence: number; state: string; reason: string; method: string; path: string; status: number };
+      const savedWire = this.db.prepare(`SELECT e.detail,e.capture_id,e.capture_epoch,e.capture_sequence,e.state,e.reason,e.method,e.path,e.status,t.clickhouse_wire_version AS exportVersion
+        FROM archive_entries e LEFT JOIN archive_threads t ON t.id=e.thread_id WHERE e.id=?`).get(row.id) as {
+        detail: string; capture_id: string; capture_epoch: string; capture_sequence: number; state: string; reason: string;
+        method: string; path: string; status: number; exportVersion: ClickHouseWireVersion | null;
+      };
       const wire = JSON.parse(savedWire.detail) as { wire?: number; [key: string]: unknown };
       if (wire.wire === 2) {
+        const thread = wireThread(savedWire.capture_epoch, savedWire.capture_id);
         if (wireAfter === undefined) {
           this.append({ kind: 'capture-start', traceId: row.trace_id, at: row.at, captureState: 'pending', record: { ...wire, captureId: savedWire.capture_id, epoch: savedWire.capture_epoch, sequence: wire.firstSequence, requestBytes: 0, responseBytes: 0, frameCount: 0, requestSha256: '', responseSha256: '', state: 'pending', reason: 'capture-open', method: savedWire.method, path: savedWire.path, status: 0 }, content: null });
           cursor = JSON.stringify([row.at, row.id, 0]); this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(cursor); snapshots++;
@@ -86,8 +105,7 @@ export class ClickHouseStore implements ArchiveFactSink {
         const chunks = this.db.prepare('SELECT sequence,piece_id,direction,offset,frame_index,frame_type,frame_at,frame_end FROM archive_wire WHERE entry_id=? AND sequence>? ORDER BY sequence LIMIT ?').all(row.id, wireAfter ?? 0, CLICKHOUSE_BATCH_ROWS - snapshots) as { sequence: number; piece_id: number | null; direction: string; offset: number; frame_index: number; frame_type: string; frame_at: string; frame_end: number }[];
         for (const chunk of chunks) {
           const bytes = chunk.piece_id === null ? 0 : pieceBytes(this.db, chunk.piece_id).length;
-          const thread = JSON.stringify(['wire', savedWire.capture_epoch, savedWire.capture_id]);
-          this.append({ kind: 'capture-chunk', traceId: row.trace_id, at: row.at, captureState: 'pending', record: { captureId: savedWire.capture_id, epoch: savedWire.capture_epoch, sequence: chunk.sequence, representation: 'base64-wire-v2', rawBytes: bytes, chunk: { direction: chunk.direction, offset: chunk.offset, frame: chunk.frame_index, type: chunk.frame_type, at: chunk.frame_at, end: Boolean(chunk.frame_end) } }, content: { wire: 2, thread, request: chunk.piece_id === null ? [] : [[chunk.piece_id, 0, bytes]] } });
+          this.append({ kind: 'capture-chunk', traceId: row.trace_id, at: row.at, captureState: 'pending', record: { captureId: savedWire.capture_id, epoch: savedWire.capture_epoch, sequence: chunk.sequence, representation: CLICKHOUSE_BASE64_WIRE, rawBytes: bytes, chunk: { direction: chunk.direction, offset: chunk.offset, frame: chunk.frame_index, type: chunk.frame_type, at: chunk.frame_at, end: Boolean(chunk.frame_end) } }, content: wireContent(thread, savedWire.exportVersion, chunk.piece_id, bytes) });
           cursor = JSON.stringify([row.at, row.id, chunk.sequence]);
           this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(cursor); snapshots++;
         }
@@ -116,11 +134,15 @@ export class ClickHouseStore implements ArchiveFactSink {
     return this.db.transaction(() => {
       this.archive.prune(); this.backfill(); backfillRecords(this.db, this.config());
       const config = this.config(), state = this.state();
+      const destination = clickhouseDestination(config);
+      this.bindRawDelivery(destination);
       const content = config.includeBodies ? 'content' : 'NULL AS content';
       const pending = this.db.prepare(`SELECT seq,kind,record_key,trace_id,at,capture_state,record,expired,thread_id,${content} FROM clickhouse_outbox ORDER BY seq LIMIT ?`).iterate(CLICKHOUSE_BATCH_ROWS) as IterableIterator<OutboxRow>;
       let facts = '', pieces = '', bytes = 0, rows = 0, last = 0;
       const gone: number[] = [];
-      const sent = new Set<number>();
+      const sent = new Set<number>(), sentRaw = new Set<number>();
+      const rawPieces: Buffer[] = [];
+      const selectPiece = this.db.prepare('SELECT p.sent,p.sent_raw,p.thread_id,t.first_at FROM archive_pieces p JOIN archive_threads t ON t.id=p.thread_id WHERE p.id=?');
       for (const r of pending) {
         let line: string;
         if (recordSpec(r.kind)) {
@@ -131,20 +153,25 @@ export class ClickHouseStore implements ArchiveFactSink {
           }
           line = encodeRecordLine(r, record, config, state.source_id);
         } else {
-          const refs = r.content ? JSON.parse(r.content) as PieceDetail & { wire?: number } : null;
-          const wire = refs?.wire === 2;
+          const refs = r.content ? JSON.parse(r.content) as QueuedPieceContent : null;
+          const wire = isWireContent(refs);
+          const raw = wire && refs.exportVersion === CLICKHOUSE_RAW_WIRE_VERSION;
           const resolved = refs && !wire ? rebuild(this.db, refs) : undefined;
+          const included = raw ? sentRaw : sent;
           let partial = false;
           for (const [id] of refs?.request ?? []) {
-            if (sent.has(id)) continue;
-            const piece = this.db.prepare('SELECT p.sent,p.thread_id,t.first_at FROM archive_pieces p JOIN archive_threads t ON t.id=p.thread_id WHERE p.id=?').get(id) as { sent: number; thread_id: string; first_at: string } | undefined;
+            if (included.has(id)) continue;
+            const piece = selectPiece.get(id) as { sent: number; sent_raw: number; thread_id: string; first_at: string } | undefined;
             if (!piece) throw new Error('Queued ClickHouse content is unavailable');
-            if (piece.sent) continue;
+            if (raw ? piece.sent_raw : piece.sent) continue;
             const data = pieceBytes(this.db, id);
-            const addition = JSON.stringify({ source_id: state.source_id, thread_id: piece.thread_id, seq: id, at: piece.first_at.replace('T', ' ').replace('Z', ''), bytes: data.toString(wire ? 'base64' : 'utf8') }) + '\n';
+            const addition = raw ? encodeRawPiece(state.source_id, piece.thread_id, id, piece.first_at, data)
+              : JSON.stringify({ source_id: state.source_id, thread_id: piece.thread_id, seq: id, at: piece.first_at.replace('T', ' ').replace('Z', ''), bytes: data.toString(wire ? 'base64' : 'utf8') }) + '\n';
             const size = Buffer.byteLength(addition);
             if (rows && (bytes + size > CLICKHOUSE_BATCH_BYTES || rows === CLICKHOUSE_BATCH_ROWS)) { partial = true; break; }
-            pieces += addition; bytes += size; rows++; sent.add(id);
+            if (typeof addition === 'string') pieces += addition;
+            else rawPieces.push(addition);
+            bytes += size; rows++; included.add(id);
           }
           if (partial) break;
           line = encodeClickHouseLine(r, config, state.source_id, true, resolved);
@@ -157,15 +184,16 @@ export class ClickHouseStore implements ArchiveFactSink {
       for (const seq of gone) this.db.prepare('DELETE FROM clickhouse_outbox WHERE seq=?').run(seq);
       if (gone.length) this.db.prepare('UPDATE clickhouse_export SET discarded=discarded+?').run(gone.length);
       if (!rows) return null;
-      const destination = clickhouseDestination(config);
-      return { token: `${destination}:${last}:${[...sent].join(',')}`, destination, pieces, facts, rows, attempts: state.attempts, nextAttemptAt: state.next_attempt };
+      const token = `${destination}:${last}:${[...sent].join(',')}:${[...sentRaw].join(',')}`;
+      return { token, destination, pieces, rawPieces: rawPieces.length ? Buffer.concat(rawPieces) : undefined, facts, rows, attempts: state.attempts, nextAttemptAt: state.next_attempt };
     })();
   }
   acknowledge(token: string, destination: string): void {
-    const [fingerprint, rawSeq] = token.split(':'), seq = Number(rawSeq);
+    const [fingerprint, rawSeq, sent, sentRaw] = token.split(':'), seq = Number(rawSeq);
     if (fingerprint !== destination || destination !== clickhouseDestination(this.config()) || !Number.isSafeInteger(seq) || seq < 0) return;
     this.db.transaction(() => {
-      for (const id of (token.split(':')[2] ?? '').split(',').map(Number).filter((id) => Number.isSafeInteger(id) && id > 0)) this.db.prepare('UPDATE archive_pieces SET sent=1 WHERE id=?').run(id);
+      for (const id of localPieceIds(sent)) this.db.prepare('UPDATE archive_pieces SET sent=1 WHERE id=?').run(id);
+      for (const id of localPieceIds(sentRaw)) this.db.prepare('UPDATE archive_pieces SET sent_raw=1 WHERE id=?').run(id);
       const deleted = this.db.prepare('DELETE FROM clickhouse_outbox WHERE seq<=?').run(seq).changes;
       this.db.prepare('UPDATE clickhouse_export SET acknowledged=acknowledged+?,last_ack=?,error=NULL,attempts=0,next_attempt=0').run(deleted, new Date().toISOString());
     })();

@@ -4,7 +4,8 @@ import { constants, gunzipSync, zstdCompressSync, zstdDecompressSync } from 'nod
 import { CAPTURE_BODY_LIMIT, CAPTURE_CHUNK_BYTES, type CaptureRecord, type ArchiveDetail } from '@shared/archive';
 import type { Db } from './activityDb';
 import type { ArchiveFactSink } from './archiveStore';
-import { pieceBytes, type Range, type Body } from './archivePieces';
+import { pieceBytes, type Body } from './archivePieces';
+import { CLICKHOUSE_BASE64_WIRE, CLICKHOUSE_RAW_WIRE_VERSION, CLICKHOUSE_WIRE_VERSION, wireContent, type ClickHouseWireVersion } from './clickhouseWire';
 import { archiveSearchText } from '@shared/archiveContent';
 
 export const WIRE_SCHEMA = `
@@ -12,7 +13,7 @@ CREATE TABLE IF NOT EXISTS archive_wire(entry_id TEXT NOT NULL,sequence INTEGER 
 CREATE INDEX IF NOT EXISTS archive_wire_piece ON archive_wire(piece_id);
 CREATE INDEX IF NOT EXISTS archive_wire_frame ON archive_wire(entry_id,frame_index,sequence DESC);
 `;
-export interface WireContent { wire: 2; thread: string; request: Range[] }
+export const wireThread = (epoch: string, captureId: string): string => JSON.stringify(['wire', epoch, captureId]);
 export interface WireDetail {
   wire: 2; entryId: string; firstSequence: number; requestType: string; responseType: string; requestEncoding: string; responseEncoding: string; format: 'http' | 'websocket';
   requestBytes: number; responseBytes: number; frameCount: number; requestSha256: string; responseSha256: string;
@@ -25,14 +26,18 @@ const uint = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) >
 const metadata = (r: CaptureRecord, firstSequence = r.sequence): WireDetail => ({ wire: 2, entryId: `trace:${r.traceId}`, firstSequence, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' : 'http', requestBytes: r.requestBytes!, responseBytes: r.responseBytes!, frameCount: r.frameCount!, requestSha256: r.requestSha256 ?? '', responseSha256: r.responseSha256 ?? '' });
 export function ingestWire(db: Db, r: CaptureRecord, sink?: ArchiveFactSink): void {
   if (typeof r.traceId !== 'string' || !TRACE.test(r.traceId) || typeof r.id !== 'string' || !r.id || r.id.length > 128 || !date(r.startedAt) || !['http', 'websocket'].includes(r.format ?? '') || !['start', 'data', 'end'].includes(r.event ?? '') || !['requestBytes', 'responseBytes', 'frameCount'].every((k) => uint(r[k as keyof CaptureRecord])) || !['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'].every((k) => typeof r[k as keyof CaptureRecord] === 'string' && Buffer.byteLength(String(r[k as keyof CaptureRecord])) <= 8192)) throw new Error('Invalid capture stream metadata');
-  const id = `trace:${r.traceId}`, thread = JSON.stringify(['wire', r.epoch, r.id]);
+  const id = `trace:${r.traceId}`, thread = wireThread(r.epoch, r.id);
   let firstSequence = r.sequence;
-  const before = db.prepare('SELECT detail,capture_id,capture_epoch,state,stored_bytes FROM archive_entries WHERE id=?').get(id) as { detail: string; capture_id: string; capture_epoch: string; state: string; stored_bytes: number } | undefined;
+  const before = db.prepare(`SELECT e.detail,e.capture_id,e.capture_epoch,e.stored_bytes,t.clickhouse_wire_version AS exportVersion
+    FROM archive_entries e LEFT JOIN archive_threads t ON t.id=e.thread_id WHERE e.id=?`).get(id) as {
+    detail: string; capture_id: string; capture_epoch: string; stored_bytes: number; exportVersion: ClickHouseWireVersion | null;
+  } | undefined;
   if (r.event === 'start') {
     if (r.requestBytes || r.responseBytes || r.frameCount || r.chunk) throw new Error('Invalid capture start');
     db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,detail,thread_id) VALUES(?,?,?,'pending','capture-open',?,?,?,?,?,?,?,?)
       ON CONFLICT(trace_id) DO UPDATE SET state='pending',reason='capture-open',capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,detail=excluded.detail,thread_id=excluded.thread_id,method=excluded.method,path=excluded.path`).run(id, r.traceId, r.startedAt, r.id, r.epoch, r.sequence, r.method, r.path, r.status, JSON.stringify(metadata(r)), thread);
-    db.prepare('INSERT OR IGNORE INTO archive_threads(id,first_at,last_at) VALUES(?,?,?)').run(thread, r.startedAt, r.startedAt);
+    const version = sink?.rawWireEnabled?.() ? CLICKHOUSE_RAW_WIRE_VERSION : CLICKHOUSE_WIRE_VERSION;
+    db.prepare('INSERT OR IGNORE INTO archive_threads(id,first_at,last_at,clickhouse_wire_version) VALUES(?,?,?,?)').run(thread, r.startedAt, r.startedAt, version);
   } else {
     if (!before || before.capture_id !== r.id || before.capture_epoch !== r.epoch) throw new Error('Capture stream start is unavailable');
     const prior = JSON.parse(before.detail) as WireDetail;
@@ -56,8 +61,7 @@ export function ingestWire(db: Db, r: CaptureRecord, sink?: ArchiveFactSink): vo
       db.prepare("UPDATE archive_entries SET state='pending',reason='capture-open',bytes=?,stored_bytes=?,detail=?,capture_sequence=? WHERE id=?").run(expected.requestBytes + expected.responseBytes, Buffer.byteLength(JSON.stringify(expected)), JSON.stringify(expected), r.sequence, id);
       db.prepare('UPDATE archive_threads SET stored_bytes=stored_bytes+?,logical_bytes=logical_bytes+? WHERE id=?').run((compressed?.length ?? 0) + Buffer.byteLength(JSON.stringify(expected)) - before.stored_bytes, bytes.length, thread);
       const { data: _data, ...chunk } = c;
-      const content: WireContent = { wire: 2, thread, request: piece ? [[piece, 0, bytes.length]] : [] };
-      sink?.append({ kind: 'capture-chunk', traceId: r.traceId, at: r.startedAt, captureState: 'pending', record: { captureId: r.id, epoch: r.epoch, sequence: r.sequence, chunk, representation: 'base64-wire-v2', rawBytes: bytes.length }, content });
+      sink?.append({ kind: 'capture-chunk', traceId: r.traceId, at: r.startedAt, captureState: 'pending', record: { captureId: r.id, epoch: r.epoch, sequence: r.sequence, chunk, representation: CLICKHOUSE_BASE64_WIRE, rawBytes: bytes.length }, content: wireContent(thread, before.exportVersion, piece, bytes.length) });
       return;
     }
     if (r.chunk || !['complete', 'partial', 'missing'].includes(r.state) || r.requestBytes !== prior.requestBytes || r.responseBytes !== prior.responseBytes || r.frameCount !== prior.frameCount) throw new Error('Capture terminal byte count mismatch');

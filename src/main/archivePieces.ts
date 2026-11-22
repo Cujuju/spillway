@@ -5,14 +5,15 @@ import type { Db } from './activityDb';
 import type { ArchiveDetail } from '@shared/archive';
 import { archiveSearchText } from '@shared/archiveContent';
 import { readWireBody, type WireDetail } from './archiveStreams';
+import { CLICKHOUSE_WIRE_VERSION } from './clickhouseWire';
 export type Range = [number, number, number];
 export type Body = Pick<ArchiveDetail, 'requestCut' | 'responseCut' | 'request' | 'response' | 'frames' | 'requestType' | 'responseType' | 'requestEncoding' | 'responseEncoding' | 'format' | 'requestDecoded' | 'responseDecoded'>;
 export type PieceDetail = Omit<Body, 'request' | 'response' | 'frames'> & { thread: string; request: Range[]; response: Range[]; frames: Range[] };
 const MIGRATION_BATCH = 8;
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 export const PIECE_SCHEMA = `
-CREATE TABLE IF NOT EXISTS archive_threads(id TEXT PRIMARY KEY,first_at TEXT NOT NULL,last_at TEXT NOT NULL,over_budget INTEGER NOT NULL DEFAULT 0,stored_bytes INTEGER NOT NULL DEFAULT 0,logical_bytes INTEGER NOT NULL DEFAULT 0,base TEXT,dict TEXT);
-CREATE TABLE IF NOT EXISTS archive_pieces(id INTEGER PRIMARY KEY AUTOINCREMENT,thread_id TEXT,bytes BLOB NOT NULL,sent INTEGER NOT NULL DEFAULT 0,dict TEXT);
+CREATE TABLE IF NOT EXISTS archive_threads(id TEXT PRIMARY KEY,first_at TEXT NOT NULL,last_at TEXT NOT NULL,over_budget INTEGER NOT NULL DEFAULT 0,stored_bytes INTEGER NOT NULL DEFAULT 0,logical_bytes INTEGER NOT NULL DEFAULT 0,base TEXT,dict TEXT,clickhouse_wire_version INTEGER NOT NULL DEFAULT ${CLICKHOUSE_WIRE_VERSION});
+CREATE TABLE IF NOT EXISTS archive_pieces(id INTEGER PRIMARY KEY AUTOINCREMENT,thread_id TEXT,bytes BLOB NOT NULL,sent INTEGER NOT NULL DEFAULT 0,dict TEXT,sent_raw INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS archive_piece_thread ON archive_pieces(thread_id);
 CREATE TABLE IF NOT EXISTS archive_pins(piece_id INTEGER NOT NULL,case_id TEXT NOT NULL,PRIMARY KEY(piece_id,case_id));
 CREATE TABLE IF NOT EXISTS archive_search_keys(id INTEGER PRIMARY KEY AUTOINCREMENT,entry_id TEXT UNIQUE NOT NULL);
@@ -162,9 +163,9 @@ export function refreshThread(db: Db, thread: string): void {
 }
 export function migratePieces(db: Db, progress?: (state: ArchiveMigrationState) => void): void {
   db.exec(PIECE_SCHEMA);
-  for (const table of ['archive_pieces', 'archive_threads']) {
+  for (const [table, extension] of [['archive_pieces', ['sent_raw', 'INTEGER NOT NULL DEFAULT 0']], ['archive_threads', ['clickhouse_wire_version', `INTEGER NOT NULL DEFAULT ${CLICKHOUSE_WIRE_VERSION}`]]] as const) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!columns.some((c) => c.name === 'dict')) db.exec(`ALTER TABLE ${table} ADD COLUMN dict TEXT`);
+    for (const [name, type] of [['dict', 'TEXT'], extension]) if (!columns.some((c) => c.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
   const columns = db.prepare('PRAGMA table_info(archive_entries)').all() as { name: string }[];
   for (const [name, type] of [['thread_id', 'TEXT'], ['stored_bytes', 'INTEGER NOT NULL DEFAULT 0'], ['search_key', 'INTEGER']] as const) if (!columns.some((c) => c.name === name)) db.exec(`ALTER TABLE archive_entries ADD COLUMN ${name} ${type}`);

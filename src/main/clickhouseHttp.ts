@@ -29,20 +29,25 @@ export function httpFailureHint(status: number): string {
   return 'server or schema failure';
 }
 interface ReadOptions { params: Record<string, number | string>; maxBytes: number }
+interface BinaryInsert { binary: Uint8Array }
 /** Never expose server responses: they can echo passwords, submitted SQL or captured content. */
-export async function clickhouseRequest(config: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, sql: string, signal: AbortSignal, read?: ReadOptions): Promise<string> {
+export async function clickhouseRequest(config: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, sql: string, signal: AbortSignal, options?: ReadOptions | BinaryInsert): Promise<string> {
   const c = validateClickHouseConfig(config);
   if (!c.endpoint) throw new Error('Configure an endpoint first');
   const auth = credentials ? validateClickHouseCredentials(credentials) : { username: 'default', password: '' };
   const endpoint = new URL(c.endpoint);
+  const read = options && 'params' in options ? options : undefined;
+  const binary = options && 'binary' in options ? options.binary : undefined;
+  const inserting = sql.startsWith('INSERT');
+  if (binary) endpoint.searchParams.set('query', sql);
   if (read) {
     for (const [key, value] of Object.entries(read.params)) endpoint.searchParams.set(`param_${key}`, String(value));
   } else endpoint.searchParams.set('wait_end_of_query', '1');
   try {
-    const timeout = sql.startsWith('INSERT') ? clickhouseTimeout(Buffer.byteLength(sql)) : QUERY_TIMEOUT_MS;
+    const timeout = inserting ? clickhouseTimeout(binary?.byteLength ?? Buffer.byteLength(sql)) : QUERY_TIMEOUT_MS;
     const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]), headers: {
-      ...(sql.startsWith('INSERT') ? { 'Content-Encoding': 'zstd' } : {}), 'Content-Type': 'text/plain; charset=utf-8', 'X-ClickHouse-User': auth.username, 'X-ClickHouse-Key': auth.password,
-    }, body: sql.startsWith('INSERT') ? new Uint8Array(await compress(Buffer.from(sql))) : sql });
+      ...(inserting ? { 'Content-Encoding': 'zstd' } : {}), 'Content-Type': binary ? 'application/octet-stream' : 'text/plain; charset=utf-8', 'X-ClickHouse-User': auth.username, 'X-ClickHouse-Key': auth.password,
+    }, body: inserting ? new Uint8Array(await compress(binary ?? Buffer.from(sql))) : sql });
     if (!response.ok) { await response.body?.cancel(); throw new Error(`ClickHouse HTTP ${response.status} (${httpFailureHint(response.status)})`); }
     if (response.headers.get('X-ClickHouse-Exception-Code') && response.headers.get('X-ClickHouse-Exception-Code') !== '0') {
       await response.body?.cancel(); throw new Error('ClickHouse reported a query failure');
@@ -86,7 +91,10 @@ export async function checkClickHouseSchema(c: ClickHouseConfig, credentials: Cl
   }
   if (outdated) throw new Error(`${CLICKHOUSE_TABLES_OUTDATED}; Upgrade tables adds the record_key column`);
 }
-export async function insertClickHouse(c: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, payload: string, signal: AbortSignal, kind = 'facts'): Promise<void> {
-  const result = await clickhouseRequest(c, credentials, `INSERT INTO ${clickhouseTable(c, kind)} SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT JSONEachRow\n${payload}`, signal);
+export async function insertClickHouse(c: ClickHouseConfig, credentials: ClickHouseCredentials | undefined, payload: string | Uint8Array, signal: AbortSignal, kind = 'facts'): Promise<void> {
+  const query = `INSERT INTO ${clickhouseTable(c, kind)} SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT`;
+  const result = typeof payload === 'string'
+    ? await clickhouseRequest(c, credentials, `${query} JSONEachRow\n${payload}`, signal)
+    : await clickhouseRequest(c, credentials, `${query} RowBinary`, signal, { binary: payload });
   if (result.trim()) throw new Error('ClickHouse insert returned an unexpected response; batch retained');
 }

@@ -6,10 +6,10 @@ export type ClickHouseStores = Record<ClickHouseStoreName, boolean>;
 // Turning export on sends everything unless a store is switched off.
 const ALL_STORES = Object.fromEntries(CLICKHOUSE_STORES.map((s) => [s, true])) as ClickHouseStores;
 export interface ClickHouseConfig {
-  enabled: boolean; endpoint: string; database: string; tablePrefix: string; includeBodies: boolean; sourceLabel: string; stores: ClickHouseStores;
+  enabled: boolean; endpoint: string; database: string; tablePrefix: string; includeBodies: boolean; rawWire: boolean; sourceLabel: string; stores: ClickHouseStores;
 }
 export interface ClickHouseCredentials { username: string; password: string }
-export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, endpoint: '', database: 'default', tablePrefix: 'spillway', includeBodies: false, sourceLabel: '', stores: ALL_STORES };
+export const DEFAULT_CLICKHOUSE_CONFIG: ClickHouseConfig = { enabled: false, endpoint: '', database: 'default', tablePrefix: 'spillway', includeBodies: false, rawWire: false, sourceLabel: '', stores: ALL_STORES };
 // The outbox holds at least as much content as the archive can retain.
 export const CLICKHOUSE_OUTBOX_BYTES = ARCHIVE_MAX_BYTES;
 export const CLICKHOUSE_SOURCE_LABEL_MAX = 64;
@@ -25,12 +25,13 @@ export interface ClickHouseStatus {
   acknowledged: number; discarded: number; oversized: number; contentExpired: number; attempts: number; nextAttemptAt: number; lastAcknowledgedAt: string | null;
   error: string | null; running: boolean; paused: boolean; backfilling: boolean;
 }
-export interface ClickHouseBatch { token: string; destination: string; pieces: string; facts: string; rows: number; attempts: number; nextAttemptAt: number }
+export interface ClickHouseBatch { token: string; destination: string; pieces: string; rawPieces?: Uint8Array; facts: string; rows: number; attempts: number; nextAttemptAt: number }
 const TABLE_SUFFIX_LENGTH = "_pieces".length;
 export function validateClickHouseConfig(raw: unknown): ClickHouseConfig {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid ClickHouse settings');
   const r = raw as ClickHouseConfig;
-  if (typeof r.enabled !== 'boolean' || typeof r.includeBodies !== 'boolean') throw new Error('Invalid ClickHouse policy');
+  const rawWire = r.rawWire ?? false;
+  if (typeof r.enabled !== 'boolean' || typeof r.includeBodies !== 'boolean' || typeof rawWire !== 'boolean') throw new Error('Invalid ClickHouse policy');
   if (![r.database, r.tablePrefix].every((v) => typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(v))) throw new Error('Database and table must be simple SQL identifiers (up to 63 characters)');
   if (r.tablePrefix.length > 63 - TABLE_SUFFIX_LENGTH) throw new Error('Table prefix is too long');
   if (typeof r.endpoint !== 'string' || r.endpoint.length > 2048) throw new Error('Invalid ClickHouse endpoint');
@@ -52,7 +53,7 @@ export function validateClickHouseConfig(raw: unknown): ClickHouseConfig {
     if (typeof value !== 'boolean') throw new Error('Invalid ClickHouse stores');
     return [name, value];
   })) as ClickHouseStores;
-  return { stores, sourceLabel: sourceLabel.trim(), enabled: r.enabled, includeBodies: r.includeBodies, endpoint, database: r.database, tablePrefix: r.tablePrefix };
+  return { stores, sourceLabel: sourceLabel.trim(), enabled: r.enabled, includeBodies: r.includeBodies, rawWire, endpoint, database: r.database, tablePrefix: r.tablePrefix };
 }
 export function validateClickHouseCredentials(raw: unknown): ClickHouseCredentials {
   const r = raw as ClickHouseCredentials | null;

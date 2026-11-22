@@ -59,6 +59,7 @@ export class ClickHouseUploader {
         this.verifiedDestination = destination;
       }
       if (batch.pieces) await insertClickHouse(state.config, this.credentials(state.config), batch.pieces, controller.signal, 'pieces');
+      if (batch.rawPieces?.byteLength) await insertClickHouse(state.config, this.credentials(state.config), batch.rawPieces, controller.signal, 'pieces');
       if (batch.facts) await insertClickHouse(state.config, this.credentials(state.config), batch.facts, controller.signal);
       if (controller.signal.aborted) return false;
       await abortable(this.worker.acknowledge(batch.token, batch.destination), controller.signal);

@@ -6,6 +6,8 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CAPTURE_BODY_LIMIT, CAPTURE_CHUNK_BYTES, DEFAULT_ARCHIVE_POLICY, type CaptureRecord } from '@shared/archive';
 import { CLICKHOUSE_BATCH_BYTES, DEFAULT_CLICKHOUSE_CONFIG } from '@shared/clickhouse';
+import { startDemoClickHouse } from '../../scripts/demo/clickhouse.mts';
+import { ClickHouseUploader } from './clickhouseUploader';
 import { durableTransaction, openActivityDb, type Db } from './activityDb';
 import { ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
@@ -17,10 +19,15 @@ afterEach(() => { for (const db of dbs.splice(0)) if (db.open) db.close(); for (
 function setup() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-wire-')); dirs.push(dir);
   const key = randomBytes(32).toString('hex'), file = path.join(dir, 'activity.db'), db = openActivityDb(file, key); dbs.push(db);
-  let exporter: ClickHouseStore;
-  const archive = new ArchiveStore(db, { append: (f) => exporter.append(f) }); exporter = new ClickHouseStore(db, archive);
+  const { archive, exporter } = connect(db);
   archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
   return { db, archive, exporter, file, key };
+}
+function connect(db: Db) {
+  let exporter: ClickHouseStore;
+  const archive = new ArchiveStore(db, { append: (f) => exporter.append(f), rawWireEnabled: () => exporter.rawWireEnabled() });
+  exporter = new ClickHouseStore(db, archive);
+  return { archive, exporter };
 }
 function stream(request: Buffer, response: Buffer, options: { messages?: number; encoding?: string } = {}): CaptureRecord[] {
   const base: CaptureRecord = { id: 'capture-wire', traceId: 'trace-wire-complete', epoch: 'wire-epoch', sequence: 1, startedAt: new Date().toISOString(), method: 'POST', path: '/v1/responses', status: 200, state: 'pending', reason: 'capture-open', request: '', response: '', requestType: 'application/json', responseType: 'text/event-stream', requestEncoding: options.encoding ?? '', responseEncoding: '', format: options.messages ? 'websocket' : 'http', requestBytes: 0, responseBytes: 0, frameCount: 0, requestSha256: '', responseSha256: '' };
@@ -125,19 +132,19 @@ it('exports large bodies over bounded batches and retains queued content across 
   exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, endpoint: 'http://127.0.0.1:8123' }); exporter.prepare();
   ingest(archive, stream(request, response)); archive.setPolicy(DEFAULT_ARCHIVE_POLICY);
   archive.prune(Date.now() + 8 * 86_400_000, true); expect(archive.detail('trace-wire-complete')?.state).toBe('complete');
-  const pieces = new Map<number, string>(); const facts: { kind: string; content_policy: string; record_json: string; request_pieces: { piece_seq: number; offset: number; length: number }[] }[] = [];
+  const pieces = new Map<string, string>(); const facts: { kind: string; content_policy: string; record_json: string; request_pieces: { piece_seq: number | string; offset: number; length: number }[] }[] = [];
   let batches = 0;
   for (;;) {
     const batch = exporter.prepare(); if (!batch) break;
     expect(Buffer.byteLength(batch.facts + batch.pieces)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
-    for (const line of batch.pieces.trim().split('\n').filter(Boolean)) { const row = JSON.parse(line); pieces.set(row.seq, row.bytes); }
+    for (const line of batch.pieces.trim().split('\n').filter(Boolean)) { const row = JSON.parse(line); pieces.set(String(row.seq), row.bytes); }
     for (const line of batch.facts.trim().split('\n').filter(Boolean)) facts.push(JSON.parse(line));
     exporter.acknowledge(batch.token, batch.destination); batches++;
   }
   expect(batches).toBeGreaterThan(1);
   const chunks = facts.filter((r) => r.kind === 'capture-chunk' && JSON.parse(r.record_json).chunk.direction === 'request');
   expect(chunks.every((r) => r.content_policy === 'included')).toBe(true);
-  const restored = Buffer.concat(chunks.map((r) => Buffer.from(r.request_pieces.map((p) => pieces.get(p.piece_seq)!.slice(p.offset, p.offset + p.length)).join(''), 'base64')));
+  const restored = Buffer.concat(chunks.map((r) => Buffer.from(r.request_pieces.map((p) => pieces.get(String(p.piece_seq))!.slice(p.offset, p.offset + p.length)).join(''), 'base64')));
   expect(restored.equals(request)).toBe(true); expect(facts.at(-1)?.kind).toBe('capture-end');
   expect(exporter.status()).toMatchObject({ queued: 0, discarded: 0, contentExpired: 0 });
   archive.prune(Date.now() + 8 * 86_400_000, true); expect(archive.detail('trace-wire-complete')?.state).toBe('expired');
@@ -163,6 +170,127 @@ it('resets an in-progress backfill cursor when its previous entry was deleted', 
   const facts = exporter.prepare()!.facts.trim().split('\n').map((s) => JSON.parse(s));
   expect(facts.map((r) => r.kind)).toEqual(['capture-start', 'capture-chunk', 'capture-chunk', 'capture-end']);
 });
+it('limits combined RowBinary piece and fact bytes per wire batch', () => {
+  const { archive, exporter } = setup();
+  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, endpoint: 'http://127.0.0.1:8123' });
+  exporter.prepare();
+  ingest(archive, stream(Buffer.alloc(CLICKHOUSE_BATCH_BYTES + CAPTURE_CHUNK_BYTES, 0xff), Buffer.alloc(0)));
+  let batches = 0;
+  for (;;) {
+    const batch = exporter.prepare();
+    if (!batch) break;
+    expect(batch.pieces).toBe('');
+    expect(Buffer.byteLength(batch.facts) + (batch.rawPieces?.byteLength ?? 0)).toBeLessThanOrEqual(CLICKHOUSE_BATCH_BYTES);
+    exporter.acknowledge(batch.token, batch.destination);
+    batches++;
+  }
+  expect(batches).toBeGreaterThan(1);
+  expect(exporter.status()).toMatchObject({ queued: 0, discarded: 0 });
+});
+
+it('keeps the capture binding through toggles, restart and an uncertain mixed upload', async () => {
+  const { db, archive, file, key, exporter: initial } = setup();
+  let exporter = initial;
+  const fake = await startDemoClickHouse();
+  try {
+    const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, endpoint: fake.endpoint };
+    exporter.configure(config);
+    exporter.prepare();
+    const before = stream(Buffer.from('before'), Buffer.alloc(0));
+    ingest(archive, before.slice(0, 1));
+    exporter.configure({ ...config, rawWire: true });
+    ingest(archive, before.slice(1));
+    const original = Buffer.concat([Buffer.from([0xff, 0, 0x80]), Buffer.alloc(128, 0x7f)]);
+    const after = stream(Buffer.alloc(0), original, { messages: 1 }).map((r) => ({
+      ...r, id: 'raw-capture', traceId: 'trace-wire-raw', sequence: r.sequence + before.length,
+    }));
+    ingest(archive, after.slice(0, 1));
+    exporter.configure(config);
+    ingest(archive, after.slice(1));
+    expect(db.prepare('SELECT clickhouse_wire_version AS version FROM archive_threads ORDER BY version').all()).toEqual([{ version: 3 }, { version: 4 }]);
+
+    // A downgrade ignores exportVersion, leaving the local ID and the v3 fallback marker.
+    const queued = db.prepare(`SELECT seq,record,content FROM clickhouse_outbox
+      WHERE trace_id='trace-wire-raw' AND json_extract(record,'$.rawBytes')>0`).get() as { seq: number; record: string; content: string };
+    expect(JSON.parse(queued.record).representation).toBe('base64-wire-v2');
+    const content = JSON.parse(queued.content) as { request: [number, number, number][]; exportVersion: number };
+    expect(content.exportVersion).toBe(4);
+    const [id, offset, length] = content.request[0]!;
+    expect([offset, length]).toEqual([0, original.length]);
+    db.prepare(`INSERT INTO clickhouse_outbox(kind,trace_id,at,capture_state,record,content,bytes,thread_id)
+      SELECT kind,trace_id,at,capture_state,record,json_remove(content,'$.exportVersion'),bytes,thread_id FROM clickhouse_outbox WHERE seq=?`).run(queued.seq);
+
+    const worker = {
+      status: async () => exporter.status(),
+      prepare: async () => structuredClone(exporter.prepare()),
+      acknowledge: async (token: string, destination: string) => exporter.acknowledge(token, destination),
+      fail: async (token: string, now: number, error: string) => exporter.fail(token, now, error),
+    };
+    const disconnectAfterRawPiece = (sql: string) => { fake.behavior.insertDisconnect = sql.endsWith(' FORMAT RowBinary'); };
+    fake.events.on('insert', disconnectAfterRawPiece);
+    expect(await new ClickHouseUploader(worker, () => undefined).runOnce()).toBe(false);
+    expect(fake.rows.size).toBe(0);
+    expect(db.prepare('SELECT sent,sent_raw FROM archive_pieces WHERE id=?').get(id)).toEqual({ sent: 0, sent_raw: 0 });
+    const expectedBatch = exporter.status().queued;
+    db.close();
+    const reopened = openActivityDb(file, key); dbs.push(reopened);
+    exporter = connect(reopened).exporter;
+    expect(exporter.status().queued).toBe(expectedBatch);
+    exporter.retry();
+    fake.events.off('insert', disconnectAfterRawPiece);
+    fake.behavior.insertDisconnect = false;
+    fake.requests.length = 0;
+
+    expect(await new ClickHouseUploader(worker, () => undefined).runOnce()).toBe(true);
+    expect(exporter.status().queued).toBe(0);
+    expect(reopened.prepare('SELECT sent,sent_raw FROM archive_pieces WHERE id=?').get(id)).toEqual({ sent: 1, sent_raw: 1 });
+    const inserts = fake.requests.filter((r) => r.sql.startsWith('INSERT'));
+    expect(inserts.map((r) => r.sql.split('\n')[0])).toEqual([
+      expect.stringMatching(/_pieces.*JSONEachRow$/), expect.stringMatching(/_pieces.*RowBinary$/), expect.stringMatching(/_facts.*JSONEachRow$/),
+    ]);
+    expect(inserts[1]).toMatchObject({ contentType: 'application/octet-stream', encoding: 'zstd' });
+    expect(new URL(inserts[1]!.url, fake.endpoint).searchParams.get('query')).toBe(inserts[1]!.sql);
+    const rawRows = [...fake.rows.values()]
+      .filter((row) => row.kind === 'capture-chunk' && JSON.parse(row.record_json).captureId === 'raw-capture')
+      .map((row) => ({ ...row, request_pieces: row.request_pieces! }));
+    const marker = rawRows.find((row) => row.request_pieces.length === 0)!;
+    expect(marker.schema_version).toBe(4);
+    expect(JSON.parse(marker.record_json)).toMatchObject({ rawBytes: 0, chunk: { frame: 1, end: true } });
+    expect(rawRows.filter((row) => row.request_pieces.length).map((row) => row.schema_version)).toEqual([4, 3]);
+    for (const row of rawRows.filter((item) => item.request_pieces.length)) {
+      const [ref] = row.request_pieces;
+      expect(typeof ref!.piece_seq).toBe(row.schema_version === 4 ? 'string' : 'number');
+      const piece = fake.pieces.get(`${row.source_id}:${ref!.piece_seq}`)!;
+      const restored = row.schema_version === 4 ? Buffer.from(piece.bytes).subarray(ref!.offset, ref!.offset + ref!.length)
+        : Buffer.from(String(piece.bytes).slice(ref!.offset, ref!.offset + ref!.length), 'base64');
+      expect(createHash('sha256').update(restored).digest('hex')).toBe(after.at(-1)?.responseSha256);
+    }
+  } finally { await fake.close(); }
+});
+
+it('resends raw pieces after a destination change made by an older build', () => {
+  const { db, archive, exporter } = setup();
+  const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, endpoint: 'http://127.0.0.1:8123' };
+  exporter.configure(config);
+  exporter.prepare();
+  ingest(archive, stream(Buffer.from('raw request'), Buffer.from('raw response')));
+  const first = exporter.prepare()!;
+  expect(first.pieces).toBe('');
+  expect(first.rawPieces?.byteLength).toBeGreaterThan(0);
+  exporter.acknowledge(first.token, first.destination);
+  expect(db.prepare('SELECT sum(sent_raw) AS n FROM archive_pieces').get()).toEqual({ n: 2 });
+  // The older configure() resets legacy sent flags and starts a backfill.
+  const { rawWire: _rawWire, ...oldConfig } = { ...config, endpoint: 'http://127.0.0.1:8124' };
+  db.exec('UPDATE archive_pieces SET sent=0');
+  db.prepare('UPDATE clickhouse_export SET config=?, backfill_cursor=?').run(JSON.stringify(oldConfig), JSON.stringify(['', '']));
+  const rebased = exporter.prepare()!;
+  expect(rebased.destination).not.toBe(first.destination);
+  expect(rebased.rawPieces).toEqual(first.rawPieces);
+  expect(db.prepare('SELECT sum(sent_raw) AS n FROM archive_pieces').get()).toEqual({ n: 0 });
+  exporter.acknowledge(rebased.token, rebased.destination);
+  expect(exporter.prepare()).toBeNull();
+});
+
 it('exports frozen complete wire bytes rather than bounded display previews', async () => {
   const { db, archive, file } = setup(), request = randomBytes(CAPTURE_BODY_LIMIT + CAPTURE_CHUNK_BYTES);
   ingest(archive, stream(request, Buffer.from('ok')));

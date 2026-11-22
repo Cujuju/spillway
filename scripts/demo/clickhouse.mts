@@ -5,7 +5,36 @@ import { zstdDecompressSync } from 'node:zlib';
 // DESCRIBE types as ClickHouse 26 prints them: named tuples span lines.
 const CLICKHOUSE_COLUMNS = { schema_version: 'UInt16', source_id: 'String', source_label: 'LowCardinality(String)', seq: 'UInt64', kind: 'LowCardinality(String)', record_key: 'String', trace_id: 'String', thread_id: 'String', at: "DateTime64(3, 'UTC')", capture_state: 'LowCardinality(String)', content_policy: 'LowCardinality(String)', request_pieces: 'Array(Tuple(\n    piece_seq UInt64,\n    offset UInt32,\n    length UInt32))', response: 'String', frames_json: 'String', record_json: 'String' };
 const CLICKHOUSE_PIECE_COLUMNS = { source_id: 'String', thread_id: 'String', seq: 'UInt64', at: "DateTime64(3, 'UTC')", bytes: 'String' };
-export interface DemoClickHouseRow { source_id: string; seq: number; kind: string; at: string; record_key: string; record_json: string; capture_state?: string; content_policy?: string }
+export interface DemoClickHouseRow { source_id: string; seq: number; kind: string; at: string; record_key: string; record_json: string; capture_state?: string; content_policy?: string; schema_version?: number; request_pieces?: { piece_seq: string | number; offset: number; length: number }[] }
+interface DemoClickHousePiece { source_id: string; thread_id: string; seq: number | string; at: string; bytes: string | Buffer }
+
+function readRawPieces(body: Buffer): DemoClickHousePiece[] {
+  const pieces: DemoClickHousePiece[] = [];
+  let offset = 0;
+  const takeString = () => {
+    let length = 0, scale = 1;
+    for (;;) {
+      const byte = body.readUInt8(offset++);
+      length += (byte & 127) * scale;
+      if (length > body.length) throw new Error('Invalid RowBinary string length');
+      if (byte < 128) break;
+      scale *= 128;
+      if (scale > body.length) throw new Error('Invalid RowBinary string length');
+    }
+    const end = offset + length;
+    if (end > body.length) throw new Error('Truncated RowBinary string');
+    const data = body.subarray(offset, end);
+    offset = end;
+    return data;
+  };
+  while (offset < body.length) {
+    const source_id = takeString().toString(), thread_id = takeString().toString();
+    const seq = body.readBigUInt64LE(offset).toString(); offset += 8;
+    const at = new Date(Number(body.readBigInt64LE(offset))).toISOString(); offset += 8;
+    pieces.push({ source_id, thread_id, seq, at, bytes: takeString() });
+  }
+  return pieces;
+}
 const asLines = (rows: unknown[]) => rows.map((row) => JSON.stringify(row)).join('\n');
 // Exported `at` is UTC text without a zone suffix; the column is DateTime64(3, 'UTC').
 const atMs = (at: string) => Date.parse(/(Z|[+-]\d\d:\d\d)$/.test(at) ? at : `${at.replace(' ', 'T')}Z`);
@@ -58,8 +87,8 @@ function selectActivity(sql: string, params: URLSearchParams, facts: DemoClickHo
 
 /** Loopback-only synthetic destination; rows models SELECT FINAL, requests retains physical retry duplicates. */
 export async function startDemoClickHouse() {
-  const requests: { url: string; sql: string; user: string | undefined; key: string | undefined }[] = [];
-  const pieces = new Map<string, DemoClickHouseRow>();
+  const requests: { url: string; sql: string; user: string | undefined; key: string | undefined; contentType?: string; encoding?: string }[] = [];
+  const pieces = new Map<string, DemoClickHousePiece>();
   const rows = new Map<string, DemoClickHouseRow>();
   const facts: DemoClickHouseRow[] = [];
   const addRows = (records: DemoClickHouseRow[]) => {
@@ -72,30 +101,43 @@ export async function startDemoClickHouse() {
       const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of req) { chunks.push(Buffer.from(chunk)); size += chunk.length; if (size > 9 * 1024 * 1024) { res.writeHead(413).end(); return; } }
       const raw = Buffer.concat(chunks);
-      const sql = (req.headers['content-encoding'] === 'zstd' ? zstdDecompressSync(raw) : raw).toString();
+      const encoding = req.headers['content-encoding'], contentType = req.headers['content-type'];
+      const body = encoding === 'zstd' ? zstdDecompressSync(raw) : raw;
+      const params = new URL(req.url ?? '', 'http://127.0.0.1').searchParams;
+      const binaryQuery = params.get('query');
+      const sql = binaryQuery ?? body.toString();
       const isPieces = /_pieces[`']/.test(sql);
-      requests.push({ url: req.url ?? '', sql, user: req.headers['x-clickhouse-user'] as string | undefined, key: req.headers['x-clickhouse-key'] as string | undefined });
-      if (sql.startsWith('INSERT')) events.emit('insert');
+      const binary = isPieces && Boolean(binaryQuery) && sql.endsWith(' FORMAT RowBinary');
+      requests.push({ url: req.url ?? '', sql, user: req.headers['x-clickhouse-user'] as string | undefined, key: req.headers['x-clickhouse-key'] as string | undefined, contentType, encoding });
+      if (sql.startsWith('INSERT')) events.emit('insert', sql);
       const respond = () => {
         if (sql.startsWith('INSERT')) {
-          const records = sql.slice(sql.indexOf('\n') + 1).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as DemoClickHouseRow & { request_pieces?: unknown[] });
-          // Like ClickHouse 26: named tuples must be JSON objects.
-          if (records.some((r) => r.request_pieces?.some((p) => Array.isArray(p)))) { res.writeHead(400).end('Cannot parse input: expected \'{\''); return; }
-          for (const row of behavior.partialRows < 0 ? records : records.slice(0, behavior.partialRows)) {
-            if (isPieces) pieces.set(`${row.source_id}:${row.seq}`, row);
-            else addRows([row]);
+          const take = <T,>(rows: T[]) => behavior.partialRows < 0 ? rows : rows.slice(0, behavior.partialRows);
+          if (binary) {
+            if (contentType !== 'application/octet-stream') { res.writeHead(415).end(); return; }
+            for (const row of take(readRawPieces(body))) pieces.set(`${row.source_id}:${row.seq}`, row);
+          } else {
+            const lines = sql.slice(sql.indexOf('\n') + 1).trim().split('\n').filter(Boolean);
+            if (isPieces) {
+              const records = lines.map((line) => JSON.parse(line) as DemoClickHousePiece);
+              for (const row of take(records)) pieces.set(`${row.source_id}:${row.seq}`, row);
+            } else {
+              const records = lines.map((line) => JSON.parse(line) as DemoClickHouseRow);
+              if (records.some((r) => r.request_pieces?.some(Array.isArray))) { res.writeHead(400).end('Cannot parse input: expected \'{\''); return; }
+              addRows(take(records));
+            }
           }
         }
         if (behavior.disconnect || sql.startsWith('INSERT') && behavior.insertDisconnect) { res.destroy(); return; }
         res.statusCode = sql.startsWith('INSERT') ? behavior.insertStatus : behavior.status;
-        const body = sql.startsWith('INSERT') ? behavior.insertBody : behavior.body;
-        if (res.statusCode !== 200 || body) { res.end(body); return; }
+        const reply = sql.startsWith('INSERT') ? behavior.insertBody : behavior.body;
+        if (res.statusCode !== 200 || reply) { res.end(reply); return; }
         if (sql === 'SELECT 1 FORMAT TabSeparated') res.end('1\n');
         else if (sql.startsWith('DESCRIBE')) res.end(JSON.stringify({ data: behavior.schema ? Object.entries(isPieces ? CLICKHOUSE_PIECE_COLUMNS : CLICKHOUSE_COLUMNS).filter(([name]) => behavior.schemaVersion > 1 || name !== 'record_key').map(([name, type]) => ({ name, type, default_type: '' })) : [] }));
         else if (sql.startsWith('SELECT engine_full')) res.end(JSON.stringify({ data: [{ engine_full: behavior.engine, sorting_key: isPieces && behavior.sorting.replaceAll(' ', '') === 'source_id,at,seq' ? 'source_id,thread_id,seq' : behavior.sorting, partition_key: behavior.partition }] }));
         else if (sql.startsWith('CREATE TABLE') || sql.startsWith('ALTER TABLE') || sql.startsWith('INSERT')) res.end('');
         else {
-          const output = selectActivity(sql, new URL(req.url ?? '', 'http://127.0.0.1').searchParams, facts);
+          const output = selectActivity(sql, params, facts);
           if (output === undefined) res.writeHead(400).end('Unsupported demo query');
           else res.end(output);
         }

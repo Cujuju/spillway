@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, appendFile, rm, stat, readdir, utimes, renam
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, startClientLogSync, importClientFile } from './clientLogSync';
+import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, clientLogRoots, startClientLogSync, importClientFile } from './clientLogSync';
 import { ClientLogWatcher, CLIENT_LOG_WATCH_RETRY_MS } from './clientLogWatcher';
 import { loadNativeClientLogEvents, type NativeClientLogEvents } from './nativeClientLogWatcher';
 import { ActivityLog } from './activityStore';
@@ -52,8 +52,12 @@ beforeEach(async () => {
   }) as unknown as typeof watch);
   dir = await mkdtemp(path.join(tmpdir(), 'spillway-watch-'));
   vi.stubEnv('CLAUDE_CONFIG_DIR', dir); vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  vi.stubEnv('T3_USERDATA_DIR', path.join(dir, 't3')); vi.stubEnv('GEMINI_HOME', path.join(dir, 'gemini'));
   await mkdir(path.join(dir, 'projects', 'old', 'subagents'), { recursive: true });
   await mkdir(path.join(dir, 'codex', 'sessions'), { recursive: true });
+  await mkdir(path.join(dir, 't3', 'providers', 'antigravity'), { recursive: true });
+  await mkdir(path.join(dir, 'gemini', 'antigravity-cli', 'brain'), { recursive: true });
+  await mkdir(path.join(dir, 'gemini', 'antigravity', 'brain'), { recursive: true });
   log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 30 });
 });
 afterEach(async () => {
@@ -102,7 +106,7 @@ it('falls back to polling if watch creation fails and logs once', async () => {
   vi.mocked(watch).mockImplementation(() => { throw new Error('unsupported'); });
   await start(); await writeFile(file(), line('new')); await poll();
   expect(log.totalsList()).toHaveLength(1);
-  await poll(); expect(warning).toHaveBeenCalledTimes(2); // Once per root.
+  await poll(); expect(warning).toHaveBeenCalledTimes(clientLogRoots().length); // Once per root.
 });
 
 it('discovers a missing root from its nearest existing ancestor', async () => {
@@ -352,7 +356,7 @@ it.each(['load', 'watch'])('polls when native %s fails, then retries and returns
   expect(log.totalsList()).toHaveLength(1);
   vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
   for (let n = 0; n < CLIENT_LOG_WATCH_RETRY_MS / CLIENT_LOG_POLL_MS; n++) await poll();
-  expect(nativeHandles).toHaveLength(2);
+  expect(nativeHandles).toHaveLength(clientLogRoots().length);
   vi.mocked(readdir).mockClear();
   for (let n = 0; n < 2 * CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
   expect(readdir).not.toHaveBeenCalled();
@@ -369,4 +373,40 @@ it('retries a failed native recovery scan without requiring another event or a p
   await poll();
   expect(log.totalsList()).toHaveLength(1);
   expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
+});
+
+it('watches Antigravity transcript.jsonl appends, ignores transcript_full.jsonl, and deduplicates with proxy', async () => {
+  const agRoot = path.join(dir, 't3', 'providers', 'antigravity');
+  const logsDir = path.join(agRoot, 'acct', 'antigravity-acp', 'brain', 'conv-1', '.system_generated', 'logs');
+  await mkdir(logsDir, { recursive: true });
+  const transcript = path.join(logsDir, 'transcript.jsonl');
+  const full = path.join(logsDir, 'transcript_full.jsonl');
+  const step = (idx: number, at: string, input: number, cached: number, output: number) => JSON.stringify({
+    step_index: idx, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: at,
+    model: 'gemini-4-neon-medium', input_tokens: input, cache_read_tokens: cached, output_tokens: output,
+  }) + '\n';
+  const firstAt = '2026-10-30T12:00:00Z';
+  await writeFile(transcript, step(1, firstAt, 100, 400, 20));
+  await writeFile(full, step(1, firstAt, 100, 400, 20));
+  // Pre-seed a matching proxied request so initial import reconciles instead of double-counting.
+  log.append({
+    at: firstAt, requestId: 'proxy-ag-1', upstreamId: null, source: 'proxy', selectionId: null,
+    provider: 'antigravity', model: 'gemini-4-neon-medium', authIndex: 'acct-1', stream: true, failed: false,
+    statusCode: 200, error: null, latencyMs: 500, ttftMs: 100, inputTokens: 500, outputTokens: 20,
+    cachedTokens: 400, cacheWriteTokens: 0, sessionId: 'antigravity:conv-1', movedFrom: null,
+    userAgent: null, client: 'antigravity-acp',
+  });
+  await start();
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
+  expect(log.coverage().clients).toEqual([expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', requests: 1, viaProxy: 1 })]);
+  const agWatch = handles.findLast((h) => h.dir === agRoot && h.recursive)!;
+  vi.mocked(stat).mockClear();
+  await appendFile(full, step(2, '2026-10-30T12:01:00Z', 50, 500, 10));
+  agWatch.emit('change', path.relative(agRoot, full));
+  await poll();
+  expect(stat).not.toHaveBeenCalled();
+  await appendFile(transcript, step(2, '2026-10-30T12:01:00Z', 50, 500, 10));
+  agWatch.emit('change', path.relative(agRoot, transcript));
+  await poll();
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
 });

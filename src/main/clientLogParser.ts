@@ -3,6 +3,7 @@ import { requestSettingsHash } from './requestSettings';
 import { createHash } from 'node:crypto';
 import { clientName } from '@shared/activityScope';
 import type { ActivityEvent } from '@shared/types';
+import type { ClientLogProvider } from './clientLogPaths';
 
 export interface LogContext { version?: string; effort?: string; settings?: Record<string, RequestSettings | null>; session?: string; model?: string; client?: string; turn?: string; total?: string; pendingRecord?: string; pendingSnapshot?: { usage: string; identity: string; at: string } }
 type Json = Record<string, any>;
@@ -11,13 +12,14 @@ const usageTotal = (u: Json | undefined): string | undefined => u ? JSON.stringi
 const text = (v: unknown): string | null => typeof v === 'string' && v.length > 0 ? v : null;
 
 /** Stateful per-file parser; context is checkpointed alongside the byte offset. No prompt or response text is retained. */
-export function parseClientLine(line: string, provider: 'claude' | 'codex', context: LogContext): ActivityEvent | null {
+export function parseClientLine(line: string, provider: ClientLogProvider, context: LogContext): ActivityEvent | null {
   let r: Json;
   try { r = JSON.parse(line); } catch { return null; }
   if (!r || typeof r !== 'object') return null;
   let usage: Json | undefined;
   let upstreamId: string | null = null;
   let identity: string;
+  let at: string | null = text(r.timestamp);
   if (provider === 'claude') {
     if (r.type === 'api-request') {
       const value = parseRequestSettings(r.params);
@@ -34,6 +36,26 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
     context.model = text(r.message.model) ?? undefined;
     context.client = 'claude-cli';
     identity = `${upstreamId}:${text(r.requestId) ?? ''}`;
+  } else if (provider === 'antigravity') {
+    if (r.type !== 'PLANNER_RESPONSE' || r.status !== 'DONE') return null;
+    if (typeof r.input_tokens !== 'number' && typeof r.output_tokens !== 'number') return null;
+    const model = text(r.model);
+    at = text(r.created_at) ?? at;
+    if (!model || !at) return null;
+    const cached = tokens(r.cache_read_tokens);
+    // Antigravity logs uncached input apart from cache_read_tokens; normalize to total prompt tokens to match proxy/Gemini accounting.
+    usage = {
+      input_tokens: tokens(r.input_tokens) + cached,
+      cached_input_tokens: cached,
+      cache_write_input_tokens: 0,
+      output_tokens: tokens(r.output_tokens),
+      reasoning_output_tokens: r.thinking_tokens,
+    };
+    upstreamId = text(r.response_id) ?? text(r.request_id);
+    context.model = model;
+    context.client = context.client ?? 'antigravity';
+    const step = typeof r.step_index === 'number' && Number.isFinite(r.step_index) ? String(r.step_index) : '';
+    identity = upstreamId ?? `${context.session ?? ''}:${step}:${at}`;
   } else {
     const p = r.payload;
     if (!p || typeof p !== 'object') return null;
@@ -77,7 +99,6 @@ export function parseClientLine(line: string, provider: 'claude' | 'codex', cont
     }
 
   }
-  const at = text(r.timestamp);
   if (!at || !Number.isFinite(Date.parse(at)) || !context.model || !usage) return null;
   const settings = provider === 'claude' ? context.settings?.[context.model] ?? null : null;
   const thinking = provider === 'claude' ? usage.output_tokens_details?.thinking_tokens : usage.reasoning_output_tokens;

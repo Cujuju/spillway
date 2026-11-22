@@ -70,10 +70,11 @@ async function encode(value: Secrets): Promise<Buffer> {
 }
 
 /** Parses secrets JSON; null when the text isn't a secrets object (ciphertext, corruption). */
-function parseSecrets(json: string): { value: Secrets; complete: boolean } | null {
+function parseSecrets(json: string, requireDatabaseKey: boolean): { value: Secrets; complete: boolean } | null {
   let parsed: Partial<Secrets>;
   try { parsed = JSON.parse(json) as Partial<Secrets>; } catch { return null; }
   if (typeof parsed?.clientApiKey !== 'string') return null;
+  if (requireDatabaseKey && !present(parsed.databaseKey)) throw new Error('Activity database key is missing');
   let clickhouse: Secrets['clickhouse'];
   if (parsed.clickhouse) {
     try {
@@ -95,16 +96,20 @@ function parseSecrets(json: string): { value: Secrets; complete: boolean } | nul
 }
 
 /** Reads an existing secrets file; throws when it can't (OS store locked or unavailable, corruption). */
-async function decode(buf: Buffer): Promise<{ value: Secrets; reEncrypt: boolean }> {
+async function decode(buf: Buffer, requireDatabaseKey = false): Promise<{ value: Secrets; reEncrypt: boolean }> {
   const encrypting = await safeStorage.isAsyncEncryptionAvailable();
   // Plain JSON was written while OS encryption was unavailable; encrypt it once it is.
-  const plain = parseSecrets(buf.toString('utf8'));
+  const plain = parseSecrets(buf.toString('utf8'), requireDatabaseKey);
   if (plain) return { value: plain.value, reEncrypt: encrypting || !plain.complete };
   if (!encrypting) throw new Error('OS encryption is unavailable');
   const r = await safeStorage.decryptStringAsync(buf);
-  const decrypted = parseSecrets(r.result);
+  const decrypted = parseSecrets(r.result, requireDatabaseKey);
   if (!decrypted) throw new Error('decrypted secrets are malformed');
   return { value: decrypted.value, reEncrypt: r.shouldReEncrypt || !decrypted.complete };
+}
+
+export async function readExistingDatabaseKey(): Promise<string> {
+  return (await decode(readFileSync(appPaths.secretsFile), true)).value.databaseKey;
 }
 
 /** What to do with a secrets file that can't be read: try again, set it aside and start new keys, or give up. */

@@ -62,12 +62,7 @@ export class ActivityStorage {
     this.state = state;
   }
 
-  /** Both the app and transfer CLI initialize under the single-instance lock before opening data. */
-  async initialize(): Promise<string | undefined> {
-    this.root = await realpath(this.root).catch((error: unknown) => {
-      if (!hasCode(error, 'ENOENT')) throw error;
-      return this.root;
-    });
+  private async readState(): Promise<StorageState> {
     const raw = await readOptional(this.stateFile);
     const next = raw === undefined ? { active: null } : JSON.parse(raw) as StorageState;
     if (!next || !validLocation(next.active) || (next.pending !== undefined && (!next.pending || !validLocation(next.pending)
@@ -75,6 +70,24 @@ export class ActivityStorage {
       || (next.cleanup !== undefined && !validLocation(next.cleanup?.source))) {
       throw new Error(`Invalid storage configuration at ${this.stateFile}`);
     }
+    return next;
+  }
+
+  /** Resolve the current directory without running move recovery. */
+  async snapshotDirectory(): Promise<string> {
+    const state = await this.readState();
+    if (state.pending || state.cleanup) throw new Error('Finish the storage move before reporting a replay floor');
+    this.verifyActive(state.active);
+    return state.active?.directory ?? this.root;
+  }
+
+  /** Both the app and transfer CLI initialize under the single-instance lock before opening data. */
+  async initialize(): Promise<string | undefined> {
+    this.root = await realpath(this.root).catch((error: unknown) => {
+      if (!hasCode(error, 'ENOENT')) throw error;
+      return this.root;
+    });
+    const next = await this.readState();
     this.state = next;
     let warning: string | undefined;
     if (next.pending) {
@@ -124,8 +137,7 @@ export class ActivityStorage {
     if (await statOptional(directory)) throw new Error(`${directory} already exists. Choose another folder.`);
   }
 
-  verifyActive(): void {
-    const active = this.state.active;
+  verifyActive(active = this.state.active): void {
     if (!active) return;
     try {
       if (readFileSync(path.join(active.directory, MARKER), 'utf8') === active.id) return;

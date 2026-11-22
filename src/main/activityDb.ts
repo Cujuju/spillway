@@ -79,9 +79,9 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 // Allow a concurrent day transaction to finish before failing a writer.
 export const ACTIVITY_BUSY_TIMEOUT_MS = 30_000;
-export function openKeyed(file: string, hexKey: string): Db {
+export function openKeyed(file: string, hexKey: string, readonly = false): Db {
   if (!HEX_KEY.test(hexKey)) throw new Error('Activity database key is malformed');
-  const db = new Database(file);
+  const db = new Database(file, { readonly, fileMustExist: readonly });
   try {
     db.pragma(`busy_timeout = ${ACTIVITY_BUSY_TIMEOUT_MS}`);
     db.pragma(`cipher='${CIPHER}'`);

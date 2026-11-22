@@ -19,7 +19,7 @@ export function isWireContent(content: QueuedPieceContent | null): content is Wi
   return content !== null && 'wire' in content && content.wire === 2;
 }
 
-const RAW_PIECE_NAMESPACE = 1n << 63n;
+export const RAW_PIECE_NAMESPACE = 1n << 63n;
 export function rawPieceSequence(id: number | bigint): bigint {
   if (typeof id === 'number' && !Number.isSafeInteger(id)) throw new Error('Invalid local ClickHouse piece ID');
   const local = BigInt(id);

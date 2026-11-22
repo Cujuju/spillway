@@ -4,6 +4,7 @@ import { systemHourCycle } from './hourCycle';
 import { spillwayNotice } from '@shared/notice';
 import { app, dialog, nativeTheme, session } from 'electron';
 import { hasTransferSwitch, runTransferMode } from './dataTransfer';
+import { REPLAY_FLOOR_SWITCH, runReplayFloorMode } from './clickhouseReplayFloor';
 import { APP_ID, APP_NAME } from '@shared/app';
 import { minuteToClock } from '@shared/windowStartSettings';
 import { history } from './historyStore';
@@ -14,7 +15,8 @@ import { confirmsSystemQuit, requestQuit } from './quit';
 import { watchQuitEvents } from './quitReason';
 import { activityStorage } from './paths';
 
-if (hasTransferSwitch()) void runTransferMode();
+if (app.commandLine.hasSwitch(REPLAY_FLOOR_SWITCH)) void runReplayFloorMode();
+else if (hasTransferSwitch()) void runTransferMode();
 else void startNormalApp();
 
 async function startNormalApp(): Promise<void> {

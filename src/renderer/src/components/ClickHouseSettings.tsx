@@ -75,6 +75,9 @@ export function ClickHouseSettings() {
       <SettingRow label="Include captured content" help="Also sends request and response text with traces and eval cases. Needs Record bodies (Request capture).">
         <Toggle value={draft().includeBodies} onChange={(v) => update('includeBodies', v)} />
       </SettingRow>
+      <SettingRow label="Raw bytes for new captures" help="Uses ClickHouse capture format v4. Requires a reader that supports v4. Captures already started keep their format.">
+        <Toggle value={draft().rawWire} onChange={(v) => update('rawWire', v)} />
+      </SettingRow>
       <SettingRow label="HTTP endpoint" help="Origin only, e.g. https://clickhouse.example:8443. HTTPS encrypts login and content.">
         <input class="input origin-field" aria-label="ClickHouse endpoint" value={draft().endpoint} onInput={(e) => update('endpoint', e.currentTarget.value)} />
       </SettingRow>

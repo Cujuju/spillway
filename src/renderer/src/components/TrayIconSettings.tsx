@@ -30,6 +30,7 @@ const specId = (s: Draft) => [s.provider, s.windowKey, s.scope, s.credentialId].
 export function TrayIconSettings() {
   const t = () => settings().trayIcons;
   const set = (fn: (d: ReturnType<typeof settings>['trayIcons']) => void) => void updateSettings((d) => fn(d.trayIcons));
+  const canHideAppIcon = () => t().enabled && t().items.length > 0;
   // Thresholds follow "Number shown"; a level starts at the threshold (used: or more, remaining: or less).
   const thresholdWording = () => (t().value === 'remaining' ? 'or below this percent remaining' : 'or above this percent used');
 
@@ -91,6 +92,9 @@ export function TrayIconSettings() {
       <SettingsGroup title="Display">
         <SettingRow label="Show limit icons" help={TRAY_ICONS_HELP}>
           <Toggle value={t().enabled} onChange={(v) => set((d) => void (d.enabled = v))} />
+        </SettingRow>
+        <SettingRow label="Show app icon" help="The app icon stays visible when there are no enabled limit icons.">
+          <Toggle label="Show app icon" value={!canHideAppIcon() || t().showAppIcon} disabled={!canHideAppIcon()} onChange={(v) => set((d) => void (d.showAppIcon = v))} />
         </SettingRow>
         <SettingRow label="Number shown" help="What the digits on each icon mean.">
           <Seg value={t().value} options={[{ value: 'remaining', label: '% remaining' }, { value: 'used', label: '% used' }] as const} onChange={(v) => set((d) => void (d.value = v))} />

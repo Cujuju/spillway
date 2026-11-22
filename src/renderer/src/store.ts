@@ -18,13 +18,17 @@ const api = window.api;
 
 export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
-const SETTINGS_SECTIONS = ['startup', 'window', 'appearance', 'trayIcons', 'proxy', 'windowStart', 'dashboard', 'notifications', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
+const SETTINGS_SECTIONS = ['appearance', 'general', 'notifications', 'startup', 'proxy', 'windowStart', 'dashboard', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+/** Retired section ids still in saved state, mapped to the section that now holds their settings. */
+const RETIRED_SECTIONS = { advanced: 'storage', window: 'general', trayIcons: 'general' } as const satisfies Record<string, SettingsSection>;
+type RetiredSection = keyof typeof RETIRED_SECTIONS;
+const isRetired = (s: string): s is RetiredSection => Object.hasOwn(RETIRED_SECTIONS, s);
 /** Lives here, not in the Settings page, so other views can open a section directly. */
-const [storedSection, setStoredSection] = persistedSignal<SettingsSection | 'advanced'>('settingsSection', 'startup', [...SETTINGS_SECTIONS, 'advanced']);
+const [storedSection, setStoredSection] = persistedSignal<SettingsSection | RetiredSection>('settingsSection', 'general', [...SETTINGS_SECTIONS, ...(Object.keys(RETIRED_SECTIONS) as RetiredSection[])]);
 export const settingsSection = (): SettingsSection => {
   const section = storedSection();
-  return section === 'advanced' ? 'storage' : section;
+  return isRetired(section) ? RETIRED_SECTIONS[section] : section;
 };
 export const setSettingsSection = (section: SettingsSection) => setStoredSection(section);
 export function openSettings(section: SettingsSection): void {

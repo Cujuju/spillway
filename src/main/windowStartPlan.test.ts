@@ -20,7 +20,7 @@ const weekly = (status: LimitWindow['status']): LimitWindow => ({
 function cred(id: string, windows: LimitWindow[], extra: Partial<Credential> = {}): Credential {
   return {
     id, name: `${id}.json`, authIndex: `idx-${id}`, provider: 'claude', label: id, note: null, email: null, lastUsedAt: null,
-    disabled: false, status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false,
+    disabled: false, canRefresh: true, status: 'active', statusMessage: null, priority: 0, cooldownUntil: null, observedAt: null, nextPick: false,
     preferred: false, weight: 1, plan: null, resetCredits: null, windows, ...extra,
   };
 }

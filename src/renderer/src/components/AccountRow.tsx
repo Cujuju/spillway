@@ -14,8 +14,6 @@ import { ProviderGlyph, ResetTime } from './ui';
 import { appLocale } from '@shared/timeFormat';
 
 const ICON_PX = 13;
-/** Providers the proxy's on-demand usage lookup (POST /usage/refresh) supports. */
-const LIVE_LOOKUP_PROVIDERS = new Set(['claude', 'codex']);
 
 /** Controls inside the row keep their own clicks; the rest of the row picks the account. */
 const ROW_CONTROLS = 'button, a, input, select';
@@ -69,7 +67,7 @@ export function AccountRow(props: {
           <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
           </Show>
-          <Show when={!c().apiKey && LIVE_LOOKUP_PROVIDERS.has(c().provider) && !c().disabled}>
+          <Show when={c().canRefresh}>
             <button class="btn ghost icon-btn" disabled={busy()} onClick={() => void refresh()} title="Refresh quota" aria-label="Refresh quota">
               <RefreshCw size={ICON_PX} class={busy() ? 'spin' : undefined} />
             </button>
@@ -118,7 +116,7 @@ export function AccountRow(props: {
         </div>
       </div>
       <div class="limits">
-        <For each={c().windows} fallback={<span class="muted">{c().apiKey ? 'No quota reported' : 'No limit data yet — refresh to look it up.'}</span>}>
+        <For each={c().windows} fallback={<span class="muted">{c().canRefresh ? 'No limit data yet — refresh to look it up.' : 'No quota reported'}</span>}>
           {(w) => <LimitBar window={w} forecast={props.forecastOf?.(w.key) ?? null} />}
         </For>
       </div>

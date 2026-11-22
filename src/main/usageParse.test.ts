@@ -45,6 +45,22 @@ describe('credential label', () => {
   });
 });
 
+describe('credential refresh capability', () => {
+  it('honors the proxy capability for Claude and Antigravity', () => {
+    expect(parseOne({ can_refresh: false }).canRefresh).toBe(false);
+    expect(parseOne({ provider: 'antigravity', can_refresh: true }).canRefresh).toBe(true);
+    expect(parseOne({ provider: 'antigravity', can_refresh: false }).canRefresh).toBe(false);
+  });
+
+  it('falls back to enabled Claude and Codex logins when the capability is omitted', () => {
+    expect(parseOne({}).canRefresh).toBe(true);
+    expect(parseOne({ provider: 'Codex' }).canRefresh).toBe(true);
+    expect(parseOne({ provider: 'antigravity' }).canRefresh).toBe(false);
+    expect(parseOne({ disabled: true }).canRefresh).toBe(false);
+    expect(parseOne({ api_key: { masked: '••••' } }).canRefresh).toBe(false);
+  });
+});
+
 describe('windows and weight', () => {
   it('reads masked API-key identity and request counts without subscription limits', () => {
     const c = parseOne({ label: 'claude-apikey', api_key: { masked: 'sk-a…1234', success: 7, failed: 2 } });

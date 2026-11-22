@@ -15,9 +15,23 @@ describe('demo fixtures', () => {
     expect(snapshot.credentials.map((c) => c.id)).toEqual(ACCOUNTS.map((a) => a.id));
     for (const c of snapshot.credentials) {
       const spec = ACCOUNTS.find((a) => a.id === c.id)!;
+      expect(c.canRefresh).toBe(spec.canRefresh);
       expect(c.windows.map((w) => w.key)).toEqual(spec.windows.map((w) => w.key));
       for (const w of c.windows) expect(w.usedPercent).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('emits Antigravity model quota buckets with unknown duration and cadence', () => {
+    const payload = usageWindows(data, new Map());
+    expect(payload).toMatchObject({
+      credentials: expect.arrayContaining([expect.objectContaining({
+        provider: 'antigravity',
+        windows: [
+          expect.objectContaining({ key: 'ag_gemini', label: 'Gemini', scoped: true, duration_seconds: null, reset_cadence: null, resets_at: expect.any(String) }),
+          expect.objectContaining({ key: 'ag_claude', label: 'Claude', scoped: true, duration_seconds: null, reset_cadence: null, resets_at: expect.any(String) }),
+        ],
+      })]),
+    });
   });
 
   it('parse as request events', () => {

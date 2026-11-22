@@ -81,6 +81,8 @@ export interface Credential {
   apiKey?: { masked: string; success: number; failed: number } | null;
   lastUsedAt: string | null;
   disabled: boolean;
+  /** True when POST /usage/refresh supports this credential. */
+  canRefresh: boolean;
   status: string;
   statusMessage: string | null;
   priority: number;

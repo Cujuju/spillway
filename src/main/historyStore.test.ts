@@ -18,7 +18,7 @@ const snapshot = (fetchedAt: string, used: number | null, resetsAt: string | nul
   fetchedAt, strategy: 'round-robin',
   credentials: [{
     id: 'a', name: 'a', authIndex: 'a', provider: 'claude', label: 'a', note: null, email: null,
-    lastUsedAt: null, disabled: false, status: 'ready', statusMessage: null, priority: 0,
+    lastUsedAt: null, disabled: false, canRefresh: true, status: 'ready', statusMessage: null, priority: 0,
     cooldownUntil: null, observedAt: null, nextPick: false, preferred: false, weight: 1, plan: null, resetCredits: null,
     windows: [{ key: 'seven_day', label: 'Weekly', usedPercent: used, resetsAt, status: 'allowed', durationMs: null, scoped: false, resetCadence: 'fixed' }],
   }],

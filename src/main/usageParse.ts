@@ -108,7 +108,7 @@ export function errorText(raw: unknown): string | null {
 function parseCredential(raw: unknown): Credential | null {
   const c = obj(raw);
   const id = s(c.id);
-  const provider = s(c.provider);
+  const provider = s(c.provider)?.toLowerCase();
   if (!id || !provider) return null;
   const windows = Array.isArray(c.windows) ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null) : [];
   const note = s(c.note);
@@ -116,17 +116,20 @@ function parseCredential(raw: unknown): Credential | null {
   const key = obj(c.api_key);
   const masked = s(key.masked);
   const apiKey = masked ? { masked, success: Math.max(0, n(key.success) ?? 0), failed: Math.max(0, n(key.failed) ?? 0) } : null;
+  const disabled = c.disabled === true;
   return {
     id,
     name: s(c.name) ?? id,
     authIndex: s(c.auth_index) ?? id,
-    provider: provider.toLowerCase(),
+    provider,
     // The proxy labels every key of a family alike ("claude-apikey"); the masked key tells them apart.
     label: note ?? masked ?? emailDomain(email) ?? s(c.label) ?? email ?? id,
     note,
     email,
     apiKey,
-    disabled: c.disabled === true,
+    disabled,
+    canRefresh: typeof c.can_refresh === 'boolean' ? c.can_refresh
+      : !apiKey && !disabled && (provider === 'claude' || provider === 'codex'),
     status: s(c.status) ?? 'unknown',
     statusMessage: errorText(c.status_message),
     priority: n(c.priority) ?? 0,

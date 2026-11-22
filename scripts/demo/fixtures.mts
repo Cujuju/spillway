@@ -18,13 +18,17 @@ const WEEK_S = 7 * 24 * 3600;
 /** Used-percent at which the proxy reports a window as a warning. */
 const WARNING_PERCENT = 80;
 const FULL_PERCENT = 100;
-interface WindowSpec { key: string; label: string; seconds: number; cadence: 'on_use' | 'fixed' | null; scoped: boolean; /** Percent per request. */ cost: number }
+type WindowSpec = { key: string; label: string; scoped: boolean; /** Percent per request. */ cost: number } & (
+  | { seconds: number; cadence: 'on_use' | 'fixed' | null }
+  | { seconds: null; cadence: null; simulatedSeconds: number }
+);
 interface AccountSpec {
   id: string;
   authIndex: string;
-  provider: 'claude' | 'codex' | 'gemini';
+  provider: 'claude' | 'codex' | 'gemini' | 'antigravity';
   email: string | null;
   note: string;
+  canRefresh: boolean;
   plan: { tier: string; type: string; label: string; multiplier: number | null } | null;
   /** Share of the hour's traffic this account takes. */
   share: number;
@@ -48,17 +52,22 @@ const CLAUDE_UA = 'claude-cli/2.4.1 (external, cli)';
 const CODEX_UA = 'codex_cli_rs/0.62.0 (Windows 10.0.19045; x86_64)';
 const GEMINI_UA = 'GeminiCLI/0.9.0 (win32; x64)';
 export const ACCOUNTS: AccountSpec[] = [
-  { id: 'claude-alex@example.com.json', authIndex: 'a1c3e5', provider: 'claude', email: 'alex@example.com', note: 'Work', share: 0.4,
+  { id: 'claude-alex@example.com.json', authIndex: 'a1c3e5', provider: 'claude', email: 'alex@example.com', note: 'Work', share: 0.4, canRefresh: true,
     plan: { tier: 'default_claude_max_20x', type: 'claude_max', label: 'Max 20x', multiplier: 20 }, models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'], userAgent: CLAUDE_UA, windows: claudeWindows(1) },
-  { id: 'claude-alex@example.org.json', authIndex: 'b2d4f6', provider: 'claude', email: 'alex@example.org', note: 'Personal', share: 0.2,
+  { id: 'claude-alex@example.org.json', authIndex: 'b2d4f6', provider: 'claude', email: 'alex@example.org', note: 'Personal', share: 0.2, canRefresh: true,
     plan: { tier: 'default_claude_max_5x', type: 'claude_max', label: 'Max 5x', multiplier: 5 }, models: ['claude-opus-5-5', 'claude-sonnet-5-5'], userAgent: CLAUDE_UA, windows: claudeWindows(0.5) },
-  { id: 'codex-alex@example.com.json', authIndex: 'c3e5a7', provider: 'codex', email: 'alex@example.com', note: 'Work', share: 0.25,
+  { id: 'codex-alex@example.com.json', authIndex: 'c3e5a7', provider: 'codex', email: 'alex@example.com', note: 'Work', share: 0.25, canRefresh: true,
     plan: { tier: 'pro', type: 'pro', label: 'Pro', multiplier: null }, models: ['gpt-6.1-sol', 'gpt-6-luna'], userAgent: CODEX_UA, windows: codexWindows(1) },
-  { id: 'codex-sam@example.net.json', authIndex: 'd4f6b8', provider: 'codex', email: 'sam@example.net', note: 'Side project', share: 0.1,
+  { id: 'codex-sam@example.net.json', authIndex: 'd4f6b8', provider: 'codex', email: 'sam@example.net', note: 'Side project', share: 0.1, canRefresh: true,
     plan: { tier: 'plus', type: 'plus', label: 'Plus', multiplier: null }, models: ['gpt-6.1-sol'], userAgent: CODEX_UA, windows: codexWindows(0.25) },
-  { id: 'gemini-apikey-1', authIndex: 'e5a7c9', provider: 'gemini', email: null, note: 'Gemini API', share: 0.05,
+  { id: 'gemini-apikey-1', authIndex: 'e5a7c9', provider: 'gemini', email: null, note: 'Gemini API', share: 0.05, canRefresh: false,
     plan: null, models: ['gemini-3.5-pro'], userAgent: GEMINI_UA, windows: [],
     apiKey: { family: 'gemini', key: 'AIza-demo-not-a-real-key-7f3a', masked: 'AIza…7f3a' } },
+  { id: 'antigravity-sam@example.net.json', authIndex: 'f6b8d0', provider: 'antigravity', email: 'sam@example.net', note: 'Antigravity', share: 0.05, canRefresh: true,
+    plan: null, models: ['gemini-3-flash'], userAgent: 'Antigravity/1.0.0', windows: [
+      { key: 'ag_gemini', label: 'Gemini', seconds: null, cadence: null, simulatedSeconds: FIVE_HOURS_S, scoped: true, cost: 4 },
+      { key: 'ag_claude', label: 'Claude', seconds: null, cadence: null, simulatedSeconds: WEEK_S, scoped: true, cost: 0.8 },
+    ] },
 ];
 /** mulberry32: small, fast and good enough for fake data. */
 function rng(seed: number): () => number {
@@ -112,6 +121,7 @@ const DAILY_SERIES = [
   { model: 'claude-haiku-5-5', effort: 'low', attempts: 12 },
   { model: 'gpt-6-luna', effort: 'medium', attempts: 10 },
   { model: 'gemini-3.5-pro', effort: 'high', attempts: 8 },
+  { model: 'gemini-3-flash', effort: 'medium', attempts: 8 },
 ];
 interface PlannedReply { account: AccountSpec; model: string; effort: string; failed: boolean; at: number; metricScale: number; shifted: boolean }
 /** A daily quota avoids random gaps; weighted slots preserve the working-day rhythm. */
@@ -174,6 +184,7 @@ const hex = (rand: () => number, length: number) => Array.from({ length }, () =>
 const uuid = (rand: () => number) => `${hex(rand, 8)}-${hex(rand, 4)}-4${hex(rand, 3)}-a${hex(rand, 3)}-${hex(rand, 12)}`;
 /** Weekly windows reset on a fixed weekly anchor; aligned to the hour like the providers' resets. */
 const firstWeeklyReset = (start: number, offsetDays: number) => Math.ceil(start / HOUR_MS) * HOUR_MS + offsetDays * DAY_MS;
+const simulatedWindowMs = (spec: WindowSpec) => (spec.seconds ?? spec.simulatedSeconds) * 1000;
 /** Average conversation length in requests, so sessions span realistic stretches. */
 const REQUESTS_PER_SESSION = 60;
 /** Share of attempts that fail upstream (rate limits, overloads). */
@@ -207,7 +218,7 @@ export function generate(now: number): DemoData {
         const w = states.get(spec.key)!;
         if (w.resetsAt !== null && t >= w.resetsAt) {
           w.used = 0;
-          w.resetsAt = spec.cadence === 'on_use' ? null : w.resetsAt + spec.seconds * 1000;
+          w.resetsAt = spec.cadence === 'on_use' ? null : w.resetsAt + simulatedWindowMs(spec);
         }
       }
       const replies = (schedule.get(t) ?? []).filter((reply) => reply.account === account).sort((a, b) => a.at - b.at);
@@ -258,7 +269,7 @@ export function generate(now: number): DemoData {
         lastUsed.set(account.authIndex, at);
         for (const spec of account.windows) {
           const w = states.get(spec.key)!;
-          if (w.resetsAt === null) w.resetsAt = t + spec.seconds * 1000;
+          if (w.resetsAt === null) w.resetsAt = t + simulatedWindowMs(spec);
           w.used = Math.min(FULL_PERCENT, w.used + spec.cost * (0.5 + rand()));
         }
       }
@@ -300,6 +311,7 @@ export function usageWindows(data: DemoData, preferred: Map<string, string>, spe
       ...(a.email ? { email: a.email } : {}),
       ...(a.apiKey ? { api_key: { masked: a.apiKey.masked, success: 412, failed: 3 } } : {}),
       disabled: false, status: 'active', status_message: '', priority: 0, cooldown_until: null, weight: 1, plan: a.plan,
+      can_refresh: a.canRefresh,
       reset_credits: demoResetCredits(a.provider, a.authIndex, data.now, spent),
       observed_at: iso(data.now), last_used_at: iso(data.lastUsed.get(a.authIndex)),
       next_pick: nextPick.get(a.provider) === a.authIndex, preferred: preferred.get(a.provider) === a.authIndex,

@@ -18,7 +18,7 @@ const api = window.api;
 
 export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
-const SETTINGS_SECTIONS = ['appearance', 'general', 'notifications', 'startup', 'proxy', 'windowStart', 'dashboard', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
+const SETTINGS_SECTIONS = ['general', 'appearance', 'notifications', 'startup', 'proxy', 'windowStart', 'dashboard', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 /** Retired section ids still in saved state, mapped to the section that now holds their settings. */
 const RETIRED_SECTIONS = { advanced: 'storage', window: 'general', trayIcons: 'general' } as const satisfies Record<string, SettingsSection>;

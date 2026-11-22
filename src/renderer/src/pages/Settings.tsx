@@ -18,7 +18,7 @@ import { setSettingsSection as setSection, settings, settingsSection as section,
 const ICON_PX = 14;
 
 const NAV: NavGroup<SettingsSection>[] = [
-  { group: 'App', items: [{ id: 'appearance', label: 'Appearance' }, { id: 'general', label: 'General' }, { id: 'notifications', label: 'Notifications' }, { id: 'startup', label: 'Startup' }] },
+  { group: 'App', items: [{ id: 'general', label: 'General' }, { id: 'appearance', label: 'Appearance' }, { id: 'notifications', label: 'Notifications' }, { id: 'startup', label: 'Startup' }] },
   { group: 'Proxy', items: [{ id: 'proxy', label: 'Routing & server' }, { id: 'windowStart', label: 'Rolling windows' }, { id: 'dashboard', label: 'Dashboard' }] },
   { group: 'Data', items: [{ id: 'storage', label: 'Storage' }, { id: 'capture', label: 'Request capture' }, { id: 'clickhouse', label: 'ClickHouse', title: 'ClickHouse export' }] },
   { group: 'System', items: [{ id: 'updates', label: 'Updates' }, { id: 'about', label: 'About', gapBefore: true }] },
@@ -186,8 +186,8 @@ export function Settings() {
   return (
     <SectionedPage nav={NAV} section={section()} onSelect={setSection}>
       <Switch>
-        <Match when={section() === 'appearance'}><Appearance /></Match>
         <Match when={section() === 'general'}><General /></Match>
+        <Match when={section() === 'appearance'}><Appearance /></Match>
         <Match when={section() === 'startup'}><Startup /></Match>
         <Match when={section() === 'proxy'}><ProxySection /></Match>
         <Match when={section() === 'windowStart'}><WindowStartSettings /></Match>

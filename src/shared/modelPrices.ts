@@ -165,12 +165,19 @@ function priceHistory(model: string): readonly ModelPrice[] | null {
   return PRICES[id] ?? PRICES[id.replace(DATE_SUFFIX, '')] ?? null;
 }
 
+// A date-only `from` parses as UTC midnight, so comparing times matches comparing UTC dates without formatting one per request.
+const startTimes = new Map<string, number>();
+const startTime = (from: string) => {
+  let time = startTimes.get(from);
+  if (time === undefined) { time = Date.parse(from); startTimes.set(from, time); }
+  return time;
+};
+
 /** Rates in effect on the request's UTC date; histories are oldest first. An unreadable time is unpriced. */
 export function priceAt(history: readonly ModelPrice[], at: string | number): ModelPrice | null {
-  const time = new Date(at);
-  if (Number.isNaN(time.getTime())) return null;
-  const day = time.toISOString().split('T')[0]!;
-  return history.findLast((price) => price.from === null || price.from <= day) ?? null;
+  const time = new Date(at).getTime();
+  if (Number.isNaN(time)) return null;
+  return history.findLast((price) => price.from === null || startTime(price.from) <= time) ?? null;
 }
 
 /** A model's current list rates; null when unpriced. */

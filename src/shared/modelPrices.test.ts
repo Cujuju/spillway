@@ -37,6 +37,9 @@ describe('tokenCost', () => {
     const history = [old, current];
     expect(priceAt(history, '2026-10-25T23:59:59Z')).toBe(old);
     expect(priceAt(history, Date.parse('2026-10-26T00:00:00Z'))).toBe(current);
+    expect(priceAt(history, Date.parse('2026-10-26T00:00:00Z') - 1)).toBe(old);
+    expect(priceAt(history, '2026-10-26T01:00:00+02:00')).toBe(old);
+    expect(priceAt(history, '2026-10-25T23:00:00-02:00')).toBe(current);
     expect(priceAt(history, 'not a time')).toBeNull();
   });
   it('prices Sonnet 5.5 cache reads at $0.20 before 2026-10-07 and $0.10 from then', () => {

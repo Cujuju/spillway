@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeUsage, sameUsage, USAGE_MATCH_TOLERANCE_MS } from './usageMerge';
-import { parseClientLine } from './clientLogParser';
+import { parseClientLine, splitAntigravityModelEffort } from './clientLogParser';
 import { tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
 
@@ -84,8 +84,11 @@ it.each(['fast', 'standard', 'flex', undefined])('maps Claude transcript billing
   expect(parseClientLine(JSON.stringify(withoutLifetime), 'claude', {})?.cacheWrite1hTokens).toBeNull();
 });
 
-it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, strips text, and deduplicates with proxy', () => {
-  const ctx = { session: 'conv-42', client: 'antigravity-cli' };
+it('parses Antigravity PLANNER_RESPONSE lines, splits model/effort, normalizes prompt tokens, strips text, and deduplicates with proxy', () => {
+  expect(splitAntigravityModelEffort('gemini-4-neon-high')).toEqual({ model: 'gemini-4-neon', effort: 'high' });
+  expect(splitAntigravityModelEffort('claude-opus-5-5-medium')).toEqual({ model: 'claude-opus-5-5', effort: 'medium' });
+  expect(splitAntigravityModelEffort('gemini-3-flash')).toEqual({ model: 'gemini-3-flash', effort: null });
+  const ctx = { session: 'conv-42', client: 'antigravity-cli', authIndex: 'ag-1' };
   const planner = {
     step_index: 7, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE',
     created_at: '2026-11-22T22:02:12Z', model: 'gemini-4-neon-medium',
@@ -95,7 +98,8 @@ it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, s
   const event = parseClientLine(JSON.stringify(planner), 'antigravity', ctx)!;
   expect(event).toMatchObject({
     provider: 'antigravity', source: 'client-log', client: 'antigravity-cli', upstreamId: null,
-    sessionId: 'agy:conv-42', model: 'gemini-4-neon-medium', at: '2026-11-22T22:02:12Z',
+    sessionId: 'agy:conv-42', model: 'gemini-4-neon', reasoningEffort: 'medium', authIndex: 'ag-1',
+    at: '2026-11-22T22:02:12Z',
     inputTokens: 55_029, cachedTokens: 41_240, cacheWriteTokens: 0, outputTokens: 603,
   });
   expect(JSON.stringify(event)).not.toContain('PRIVATE_');
@@ -105,7 +109,7 @@ it('parses Antigravity PLANNER_RESPONSE lines, normalizes total prompt tokens, s
   expect(parseClientLine(JSON.stringify({ step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-22T22:02:00Z' }), 'antigravity', ctx)).toBeNull();
   // Deduplicates against a matching proxied Antigravity event.
   const proxied = sampleUsage({
-    provider: 'antigravity', model: 'gemini-4-neon-medium', sessionId: 'agy:conv-42', client: 'antigravity-cli',
+    provider: 'antigravity', model: 'gemini-4-neon', sessionId: 'agy:conv-42', client: 'antigravity-cli',
     at: '2026-11-22T22:02:10Z', inputTokens: 55_029, cachedTokens: 41_240, cacheWriteTokens: 0, outputTokens: 603,
   });
   expect(sameUsage(proxied, event)).toBe(true);

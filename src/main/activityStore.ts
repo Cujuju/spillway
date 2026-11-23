@@ -26,7 +26,8 @@ import type { ThinkingQuery } from '@shared/thinking';
 import { compareActivity } from './activityCompare';
 import type { CompareQuery } from '@shared/activityCompare';
 export { oldestKeptDay, lastDays } from './activityTransfer';
-import { clientLogKey } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, clientLogKey, type ClientLogProvider } from './clientLogPaths';
+import { readAntigravityOAuthEmail } from './clientLogSync';
 import { connectionStatements } from './connectionStatements';
 import { localDay } from '@shared/activityCounts';
 import { normalizeTransport } from '@shared/activityTransport';
@@ -34,9 +35,9 @@ import { EVERY_REQUEST, inScope, normalizeScope, type ActivityScope } from '@sha
 import {
   ACTIVITY_PAGE_SIZE, RHYTHM_LOOKBACK_DAYS, type ActivityBucket, type ActivityBucketSnapshot, type ActivityDaySummary, type ActivityDayTotal, type ActivityEvent, type ActivityPage, type ActivityPageQuery, type ProxyCoverage, type StoredActivityEvent,
 } from '@shared/types';
-import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, durableTransaction, importLegacyFiles, openActivityDb, type Db } from './activityDb';
+import { ACCOUNT_KEY_SQL, CLIENT_KEY_SQL, CONVERSATION_KEY_SQL, DAY_KEY, durableTransaction, importLegacyFiles, openActivityDb, openKeyed, SOURCE_KEY_SQL, type Db } from './activityDb';
 import { addToTotals, dailyTotals, readTotals, storedTotalKey, toBucket, type ActivityTotal } from './activityTotals';
-import { identityKey, reconcileUsage, rememberUsage, type AccountedActivityEvent } from './usageLedger';
+import { identityKey, reconcileUsage, relabelIdentities, rememberUsage, type AccountedActivityEvent, type IdentityRow } from './usageLedger';
 import { toStored, type RequestRow } from './activityRequestRow';
 
 const conversationKey = (e: ActivityEvent) => `${e.sessionId}|${e.model}`;
@@ -66,7 +67,7 @@ function normalizeQuery(q: Partial<ActivityPageQuery> | undefined): ActivityPage
 
 /** SQL condition limiting requests to `scope`'s accounts and clients; null when every request is in scope. */
 export function scopeClause(scope: ActivityScope): { sql: string; params: string[] } | null {
-  const parts: string[] = scope.source === 'proxy' ? ["coalesce(json_extract(event, '$.source'), 'proxy') = 'proxy'"] : [];
+  const parts: string[] = scope.source === 'proxy' ? [`${SOURCE_KEY_SQL} = 'proxy'`] : [];
   const params: string[] = [];
   for (const [keySql, keys] of [[ACCOUNT_KEY_SQL, scope.accounts], [CLIENT_KEY_SQL, scope.clients], ["coalesce(json_extract(event, '$.reasoningEffort'), '')", scope.efforts ?? null]] as const) {
     if (keys === null) continue;
@@ -80,7 +81,7 @@ export function scopeClause(scope: ActivityScope): { sql: string; params: string
  * Every request in the encrypted database (activityDb.ts), kept for the "Keep requests for" setting,
  * plus hourly totals that are kept until cleared.
  */
-export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number }
+export interface ActivityConfig { activityDb: string; legacyActivityDir: string; databaseKey: string; retentionDays: number; readonly?: boolean }
 export class ActivityLog {
   private retainedTurns = new RetainedTurns();
   thinkingTestPrepare(req: TestPlanRequest) { return prepareTest(this.db, this.archive, req, this.retainedTurns); }
@@ -154,10 +155,63 @@ export class ActivityLog {
   private checkpoints = new Map<string, string | undefined>();
   /** Latest account per conversation and model (conversationKey), filled from the database on first sight. */
   private conversationAccounts = new Map<string, string | null>();
+  /** Maps `provider:email` (lowercased) to proxy credential `authIndex` for local-log attribution. */
+  private accounts = new Map<string, string>();
+
+  resolveAccount(provider: ClientLogProvider, email: string): string | null {
+    return this.accounts.get(`${provider}:${email.trim().toLowerCase()}`) ?? null;
+  }
+
+  /** Updates known email→authIndex pairs and backfills unattributed local Antigravity sessions. */
+  async setAccountMap(accounts: Record<string, string>): Promise<boolean> {
+    this.accounts = new Map(Object.entries(accounts).map(([k, v]) => [k.toLowerCase(), v]));
+    if (![...this.accounts.keys()].some((k) => k.startsWith('antigravity:'))) return false;
+    const missing = this.db.prepare("SELECT 1 FROM requests WHERE json_extract(event, '$.provider') = 'antigravity' AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.authIndex') IS NULL LIMIT 1").get()
+      ?? this.db.prepare("SELECT 1 FROM usage_identities WHERE provider = 'antigravity' AND source = 'client-log' AND json_extract(event, '$.authIndex') IS NULL LIMIT 1").get();
+    if (!missing) return false;
+    const bySession = new Map<string, string>();
+    const checkpoints = this.db.prepare('SELECT path FROM client_log_checkpoints').all() as { path: string }[];
+    for (const { path: file } of checkpoints) {
+      const { session } = antigravityLogContext(file);
+      if (!session) continue;
+      const tokenPath = antigravityOAuthTokenPath(file);
+      const email = tokenPath ? await readAntigravityOAuthEmail(tokenPath) : null;
+      const authIndex = email ? this.resolveAccount('antigravity', email) : null;
+      if (authIndex) bySession.set(`agy:${session}`, authIndex);
+    }
+    if (bySession.size === 0) return false;
+    const changed = this.db.transaction(() => {
+      let updated = false;
+      const updateReq = this.db.prepare('UPDATE requests SET event = ? WHERE id = ?');
+      for (const row of this.db.prepare("SELECT id, event FROM requests WHERE json_extract(event, '$.provider') = 'antigravity' AND json_extract(event, '$.source') = 'client-log' AND json_extract(event, '$.authIndex') IS NULL").all() as { id: number; event: string }[]) {
+        const e = JSON.parse(row.event) as Record<string, unknown>;
+        const authIndex = typeof e.sessionId === 'string' ? bySession.get(e.sessionId) : undefined;
+        if (!authIndex) continue;
+        updateReq.run(JSON.stringify({ ...e, authIndex }), row.id);
+        updated = true;
+      }
+      const identityRows = this.db.prepare("SELECT * FROM usage_identities WHERE provider = 'antigravity' AND source = 'client-log' AND json_extract(event, '$.authIndex') IS NULL").all() as IdentityRow[];
+      if (relabelIdentities(this.db, identityRows, (_row, e) => {
+        const authIndex = typeof e.sessionId === 'string' ? bySession.get(e.sessionId) : undefined;
+        return authIndex ? { authIndex } : null;
+      })) updated = true;
+      return updated;
+    }).immediate();
+    if (changed) {
+      this.totals = null;
+      this.conversationAccounts.clear();
+      this.revision += 1;
+    }
+    return changed;
+  }
 
   /** Opens on first use, after secrets load. */
   private get db(): Db {
     if (!this.conn) {
+      if (this.config.readonly) {
+        this.conn = openKeyed(this.config.activityDb, this.config.databaseKey, { readonly: true });
+        return this.conn;
+      }
       this.conn = openActivityDb(this.config.activityDb, this.config.databaseKey);
       importLegacyFiles(this.conn, this.config.legacyActivityDir);
       if (!this.conn.prepare("SELECT 1 FROM meta WHERE key = 'usage-ledger-seeded'").get()) {
@@ -316,16 +370,19 @@ export class ActivityLog {
     const scope = normalizeScope(rawScope);
     const clause = scopeClause(scope);
     const sql = `SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests ${clause ? `WHERE ${clause.sql}` : ''} GROUP BY day ORDER BY day DESC`;
-    const rows = this.db.prepare(sql).all(...(clause?.params ?? [])) as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
-    const cost = new Map<string, Pick<ActivityDaySummary, 'costUsd' | 'unpricedRequests'>>();
-    for (const t of this.totalsList()) {
-      if (!inScope(scope, t)) continue;
-      const c = cost.get(t.day) ?? { costUsd: 0, unpricedRequests: 0 };
-      c.costUsd += t.costUsd;
-      c.unpricedRequests += t.unpricedRequests;
-      cost.set(t.day, c);
-    }
-    return rows.map((r) => ({ ...r, ...(cost.get(r.day) ?? { costUsd: 0, unpricedRequests: 0 }) }));
+    // One WAL read snapshot keeps request counts, newestId and totals consistent with concurrent writes.
+    return this.db.transaction(() => {
+      const rows = this.db.prepare(sql).all(...(clause?.params ?? [])) as Pick<ActivityDaySummary, 'day' | 'requests' | 'failed' | 'newestId'>[];
+      const cost = new Map<string, Pick<ActivityDaySummary, 'costUsd' | 'unpricedRequests'>>();
+      for (const t of this.totalsList()) {
+        if (!inScope(scope, t)) continue;
+        const c = cost.get(t.day) ?? { costUsd: 0, unpricedRequests: 0 };
+        c.costUsd += t.costUsd;
+        c.unpricedRequests += t.unpricedRequests;
+        cost.set(t.day, c);
+      }
+      return rows.map((r) => ({ ...r, ...(cost.get(r.day) ?? { costUsd: 0, unpricedRequests: 0 }) }));
+    })();
   }
 
   /** Days with stored requests, newest first. */
@@ -358,7 +415,7 @@ export class ActivityLog {
   /** Thinking costs and alternatives from retained turns; null for a malformed query. */
   thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models, this.retainedTurns); }
   /** Combination cards and Compare table for the Overview; null for a malformed query. */
-  compare(q: CompareQuery) { return compareActivity(this.db, this.loadTotals().values(), q, Date.now()); }
+  compare(q: CompareQuery) { return this.db.transaction(() => compareActivity(this.db, this.loadTotals().values(), q, Date.now()))(); }
 
   totalsList(): ActivityDayTotal[] {
     return dailyTotals(this.loadTotals().values());

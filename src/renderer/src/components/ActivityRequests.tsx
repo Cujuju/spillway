@@ -9,7 +9,8 @@ import { dayLabel } from '../lib/format';
 import { OLDER_DAYS_WINDOW } from '@shared/activityOlder';
 import { createOlderDays, olderPage, OlderReadError } from '../lib/olderActivity';
 import { persistedSignal } from '../lib/persisted';
-import { createRequestOrder, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, type RequestSort } from '../lib/requestSort';
+import { mergeRefreshedRows, reconcileRows, refreshedShownCount, REQUEST_RENDER_BATCH } from '../lib/requestRows';
+import { createRequestOrder, DEFAULT_SORT, isRecordedOrder, isRequestSort, nextSort, REQUEST_COLUMNS, sortRequests, type RequestSort } from '../lib/requestSort';
 import { now } from '../store';
 import { costText } from './activityFormat';
 import { REQUEST_COLUMN_COUNT, RequestRow } from './RequestRow';
@@ -70,15 +71,36 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   createEffect(on(olderDays, (now, before) => {
     const moved = new Set([...now, ...before ?? now].filter((day) => now.has(day) !== (before ?? now).has(day)));
     if (!moved.size) return;
-    for (const day of moved) storeChanges.set(day, (storeChanges.get(day) ?? 0) + 1);
+    for (const day of moved) {
+      refreshBuffers.delete(day);
+      storeChanges.set(day, (storeChanges.get(day) ?? 0) + 1);
+    }
     setSections((all) => Object.fromEntries(Object.entries(all).filter(([day]) => !moved.has(day))));
     // The scroll sentinel of an open day stays in view, so nothing else would ask for its first page.
     for (const day of moved) if (isOpen(day)) loadMore(day);
   }));
-  createEffect(on([() => props.filter, () => props.scope, sort], () => {
+  /** Live events arriving while a day refresh is in flight; merged when the refresh resolves. */
+  const refreshBuffers = new Map<string, StoredActivityEvent[]>();
+  const queryIdentity = (filter: RequestFilter, scope: ActivityScope, order: RequestSort) => JSON.stringify({ filter, scope, sort: order });
+  let previousIdentity: string | undefined;
+  createEffect(on([() => props.filter, () => props.scope, sort], ([filter, scope, order]) => {
+    const identity = queryIdentity(filter, scope, order);
+    if (previousIdentity === undefined) {
+      previousIdentity = identity;
+      return;
+    }
     generation += 1;
-    setSections({});
-  }, { defer: true }));
+    if (identity !== previousIdentity) {
+      previousIdentity = identity;
+      refreshBuffers.clear();
+      setSections({});
+      return;
+    }
+    // Routine activity reset: keep open days rendered and refresh them in place; drop closed days.
+    const openDays = Object.keys(sections()).filter((day) => isOpen(day));
+    setSections((all) => Object.fromEntries(Object.entries(all).filter(([day]) => isOpen(day))));
+    for (const day of openDays) refreshDay(day);
+  }));
   // Forget open/closed choices for days in neither store. Only the unfiltered list holds every stored day.
   createEffect(on(() => props.days.loaded(), (loaded) => {
     if (!loaded || props.scope.accounts !== null || props.scope.clients !== null || props.scope.efforts != null || props.scope.source === 'proxy') return;
@@ -86,28 +108,86 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
     setToggled((t) => Object.fromEntries(Object.entries(t).filter(([d]) => days.has(d) || olderDays.has(d))));
   }));
 
-  const fetchInto = (day: string, load: () => Promise<{ events: StoredActivityEvent[]; more: boolean; truncated?: boolean }>) => {
+  const fetchInto = (day: string, load: () => Promise<{ events: StoredActivityEvent[]; more: boolean; truncated?: boolean }>, replace = false) => {
     const gen = generation;
     const change = storeChanges.get(day) ?? 0;
+    const buffer = replace ? [] as StoredActivityEvent[] : null;
+    if (buffer) refreshBuffers.set(day, buffer);
     setSection(day, (cur) => ({ ...cur, loading: true, error: null }));
     void load()
       .then((page) => {
+        if (buffer && refreshBuffers.get(day) === buffer) refreshBuffers.delete(day);
         if (gen !== generation || change !== (storeChanges.get(day) ?? 0)) return;
         // Live requests that arrived during the load may be in it too.
         setSection(day, (cur) => {
-          const shown = new Set(cur.rows.map((e) => e.id));
-          return { ...cur, rows: [...cur.rows, ...page.events.filter((e) => !shown.has(e.id))], more: page.more, loaded: true, loading: false, shown: ACTIVITY_PAGE_SIZE, truncated: page.truncated === true };
+          const seen = replace ? null : new Set(cur.rows.map((e) => e.id));
+          const merged = replace ? mergeRefreshedRows(page.events, buffer ?? []) : [...cur.rows, ...page.events.filter((e) => !seen!.has(e.id))];
+          const rows = replace ? reconcileRows(cur.rows, merged) : merged;
+          const order = sort();
+          const labels = { account: (id: string | null) => props.account(id), conversation: conversationLabel };
+          const orderedFor = (list: readonly StoredActivityEvent[]) => (isRecordedOrder(order) ? list : sortRequests(list, order, labels));
+          const shown = replace
+            ? refreshedShownCount(orderedFor(cur.rows), cur.shown, orderedFor(rows))
+            : cur.loaded ? cur.shown + REQUEST_RENDER_BATCH : REQUEST_RENDER_BATCH;
+          return { ...cur, rows, more: page.more, loaded: true, loading: false, shown, truncated: page.truncated === true };
         });
       })
       .catch((err: unknown) => {
+        if (buffer && refreshBuffers.get(day) === buffer) refreshBuffers.delete(day);
         console.error('[activity] requests failed to load:', err);
         if (gen === generation && change === (storeChanges.get(day) ?? 0)) setSection(day, (cur) => ({ ...cur, loading: false, error: err instanceof OlderReadError ? err.message : null }));
       });
   };
-  /** Newest first pages from the database; other orders load the whole day once, then reveal it a page at a time. */
+  const refreshDay = (day: string) => {
+    const failed = failedOnly();
+    const scope = props.scope;
+    const existing = section(day).rows;
+    const target = Math.max(existing.length, ACTIVITY_PAGE_SIZE);
+    const oldestId = existing.at(-1)?.id ?? null;
+    const gen = generation;
+    const change = storeChanges.get(day) ?? 0;
+    if (isOlder(day)) {
+      const whole = !isRecordedOrder(sort());
+      fetchInto(day, async () => {
+        if (whole) return olderPage({ day, failedOnly: failed, scope, offset: 0, whole: true });
+        const events: StoredActivityEvent[] = [];
+        let more = true;
+        let truncated = false;
+        while (more && events.length < target && gen === generation && change === (storeChanges.get(day) ?? 0)) {
+          const page = await olderPage({ day, failedOnly: failed, scope, offset: events.length, whole: false });
+          events.push(...page.events);
+          more = page.more;
+          truncated = truncated || page.truncated === true;
+          if (!page.events.length) break;
+        }
+        return { events, more, truncated };
+      }, true);
+    } else if (isRecordedOrder(sort())) {
+      fetchInto(day, async () => {
+        const events: StoredActivityEvent[] = [];
+        let more = true;
+        let before: number | null = null;
+        while (more && (events.length < target || (oldestId !== null && (before === null || before > oldestId))) && gen === generation && change === (storeChanges.get(day) ?? 0)) {
+          const page = await window.api.activityPage({ day, failedOnly: failed, scope, before });
+          events.push(...page.events);
+          more = page.more;
+          before = page.events.at(-1)?.id ?? null;
+          if (!page.events.length || before === null) break;
+        }
+        return { events, more };
+      }, true);
+    } else {
+      fetchInto(day, () => window.api.activityDay(day, failed, scope).then((events) => ({ events, more: false })), true);
+    }
+  };
+  /** Reveals buffered rows in viewport-sized batches before paging further from SQLite or ClickHouse. */
   const loadMore = (day: string) => {
     const s = section(day);
     if (s.loading) return;
+    if (s.loaded && s.shown < s.rows.length) {
+      setSection(day, (cur) => ({ ...cur, shown: cur.shown + REQUEST_RENDER_BATCH }));
+      return;
+    }
     // Read now, so the load matches the filters it started under.
     const failed = failedOnly();
     const scope = props.scope;
@@ -115,14 +195,11 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
       // ClickHouse rows carry no local id, so they page by position.
       const whole = !isRecordedOrder(sort());
       if (!s.loaded || (!whole && s.more)) fetchInto(day, () => olderPage({ day, failedOnly: failed, scope, offset: s.rows.length, whole }));
-      else if (whole && s.shown < s.rows.length) setSection(day, (cur) => ({ ...cur, shown: cur.shown + ACTIVITY_PAGE_SIZE }));
     } else if (isRecordedOrder(sort())) {
       const query = { day, failedOnly: failed, scope, before: s.rows.at(-1)?.id ?? null };
       if (!s.loaded || s.more) fetchInto(day, () => window.api.activityPage(query));
     } else if (!s.loaded) {
       fetchInto(day, () => window.api.activityDay(day, failed, scope).then((events) => ({ events, more: false })));
-    } else if (s.shown < s.rows.length) {
-      setSection(day, (cur) => ({ ...cur, shown: cur.shown + ACTIVITY_PAGE_SIZE }));
     }
   };
   /** Loads more of a day when the end of its rows scrolls into view. */
@@ -139,7 +216,8 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
       const day = localDay(Date.parse(e.at));
       // A day that hasn't started loading picks the request up with its first load.
       if (!sections()[day] || (failedOnly() && !e.failed) || !inScope(props.scope, e)) return;
-      setSection(day, (s) => (s.rows.some((r) => r.id === e.id) ? s : { ...s, rows: [e, ...s.rows] }));
+      refreshBuffers.get(day)?.push(e);
+      setSection(day, (s) => (s.rows.some((r) => r.id === e.id) ? s : { ...s, rows: [e, ...s.rows], shown: s.shown + 1 }));
     }));
   });
 
@@ -171,8 +249,8 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
             // Same object until this day's section changes, so other days' updates don't re-sort it.
             const own = createMemo(() => section(day));
             const ordered = createRequestOrder(() => own().rows, sort, { account: (id) => props.account(id), conversation: conversationLabel });
-            const rows = createMemo(() => isRecordedOrder(sort()) ? ordered() : ordered().slice(0, own().shown));
-            const hasMore = () => !own().loaded || (isRecordedOrder(sort()) ? own().more : own().shown < own().rows.length);
+            const rows = createMemo(() => ordered().slice(0, own().shown));
+            const hasMore = () => !own().loaded || own().shown < own().rows.length || (isRecordedOrder(sort()) && own().more);
             return (
               <tbody>
                 <tr class="group-row day-row">

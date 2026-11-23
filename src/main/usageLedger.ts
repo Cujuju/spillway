@@ -1,5 +1,5 @@
-import { addEvent, DETAIL_KEYS, emptyCounts, localDay, localHourStart, scaleDetailCosts } from '@shared/activityCounts';
-import { storedTotalKey } from './activityTotals';
+import { addCounts, addEvent, DETAIL_KEYS, emptyCounts, localDay, localHourStart, scaleDetailCosts } from '@shared/activityCounts';
+import { readTotalRows, storedTotalKey, type ActivityTotal } from './activityTotals';
 import type { ActivityCounts, ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import { fallbackKey, sameUsage } from './usageMerge';
@@ -138,4 +138,73 @@ export function repairMatchedIdentities(db: Db): void {
     const matches = (candidates.all(event.upstreamId, fallbackKey(event)) as IdentityRow[]).filter((other) => ownedRequest(db, other) && sameUsage(identityEvent(other), event));
     if (matches.length === 1) link.run(matches[0]!.row_id, row.key);
   }
+}
+
+/** Updates `usage_identities` metadata in place and moves accounted counts between `activity_totals` buckets. */
+export function relabelIdentities(
+  db: Db,
+  rows: IdentityRow[],
+  patchFor: (row: IdentityRow, parsed: Record<string, unknown>) => Record<string, unknown> | null,
+  reprice = false,
+): boolean {
+  const byStoredKey = new Map<string, { dbKey: string; total: ActivityTotal }>();
+  for (const r of readTotalRows(db)) byStoredKey.set(storedTotalKey(r.total), { dbKey: r.key, total: r.total });
+  const dirty = new Set<string>();
+  const updateId = db.prepare('UPDATE usage_identities SET event = ? WHERE key = ?');
+  let changed = false;
+  for (const row of rows) {
+    const parsed = JSON.parse(row.event) as Record<string, unknown>;
+    const patch = patchFor(row, parsed);
+    if (!patch) continue;
+    changed = true;
+    const oldCounts = countedUsage(row);
+    const nextParsed: Record<string, unknown> = { ...parsed, ...patch };
+    if (reprice) {
+      delete nextParsed.costUsd;
+      delete nextParsed.uncachedCostUsd;
+      const repriced = accountedUsage(identityEvent({ ...row, event: JSON.stringify(nextParsed) }));
+      nextParsed.costUsd = repriced.costUsd;
+      nextParsed.uncachedCostUsd = repriced.uncachedCostUsd;
+    }
+    const nextJson = JSON.stringify(nextParsed);
+    updateId.run(nextJson, row.key);
+    // Matched client-log rows are not counted in activity_totals; their proxy twin is.
+    if (row.source === 'client-log' && row.matched === 1) continue;
+    const nextRow: IdentityRow = { ...row, event: nextJson };
+    const nextEvent = identityEvent(nextRow);
+    const nextCounts = reprice ? countedUsage(nextRow) : oldCounts;
+    const oldKey = removalKey(row);
+    const day = (parsed.totalDay as string | undefined) ?? localDay(Date.parse(row.at));
+    const start = (parsed.totalStart as number | null | undefined) ?? undefined;
+    const newBase = {
+      day, ...(start === undefined ? {} : { start }),
+      provider: nextEvent.provider, authIndex: nextEvent.authIndex, model: nextEvent.model,
+      client: nextEvent.client ?? null, source: nextEvent.source ?? 'proxy',
+      ...(nextEvent.effectiveModel ? { effectiveModel: nextEvent.effectiveModel } : {}),
+      ...(nextEvent.reasoningEffort ? { reasoningEffort: nextEvent.reasoningEffort } : {}),
+    };
+    const newKey = storedTotalKey(newBase);
+    if (oldKey === newKey && !reprice) continue;
+    const oldEntry = byStoredKey.get(oldKey);
+    if (oldEntry) {
+      for (const k of Object.keys(oldCounts) as (keyof ActivityCounts)[]) oldEntry.total[k] -= oldCounts[k];
+      dirty.add(oldKey);
+    }
+    let newEntry = byStoredKey.get(newKey);
+    if (!newEntry) {
+      newEntry = { dbKey: newKey, total: { ...newBase, ...emptyCounts() } };
+      byStoredKey.set(newKey, newEntry);
+    }
+    addCounts(newEntry.total, nextCounts);
+    dirty.add(newKey);
+  }
+  if (!changed) return false;
+  const save = db.prepare('INSERT OR REPLACE INTO activity_totals (key, total) VALUES (?, ?)');
+  const del = db.prepare('DELETE FROM activity_totals WHERE key = ?');
+  for (const key of dirty) {
+    const entry = byStoredKey.get(key)!;
+    if (entry.total.requests <= 0) del.run(entry.dbKey);
+    else save.run(entry.dbKey, JSON.stringify(entry.total));
+  }
+  return true;
 }

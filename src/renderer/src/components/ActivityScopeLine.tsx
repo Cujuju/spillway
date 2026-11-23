@@ -9,11 +9,13 @@ import { RESET_TRACE_FILTERS, TraceScopeParts, traceFiltersNarrowed, type TraceF
 import { appLocale } from '@shared/timeFormat';
 
 export type UsageSource = 'proxy' | 'all';
+/** Activity opens on all usage so local-only providers (like Antigravity) appear immediately. */
+export const DEFAULT_SOURCE: UsageSource = 'all';
 /** The effort filter's "every effort" value; '' is requests with no recorded effort. */
 export const ANY_EFFORT = '*';
 const SOURCES = [
-  { value: 'proxy', label: 'Via proxy', phrase: 'proxy traffic' },
   { value: 'all', label: 'All usage', phrase: 'all usage' },
+  { value: 'proxy', label: 'Via proxy', phrase: 'proxy traffic' },
 ] as const;
 /** The time frame the Overview opens on. */
 export const DEFAULT_RANGE: Range = '7d';
@@ -57,11 +59,11 @@ export function ActivityScopeLine(props: {
     { value: '', label: 'Unknown effort', phrase: 'unknown effort' },
     ...props.efforts.map((e) => ({ value: e, label: e, phrase: `${e} effort` })),
   ]);
-  const narrowed = () => props.source !== 'proxy' || (props.time !== undefined && props.time.range !== DEFAULT_RANGE)
+  const narrowed = () => props.source !== DEFAULT_SOURCE || (props.time !== undefined && props.time.range !== DEFAULT_RANGE)
     || (props.traces !== undefined && traceFiltersNarrowed(props.traces.value))
     || (props.full && (props.accounts !== null || props.clientScope !== null || (!props.noEffort && props.effort !== ANY_EFFORT)));
   const reset = () => {
-    props.onSource('proxy');
+    props.onSource(DEFAULT_SOURCE);
     props.time?.onRange(DEFAULT_RANGE);
     props.traces?.onChange(RESET_TRACE_FILTERS);
     if (!props.full) return;
@@ -70,7 +72,7 @@ export function ActivityScopeLine(props: {
   return (
     <div class="scope-line" role="group" aria-label="Activity scope">
       <span>Showing</span>
-      <ChoiceChip label="Usage" value={props.source} initial="proxy" options={SOURCES} onChange={props.onSource} />
+      <ChoiceChip label="Usage" value={props.source} initial={DEFAULT_SOURCE} options={SOURCES} onChange={props.onSource} />
       <Show when={props.full}>
         <span>for</span>
         <AccountFilter groups={props.groups} value={props.accounts} onChange={props.onAccounts} />

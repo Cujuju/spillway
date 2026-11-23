@@ -2,17 +2,28 @@ import repriceWorkerPath from './activityRepriceWorker?modulePath';
 import { ActivityRepriceJob } from './activityRepriceJob';
 import { Worker } from 'node:worker_threads';
 import workerPath from './activityWorker?modulePath';
+import readWorkerPath from './activityReadWorker?modulePath';
+import namesWorkerPath from './conversationNamesWorker?modulePath';
 import { ActivityRpc } from './activityRpc';
+import { ActivityRouter } from './activityRouter';
 import { activityStorage, appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
-export const activityLog = new ActivityRpc(() => {
+
+const workerConfig = () => {
   activityStorage().verifyActive();
-  return new Worker(workerPath, { workerData: {
+  return {
     activityDb: appPaths.activityDb, legacyActivityDir: appPaths.legacyActivityDir,
     databaseKey: getSecrets().databaseKey, retentionDays: getSettings().activity.retentionDays,
-  } });
-});
+  };
+};
+
+const writerRpc = new ActivityRpc(() => new Worker(workerPath, { workerData: workerConfig() }));
+const makeReaderRpc = () => new ActivityRpc(() => new Worker(readWorkerPath, { workerData: workerConfig() }));
+const namesRpc = new ActivityRpc(() => new Worker(namesWorkerPath));
+
+export const activityLog = new ActivityRouter(writerRpc, makeReaderRpc, namesRpc);
+
 let progress: ActivityImportState = { state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
 let migration: ArchiveMigrationState = { state: 'idle', done: 0, total: 0 };
 activityLog.on('migration', (state: ArchiveMigrationState) => { migration = state; });

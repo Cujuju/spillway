@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 export type ClientLogProvider = 'claude' | 'codex' | 'antigravity';
@@ -9,6 +11,11 @@ const ANTIGRAVITY_LOG_FILE = /(?:^|[\\/])transcript\.jsonl(?:\.zst)?$/;
 export const isClientLogFile = (file: string, provider?: ClientLogProvider): boolean =>
   provider === 'antigravity' ? ANTIGRAVITY_LOG_FILE.test(file) : ANY_LOG_FILE.test(file);
 
+/** Resolves T3 Code's userdata root from env or default ~/.t3/userdata. */
+export function t3UserdataDir(): string {
+  return process.env.T3_USERDATA_DIR || path.join(process.env.T3CODE_HOME || path.join(homedir(), '.t3'), 'userdata');
+}
+
 /** Derives conversation session and client variant from Antigravity's `.../brain/<id>/...` path. */
 export function antigravityLogContext(file: string): { session?: string; client: string } {
   const parts = file.split(/[\\/]+/).filter(Boolean);
@@ -18,6 +25,37 @@ export function antigravityLogContext(file: string): { session?: string; client:
     : parts.includes('antigravity-cli') ? 'antigravity-cli'
     : 'antigravity';
   return { ...(session ? { session } : {}), client };
+}
+
+/** Returns `<parent-of-brain>/antigravity-oauth-token` for an Antigravity transcript path, or null. */
+export function antigravityOAuthTokenPath(file: string): string | null {
+  let current = path.dirname(file);
+  while (true) {
+    const parent = path.dirname(current);
+    if (path.basename(current).toLowerCase() === 'brain' && parent !== current) {
+      return path.join(parent, 'antigravity-oauth-token');
+    }
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+/** Existing Antigravity conversation summary SQLite databases across T3 ACP, CLI, and IDE roots. */
+export function antigravitySummaryDbs(): string[] {
+  const geminiHome = process.env.GEMINI_HOME || path.join(homedir(), '.gemini');
+  const dbs: string[] = [];
+  const pushIfExists = (file: string) => { if (existsSync(file)) dbs.push(file); };
+  pushIfExists(path.join(geminiHome, 'antigravity-cli', 'conversation_summaries.db'));
+  pushIfExists(path.join(geminiHome, 'antigravity', 'conversation_summaries.db'));
+  const t3Providers = path.join(t3UserdataDir(), 'providers', 'antigravity');
+  if (existsSync(t3Providers)) {
+    try {
+      for (const entry of readdirSync(t3Providers, { withFileTypes: true })) {
+        if (entry.isDirectory()) pushIfExists(path.join(t3Providers, entry.name, 'antigravity-acp', 'conversation_summaries.db'));
+      }
+    } catch { /* Directory unreadable: titles remain optional. */ }
+  }
+  return dbs;
 }
 
 /** macOS permits case-sensitive volumes; only Windows keys fold case. Never use keys for filesystem access. */

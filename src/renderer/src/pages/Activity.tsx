@@ -4,7 +4,7 @@ import { SessionTraces } from '../components/SessionTraces';
 import { DriftView } from '../components/DriftView';
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { isKeyScope, type AccountScope, type ActivityScope, type ClientScope } from '@shared/activityScope';
-import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE, type TimeFrame } from '../components/ActivityScopeLine';
+import { ActivityScopeLine, ANY_EFFORT, DEFAULT_RANGE, DEFAULT_SOURCE, type TimeFrame } from '../components/ActivityScopeLine';
 import { DEFAULT_TRACE_FILTERS, TraceLimitNote, type TraceFilters } from '../components/TraceScopeParts';
 import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
 import { AddChartSelect, AddComboSelect, type PendingChart } from '../components/ActivityBoard';
@@ -45,7 +45,7 @@ export function Activity() {
   const [filter, setFilter] = persistedSignal<RequestFilter>('activity.filter', 'all', FILTERS);
   const [accounts, setAccounts] = persistedSignal<AccountScope>('activity.accounts', null, isKeyScope);
   const [clients, setClients] = persistedSignal<ClientScope>('activity.clients', null, isKeyScope);
-  const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', 'proxy', ['proxy', 'all']);
+  const [source, setSource] = persistedSignal<'proxy' | 'all'>('activity.source', DEFAULT_SOURCE, ['proxy', 'all']);
   const [period, setPeriod] = persistedSignal<TotalsPeriod>('activity.totalsPeriod', 'day', TOTALS_PERIODS.map((p) => p.value));
   const [effort, setEffort] = persistedSignal<string>('activity.effort', ANY_EFFORT, (v): v is string => typeof v === 'string');
   const [range, setRange] = persistedSignal<Range>('activity.range', DEFAULT_RANGE, RANGES);
@@ -73,7 +73,7 @@ export function Activity() {
   const compare = createCompareReport(() => view() === 'overview', scope, overviewSpan);
   const thinking = createThinkingReport(() => view() === 'thinking', scope, overviewSpan);
   const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
-  const days = createDaySummaries(scope);
+  const days = createDaySummaries(() => view() === 'requests', scope);
   // The stored and failed totals ride on the filter it switches between.
   const filterOptions = createMemo(() => [
     { value: 'all' as const, label: `All ${days.stored().requests.toLocaleString(appLocale())}` },

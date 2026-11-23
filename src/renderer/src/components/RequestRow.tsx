@@ -15,6 +15,18 @@ import { appLocale } from '@shared/timeFormat';
 
 export const REQUEST_COLUMN_COUNT = REQUEST_COLUMNS.length;
 
+let cachedLocale = '';
+let cachedTimeFormat: Intl.DateTimeFormat | null = null;
+const formatTime = (at: string): string => {
+  const locale = appLocale();
+  if (!cachedTimeFormat || cachedLocale !== locale) {
+    cachedLocale = locale;
+    cachedTimeFormat = new Intl.DateTimeFormat(appLocale(), { timeStyle: 'medium' });
+  }
+  const ms = Date.parse(at);
+  return Number.isFinite(ms) ? cachedTimeFormat.format(ms) : '—';
+};
+
 const requestCost = (e: ActivityEvent) => {
   const cost = tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, e);
   return cost ? usd(cost.usd) : '—';
@@ -27,7 +39,7 @@ export function RequestRow(props: { e: StoredActivityEvent; account: (authIndex:
   return (
     <>
       <tr classList={{ 'has-error': !!errorText() }}>
-        <td class="tabular"><button class="sort-btn" type="button" title="Inspect request and response" aria-expanded={inspect()} onClick={() => setInspect((v) => !v)}>{new Date(props.e.at).toLocaleTimeString(appLocale())}</button></td>
+        <td class="tabular"><button class="sort-btn" type="button" title="Inspect request and response" aria-expanded={inspect()} onClick={() => setInspect((v) => !v)}>{formatTime(props.e.at)}</button></td>
         <td class="fill">
           <HoverTip title="Request account" layout="block" rows={[
             { label: 'Account', value: props.account(props.e.authIndex) },

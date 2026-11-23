@@ -51,3 +51,34 @@ export function forecastRate(
   }
   return observed ? total : null;
 }
+
+/**
+ * Converts a longer account-wide window's forecast rate into `key`'s pool units when both cover
+ * the same accounts with measured cost ratios, so stacked charts share one exhaustion time.
+ */
+export function sustainedForecastRate(
+  samples: HistorySample[], summaries: WindowSummary[], credentials: Credential[], key: string,
+  shares: Map<string, AccountShare>, anchorKey: string | null, anchorShares: Map<string, AccountShare> | null,
+  now: number, lookbackHours: number, profile: RhythmProfile = FLAT_RHYTHM, offset: TimezoneOffset = localOffset,
+): number | null {
+  const scoped = credentials.some((c) => c.windows.some((w) => w.key === key && w.scoped));
+  if (!scoped && anchorKey && anchorKey !== key && anchorShares && anchorShares.size === shares.size && shares.size > 0) {
+    let scale: number | null = null;
+    let compatible = true;
+    for (const [id, share] of shares) {
+      const anchor = anchorShares.get(id);
+      const shortCost = share.cost[anchorKey];
+      const anchorCost = anchor?.cost[anchorKey];
+      if (!anchor || !(shortCost && shortCost > 0) || !(anchorCost && anchorCost > 0)) {
+        compatible = false;
+        break;
+      }
+      scale = anchorCost / shortCost;
+    }
+    if (compatible && scale !== null) {
+      const anchorRate = forecastRate(samples, summaries, credentials, anchorKey, anchorShares, now, lookbackHours, profile, offset);
+      if (anchorRate !== null) return anchorRate * scale;
+    }
+  }
+  return forecastRate(samples, summaries, credentials, key, shares, now, lookbackHours, profile, offset);
+}

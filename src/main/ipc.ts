@@ -279,7 +279,7 @@ const handlers: Handlers = {
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
   traceAttempts: (q) => activityLog.call('traceAttempts', q),
   archiveDetail: (id) => activityLog.call('archiveDetail', id),
-  archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error }),
+  archiveStatus: async () => ({ ...await activityLog.call('archiveStatus'), syncError: archiveSync.error, syncLagAt: archiveSync.lagAt ?? null }),
   archivePolicy: (p) => withClickHousePaused(async () => { const status = await activityLog.call('archivePolicy', p); await archiveSync.refresh(); return status; }),
   archiveClear: () => withClickHousePaused(async () => { const { policy } = await activityLog.call('archiveStatus'); await activityLog.call('archivePolicy', { ...policy, captureBodies: false }); await archiveSync.clear(); }),
   clickhouseStatus,

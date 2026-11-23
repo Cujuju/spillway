@@ -114,6 +114,7 @@ export class ActivityLog {
   private get archive(): ArchiveStore { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact), rawWireEnabled: () => this.clickhouse.rawWireEnabled() }, this.migrationProgress); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
+  archiveIngestBatch(pages: CapturePage[]): void { this.archive.ingestBatch(pages); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
   archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }

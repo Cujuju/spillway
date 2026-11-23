@@ -21,6 +21,7 @@ export const noticeOverlay = createNoticeOverlay({
 export function openNoticeTarget(target: string | undefined): void {
   if (target === 'proxy') showWindowAndSend(EVENTS.onOpenProxy);
   else if (target === 'updates') showWindowAndSend(EVENTS.onOpenSettings, 'updates');
+  else if (target === 'capture') showWindowAndSend(EVENTS.onOpenSettings, 'capture');
   else showMainWindow();
 }
 const notifier = createNotifier({

@@ -13,6 +13,7 @@ const MIGRATION_BATCH = 8;
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 export const PIECE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS archive_threads(id TEXT PRIMARY KEY,first_at TEXT NOT NULL,last_at TEXT NOT NULL,over_budget INTEGER NOT NULL DEFAULT 0,stored_bytes INTEGER NOT NULL DEFAULT 0,logical_bytes INTEGER NOT NULL DEFAULT 0,base TEXT,dict TEXT,clickhouse_wire_version INTEGER NOT NULL DEFAULT ${CLICKHOUSE_WIRE_VERSION});
+CREATE INDEX IF NOT EXISTS archive_threads_last_at ON archive_threads(last_at,id);
 CREATE TABLE IF NOT EXISTS archive_pieces(id INTEGER PRIMARY KEY AUTOINCREMENT,thread_id TEXT,bytes BLOB NOT NULL,sent INTEGER NOT NULL DEFAULT 0,dict TEXT,sent_raw INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS archive_piece_thread ON archive_pieces(thread_id);
 CREATE TABLE IF NOT EXISTS archive_pins(piece_id INTEGER NOT NULL,case_id TEXT NOT NULL,PRIMARY KEY(piece_id,case_id));
@@ -206,7 +207,8 @@ export function expireThread(db: Db, thread: string): void {
   for (const r of expired) db.prepare("UPDATE clickhouse_outbox SET bytes=bytes-length(CAST(content AS BLOB)),content=NULL,expired=1 WHERE seq=?").run(r.seq);
   db.prepare('UPDATE clickhouse_export SET queued_bytes=queued_bytes-?').run(expired.reduce((n, r) => n + r.content_bytes, 0));
   db.prepare('UPDATE clickhouse_export SET content_expired=content_expired+?').run(expired.length);
+  db.prepare('DELETE FROM archive_pieces WHERE thread_id=? AND id NOT IN (SELECT piece_id FROM archive_pins)').run(thread);
   db.prepare('UPDATE archive_pieces SET thread_id=NULL WHERE thread_id=?').run(thread);
-  db.prepare('DELETE FROM archive_threads WHERE id=?').run(thread); collectPieces(db);
+  db.prepare('DELETE FROM archive_threads WHERE id=?').run(thread);
 }
 

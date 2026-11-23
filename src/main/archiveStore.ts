@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS archive_entries (
 CREATE INDEX IF NOT EXISTS archive_time ON archive_entries(at, id);
 CREATE INDEX IF NOT EXISTS archive_session ON archive_entries(session_id, at, id);
 CREATE INDEX IF NOT EXISTS archive_expiry ON archive_entries(at, id) WHERE bytes > 0;
+CREATE INDEX IF NOT EXISTS archive_entries_pending ON archive_entries(at, id) WHERE state='pending';
 CREATE TABLE IF NOT EXISTS archive_attempts (identity TEXT PRIMARY KEY, trace_id TEXT NOT NULL, detail TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
 
@@ -29,6 +30,14 @@ const entry = (r: Row): ArchiveEntry => ({ schemaVersion: 1, captureEpoch: r.cap
 const validDate = (s: unknown): s is string => typeof s === 'string' && Number.isFinite(Date.parse(s));
 const TRACE = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_METADATA = 20_000;
+/** Minimum interval between automatic retention/eviction passes during normal polling and ingest. */
+const PRUNE_INTERVAL_MS = 60_000;
+/** Grace window before an unobserved pending trace is settled as missing once caught up. */
+const CAPTURE_PENDING_TIMEOUT_MS = 10 * 60_000;
+/** Proxy spool page size (CapturePageRecords in CLIProxyAPI); a full v2 page means more backlog awaits. */
+const CAPTURE_PAGE_LIMIT = 4;
+/** Proxy error returned when the capture journal could not be read (request_capture_journal.go). */
+const CAPTURE_READ_FAILED = 'Capture journal read failed';
 /** Longest search text; longer input is cut. */
 const SEARCH_MAX_CHARS = 256;
 /** Entries (`archive_entries`) whose recorded text has every whitespace-separated keyword, literally; null for blank text. */
@@ -51,6 +60,8 @@ const EMPTY_DETAIL = { request: '', response: '', requestType: '', responseType:
 export class ArchiveStore {
   private policy: ArchivePolicy;
   private lastPruned = 0;
+  /** True while v2 capture pages are full (backlog draining); pauses wall-clock missing-capture timeouts. */
+  private draining = false;
   constructor(private db: Db, private sink?: ArchiveFactSink, progress?: (state: ArchiveMigrationState) => void) {
     migratePieces(this.db, progress);
     this.policy = normalizeArchivePolicy(this.read('policy', {}));
@@ -97,72 +108,87 @@ export class ArchiveStore {
     })();
   }
   ingest(page: CapturePage): void {
-    if (page?.version === 2 && this.read('proxyClearPending', false)) throw new Error('Capture journal deletion is pending');
-    if (!this.policy.captureBodies && page?.version !== 2) return;
-    if (![1, 2].includes(page?.version) || typeof page.epoch !== 'string' || page.epoch.length > 128 || !Array.isArray(page.records) || page.records.length > 4) throw new Error('Invalid capture page');
-    const commit = (work: () => void) => page.version === 2 ? durableTransaction(this.db, work) : this.db.transaction(work)();
+    this.ingestBatch([page]);
+  }
+  ingestBatch(pages: CapturePage[]): void {
+    if (!pages.length) return;
+    let durable = false;
+    const validPages: CapturePage[] = [];
+    for (const page of pages) {
+      if (page?.version === 2 && this.read('proxyClearPending', false)) throw new Error('Capture journal deletion is pending');
+      if (!this.policy.captureBodies && page?.version !== 2) continue;
+      if (![1, 2].includes(page?.version) || typeof page.epoch !== 'string' || page.epoch.length > 128 || !Array.isArray(page.records) || page.records.length > CAPTURE_PAGE_LIMIT) throw new Error('Invalid capture page');
+      if (page.version === 2) durable = true;
+      validPages.push(page);
+    }
+    if (!validPages.length) return;
+    const commit = (work: () => void) => durable ? durableTransaction(this.db, work) : this.db.transaction(work)();
     commit(() => {
-      const previous = this.read<string | null>('epoch', null);
-      let sequence = previous === page.epoch ? this.read('sequence', 0) : 0;
-      if (previous && previous !== page.epoch) {
-        this.write('dropBaseline', 0);
-        this.write('restarts', this.read('restarts', 0) + 1);
-        this.settle('proxy-restarted-before-capture');
-        const orphaned = this.db.prepare("UPDATE archive_entries SET state='partial',reason='capture-journal-reset' WHERE state='pending' AND json_extract(detail,'$.wire')=2 AND capture_epoch<>? RETURNING trace_id,at").all(page.epoch) as { trace_id: string; at: string }[];
-        for (const r of orphaned) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: 'partial', record: { state: 'partial', reason: 'capture-journal-reset' }, content: null });
-      }
-      for (const r of page.records) {
-        if (!r || !Number.isSafeInteger(r.sequence) || r.sequence < 1) throw new Error('Invalid capture cursor');
-        if (r.sequence <= sequence) continue;
-        if (page.version === 2) {
-          if (r.epoch !== page.epoch || r.sequence !== sequence + 1) throw new Error('Capture journal sequence gap');
-          ingestWire(this.db, r, this.sink); sequence = r.sequence; continue;
+      for (const page of validPages) {
+        const previous = this.read<string | null>('epoch', null);
+        let sequence = previous === page.epoch ? this.read('sequence', 0) : 0;
+        if (previous && previous !== page.epoch) {
+          this.write('dropBaseline', 0);
+          this.write('restarts', this.read('restarts', 0) + 1);
+          this.settle('proxy-restarted-before-capture');
+          const orphaned = this.db.prepare("UPDATE archive_entries SET state='partial',reason='capture-journal-reset' WHERE state='pending' AND json_extract(detail,'$.wire')=2 AND capture_epoch<>? RETURNING trace_id,at").all(page.epoch) as { trace_id: string; at: string }[];
+          for (const r of orphaned) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: 'partial', record: { state: 'partial', reason: 'capture-journal-reset' }, content: null });
         }
-        if (r.sequence !== sequence + 1) this.write('gaps', this.read('gaps', 0) + r.sequence - sequence - 1);
-        sequence = r.sequence;
-        const valid = typeof r.traceId === 'string' && TRACE.test(r.traceId) && typeof r.id === 'string' && r.id.length <= 128 && validDate(r.startedAt) && r.epoch === page.epoch && ['complete', 'partial', 'missing', 'pending'].includes(r.state)
-          && (['request', 'response'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= CAPTURE_BODY_LIMIT * 4)
-          && validCaptureCut(r.requestCut, r.request) && validCaptureCut(r.responseCut, r.response)
-          && (['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= 8192)
-          && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= CAPTURE_BODY_LIMIT * 3) && r.frames.every((f) => validCaptureCut(f.cut, f.payload) && (f.cut === undefined || f.truncated)) && (['request', 'response'] as const).every((direction) => r.frames!.filter((f) => f.direction === direction).reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 3));
-        if (!valid) { this.write('rejected', this.read('rejected', 0) + 1); continue; }
-        // Absent cuts stay absent, so an older proxy's records read as legacy (start-only) captures.
-        const captured = { requestCut: r.requestCut, responseCut: r.responseCut, request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' as const : 'http' as const, requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
-        const detail = JSON.stringify(captured);
-        const { request, response, frames, ...metadata } = captured;
-
-        const id = `trace:${r.traceId}`;
-        this.db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,bytes,detail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(trace_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,method=excluded.method,path=excluded.path,status=excluded.status,bytes=excluded.bytes,detail=excluded.detail`)
-          .run(id, r.traceId, r.startedAt, r.state, r.reason, r.id, r.epoch, r.sequence, r.method.slice(0, 16), r.path.slice(0, 2048), Number.isSafeInteger(r.status) ? r.status : 0, r.request || r.response || r.frames?.length ? Buffer.byteLength(detail) : 0, detail);
-        let refs: object | null = null;
-        if (request || response || frames.length) {
-          const existing = this.db.prepare('SELECT thread_id,session_id,model FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null; session_id: string | null; model: string };
-          const thread = existing.thread_id ?? JSON.stringify(existing.session_id ? [existing.session_id, existing.model] : [id]);
-          refs = storeBody(this.db, id, captured);
-          while (refs && storedBytes(this.db) > this.policy.maxBytes) {
-            const oldest = this.db.prepare(`SELECT id FROM archive_threads WHERE id<>? AND ${EVICTABLE_THREAD} ORDER BY last_at,id LIMIT 1`).get(thread) as { id: string } | undefined;
-            if (!oldest) break;
-            expireThread(this.db, oldest.id);
+        for (const r of page.records) {
+          if (!r || !Number.isSafeInteger(r.sequence) || r.sequence < 1) throw new Error('Invalid capture cursor');
+          if (r.sequence <= sequence) continue;
+          if (page.version === 2) {
+            if (r.epoch !== page.epoch || r.sequence !== sequence + 1) throw new Error('Capture journal sequence gap');
+            ingestWire(this.db, r, this.sink); sequence = r.sequence; continue;
           }
-        } else {
-          this.db.prepare('UPDATE archive_entries SET stored_bytes=0 WHERE id=?').run(id);
-          this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
+          if (r.sequence !== sequence + 1) this.write('gaps', this.read('gaps', 0) + r.sequence - sequence - 1);
+          sequence = r.sequence;
+          const valid = typeof r.traceId === 'string' && TRACE.test(r.traceId) && typeof r.id === 'string' && r.id.length <= 128 && validDate(r.startedAt) && r.epoch === page.epoch && ['complete', 'partial', 'missing', 'pending'].includes(r.state)
+            && (['request', 'response'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= CAPTURE_BODY_LIMIT * 4)
+            && validCaptureCut(r.requestCut, r.request) && validCaptureCut(r.responseCut, r.response)
+            && (['method', 'path', 'reason', 'requestType', 'responseType', 'requestEncoding', 'responseEncoding'] as const).every((key) => typeof r[key] === 'string' && Buffer.byteLength(r[key]) <= 8192)
+            && (r.frames === undefined || Array.isArray(r.frames) && r.frames.length <= 128 && r.frames.every((f) => f && Number.isSafeInteger(f.index) && ['request', 'response'].includes(f.direction) && ['text', 'binary'].includes(f.type) && validDate(f.at) && typeof f.truncated === 'boolean' && typeof f.payload === 'string' && Buffer.byteLength(f.payload) <= CAPTURE_BODY_LIMIT * 3) && r.frames.every((f) => validCaptureCut(f.cut, f.payload) && (f.cut === undefined || f.truncated)) && (['request', 'response'] as const).every((direction) => r.frames!.filter((f) => f.direction === direction).reduce((n, f) => n + Buffer.byteLength(f.payload), 0) <= CAPTURE_BODY_LIMIT * 3));
+          if (!valid) { this.write('rejected', this.read('rejected', 0) + 1); continue; }
+          // Absent cuts stay absent, so an older proxy's records read as legacy (start-only) captures.
+          const captured = { requestCut: r.requestCut, responseCut: r.responseCut, request: r.request, response: r.response, requestType: r.requestType, responseType: r.responseType, requestEncoding: r.requestEncoding, responseEncoding: r.responseEncoding, format: r.format === 'websocket' ? 'websocket' as const : 'http' as const, requestDecoded: r.requestDecoded === true, responseDecoded: r.responseDecoded === true, frames: r.frames ?? [] };
+          const detail = JSON.stringify(captured);
+          const { request, response, frames, ...metadata } = captured;
+
+          const id = `trace:${r.traceId}`;
+          this.db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,bytes,detail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(trace_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,method=excluded.method,path=excluded.path,status=excluded.status,bytes=excluded.bytes,detail=excluded.detail`)
+            .run(id, r.traceId, r.startedAt, r.state, r.reason, r.id, r.epoch, r.sequence, r.method.slice(0, 16), r.path.slice(0, 2048), Number.isSafeInteger(r.status) ? r.status : 0, r.request || r.response || r.frames?.length ? Buffer.byteLength(detail) : 0, detail);
+          let refs: object | null = null;
+          if (request || response || frames.length) {
+            const existing = this.db.prepare('SELECT thread_id,session_id,model FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null; session_id: string | null; model: string };
+            const thread = existing.thread_id ?? JSON.stringify(existing.session_id ? [existing.session_id, existing.model] : [id]);
+            refs = storeBody(this.db, id, captured);
+            while (refs && storedBytes(this.db) > this.policy.maxBytes) {
+              const oldest = this.db.prepare(`SELECT id FROM archive_threads WHERE id<>? AND ${EVICTABLE_THREAD} ORDER BY last_at,id LIMIT 1`).get(thread) as { id: string } | undefined;
+              if (!oldest) break;
+              expireThread(this.db, oldest.id);
+            }
+          } else {
+            this.db.prepare('UPDATE archive_entries SET stored_bytes=0 WHERE id=?').run(id);
+            this.db.prepare('DELETE FROM archive_search WHERE rowid=(SELECT search_key FROM archive_entries WHERE id=?)').run(id);
+          }
+          if (!refs) {
+            const owner = this.db.prepare('SELECT thread_id FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null };
+            if (owner.thread_id) refreshThread(this.db, owner.thread_id);
+          }
+          this.sink?.append({ kind: 'capture', traceId: r.traceId, at: r.startedAt, captureState: (this.db.prepare('SELECT state FROM archive_entries WHERE id=?').get(id) as { state: string }).state, record: { ...metadata, captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason, startedAt: r.startedAt, frameCount: frames.length }, content: refs });
         }
-        if (!refs) {
-          const owner = this.db.prepare('SELECT thread_id FROM archive_entries WHERE id=?').get(id) as { thread_id: string | null };
-          if (owner.thread_id) refreshThread(this.db, owner.thread_id);
-        }
-        this.sink?.append({ kind: 'capture', traceId: r.traceId, at: r.startedAt, captureState: (this.db.prepare('SELECT state FROM archive_entries WHERE id=?').get(id) as { state: string }).state, record: { ...metadata, captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason, startedAt: r.startedAt, frameCount: frames.length }, content: refs });
+        this.write('epoch', page.epoch); this.write('sequence', sequence);
+        const drops = Number.isSafeInteger(page.dropped) && page.dropped >= 0 ? page.dropped : 0;
+        this.write('proxyDropped', drops); this.write('dropped', Math.max(0, drops - this.read('dropBaseline', 0)));
       }
-      this.write('epoch', page.epoch); this.write('sequence', sequence);
-      const drops = Number.isSafeInteger(page.dropped) && page.dropped >= 0 ? page.dropped : 0;
-      this.write('proxyDropped', drops); this.write('dropped', Math.max(0, drops - this.read('dropBaseline', 0)));
-      this.prune(Date.now(), true);
+      const last = validPages.at(-1)!;
+      this.draining = last.version === 2 && (last.records.length === CAPTURE_PAGE_LIMIT || last.error === CAPTURE_READ_FAILED);
+      this.prune(Date.now());
     });
   }
   prune(now = Date.now(), force = false): void {
-    if (!force && now - this.lastPruned < 60_000) return;
+    if (!force && now - this.lastPruned < PRUNE_INTERVAL_MS) return;
     const cutoff = new Date(now - this.policy.retentionDays * 86_400_000).toISOString();
     this.db.transaction(() => {
       for (const r of this.db.prepare(`SELECT id FROM archive_threads WHERE last_at < ? AND ${EVICTABLE_THREAD}`).all(cutoff) as { id: string }[]) expireThread(this.db, r.id);
@@ -171,7 +197,7 @@ export class ArchiveStore {
         if (!oldest) break;
         expireThread(this.db, oldest.id);
       }
-      this.settle('capture-unavailable-or-interrupted', new Date(now - 10 * 60_000).toISOString());
+      if (!this.draining) this.settle('capture-unavailable-or-interrupted', new Date(now - CAPTURE_PENDING_TIMEOUT_MS).toISOString());
       const count = (this.db.prepare('SELECT count(*) AS n FROM archive_entries').get() as { n: number }).n;
       const obsolete = count > MAX_METADATA ? this.db.prepare("SELECT id,trace_id,thread_id,stored_bytes,bytes FROM archive_entries WHERE state<>'pending' AND NOT EXISTS(SELECT 1 FROM clickhouse_export WHERE backfill_cursor IS NOT NULL AND json_extract(config,'$.includeBodies')=1) AND NOT EXISTS(SELECT 1 FROM clickhouse_outbox q WHERE q.trace_id=archive_entries.trace_id AND q.content IS NOT NULL) ORDER BY at,id LIMIT ?").all(count - MAX_METADATA) as { id: string; trace_id: string; thread_id: string | null; stored_bytes: number; bytes: number }[] : [];
       for (const r of obsolete) {

@@ -112,7 +112,7 @@ export class ActivityLog {
   archiveExportCancel(id: string) { return this.exports.cancel(id); }
   async archiveExportDispose(): Promise<void> { await this.exporter?.dispose(); }
   private archiveStore: ArchiveStore | null = null;
-  private get archive(): ArchiveStore { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact), rawWireEnabled: () => this.clickhouse.rawWireEnabled() }, this.migrationProgress); }
+  private get archive(): ArchiveStore { return this.archiveStore ??= new ArchiveStore(this.db, { append: (fact) => new ClickHouseStore(this.db, this.archiveStore!).append(fact), rawWireEnabled: () => this.clickhouse.rawWireEnabled(), cdcWireEnabled: () => this.clickhouse.cdcWireEnabled(), cdcExportMode: () => this.clickhouse.cdcExportMode() }, this.migrationProgress); }
   archiveObserve(e: ActivityEvent): void { this.archive.observe(e); }
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveIngestBatch(pages: CapturePage[]): void { this.archive.ingestBatch(pages); }

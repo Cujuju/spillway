@@ -1,4 +1,4 @@
-# Optional ClickHouse long-term store (v2 tables; v2â€“v4 facts)
+# Optional ClickHouse long-term store (v2 tables; v2–v5 facts)
 
 Settings → Data → ClickHouse keeps a long-term copy of Spillway's local stores; local retention stays short-term. Export, each store and content inclusion are independently opt-in; turning export on selects every store. Configure an HTTP(S) origin, database and `tablePrefix` (default `spillway`). Check (and Create tables, offered when Check finds them missing) handles both `<prefix>_facts` and `<prefix>_pieces`; types compare without layout whitespace, since ClickHouse 26 pretty-prints named tuples. Prefixes are simple SQL identifiers limited to 56 characters so the longest suffix fits the 63-character identifier limit.
 
@@ -115,18 +115,19 @@ GROUP BY p.seq;
 The synthetic demo destination supports both tables, zstd INSERT bodies, schema checks, retries, partial writes, disconnects and delayed responses without real credentials.
 
 
-## Reconstructing wire captures (facts v3 and v4)
+## Reconstructing wire captures (facts v3, v4 and v5)
 
 A capture appends `capture-start`, `capture-chunk` and `capture-end` facts. The chunk record contains the capture UUID, epoch, original journal sequence, direction, zero-based direction offset, WebSocket message index/type/time/end, and `rawBytes`. Its generic `request_pieces` field also references response chunks. Empty WebSocket messages have zero raw bytes and no piece reference. The `response` and `frames_json` columns are empty.
 
 - V3 chunks reference base64 text with `representation: "base64-wire-v2"`. Their reference lengths are in base64 bytes. Decode each chunk separately before concatenating.
-- V4 chunks reference original bytes with `representation: "raw-wire-v1"`. Their references have offset zero and length `rawBytes`. The piece ID sets the high bit of the original local ID, giving raw pieces an independent key in the same table. Preserve those `UInt64` values as decimal strings or 64-bit integers in clients.
+- V4 chunks reference original bytes with `representation: "raw-wire-v1"`. Their references have offset zero and length `rawBytes`. The piece ID sets the high bit (bit 63) of the original local ID, giving raw pieces an independent key in the same table. Preserve those `UInt64` values as decimal strings or 64-bit integers in clients.
+- V5 chunks (`schema_version = 5`, `representation: "cdc-wire-v1"`, default for new captures via **Deduplicate capture bodies**) split each direction's contiguous raw wire bytes using FastCDC (2 KiB min, 8 KiB normal, 64 KiB max) and store each unique chunk once in `spillway_pieces` under `thread_id = 'cdc-v1'` with bit 62 set on `seq` (`(1 << 62) | chunkId`, disjoint from v3 and v4). A capture's `capture-chunk` facts coalesce WebSocket frames into a direction stream plus a `frames` array of `{frame, type, at, offset, length, end}` boundaries, and `request_pieces` lists the ordered `[piece_seq, 0, length]` chunk references. Local `clickhouse_cdc_chunks` frees compressed bytes on acknowledgment while retaining the hash→ID index until destination change. Queued v5 outbox rows are not readable by pre-v5 builds: drain or clear the outbox before downgrading.
 
 **Raw bytes for new captures** is off by default. Enable it after updating reconstruction queries and clients. Each capture binds to its format when its start is ingested. Toggling the setting affects future starts. Queued rows and subsequent backfills keep their bound format. Use Clear outbox to discard queued rows deliberately. An older writer can replay retained chunks as v3 using a separate piece ID. A reader must therefore choose the encoding for each chunk fact.
 
 Raw HTTP bodies preserve their original content encoding. WebSocket binary messages preserve application bytes. Body export still requires its own opt-in. Only a terminal `complete` record certifies a finalized observed exchange. Keep partial captures labeled partial.
 
-Select a specific capture by source ID, trace ID, capture UUID and epoch. The query returns `journal_seq UInt64, chunk String, wire_bytes String` in RowBinary. It collapses transport retries with `FINAL`, then takes the newest included fact for each original journal sequence. Pieces match on `(source_id, thread_id, piece_seq)`, so ClickHouse can skip unrelated threads. Zero-length markers survive the joins. Unsupported encodings, missing pieces and mismatched extents fail the query.
+For v3 and v4 captures, select a specific capture by source ID, trace ID, capture UUID and epoch. The query returns `journal_seq UInt64, chunk String, wire_bytes String` in RowBinary. It excludes v5 facts (which use a capture-local `chunk_seq` instead of the proxy journal sequence), collapses transport retries with `FINAL`, then takes the newest included fact for each original journal sequence. Pieces match on `(source_id, thread_id, piece_seq)`, so ClickHouse can skip unrelated threads. Zero-length markers survive the joins. Unsupported encodings, missing pieces and mismatched extents fail the query.
 
 ```sql
 WITH
@@ -141,6 +142,7 @@ WITH
     WHERE source_id = {source:String} AND trace_id = {trace:String}
       AND JSONExtractString(record_json, 'captureId') = {capture:String}
       AND JSONExtractString(record_json, 'epoch') = {epoch:String}
+      AND schema_version != 5
       AND kind = 'capture-chunk' AND content_policy = 'included'
     ORDER BY seq DESC LIMIT 1 BY journal_seq
   ),
@@ -196,5 +198,46 @@ ORDER BY seq DESC LIMIT 1;
 ```
 
 Process chunks in journal order and verify contiguous offsets per direction, total `requestBytes` and `responseBytes`, and the two SHA-256 hashes from the terminal record. For WebSocket, also verify frame counts and continuations, including empty messages, using `frame`, `type`, `at` and `end` from the chunk JSON. Missing terminal metadata or a mismatch means reconstruction is incomplete.
+
+For a v5 (`cdc-wire-v1`) capture, reconstruct each direction stream directly from `thread_id = 'cdc-v1'` pieces in chunk order:
+
+```sql
+WITH
+  facts AS (
+    SELECT source_id,
+           JSONExtractUInt(record_json, 'sequence') AS chunk_seq,
+           JSONExtractString(record_json, 'direction') AS direction,
+           JSONExtractUInt(record_json, 'offset') AS stream_offset,
+           JSONExtractUInt(record_json, 'rawBytes') AS raw_size,
+           JSONExtractRaw(record_json, 'frames') AS frames_json,
+           request_pieces
+    FROM spillway_facts FINAL
+    WHERE source_id = {source:String} AND trace_id = {trace:String}
+      AND JSONExtractString(record_json, 'captureId') = {capture:String}
+      AND JSONExtractString(record_json, 'epoch') = {epoch:String}
+      AND schema_version = 5 AND kind = 'capture-chunk' AND content_policy = 'included'
+    ORDER BY seq DESC LIMIT 1 BY chunk_seq
+  ),
+  refs AS (
+    SELECT f.source_id, f.chunk_seq, f.direction, f.stream_offset, f.raw_size, f.frames_json,
+           ref.piece_seq AS piece_seq, ref.offset AS piece_offset, ref.length AS piece_length, idx
+    FROM facts AS f
+    LEFT ARRAY JOIN f.request_pieces AS ref, arrayEnumerate(f.request_pieces) AS idx
+  ),
+  pieces AS (
+    SELECT source_id, seq, bytes
+    FROM spillway_pieces FINAL
+    WHERE source_id = {source:String} AND thread_id = 'cdc-v1'
+      AND seq IN (SELECT piece_seq FROM refs WHERE piece_seq != 0)
+  )
+SELECT r.chunk_seq, r.direction, r.stream_offset, r.frames_json,
+       arrayStringConcat(arrayMap(x -> x.2, arraySort(x -> x.1, groupArray((r.idx, if(r.piece_seq = 0, '', substring(p.bytes, r.piece_offset + 1, r.piece_length))))))) AS wire_bytes
+FROM refs AS r
+LEFT JOIN pieces AS p ON r.source_id = p.source_id AND r.piece_seq = p.seq
+GROUP BY r.chunk_seq, r.direction, r.stream_offset, r.raw_size, r.frames_json
+HAVING throwIf(length(wire_bytes) != r.raw_size, 'Invalid CDC wire capture chunk') = 0
+ORDER BY r.chunk_seq
+FORMAT RowBinary;
+```
 
 No server configuration or remote deletion is performed by this change. Body size is independent of insert size. Capture, export and search/display limits are separate: display/search previews can be limited while complete original bytes remain retained and exported.

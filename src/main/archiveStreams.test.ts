@@ -26,7 +26,7 @@ function setup() {
 }
 function connect(db: Db) {
   let exporter: ClickHouseStore;
-  const archive = new ArchiveStore(db, { append: (f) => exporter.append(f), rawWireEnabled: () => exporter.rawWireEnabled() });
+  const archive = new ArchiveStore(db, { append: (f) => exporter.append(f), rawWireEnabled: () => exporter.rawWireEnabled(), cdcWireEnabled: () => exporter.cdcWireEnabled(), cdcExportMode: () => exporter.cdcExportMode() });
   exporter = new ClickHouseStore(db, archive);
   return { archive, exporter };
 }
@@ -130,7 +130,7 @@ it('resumes an open stream after a worker restart and imports already-captured b
 });
 it('exports large bodies over bounded batches and retains queued content across retention and recording disable', () => {
   const { db, archive, exporter } = setup(), request = randomBytes(CAPTURE_BODY_LIMIT + CAPTURE_CHUNK_BYTES), response = randomBytes(1024);
-  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, endpoint: 'http://127.0.0.1:8123' }); exporter.prepare();
+  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, cdcWire: false, endpoint: 'http://127.0.0.1:8123' }); exporter.prepare();
   ingest(archive, stream(request, response)); archive.setPolicy(DEFAULT_ARCHIVE_POLICY);
   archive.prune(Date.now() + 8 * 86_400_000, true); expect(archive.detail('trace-wire-complete')?.state).toBe('complete');
   const pieces = new Map<string, string>(); const facts: { kind: string; content_policy: string; record_json: string; request_pieces: { piece_seq: number | string; offset: number; length: number }[] }[] = [];
@@ -153,8 +153,9 @@ it('exports large bodies over bounded batches and retains queued content across 
 });
 it('backfills every raw chunk to a new destination without reconstructing the whole body', () => {
   const { archive, exporter } = setup(), request = randomBytes(CAPTURE_CHUNK_BYTES * 2);
+  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, cdcWire: false });
   ingest(archive, stream(request, Buffer.from('ok')));
-  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, endpoint: 'http://127.0.0.1:8123' });
+  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, cdcWire: false, endpoint: 'http://127.0.0.1:8123' });
   const batch = exporter.prepare()!;
   const facts = batch.facts.trim().split('\n').map((s) => JSON.parse(s));
   expect(facts.filter((r) => r.kind === 'capture-chunk')).toHaveLength(3);
@@ -173,7 +174,7 @@ it('resets an in-progress backfill cursor when its previous entry was deleted', 
 });
 it('limits combined RowBinary piece and fact bytes per wire batch', () => {
   const { archive, exporter } = setup();
-  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, endpoint: 'http://127.0.0.1:8123' });
+  exporter.configure({ ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, cdcWire: false, endpoint: 'http://127.0.0.1:8123' });
   exporter.prepare();
   ingest(archive, stream(Buffer.alloc(CLICKHOUSE_BATCH_BYTES + CAPTURE_CHUNK_BYTES, 0xff), Buffer.alloc(0)));
   let batches = 0;
@@ -194,7 +195,7 @@ it('keeps the capture binding through toggles, restart and an uncertain mixed up
   let exporter = initial;
   const fake = await startDemoClickHouse();
   try {
-    const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, endpoint: fake.endpoint };
+    const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, cdcWire: false, endpoint: fake.endpoint };
     exporter.configure(config);
     exporter.prepare();
     const before = stream(Buffer.from('before'), Buffer.alloc(0));
@@ -271,7 +272,7 @@ it('keeps the capture binding through toggles, restart and an uncertain mixed up
 
 it('resends raw pieces after a destination change made by an older build', () => {
   const { db, archive, exporter } = setup();
-  const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, endpoint: 'http://127.0.0.1:8123' };
+  const config = { ...DEFAULT_CLICKHOUSE_CONFIG, enabled: true, includeBodies: true, rawWire: true, cdcWire: false, endpoint: 'http://127.0.0.1:8123' };
   exporter.configure(config);
   exporter.prepare();
   ingest(archive, stream(Buffer.from('raw request'), Buffer.from('raw response')));

@@ -3,7 +3,9 @@ import { durableTransaction, type Db } from './activityDb';
 import { ARCHIVE_PAGE_SIZE, CAPTURE_BODY_LIMIT, normalizeArchivePolicy, type ArchiveDetail, type ArchiveEntry, type ArchivePage, type ArchivePolicy, type ArchiveQuery, type ArchiveStatus, type CapturePage, type CaptureCut } from '@shared/archive';
 import { sessionKind, type ActivityEvent } from '@shared/types';
 import { EVICTABLE_THREAD, PIECE_SCHEMA, migratePieces, storeBody, readBody, expireThread, storedBytes, refreshThread } from './archivePieces';
-import { WIRE_SCHEMA, ingestWire } from './archiveStreams';
+import { WIRE_SCHEMA, ingestWire, wireThread } from './archiveStreams';
+import { emitCdcCaptureChunks } from './clickhouseCdc';
+import { CLICKHOUSE_CDC_WIRE_VERSION } from './clickhouseWire';
 import { normalizeTransport } from '@shared/activityTransport';
 
 export const ARCHIVE_SCHEMA = `
@@ -22,7 +24,7 @@ CREATE INDEX IF NOT EXISTS archive_attempt_trace ON archive_attempts(trace_id);
 
 CREATE TABLE IF NOT EXISTS archive_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ` + PIECE_SCHEMA + WIRE_SCHEMA;
-export interface ArchiveFactSink { append(fact: ArchiveFact): void; rawWireEnabled?(): boolean }
+export interface ArchiveFactSink { append(fact: ArchiveFact): void; rawWireEnabled?(): boolean; cdcWireEnabled?(): boolean; cdcExportMode?(): 'off' | 'metadata' | 'bodies' }
 export type ArchiveFact = { kind: 'attempt' | 'capture' | 'finalized' | 'snapshot' | 'capture-start' | 'capture-chunk' | 'capture-end'; traceId: string; at: string; captureState: string; record: object; content: object | null };
 type Row = { id: string; trace_id: string; at: string; state: ArchiveEntry['state']; reason: string; session_id: string | null; model: string; provider: string; client: string | null; capture_id: string | null; capture_epoch: string | null; capture_sequence: number | null; method: string; path: string; status: number; bytes: number; detail: string };
 const ENTRY_COLUMNS = 'id,trace_id,at,state,reason,session_id,model,provider,client,capture_id,capture_epoch,capture_sequence,method,path,status,bytes';
@@ -131,8 +133,14 @@ export class ArchiveStore {
           this.write('dropBaseline', 0);
           this.write('restarts', this.read('restarts', 0) + 1);
           this.settle('proxy-restarted-before-capture');
-          const orphaned = this.db.prepare("UPDATE archive_entries SET state='partial',reason='capture-journal-reset' WHERE state='pending' AND json_extract(detail,'$.wire')=2 AND capture_epoch<>? RETURNING trace_id,at").all(page.epoch) as { trace_id: string; at: string }[];
-          for (const r of orphaned) this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: 'partial', record: { state: 'partial', reason: 'capture-journal-reset' }, content: null });
+          const orphaned = this.db.prepare("UPDATE archive_entries SET state='partial',reason='capture-journal-reset' WHERE state='pending' AND json_extract(detail,'$.wire')=2 AND capture_epoch<>? RETURNING id,trace_id,at,capture_id,capture_epoch,thread_id").all(page.epoch) as { id: string; trace_id: string; at: string; capture_id: string | null; capture_epoch: string | null; thread_id: string | null }[];
+          for (const r of orphaned) {
+            const version = r.thread_id ? (this.db.prepare('SELECT clickhouse_wire_version AS v FROM archive_threads WHERE id=?').get(r.thread_id) as { v: number } | undefined)?.v : undefined;
+            if (version === CLICKHOUSE_CDC_WIRE_VERSION && r.capture_id && r.capture_epoch) {
+              emitCdcCaptureChunks(this.db, { entryId: r.id, traceId: r.trace_id, captureId: r.capture_id, epoch: r.capture_epoch, startedAt: r.at, thread: r.thread_id ?? wireThread(r.capture_epoch, r.capture_id) }, this.sink);
+            }
+            this.sink?.append({ kind: 'finalized', traceId: r.trace_id, at: r.at, captureState: 'partial', record: { state: 'partial', reason: 'capture-journal-reset' }, content: null });
+          }
         }
         for (const r of page.records) {
           if (!r || !Number.isSafeInteger(r.sequence) || r.sequence < 1) throw new Error('Invalid capture cursor');
@@ -257,7 +265,7 @@ export class ArchiveStore {
     this.lastPruned = 0;
   }
 }
-export const ARCHIVE_CLEAR_SQL = `UPDATE clickhouse_export SET discarded=discarded+queued_rows,backfill_cursor=NULL; DELETE FROM clickhouse_outbox;
+export const ARCHIVE_CLEAR_SQL = `UPDATE clickhouse_export SET discarded=discarded+queued_rows,backfill_cursor=NULL; DELETE FROM clickhouse_outbox; DELETE FROM clickhouse_cdc_chunks WHERE sent=0;
 DROP TABLE IF EXISTS archive_fts; DELETE FROM archive_search; DELETE FROM archive_search_keys; DELETE FROM archive_wire; DELETE FROM archive_entries; DELETE FROM archive_attempts; UPDATE archive_pieces SET thread_id=NULL; DELETE FROM archive_threads;
 DELETE FROM archive_pieces WHERE id NOT IN (SELECT piece_id FROM archive_pins);
 INSERT OR REPLACE INTO archive_meta VALUES ('dropBaseline', coalesce((SELECT value FROM archive_meta WHERE key='proxyDropped'),'0'));

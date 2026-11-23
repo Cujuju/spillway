@@ -5,7 +5,8 @@ import { CAPTURE_BODY_LIMIT, CAPTURE_CHUNK_BYTES, type CaptureRecord, type Archi
 import type { Db } from './activityDb';
 import type { ArchiveFactSink } from './archiveStore';
 import { pieceBytes, type Body } from './archivePieces';
-import { CLICKHOUSE_BASE64_WIRE, CLICKHOUSE_RAW_WIRE_VERSION, CLICKHOUSE_WIRE_VERSION, wireContent, type ClickHouseWireVersion } from './clickhouseWire';
+import { CLICKHOUSE_BASE64_WIRE, CLICKHOUSE_CDC_WIRE_VERSION, CLICKHOUSE_RAW_WIRE_VERSION, CLICKHOUSE_WIRE_VERSION, wireContent, type ClickHouseWireVersion } from './clickhouseWire';
+import { emitCdcCaptureChunks } from './clickhouseCdc';
 import { archiveSearchText } from '@shared/archiveContent';
 
 export const WIRE_SCHEMA = `
@@ -36,7 +37,7 @@ export function ingestWire(db: Db, r: CaptureRecord, sink?: ArchiveFactSink): vo
     if (r.requestBytes || r.responseBytes || r.frameCount || r.chunk) throw new Error('Invalid capture start');
     db.prepare(`INSERT INTO archive_entries(id,trace_id,at,state,reason,capture_id,capture_epoch,capture_sequence,method,path,status,detail,thread_id) VALUES(?,?,?,'pending','capture-open',?,?,?,?,?,?,?,?)
       ON CONFLICT(trace_id) DO UPDATE SET state='pending',reason='capture-open',capture_id=excluded.capture_id,capture_epoch=excluded.capture_epoch,capture_sequence=excluded.capture_sequence,detail=excluded.detail,thread_id=excluded.thread_id,method=excluded.method,path=excluded.path`).run(id, r.traceId, r.startedAt, r.id, r.epoch, r.sequence, r.method, r.path, r.status, JSON.stringify(metadata(r)), thread);
-    const version = sink?.rawWireEnabled?.() ? CLICKHOUSE_RAW_WIRE_VERSION : CLICKHOUSE_WIRE_VERSION;
+    const version = sink?.cdcWireEnabled?.() ? CLICKHOUSE_CDC_WIRE_VERSION : sink?.rawWireEnabled?.() ? CLICKHOUSE_RAW_WIRE_VERSION : CLICKHOUSE_WIRE_VERSION;
     db.prepare('INSERT OR IGNORE INTO archive_threads(id,first_at,last_at,clickhouse_wire_version) VALUES(?,?,?,?)').run(thread, r.startedAt, r.startedAt, version);
   } else {
     if (!before || before.capture_id !== r.id || before.capture_epoch !== r.epoch) throw new Error('Capture stream start is unavailable');
@@ -61,7 +62,9 @@ export function ingestWire(db: Db, r: CaptureRecord, sink?: ArchiveFactSink): vo
       db.prepare("UPDATE archive_entries SET state='pending',reason='capture-open',bytes=?,stored_bytes=?,detail=?,capture_sequence=? WHERE id=?").run(expected.requestBytes + expected.responseBytes, Buffer.byteLength(JSON.stringify(expected)), JSON.stringify(expected), r.sequence, id);
       db.prepare('UPDATE archive_threads SET stored_bytes=stored_bytes+?,logical_bytes=logical_bytes+? WHERE id=?').run((compressed?.length ?? 0) + Buffer.byteLength(JSON.stringify(expected)) - before.stored_bytes, bytes.length, thread);
       const { data: _data, ...chunk } = c;
-      sink?.append({ kind: 'capture-chunk', traceId: r.traceId, at: r.startedAt, captureState: 'pending', record: { captureId: r.id, epoch: r.epoch, sequence: r.sequence, chunk, representation: CLICKHOUSE_BASE64_WIRE, rawBytes: bytes.length }, content: wireContent(thread, before.exportVersion, piece, bytes.length) });
+      if (before.exportVersion !== CLICKHOUSE_CDC_WIRE_VERSION) {
+        sink?.append({ kind: 'capture-chunk', traceId: r.traceId, at: r.startedAt, captureState: 'pending', record: { captureId: r.id, epoch: r.epoch, sequence: r.sequence, chunk, representation: CLICKHOUSE_BASE64_WIRE, rawBytes: bytes.length }, content: wireContent(thread, before.exportVersion, piece, bytes.length) });
+      }
       return;
     }
     if (r.chunk || !['complete', 'partial', 'missing'].includes(r.state) || r.requestBytes !== prior.requestBytes || r.responseBytes !== prior.responseBytes || r.frameCount !== prior.frameCount) throw new Error('Capture terminal byte count mismatch');
@@ -80,6 +83,9 @@ export function ingestWire(db: Db, r: CaptureRecord, sink?: ArchiveFactSink): vo
     db.prepare('UPDATE archive_entries SET state=?,reason=?,detail=?,stored_bytes=?,status=?,capture_sequence=? WHERE id=?').run(r.state, r.reason, JSON.stringify(metadata(r, prior.firstSequence)), Buffer.byteLength(JSON.stringify(metadata(r, prior.firstSequence))), r.status, r.sequence, id);
     db.prepare('UPDATE archive_threads SET stored_bytes=stored_bytes+? WHERE id=?').run(Buffer.byteLength(JSON.stringify(metadata(r, prior.firstSequence))) - before.stored_bytes, thread);
     indexWire(db, id, metadata(r, prior.firstSequence));
+    if (before.exportVersion === CLICKHOUSE_CDC_WIRE_VERSION) {
+      emitCdcCaptureChunks(db, { entryId: id, traceId: r.traceId, captureId: r.id, epoch: r.epoch, startedAt: r.startedAt, thread }, sink);
+    }
   }
   sink?.append({ kind: r.event === 'start' ? 'capture-start' : 'capture-end', traceId: r.traceId, at: r.startedAt, captureState: r.state, record: { ...metadata(r, firstSequence), captureId: r.id, epoch: r.epoch, sequence: r.sequence, method: r.method, path: r.path, status: r.status, state: r.state, reason: r.reason }, content: null });
 }

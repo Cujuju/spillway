@@ -1,6 +1,6 @@
 import type { ClickHouseConfig } from '@shared/clickhouse';
 import { CAPTURE_BODY_LIMIT } from '@shared/archive';
-import { CLICKHOUSE_RAW_WIRE, CLICKHOUSE_RAW_WIRE_VERSION, CLICKHOUSE_WIRE_VERSION, isWireContent, rawPieceSequence, type QueuedPieceContent } from './clickhouseWire';
+import { CLICKHOUSE_CDC_WIRE, CLICKHOUSE_CDC_WIRE_VERSION, CLICKHOUSE_RAW_WIRE, CLICKHOUSE_RAW_WIRE_VERSION, CLICKHOUSE_WIRE_VERSION, cdcPieceSequence, isCdcWireContent, isWireContent, rawPieceSequence, type QueuedPieceContent } from './clickhouseWire';
 import type { ResolvedRecord } from './clickhouseRecords';
 export const CLICKHOUSE_SCHEMA_VERSION = 2;
 // JSONEachRow reads named tuples as objects by default; arrays fail with HTTP 400.
@@ -14,8 +14,11 @@ export function encodeClickHouseLine(row: OutboxRow, config: ClickHouseConfig, s
   const refs = row.content ? JSON.parse(row.content) as QueuedPieceContent : null;
   const metadata = row.kind === 'capture-start' || row.kind === 'capture-end';
   const policy = override ?? (metadata ? 'metadata-only' : row.expired ? 'source-expired' : include ? 'included' : config.includeBodies ? 'source-unavailable' : 'metadata-only');
-  const fact = { schema_version: row.kind.startsWith('capture-') ? CLICKHOUSE_WIRE_VERSION : CLICKHOUSE_SCHEMA_VERSION, source_id: source, source_label: config.sourceLabel, seq: row.seq, kind: row.kind, record_key: '', trace_id: row.trace_id, thread_id: row.thread_id ?? refs?.thread ?? '', at: clickhouseTime(row.at), capture_state: row.capture_state, content_policy: policy, request_pieces: include ? refs!.request.map(namedPiece) : [], response: include ? resolved?.response ?? '' : '', frames_json: include ? JSON.stringify(resolved?.frames ?? []) : '', record_json: row.record };
-  if (include && isWireContent(refs)) {
+  const cdcRecord = isCdcWireContent(refs) || (row.kind === 'capture-chunk' && (JSON.parse(row.record) as { representation?: string }).representation === CLICKHOUSE_CDC_WIRE);
+  const fact = { schema_version: cdcRecord ? CLICKHOUSE_CDC_WIRE_VERSION : row.kind.startsWith('capture-') ? CLICKHOUSE_WIRE_VERSION : CLICKHOUSE_SCHEMA_VERSION, source_id: source, source_label: config.sourceLabel, seq: row.seq, kind: row.kind, record_key: '', trace_id: row.trace_id, thread_id: row.thread_id ?? refs?.thread ?? '', at: clickhouseTime(row.at), capture_state: row.capture_state, content_policy: policy, request_pieces: include && !isCdcWireContent(refs) ? refs!.request.map(namedPiece) : [], response: include ? resolved?.response ?? '' : '', frames_json: include ? JSON.stringify(resolved?.frames ?? []) : '', record_json: row.record };
+  if (include && isCdcWireContent(refs)) {
+    fact.request_pieces = refs.chunks.map(([id, length]) => namedPiece([cdcPieceSequence(id).toString(), 0, length]));
+  } else if (include && isWireContent(refs)) {
     const raw = refs.exportVersion === CLICKHOUSE_RAW_WIRE_VERSION;
     fact.schema_version = raw ? CLICKHOUSE_RAW_WIRE_VERSION : CLICKHOUSE_WIRE_VERSION;
     fact.request_pieces = refs.request.map(([id, offset, length]) => raw

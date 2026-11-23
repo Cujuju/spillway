@@ -5,7 +5,7 @@ import { zstdDecompressSync } from 'node:zlib';
 // DESCRIBE types as ClickHouse 26 prints them: named tuples span lines.
 const CLICKHOUSE_COLUMNS = { schema_version: 'UInt16', source_id: 'String', source_label: 'LowCardinality(String)', seq: 'UInt64', kind: 'LowCardinality(String)', record_key: 'String', trace_id: 'String', thread_id: 'String', at: "DateTime64(3, 'UTC')", capture_state: 'LowCardinality(String)', content_policy: 'LowCardinality(String)', request_pieces: 'Array(Tuple(\n    piece_seq UInt64,\n    offset UInt32,\n    length UInt32))', response: 'String', frames_json: 'String', record_json: 'String' };
 const CLICKHOUSE_PIECE_COLUMNS = { source_id: 'String', thread_id: 'String', seq: 'UInt64', at: "DateTime64(3, 'UTC')", bytes: 'String' };
-export interface DemoClickHouseRow { source_id: string; seq: number; kind: string; at: string; record_key: string; record_json: string; capture_state?: string; content_policy?: string; schema_version?: number; request_pieces?: { piece_seq: string | number; offset: number; length: number }[] }
+export interface DemoClickHouseRow { source_id: string; seq: number; kind: string; at: string; record_key: string; trace_id?: string; record_json: string; capture_state?: string; content_policy?: string; schema_version?: number; request_pieces?: { piece_seq: string | number; offset: number; length: number }[] }
 interface DemoClickHousePiece { source_id: string; thread_id: string; seq: number | string; at: string; bytes: string | Buffer }
 
 function readRawPieces(body: Buffer): DemoClickHousePiece[] {

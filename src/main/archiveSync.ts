@@ -27,10 +27,11 @@ export class ArchiveSync extends EventEmitter {
   private active = false;
   private leased: boolean | undefined;
   private renewAt = 0;
+  private drainingSince: number | null = null;
   private alerted: 'error' | 'lag' | null = null;
   private run: Promise<void> = Promise.resolve();
   start(): Promise<void> { this.stop(); this.active = true; this.leased = undefined; const gen = this.generation; return this.run = this.tick(gen); }
-  stop(): void { clearTimeout(this.timer); this.generation++; this.active = false; }
+  stop(): void { clearTimeout(this.timer); this.generation++; this.active = false; this.drainingSince = null; this.lagAt = null; this.alerted = null; }
   async clear(): Promise<void> {
     const active = this.active; this.stop(); await this.run;
     await activityLog.call('archiveClear');
@@ -43,7 +44,8 @@ export class ArchiveSync extends EventEmitter {
   }
   async refresh(): Promise<void> {
     const active = this.active; this.stop(); const gen = this.generation; await this.run;
-    if (!active || gen !== this.generation) { this.error = null; this.lagAt = null; this.alerted = null; return; }
+    if (gen !== this.generation) return;
+    if (!active) { this.error = null; this.lagAt = null; this.alerted = null; return; }
     this.active = true; this.run = this.tick(gen); await this.run;
   }
   private updateAlerts(): void {
@@ -55,13 +57,13 @@ export class ArchiveSync extends EventEmitter {
       this.alerted = null;
     }
   }
-  private async flushBatch(batch: CapturePage[], epoch: string, cursor: number, gen: number): Promise<boolean> {
+  private async flushBatch(batch: CapturePage[], epoch: string, cursor: number, gen: number, ack = true): Promise<boolean> {
     if (!batch.length) return true;
     await activityLog.call('archiveIngestBatch', batch);
     if (gen !== this.generation) return false;
     const last = batch.at(-1)!;
     const committed = last.records.at(-1)?.sequence ?? cursor;
-    if (last.version === 2 && committed > 0) await management.acknowledgeCaptures(epoch, committed);
+    if (ack && last.version === 2 && committed > 0) await management.acknowledgeCaptures(epoch, committed);
     return gen === this.generation;
   }
   private async tick(gen: number): Promise<void> {
@@ -82,15 +84,21 @@ export class ArchiveSync extends EventEmitter {
       let batch: CapturePage[] = [];
       let lastPage: CapturePage | null = null;
       for (let pages = 0; pages < PAGES_PER_BATCH && gen === this.generation; pages++) {
-        let page = await management.captures(cursor);
+        let page: CapturePage;
+        try { page = await management.captures(cursor); }
+        catch (err) {
+          if (gen === this.generation && batch.length && epoch !== null) await this.flushBatch(batch, epoch, cursor, gen);
+          throw err;
+        }
         if (gen !== this.generation) return;
         if (epoch !== page.epoch) {
           if (batch.length && epoch !== null) {
-            if (!await this.flushBatch(batch, epoch, cursor, gen)) return;
+            if (!await this.flushBatch(batch, epoch, cursor, gen, false)) return;
             batch = [];
           }
           cursor = 0; epoch = page.epoch; page = await management.captures(0);
           if (gen !== this.generation) return;
+          epoch = page.epoch;
         }
         if (!status.policy.captureBodies && page.version === 1) break;
         if (page.error) warning = page.error;
@@ -104,13 +112,21 @@ export class ArchiveSync extends EventEmitter {
         if (!await this.flushBatch(batch, epoch, cursor, gen)) return;
       }
       const draining = Boolean(lastPage && lastPage.records.length === CAPTURE_PAGE_LIMIT);
-      if (draining) delay = DRAIN_YIELD_MS;
-      const tailAt = lastPage?.records.at(-1)?.startedAt;
-      const tailMs = typeof tailAt === 'string' ? Date.parse(tailAt) : NaN;
-      this.lagAt = draining && Number.isFinite(tailMs) && Date.now() - tailMs >= CAPTURE_LAG_ALERT_MS ? tailAt! : null;
+      if (draining) {
+        delay = DRAIN_YIELD_MS;
+        this.drainingSince ??= Date.now();
+      } else {
+        this.drainingSince = null;
+      }
+      this.lagAt = this.drainingSince !== null && Date.now() - this.drainingSince >= CAPTURE_LAG_ALERT_MS
+        ? new Date(this.drainingSince).toISOString()
+        : null;
       this.error = warning;
       this.updateAlerts();
     } catch (e) {
+      if (gen !== this.generation) return;
+      this.drainingSince = null;
+      this.lagAt = null;
       this.error = e instanceof Error ? e.message : String(e);
       this.updateAlerts();
     } finally {

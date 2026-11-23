@@ -108,16 +108,16 @@ it('drains committed bytes while surfacing a producer storage warning', async ()
   expect(mocks.ack).toHaveBeenCalledWith('old', 42);
   expect(sync.error).toBe('Capture storage write failed');
 });
-it('alerts once when capture ingest lags behind live traffic and clears once caught up', async () => {
-  const staleAt = new Date(Date.now() - 15 * 60_000).toISOString();
+it('alerts once only when full-batch draining persists past the lag threshold, ignoring old stream startedAt bursts', async () => {
+  const oldStreamStart = new Date(Date.now() - 15 * 60_000).toISOString();
   mocks.call.mockResolvedValue(status());
   let calls = 0;
   mocks.captures.mockImplementation((cursor: number) => {
     calls++;
-    if (calls <= 32) {
+    if (calls <= 48) {
       return Promise.resolve({
         version: 2, epoch: 'old', dropped: 0,
-        records: [1, 2, 3, 4].map((i) => ({ sequence: cursor + i, startedAt: staleAt })),
+        records: [1, 2, 3, 4].map((i) => ({ sequence: cursor + i, startedAt: oldStreamStart })),
       });
     }
     return Promise.resolve({ version: 2, epoch: 'old', dropped: 0, records: [] });
@@ -125,12 +125,78 @@ it('alerts once when capture ingest lags behind live traffic and clears once cau
   const alerts: ArchiveSyncAlert[] = [];
   const sync = new ArchiveSync(); sync.on('alert', (a: ArchiveSyncAlert) => alerts.push(a));
   await sync.start();
-  expect(sync.lagAt).toBe(staleAt);
-  expect(alerts).toEqual([{ kind: 'lag', message: staleAt }]);
+  expect(sync.lagAt).toBeNull();
+  expect(alerts).toEqual([]);
+  // A failed poll resets the continuous-drain clock so an outage gap cannot trigger a spurious lag alert.
+  mocks.captures.mockRejectedValueOnce(new Error('transient'));
+  vi.setSystemTime(Date.now() + 5 * 60_000);
   await vi.advanceTimersToNextTimerAsync();
-  expect(sync.lagAt).toBe(staleAt);
-  expect(alerts).toHaveLength(1);
+  expect(sync.error).toBe('transient');
+  expect(sync.lagAt).toBeNull();
+  const restartedDrainAt = new Date(Date.now() + 3_000).toISOString();
+  await vi.advanceTimersByTimeAsync(3_000);
+  expect(sync.lagAt).toBeNull();
+  vi.setSystemTime(Date.now() + 5 * 60_000);
+  await vi.advanceTimersToNextTimerAsync();
+  expect(sync.lagAt).toBe(restartedDrainAt);
+  expect(alerts).toEqual([{ kind: 'error', message: 'transient' }, { kind: 'lag', message: restartedDrainAt }]);
   await vi.advanceTimersToNextTimerAsync();
   expect(sync.lagAt).toBeNull();
+  expect(alerts).toHaveLength(2);
+  sync.stop();
+});
+it('commits the prior epoch batch without sending a doomed ACK on mid-batch epoch rotation', async () => {
+  mocks.call.mockResolvedValue(status());
+  let calls = 0;
+  mocks.captures.mockImplementation((cursor: number) => {
+    calls++;
+    if (calls === 1) return Promise.resolve({ version: 2, epoch: 'old', dropped: 0, records: [1, 2, 3, 4].map((i) => ({ sequence: cursor + i })) });
+    if (calls === 2) return Promise.resolve({ version: 2, epoch: 'mid', dropped: 0, records: [] });
+    return Promise.resolve({ version: 2, epoch: 'new', dropped: 0, records: [{ sequence: 1 }] });
+  });
+  const sync = new ArchiveSync(); await sync.start(); sync.stop();
+  expect(mocks.ack).toHaveBeenCalledOnce();
+  expect(mocks.ack).toHaveBeenCalledWith('new', 1);
+  expect(sync.error).toBeNull();
+});
+it('clears lag state on stop and ignores late errors from a superseded poll generation', async () => {
+  mocks.call.mockResolvedValue(status());
+  let rejectStale: ((err: Error) => void) | undefined;
+  mocks.captures.mockImplementationOnce(() => new Promise((_, reject) => { rejectStale = reject; }));
+  const sync = new ArchiveSync();
+  const stale = sync.start();
+  await vi.waitFor(() => expect(rejectStale).toBeDefined());
+  mocks.captures.mockResolvedValueOnce({ version: 2, epoch: 'old', dropped: 0, records: [] });
+  await sync.start();
+  rejectStale!(new Error('stale failure'));
+  await stale;
+  expect(sync.error).toBeNull();
+  sync.lagAt = new Date().toISOString();
+  sync.stop();
+  expect(sync.lagAt).toBeNull();
+});
+it('commits and ACKs a fetched batch prefix when a later page fetch fails', async () => {
+  mocks.call.mockResolvedValue(status());
+  mocks.captures
+    .mockResolvedValueOnce({ version: 2, epoch: 'old', dropped: 0, records: [43, 44, 45, 46].map((sequence) => ({ sequence })) })
+    .mockRejectedValueOnce(new Error('mid-batch fetch failed'));
+  const sync = new ArchiveSync(); await sync.start(); sync.stop();
+  expect(mocks.call).toHaveBeenCalledWith('archiveIngestBatch', [expect.objectContaining({ epoch: 'old' })]);
+  expect(mocks.ack).toHaveBeenCalledWith('old', 46);
+  expect(sync.error).toBe('mid-batch fetch failed');
+});
+it('does not let a superseded refresh clear a restarted poll error', async () => {
+  mocks.call.mockResolvedValue(status());
+  let resolveOld!: (v: unknown) => void;
+  mocks.captures.mockImplementationOnce(() => new Promise((r) => { resolveOld = r; }));
+  const sync = new ArchiveSync();
+  void sync.start();
+  await vi.waitFor(() => expect(resolveOld).toBeDefined());
+  const refreshing = sync.refresh();
+  mocks.captures.mockRejectedValueOnce(new Error('restarted failure'));
+  await sync.start();
+  resolveOld({ version: 2, epoch: 'old', dropped: 0, records: [] });
+  await refreshing;
+  expect(sync.error).toBe('restarted failure');
   sync.stop();
 });

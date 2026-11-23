@@ -328,9 +328,13 @@ it('indexes prune queries, evicts thread pieces directly, and pauses missing-cap
   archive.prune(Date.now(), true);
   expect(archive.detail('trace-newer-pending')?.state).toBe('pending');
 
-  // Once the backlog drains (non-full final page), genuinely missing traces older than 10m settle,
-  // and a late-arriving wire capture recovers a previously settled missing entry to complete.
-  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, records: backlog.slice(4) }]);
+  // An errored empty v2 journal read must not be treated as caught up, but a producer write warning on a short read does settle.
+  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, error: 'Capture journal read failed', records: [] }]);
+  archive.prune(Date.now(), true);
+  expect(archive.detail('trace-newer-pending')?.state).toBe('pending');
+
+  // A short final page (even with a producer write warning) settles genuinely missing traces; late captures still recover them.
+  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, error: 'Capture storage write failed; a transaction may be incomplete', records: backlog.slice(4) }]);
   archive.prune(Date.now(), true);
   expect(archive.detail('trace-wire-complete')).toMatchObject({ state: 'complete', response: 'ok' });
   expect(archive.detail('trace-newer-pending')).toMatchObject({ state: 'missing', reason: 'capture-unavailable-or-interrupted' });

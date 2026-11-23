@@ -36,6 +36,8 @@ const PRUNE_INTERVAL_MS = 60_000;
 const CAPTURE_PENDING_TIMEOUT_MS = 10 * 60_000;
 /** Proxy spool page size (CapturePageRecords in CLIProxyAPI); a full v2 page means more backlog awaits. */
 const CAPTURE_PAGE_LIMIT = 4;
+/** Proxy error returned when the capture journal could not be read (request_capture_journal.go). */
+const CAPTURE_READ_FAILED = 'Capture journal read failed';
 /** Longest search text; longer input is cut. */
 const SEARCH_MAX_CHARS = 256;
 /** Entries (`archive_entries`) whose recorded text has every whitespace-separated keyword, literally; null for blank text. */
@@ -181,7 +183,7 @@ export class ArchiveStore {
         this.write('proxyDropped', drops); this.write('dropped', Math.max(0, drops - this.read('dropBaseline', 0)));
       }
       const last = validPages.at(-1)!;
-      this.draining = last.version === 2 && last.records.length === CAPTURE_PAGE_LIMIT;
+      this.draining = last.version === 2 && (last.records.length === CAPTURE_PAGE_LIMIT || last.error === CAPTURE_READ_FAILED);
       this.prune(Date.now());
     });
   }

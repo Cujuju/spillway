@@ -94,7 +94,7 @@ export function RequestCaptureSettings() {
           <button class="btn danger" type="button" disabled={busy() || s().entries === 0} onClick={() => setConfirming(true)}>Delete…</button>
         </SettingRow>
         <Show when={s().syncError}>{(e) => <Notice tone="error">Capture sync failed: {shownText(e())}</Notice>}</Show>
-        <Show when={s().syncLagAt}>{(at) => <Notice tone="warn">Capture ingest is catching up (processing {at()}). Missing bodies will appear once caught up.</Notice>}</Show>
+        <Show when={s().syncLagAt}>{(at) => <Notice tone="warn">Capture ingest has been catching up since {at()}. Missing bodies will appear once caught up.</Notice>}</Show>
         <Show when={s().clearPending}><Notice>Local bodies deleted. Proxy journal deletion is pending and will finish before capture resumes.</Notice></Show>
         <Show when={s().exportWarning}>{(w) => <Notice>Export cleanup: {shownText(w())}</Notice>}</Show>
       </>}</Show>

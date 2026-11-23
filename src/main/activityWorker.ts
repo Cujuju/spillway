@@ -38,7 +38,7 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   activityOlderBoundaries: () => log.activityOlderBoundaries(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),
   names: (ids) => conversationNames.names(ids),
-  archiveObserve: (e) => log.archiveObserve(e), archiveIngest: (p) => log.archiveIngest(p), archiveIngestBatch: (ps) => log.archiveIngestBatch(ps),
+  archiveObserve: (e) => log.archiveObserve(e), archiveIngestBatch: (ps) => log.archiveIngestBatch(ps),
   archiveDetail: (id) => log.archiveDetail(id),
   archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(), archiveClearAcknowledged: () => log.archiveClearAcknowledged(),
   archiveExportPrepare: (o) => log.archiveExportPrepare(o), archiveExportStatus: (id) => log.archiveExportStatus(id),

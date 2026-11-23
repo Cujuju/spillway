@@ -21,8 +21,8 @@ export interface DaySummaries {
   loaded: () => boolean;
 }
 
-/** Per-day request counts for `scope`, loaded when it changes and kept current from the live stream. Call in a component. */
-export function createDaySummaries(scope: () => ActivityScope): DaySummaries {
+/** Per-day request counts for `scope`, loaded only while `active` and kept current from the live stream. Call in a component. */
+export function createDaySummaries(active: () => boolean, scope: () => ActivityScope): DaySummaries {
   const [list, setList] = createSignal<ActivityDaySummary[]>([]);
   const [loaded, setLoaded] = createSignal(false);
   /** Live requests that arrive while a load runs; applied after, when newer than it counted. */
@@ -33,7 +33,7 @@ export function createDaySummaries(scope: () => ActivityScope): DaySummaries {
   const stored = createMemo(() => list().reduce((t, s) => ({ requests: t.requests + s.requests, failed: t.failed + s.failed }), { requests: 0, failed: 0 }));
 
   const count = (e: StoredActivityEvent) => {
-    if (!inScope(scope(), e)) return;
+    if (!active() || !inScope(scope(), e)) return;
     const day = localDay(Date.parse(e.at));
     const current = byDay().get(day);
     if (current && e.id <= current.newestId) return;
@@ -44,9 +44,18 @@ export function createDaySummaries(scope: () => ActivityScope): DaySummaries {
   onMount(() => {
     // An IPC event handler: it reads current state on each event, untracked by design.
     // oxlint-disable-next-line solid/reactivity
-    onCleanup(window.api.onActivity((e) => (liveDuringLoad ? liveDuringLoad.push(e) : count(e))));
+    onCleanup(window.api.onActivity((e) => {
+      if (!active()) return;
+      if (liveDuringLoad) liveDuringLoad.push(e);
+      else count(e);
+    }));
   });
-  createEffect(on(scope, (current) => {
+  createEffect(on([active, scope], ([isActive, current]) => {
+    if (!isActive) {
+      generation += 1;
+      liveDuringLoad = null;
+      return;
+    }
     const gen = ++generation;
     liveDuringLoad ??= [];
     setLoaded(false);

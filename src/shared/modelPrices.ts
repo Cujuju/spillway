@@ -39,6 +39,10 @@ const noCache = (input: number, output: number): Rates => o(input, input, output
 const HAIKU_5_5_LONG_ABOVE = 100_000;
 /** OpenAI's long-context step. */
 const OPENAI_LONG_ABOVE = 272_000;
+/** Gemini Pro's long-context step. */
+const GEMINI_LONG_ABOVE = 200_000;
+/** Gemini includes cached tokens in input and reports no separate cache-write fee. */
+const g = (input: number, cacheRead: number, output: number): Rates => o(input, cacheRead, output);
 
 const OPUS_4_5_TO_5 = [{ from: null, rates: r(5, 6.25, 0.5, 25) }];
 const OPUS_4 = [{ from: null, rates: r(15, 18.75, 1.5, 75) }];
@@ -98,6 +102,16 @@ const PRICES: Record<string, readonly ModelPrice[]> = {
   'gpt-4o-mini': [{ from: null, rates: o(0.15, 0.075, 0.6, 0.15, 0.15), tiers: { fast: { rates: o(0.25, 0.125, 1, 0.25, 0.25) } } }],
   'o3-pro': [{ from: null, rates: noCache(20, 80) }],
   'o3': [{ from: null, rates: o(2, 0.5, 8, 2, 2), tiers: { fast: { rates: o(3.5, 0.875, 14, 3.5, 3.5) }, flex: { rates: o(1, 0.25, 4, 1, 1) } } }],
+  'gemini-4-neon': [{ from: null, rates: g(3, 0.15, 15) }],
+  'gemini-4-argon': [{ from: null, rates: g(2, 0.1, 10) }, { from: '2026-12-01', rates: g(4, 0.2, 20) }],
+  'gemini-3.1-pro': [{ from: null, rates: g(2, 0.2, 12), longAbove: GEMINI_LONG_ABOVE, long: g(4, 0.4, 18) }],
+  'gemini-3.1-pro-preview': [{ from: null, rates: g(2, 0.2, 12), longAbove: GEMINI_LONG_ABOVE, long: g(4, 0.4, 18) }],
+  'gemini-3-flash': [{ from: null, rates: g(0.5, 0.05, 3) }],
+  'gemini-3-flash-preview': [{ from: null, rates: g(0.5, 0.05, 3) }],
+  'gemini-3.1-flash-lite': [{ from: null, rates: g(0.25, 0.025, 1.5) }],
+  'gemini-3.1-flash-lite-preview': [{ from: null, rates: g(0.25, 0.025, 1.5) }],
+  'gemini-2.5-pro': [{ from: null, rates: g(1.25, 0.125, 10), longAbove: GEMINI_LONG_ABOVE, long: g(2.5, 0.25, 15) }],
+  'gemini-2.5-flash': [{ from: null, rates: g(0.3, 0.03, 2.5) }],
 };
 
 /** Claude bills cache reads and writes apart from input; OpenAI's input includes its cached tokens. */

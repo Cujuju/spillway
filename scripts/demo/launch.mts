@@ -112,6 +112,10 @@ function olderFacts(data: DemoData): DemoClickHouseRow[] {
   return rows;
 }
 
+/** Windows Chromium child processes release cache handles briefly after the main process exits. */
+const SCRATCH_RM_RETRIES = 10;
+const SCRATCH_RM_RETRY_DELAY_MS = 100;
+
 export async function launchDemo({ theme = DARK_THEME, debuggingPort, clickhouse: withClickHouse }: DemoOptions = {}): Promise<DemoApp> {
   const data = generate(Date.now());
   const scratch = mkdtempSync(path.join(tmpdir(), 'spillway-demo-'));
@@ -147,7 +151,7 @@ export async function launchDemo({ theme = DARK_THEME, debuggingPort, clickhouse
       }
       await proxy.close();
       await clickhouse?.close();
-      rmSync(scratch, { recursive: true, force: true });
+      rmSync(scratch, { recursive: true, force: true, maxRetries: SCRATCH_RM_RETRIES, retryDelay: SCRATCH_RM_RETRY_DELAY_MS });
     },
   };
 }

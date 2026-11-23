@@ -5,8 +5,16 @@ import { clientName } from '@shared/activityScope';
 import type { ActivityEvent } from '@shared/types';
 import type { ClientLogProvider } from './clientLogPaths';
 
-export interface LogContext { version?: string; effort?: string; settings?: Record<string, RequestSettings | null>; session?: string; model?: string; client?: string; turn?: string; total?: string; pendingRecord?: string; pendingSnapshot?: { usage: string; identity: string; at: string } }
+export interface LogContext { version?: string; effort?: string; settings?: Record<string, RequestSettings | null>; session?: string; model?: string; client?: string; authIndex?: string | null; turn?: string; total?: string; pendingRecord?: string; pendingSnapshot?: { usage: string; identity: string; at: string } }
 type Json = Record<string, any>;
+const ANTIGRAVITY_EFFORT_SUFFIX = /^(.+)-(minimal|low|medium|high|xhigh|max)$/i;
+
+/** Splits Antigravity's encoded effort suffix ("gemini-4-neon-high" → model + "high"). */
+export function splitAntigravityModelEffort(raw: string): { model: string; effort: string | null } {
+  const trimmed = raw.trim();
+  const match = ANTIGRAVITY_EFFORT_SUFFIX.exec(trimmed);
+  return match ? { model: match[1]!, effort: match[2]!.toLowerCase() } : { model: trimmed, effort: null };
+}
 const tokens = (n: unknown): number => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0;
 const usageTotal = (u: Json | undefined): string | undefined => u ? JSON.stringify([u.input_tokens, u.cached_input_tokens, u.cache_write_input_tokens ?? 0, u.output_tokens, u.reasoning_output_tokens ?? 0]) : undefined;
 const text = (v: unknown): string | null => typeof v === 'string' && v.length > 0 ? v : null;
@@ -39,9 +47,10 @@ export function parseClientLine(line: string, provider: ClientLogProvider, conte
   } else if (provider === 'antigravity') {
     if (r.type !== 'PLANNER_RESPONSE' || r.status !== 'DONE') return null;
     if (typeof r.input_tokens !== 'number' && typeof r.output_tokens !== 'number') return null;
-    const model = text(r.model);
+    const rawModel = text(r.model);
     at = text(r.created_at) ?? at;
-    if (!model || !at) return null;
+    if (!rawModel || !at) return null;
+    const { model, effort } = splitAntigravityModelEffort(rawModel);
     const cached = tokens(r.cache_read_tokens);
     // Antigravity logs uncached input apart from cache_read_tokens; normalize to total prompt tokens to match proxy/Gemini accounting.
     usage = {
@@ -53,6 +62,7 @@ export function parseClientLine(line: string, provider: ClientLogProvider, conte
     };
     upstreamId = text(r.response_id) ?? text(r.request_id);
     context.model = model;
+    context.effort = effort ?? undefined;
     context.client = context.client ?? 'antigravity';
     const step = typeof r.step_index === 'number' && Number.isFinite(r.step_index) ? String(r.step_index) : '';
     identity = upstreamId ?? `${context.session ?? ''}:${step}:${at}`;
@@ -111,7 +121,7 @@ export function parseClientLine(line: string, provider: ClientLogProvider, conte
     at, requestId: `client-log:${provider}:${createHash('sha256').update(identity).digest('hex')}`,
     upstreamId, turnKey: null, source: 'client-log', selectionId: null, provider, model: context.model,
     effectiveModel: null, reasoningEffort: context.effort ?? null, parentSessionId: null,
-    authIndex: null, stream: true, failed: false, statusCode: null, error: null, latencyMs: null, ttftMs: null,
+    authIndex: context.authIndex ?? null, stream: true, failed: false, statusCode: null, error: null, latencyMs: null, ttftMs: null,
     inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens),
     cachedTokens: tokens(provider === 'claude' ? usage.cache_read_input_tokens : usage.cached_input_tokens),
     cacheWriteTokens: tokens(provider === 'claude' ? usage.cache_creation_input_tokens : usage.cache_write_input_tokens),

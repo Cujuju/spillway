@@ -4,7 +4,6 @@ const state = vi.hoisted(() => ({ postMessage: vi.fn(), prune: vi.fn(), start: v
 vi.mock('node:worker_threads', () => ({ parentPort: Object.assign(new EventEmitter(), { postMessage: state.postMessage }), workerData: {} }));
 vi.mock('./activityStore', () => ({ ActivityLog: class { prune = state.prune; archiveExportReset = state.exportReset; archiveExportStartupError = state.exportError; } }));
 vi.mock('./clientLogSync', () => ({ startClientLogSync: state.start }));
-vi.mock('./conversationNames', () => ({ conversationNames: {} }));
 it('invalidates renderer after each initialization even when checkpointed scans change nothing', async () => {
   for (let boot = 0; boot < 2; boot++) {
     vi.resetModules();

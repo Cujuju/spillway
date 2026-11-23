@@ -1,6 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { ActivityLog } from './activityStore';
-import { conversationNames } from './conversationNames';
 import { startClientLogSync } from './clientLogSync';
 import { startTitleExport } from './titleExport';
 import type { ActivityMethods, EvalMethods, Request, WorkerConfig } from './activityProtocol';
@@ -16,7 +15,7 @@ const startSync = () => startClientLogSync(log, () => {
 }, (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
 const titles = startTitleExport(log);
-const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise<void> } = {
+const methods: Omit<ActivityMethods, 'clear' | 'names'> & EvalMethods & { clear(): Promise<void> } = {
   thinkingTestPrepare: (req) => log.thinkingTestPrepare(req), thinkingTestSave: (test) => log.thinkingTestSave(test), thinkingTests: () => log.thinkingTests(),
   priceSnapshot: () => log.priceSnapshot(),
   pricesChanged: () => { log.pricesChanged(); port.postMessage({ event: 'reset' }); },
@@ -37,7 +36,11 @@ const methods: Omit<ActivityMethods, 'clear'> & EvalMethods & { clear(): Promise
   buckets: (days) => log.buckets(days), bucketSnapshot: (days) => log.bucketSnapshot(days), coverage: () => log.coverage(),
   activityOlderBoundaries: () => log.activityOlderBoundaries(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),
-  names: (ids) => conversationNames.names(ids),
+  setAccountMap: async (accounts) => {
+    const changed = await log.setAccountMap(accounts);
+    if (changed) port.postMessage({ event: 'reset' });
+    return changed;
+  },
   archiveObserve: (e) => log.archiveObserve(e), archiveIngestBatch: (ps) => log.archiveIngestBatch(ps),
   archiveDetail: (id) => log.archiveDetail(id),
   archiveStatus: () => log.archiveStatus(), archivePolicy: (p) => log.archivePolicy(p), archiveClear: () => log.archiveClear(), archiveClearAcknowledged: () => log.archiveClearAcknowledged(),
@@ -54,7 +57,8 @@ let queue = Promise.resolve();
 port.on('message', (request: Request) => {
   queue = queue.then(async () => {
     try {
-      const fn = methods[request.method] as (...args: unknown[]) => unknown;
+      const fn = methods[request.method as keyof typeof methods] as ((...args: unknown[]) => unknown) | undefined;
+      if (!fn) throw new Error(`Unsupported worker method: ${request.method}`);
       const value = await fn(...request.args);
       port.postMessage({ id: request.id, value });
       if (request.method === 'close') port.close();

@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createZstdDecompress } from 'node:zlib';
-import { readdir, open, stat } from 'node:fs/promises';
+import { readdir, readFile, open, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { ClientLogWatcher } from './clientLogWatcher';
-import { antigravityLogContext, clientLogKey, isClientLogFile, type ClientLogProvider } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, clientLogKey, isClientLogFile, t3UserdataDir, type ClientLogProvider } from './clientLogPaths';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
 
@@ -27,10 +27,30 @@ export interface ImportSink {
   checkpoint(file: string): string | undefined;
   /** False means only the checkpoint changed; void preserves sinks without accounting feedback. */
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean | void;
+  /** Resolves a local login email to a proxy credential's authIndex when known. */
+  resolveAccount?(provider: ClientLogProvider, email: string): string | null;
 }
+
+const oauthEmailCache = new Map<string, { mtimeMs: number; email: string | null }>();
+/** Reads `id_token_email` from an Antigravity OAuth token file, cached by mtime. */
+export async function readAntigravityOAuthEmail(tokenFile: string): Promise<string | null> {
+  const key = clientLogKey(tokenFile);
+  try {
+    const info = await stat(tokenFile);
+    const cached = oauthEmailCache.get(key);
+    if (cached && cached.mtimeMs === info.mtimeMs) return cached.email;
+    const parsed = JSON.parse(await readFile(tokenFile, 'utf8')) as { id_token_email?: unknown };
+    const email = typeof parsed?.id_token_email === 'string' && parsed.id_token_email.trim() ? parsed.id_token_email.trim().toLowerCase() : null;
+    oauthEmailCache.set(key, { mtimeMs: info.mtimeMs, email });
+    return email;
+  } catch {
+    return null;
+  }
+}
+
 export const clientLogRoots = (): { provider: ClientLogProvider; dir: string }[] => {
   const geminiHome = process.env.GEMINI_HOME || path.join(homedir(), '.gemini');
-  const t3Userdata = process.env.T3_USERDATA_DIR || path.join(process.env.T3CODE_HOME || path.join(homedir(), '.t3'), 'userdata');
+  const t3Userdata = t3UserdataDir();
   return [
     { provider: 'claude', dir: path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'projects') },
     { provider: 'codex', dir: path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'sessions') },
@@ -108,11 +128,23 @@ export async function importClientFile(file: string, provider: ClientLogProvider
     };
     if (cp && !archived && cp.anchor !== await anchorAt(cp.offset)) cp = undefined;
     const context = cp?.context ?? {};
+    let antigravityEmail: string | null = null;
     if (provider === 'antigravity') {
       const derived = antigravityLogContext(file);
       context.session ??= derived.session;
       context.client ??= derived.client;
+      if (sink.resolveAccount) {
+        const tokenFile = antigravityOAuthTokenPath(file);
+        antigravityEmail = tokenFile ? await readAntigravityOAuthEmail(tokenFile) : null;
+        context.authIndex = antigravityEmail ? sink.resolveAccount('antigravity', antigravityEmail) : null;
+      }
     }
+    const applyAccountAtCommit = (events: ActivityEvent[]) => {
+      if (!antigravityEmail || !sink.resolveAccount) return;
+      const authIndex = sink.resolveAccount('antigravity', antigravityEmail);
+      context.authIndex = authIndex;
+      for (const e of events) e.authIndex = authIndex;
+    };
     let offset = cp?.offset ?? 0;
     let position = offset;
     let pending = Buffer.alloc(0);
@@ -149,6 +181,8 @@ export async function importClientFile(file: string, provider: ClientLogProvider
           pending = pending.subarray(end + 1);
           const state: Checkpoint = { version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context, birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset) };
           if (stopped()) break;
+          // Resolve synchronously at commit so credential maps arriving mid-scan attribute the batch.
+          applyAccountAtCommit(events);
           const committed = sink.importBatch(key, JSON.stringify(state), events);
           changed = (events.length > 0 && committed !== false) || changed;
           await setImmediate();
@@ -157,8 +191,11 @@ export async function importClientFile(file: string, provider: ClientLogProvider
       }
       await setImmediate();
     }
-    if (!stopped()) sink.importBatch(key, JSON.stringify({ version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context,
-      birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset), complete: true } satisfies Checkpoint), []);
+    if (!stopped()) {
+      applyAccountAtCommit([]);
+      sink.importBatch(key, JSON.stringify({ version: CHECKPOINT_VERSION, size: info.size, mtime: info.mtimeMs, offset, context,
+        birthtime: info.birthtimeMs, ...identity, anchor: archived ? '' : await anchorAt(offset), complete: true } satisfies Checkpoint), []);
+    }
     return changed;
   } catch (e) { if (!missing(e)) throw e; return false; }
   finally { await handle?.close(); }
@@ -193,6 +230,7 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     };
     const counted: ImportSink = {
       checkpoint: (file) => sink.checkpoint(file),
+      resolveAccount: sink.resolveAccount ? (provider, email) => sink.resolveAccount!(provider, email) : undefined,
       importBatch: (file, checkpoint, events) => {
         const committed = sink.importBatch(file, checkpoint, events);
         dirty = (events.length > 0 && committed !== false) || dirty;

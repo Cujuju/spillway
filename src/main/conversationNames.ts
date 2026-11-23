@@ -1,20 +1,20 @@
 import Database from 'better-sqlite3-multiple-ciphers';
-import { existsSync, readdirSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
-import os from 'node:os';
+import { existsSync } from 'node:fs';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { clientHomes } from './clientHomes';
+import { antigravitySummaryDbs, t3UserdataDir } from './clientLogPaths';
 
 /** Titles change after a conversation starts (T3 Code renames threads), so title lists are reread at most this often. */
 const TITLE_LIST_REFRESH_MS = 30_000;
 /** Bounds one renderer request; a day of requests holds far fewer conversations. */
 export const MAX_IDS_PER_CALL = 1000;
 /** Proxy session IDs: "<client>:<native id>", plus ":agent:<id>" for subagents (docs/desktop-api.md in the fork). */
-const SESSION_ID = /^(claude|codex):(.+?)(?::agent:.+)?$/;
+const SESSION_ID = /^(claude|codex|agy):(.+?)(?::agent:.+)?$/;
 /** Claude Code names transcripts by session UUID; checked before it becomes part of a path. */
 const CLAUDE_SESSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** T3 Code's own database (internal schema, read-only): each thread's provider session and its title. */
-const T3_STATE_DB = path.join(os.homedir(), '.t3', 'userdata', 'statev2.sqlite');
+const t3StateDb = () => path.join(t3UserdataDir(), 'statev2.sqlite');
 const T3_TITLES_SQL = `
 SELECT json_extract(p.payload_json, '$.nativeThreadRef.nativeId') AS native, t.title AS title
 FROM orchestration_v2_projection_provider_threads p
@@ -26,11 +26,15 @@ const CODEX_STATE_DB_NAME = 'state_5.sqlite';
 const CODEX_TITLES_SQL = `
 SELECT id AS native, coalesce(nullif(name, ''), title) AS title FROM threads
 WHERE coalesce(nullif(name, ''), title) <> ''`;
+/** Antigravity CLI/IDE conversation summaries (internal schema, read-only). */
+const ANTIGRAVITY_TITLES_SQL = `
+SELECT conversation_id AS native, title FROM conversation_summaries
+WHERE title IS NOT NULL AND title <> ''`;
 
 /** The client's own conversation ID inside a proxy session ID; null for clients without names. */
-export function nativeConversationId(sessionId: string): { client: 'claude' | 'codex'; id: string } | null {
+export function nativeConversationId(sessionId: string): { client: 'claude' | 'codex' | 'agy'; id: string } | null {
   const m = SESSION_ID.exec(sessionId);
-  return m ? { client: m[1] as 'claude' | 'codex', id: m[2]! } : null;
+  return m ? { client: m[1] as 'claude' | 'codex' | 'agy', id: m[2]! } : null;
 }
 
 /** A Claude Code transcript's title: one the user set wins over the generated one; the last of each counts. */
@@ -88,6 +92,9 @@ class ConversationNames {
   private titlesReadAt = 0;
   /** Claude Code transcript titles by file, valid while the file's mtime holds. */
   private transcripts = new Map<string, { mtimeMs: number; title: string | null }>();
+  /** Claude Code project directories cached to avoid synchronous readdir on every lookup. */
+  private claudeProjectDirs: string[] = [];
+  private claudeDirsReadAt = 0;
 
   async names(sessionIds: unknown): Promise<Record<string, string>> {
     if (!Array.isArray(sessionIds)) return {};
@@ -110,15 +117,22 @@ class ConversationNames {
     const index = path.join(codexHome, 'session_index.jsonl');
     const renamed = existsSync(index) ? codexIndexTitles(await readFile(index, 'utf8').catch(() => '')) : new Map<string, string>();
     const codex = readDbTitles(path.join(codexHome, CODEX_STATE_DB_NAME), CODEX_TITLES_SQL, 'Codex');
-    // Later sources win: renames over Codex's titles, and T3 Code titles, which the user sees, over both.
-    this.titles = new Map([...codex, ...renamed, ...readDbTitles(T3_STATE_DB, T3_TITLES_SQL, 'T3 Code')]);
+    const agy = new Map<string, string>();
+    for (const dbFile of antigravitySummaryDbs()) {
+      for (const [id, title] of readDbTitles(dbFile, ANTIGRAVITY_TITLES_SQL, 'Antigravity')) agy.set(id, title);
+    }
+    // Later sources win: renames over Codex's titles, and T3 Code titles, which the user sees, over all.
+    this.titles = new Map([...agy, ...codex, ...renamed, ...readDbTitles(t3StateDb(), T3_TITLES_SQL, 'T3 Code')]);
   }
 
   private async claudeTitle(sessionUuid: string): Promise<string | null> {
     if (!CLAUDE_SESSION_UUID.test(sessionUuid)) return null;
     const projects = path.join(clientHomes().claude, 'projects');
-    if (!existsSync(projects)) return null;
-    for (const dir of readdirSync(projects)) {
+    if (Date.now() - this.claudeDirsReadAt >= TITLE_LIST_REFRESH_MS) {
+      this.claudeDirsReadAt = Date.now();
+      this.claudeProjectDirs = await readdir(projects).catch(() => []);
+    }
+    for (const dir of this.claudeProjectDirs) {
       const file = path.join(projects, dir, `${sessionUuid}.jsonl`);
       const info = await stat(file).catch(() => null);
       if (!info) continue;

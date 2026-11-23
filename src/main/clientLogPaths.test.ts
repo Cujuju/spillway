@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { antigravityLogContext, clientLogKey, isClientLogFile } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, clientLogKey, isClientLogFile } from './clientLogPaths';
 import { openActivityDb } from './activityDb';
 import { ActivityLog } from './activityStore';
 
@@ -27,6 +27,9 @@ it('limits Antigravity log matching to canonical transcript files and derives se
     .toEqual({ session: 'conv-2', client: 'antigravity-cli' });
   expect(antigravityLogContext('/home/u/.gemini/antigravity/brain/conv-3/.system_generated/logs/transcript.jsonl'))
     .toEqual({ session: 'conv-3', client: 'antigravity' });
+  expect(antigravityOAuthTokenPath(path.join(tmpdir(), 'antigravity-acp', 'brain', 'conv-1', '.system_generated', 'logs', 'transcript.jsonl')))
+    .toBe(path.join(tmpdir(), 'antigravity-acp', 'antigravity-oauth-token'));
+  expect(antigravityOAuthTokenPath(path.join(tmpdir(), 'other', 'transcript.jsonl'))).toBeNull();
 });
 
 it.skipIf(process.platform !== 'win32')('rekeys legacy rows transactionally and shares the key with the cache and DB', async () => {

@@ -1,4 +1,5 @@
-import { repairMatchedIdentities } from './usageLedger';
+import { relabelIdentities, repairMatchedIdentities, type IdentityRow } from './usageLedger';
+import { splitAntigravityModelEffort } from './clientLogParser';
 import { clientLogKey } from './clientLogPaths';
 import { ARCHIVE_SCHEMA } from './archiveStore';
 import { CLICKHOUSE_SCHEMA } from './clickhouseStore';
@@ -46,6 +47,7 @@ const LEGACY_IMPORTED = 'legacy-files-imported';
 const RETAINED_HOURS_REBUILT = 'retained-hours-rebuilt';
 const COMPACT_IDENTITIES = 'compact-usage-identities';
 const DRIFT_METADATA_BACKFILL = 'client-log-drift-metadata-backfilled';
+const ANTIGRAVITY_EFFORT_NORMALIZED = 'antigravity-effort-normalized-v1';
 const INCREMENTAL_VACUUM = 'incremental-vacuum-enabled';
 
 /** A conversation's requests on one model (the proxy binds each model separately); queries must use this exact text to use its index. */
@@ -58,6 +60,8 @@ export const IDENTITY_BY_ROW_INDEX = 'usage_identity_by_row';
 export const ACCOUNT_KEY_SQL = `coalesce(json_extract(event, '$.authIndex'), '${NO_ACCOUNT_KEY}')`;
 /** A request's client key (clientKey in activityScope.ts); queries must use this exact text to use its index. */
 export const CLIENT_KEY_SQL = `coalesce(json_extract(event, '$.client'), '${NO_CLIENT_KEY}')`;
+/** A request's source key ('proxy' or 'client-log'); queries must use this exact text to use its index. */
+export const SOURCE_KEY_SQL = `coalesce(json_extract(event, '$.source'), 'proxy')`;
 
 /** Rows are ordered by id, the order Spillway recorded them, which also pages the list. */
 const SCHEMA = `
@@ -67,6 +71,8 @@ CREATE TABLE IF NOT EXISTS canary_results (id TEXT PRIMARY KEY, day TEXT NOT NUL
 CREATE INDEX IF NOT EXISTS canary_by_day ON canary_results(day);
 CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, day TEXT NOT NULL, failed INTEGER NOT NULL, event TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS requests_by_day ON requests (day, id);
+CREATE INDEX IF NOT EXISTS requests_day_summary ON requests (day, id, failed);
+CREATE INDEX IF NOT EXISTS requests_by_source ON requests (${SOURCE_KEY_SQL}, day, id, failed);
 CREATE INDEX IF NOT EXISTS requests_failed ON requests (id) WHERE failed = 1;
 CREATE INDEX IF NOT EXISTS requests_by_account ON requests (${ACCOUNT_KEY_SQL}, day, id);
 CREATE INDEX IF NOT EXISTS requests_by_client ON requests (${CLIENT_KEY_SQL}, day, id);
@@ -85,9 +91,9 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 // Allow a concurrent day transaction to finish before failing a writer.
 export const ACTIVITY_BUSY_TIMEOUT_MS = 30_000;
-export function openKeyed(file: string, hexKey: string): Db {
+export function openKeyed(file: string, hexKey: string, options?: { readonly?: boolean }): Db {
   if (!HEX_KEY.test(hexKey)) throw new Error('Activity database key is malformed');
-  const db = new Database(file);
+  const db = options?.readonly ? new Database(file, { readonly: true, fileMustExist: true }) : new Database(file);
   try {
     db.pragma(`busy_timeout = ${ACTIVITY_BUSY_TIMEOUT_MS}`);
     db.pragma(`cipher='${CIPHER}'`);
@@ -147,6 +153,26 @@ export function openActivityDb(file: string, hexKey: string): Db {
         repairMatchedIdentities(db);
         db.exec('DELETE FROM client_log_checkpoints');
         db.prepare('INSERT INTO meta VALUES (?, ?)').run(DRIFT_METADATA_BACKFILL, '1');
+      }
+      if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(ANTIGRAVITY_EFFORT_NORMALIZED)) {
+        let normalized = false;
+        const updateReq = db.prepare('UPDATE requests SET event = ? WHERE id = ?');
+        for (const row of db.prepare("SELECT id, event FROM requests WHERE json_extract(event, '$.provider') = 'antigravity' AND json_extract(event, '$.reasoningEffort') IS NULL").all() as { id: number; event: string }[]) {
+          const e = JSON.parse(row.event) as Record<string, unknown>;
+          if (typeof e.model !== 'string') continue;
+          const split = splitAntigravityModelEffort(e.model);
+          if (!split.effort) continue;
+          updateReq.run(JSON.stringify({ ...e, model: split.model, reasoningEffort: split.effort }), row.id);
+          normalized = true;
+        }
+        const identityRows = db.prepare("SELECT * FROM usage_identities WHERE provider = 'antigravity' AND json_extract(event, '$.reasoningEffort') IS NULL").all() as IdentityRow[];
+        if (relabelIdentities(db, identityRows, (_row, e) => {
+          if (typeof e.model !== 'string') return null;
+          const split = splitAntigravityModelEffort(e.model);
+          return split.effort ? { model: split.model, reasoningEffort: split.effort } : null;
+        }, true)) normalized = true;
+        if (normalized) invalidateActivityPrices(db);
+        db.prepare('INSERT INTO meta VALUES (?, ?)').run(ANTIGRAVITY_EFFORT_NORMALIZED, '1');
       }
       // Group-first avoids sorting every identity; time-first also supports bounded range scans.
       db.exec(`CREATE INDEX IF NOT EXISTS usage_coverage ON usage_identities (source, at, provider, client, matched);

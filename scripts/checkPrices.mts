@@ -130,7 +130,7 @@ function parseOpenAITables(md: string): Page {
 
 const SOURCES: Source[] = [
   { name: 'Anthropic', url: ANTHROPIC_URL, provider: 'claude', owns: (id) => id.startsWith('claude-'), parse: parseAnthropic },
-  { name: 'OpenAI', url: OPENAI_URL, provider: 'codex', owns: (id) => !id.startsWith('claude-'), parse: parseOpenAI },
+  { name: 'OpenAI', url: OPENAI_URL, provider: 'codex', owns: (id) => !id.startsWith('claude-') && !id.startsWith('gemini-'), parse: parseOpenAI },
 ];
 
 const fmt = (n: number | null | undefined) => n == null ? '—' : `$${n}`;

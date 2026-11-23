@@ -288,6 +288,9 @@ it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appe
     await writeFile(path.join(acpLogs, 'transcript_full.jsonl'), step(1, '2026-11-22T10:00:00Z'));
     await writeFile(path.join(acpLogs, 'chunks', 'transcript', '00000000.jsonl'), step(1, '2026-11-22T10:00:00Z'));
     await writeFile(cliFile, step(2, '2026-11-22T10:01:00Z'));
+    await writeFile(path.join(dir, 't3', 'providers', 'antigravity', 'acct', 'antigravity-acp', 'antigravity-oauth-token'),
+      JSON.stringify({ id_token_email: 'User@Example.com' }));
+    sink.resolveAccount = (provider, email) => (provider === 'antigravity' && email.toLowerCase() === 'user@example.com' ? 'cred-ag-1' : null);
     let done!: () => void;
     const idle = new Promise<void>((resolve) => { done = resolve; });
     const progress = vi.fn((p) => { if (p.state === 'idle') done(); });
@@ -295,8 +298,8 @@ it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appe
     await idle; await stop();
     expect(progress.mock.calls.at(-1)?.[0]).toMatchObject({ state: 'idle', filesDone: 2, filesTotal: 2 });
     expect([...records.values()]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', sessionId: 'agy:conv-acp', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
-      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-cli', sessionId: 'agy:conv-cli', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-acp', sessionId: 'agy:conv-acp', model: 'gemini-4-neon', reasoningEffort: 'medium', authIndex: 'cred-ag-1', inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
+      expect.objectContaining({ provider: 'antigravity', client: 'antigravity-cli', sessionId: 'agy:conv-cli', model: 'gemini-4-neon', reasoningEffort: 'medium', authIndex: null, inputTokens: 500, cachedTokens: 400, outputTokens: 25 }),
     ]));
     // Resumes from checkpoint on append without re-reading earlier lines.
     await appendFile(acpFile, step(3, '2026-11-22T10:02:00Z'));
@@ -304,4 +307,32 @@ it('discovers Antigravity transcripts across ACP and CLI roots, checkpoints appe
     expect(records.size).toBe(3);
     expect(await importClientFile(acpFile, 'antigravity', sink)).toBe(false);
   } finally { vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
+});
+
+it('resolves Antigravity authIndex at batch commit when the account map arrives or changes mid-scan', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-ag-late-map-'));
+  const agRoot = path.join(dir, 'antigravity-acp');
+  const logDir = path.join(agRoot, 'brain', 'conv-late', '.system_generated', 'logs');
+  const file = path.join(logDir, 'transcript.jsonl');
+  let state: string | undefined;
+  let calls = 0;
+  const committed: ActivityEvent[] = [];
+  const sink: ImportSink = {
+    checkpoint: () => state,
+    // First call during file open returns an old mapping; commit-time lookup returns the replacement mapping.
+    resolveAccount: (_provider, email) => (email === 'late@example.com' ? (++calls >= 2 ? 'cred-new' : 'cred-old') : null),
+    importBatch: (_, s, events) => { state = s; committed.push(...events); },
+  };
+  try {
+    await mkdir(logDir, { recursive: true });
+    await writeFile(path.join(agRoot, 'antigravity-oauth-token'), JSON.stringify({ id_token_email: 'late@example.com' }));
+    await writeFile(file, JSON.stringify({
+      step_index: 1, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE',
+      created_at: '2026-11-22T10:00:00Z', model: 'gemini-4-neon-high',
+      input_tokens: 100, cache_read_tokens: 0, output_tokens: 10,
+    }) + '\n');
+    expect(await importClientFile(file, 'antigravity', sink)).toBe(true);
+    expect(committed).toHaveLength(1);
+    expect(committed[0]?.authIndex).toBe('cred-new');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

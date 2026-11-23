@@ -1,0 +1,36 @@
+import { parentPort, workerData } from 'node:worker_threads';
+import { ActivityLog } from './activityStore';
+import type { Request, WorkerConfig } from './activityProtocol';
+
+const port = parentPort!;
+const log = new ActivityLog({ ...(workerData as WorkerConfig), readonly: true });
+
+const methods = {
+  page: (q: Parameters<ActivityLog['page']>[0]) => log.page(q),
+  day: (...args: Parameters<ActivityLog['day']>) => log.day(...args),
+  days: () => log.days(),
+  daySummaries: (scope: Parameters<ActivityLog['daySummaries']>[0]) => log.daySummaries(scope),
+  totalsList: () => log.totalsList(),
+  buckets: (days: Parameters<ActivityLog['buckets']>[0]) => log.buckets(days),
+  bucketSnapshot: (days: Parameters<ActivityLog['bucketSnapshot']>[0]) => log.bucketSnapshot(days),
+  compare: (q: Parameters<ActivityLog['compare']>[0]) => log.compare(q),
+  driftQuery: (q: Parameters<ActivityLog['driftQuery']>[0]) => log.driftQuery(q),
+  coverage: () => log.coverage(),
+  thinkingTests: () => log.thinkingTests(),
+  close: () => { log.close(); },
+};
+
+let queue = Promise.resolve();
+port.on('message', (request: Request) => {
+  queue = queue.then(async () => {
+    try {
+      const fn = methods[request.method as keyof typeof methods] as ((...args: unknown[]) => unknown) | undefined;
+      if (!fn) throw new Error(`Unsupported read worker method: ${request.method}`);
+      const value = await fn(...request.args);
+      port.postMessage({ id: request.id, value });
+      if (request.method === 'close') port.close();
+    } catch (e) {
+      port.postMessage({ id: request.id, error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+});

@@ -66,7 +66,27 @@ async function startNormalApp(): Promise<void> {
   }
 
   function wireEvents(): void {
-    usage.on('snapshot', (s) => send(EVENTS.onSnapshot, s));
+    let lastAccountMap = '';
+    let latestAccounts: Record<string, string> | null = null;
+    let resyncAccounts = false;
+    const syncAccountMap = (map: Record<string, string>) => {
+      void activityLog.call('setAccountMap', map).catch((error) => console.error('[activity] account map sync failed:', error));
+    };
+    usage.on('snapshot', (s) => {
+      send(EVENTS.onSnapshot, s);
+      const map: Record<string, string> = {};
+      for (const c of s.credentials) {
+        if (c.email && c.authIndex) map[`${c.provider}:${c.email.trim().toLowerCase()}`] = c.authIndex;
+      }
+      const next = JSON.stringify(map);
+      if (next !== lastAccountMap) {
+        lastAccountMap = next;
+        latestAccounts = map;
+        resyncAccounts = false;
+        syncAccountMap(map);
+      }
+    });
+    activityLog.on('failure', () => { resyncAccounts = true; });
     // Snapshots follow history.add, so the newest sample is already stored.
     usage.on('snapshot', () => exportUsage(false));
     usage.on('error', (m) => send(EVENTS.onUsageError, m));
@@ -78,7 +98,13 @@ async function startNormalApp(): Promise<void> {
       if (s.state !== 'running') archiveSync.stop();
       if (s.state !== 'running' && !isQuitting()) void activity.stop();
     });
-    activityLog.on('reset', () => send(EVENTS.onActivityReset, undefined));
+    activityLog.on('reset', () => {
+      if (resyncAccounts && latestAccounts) {
+        resyncAccounts = false;
+        syncAccountMap(latestAccounts);
+      }
+      send(EVENTS.onActivityReset, undefined);
+    });
     activityLog.on('progress', (state) => send(EVENTS.onActivityImport, state));
     activityLog.on('migration', (state) => send(EVENTS.onArchiveMigration, state));
     activity.on('reset', () => send(EVENTS.onActivityReset, undefined));

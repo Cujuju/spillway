@@ -81,6 +81,25 @@ describe('tokenCost', () => {
     expect(tokenCost('claude', 'claude-opus-5-5-20260901', AT, t(1_000_000, 0))!.usd).toBeCloseTo(4);
     expect(tokenCost('codex', 'gpt-image-2', AT, t(10, 10))).toBeNull();
   });
+  it('prices Gemini models used by Antigravity, including >200K long-context tiers and dated Argon rates', () => {
+    // gemini-4-neon: $3 in, $0.15 cached, $15 out (cached tokens included in prompt input).
+    expect(tokenCost('antigravity', 'gemini-4-neon', AT, t(1_000_000, 100_000, 800_000))!.usd)
+      .toBeCloseTo(0.2 * 3 + 0.8 * 0.15 + 0.1 * 15);
+    // gemini-4-argon: introductory rate then standard rate.
+    expect(tokenCost('antigravity', 'gemini-4-argon', '2026-11-30T23:59:59Z', t(1_000_000, 100_000, 500_000))!.usd)
+      .toBeCloseTo(0.5 * 2 + 0.5 * 0.1 + 0.1 * 10);
+    expect(tokenCost('antigravity', 'gemini-4-argon', '2026-12-01T00:00:00Z', t(1_000_000, 100_000, 500_000))!.usd)
+      .toBeCloseTo(0.5 * 4 + 0.5 * 0.2 + 0.1 * 20);
+    // gemini-3.1-pro: $2/$0.20/$12 up to 200K, $4/$0.40/$18 above 200K.
+    expect(tokenCost('antigravity', 'gemini-3.1-pro', AT, t(200_000, 100_000, 100_000))!.usd)
+      .toBeCloseTo(0.1 * 2 + 0.1 * 0.2 + 0.1 * 12);
+    expect(tokenCost('antigravity', 'gemini-3.1-pro', AT, t(300_000, 100_000, 100_000))!.usd)
+      .toBeCloseTo(0.2 * 4 + 0.1 * 0.4 + 0.1 * 18);
+    expect(tokenCost('antigravity', 'gemini-3-flash', AT, t(1_000_000, 1_000_000, 500_000))!.usd)
+      .toBeCloseTo(0.5 * 0.5 + 0.5 * 0.05 + 3);
+    expect(tokenCost('antigravity', 'gemini-3.1-flash-lite', AT, t(1_000_000, 1_000_000, 0))!.usd)
+      .toBeCloseTo(0.25 + 1.5);
+  });
 });
 
 

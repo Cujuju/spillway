@@ -385,3 +385,83 @@ it('proxy replay after pruning and row-ID reuse returns no unrelated row', () =>
   expect(activityLog.totalsList()).toEqual(totals);
   expect(storedCount()).toBe(1);
 });
+
+describe('Antigravity migration, account backfill, covering indexes and WAL reader', () => {
+  beforeEach(() => activityLog.clear());
+
+  it('uses covering and source indexes for daySummaries and proxy page queries without full table scans', async () => {
+    const { openActivityDb, SOURCE_KEY_SQL } = await import('./activityDb');
+    activityLog.append(event(daysAgo(0), { requestId: 'p1' }));
+    activityLog.append(event(daysAgo(0), { requestId: 'c1', source: 'client-log', authIndex: null }));
+    activityLog.close();
+    const db = openActivityDb(dbFile, secrets.databaseKey);
+    try {
+      const plan = (sql: string, ...params: unknown[]) =>
+        (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as { detail: string }[]).map((r) => r.detail).join(' | ');
+      const allDays = plan('SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests GROUP BY day ORDER BY day DESC');
+      expect(allDays).toContain('USING COVERING INDEX requests_day_summary');
+      const proxyDays = plan(`SELECT day, count(*) AS requests, sum(failed) AS failed, max(id) AS newestId FROM requests WHERE ${SOURCE_KEY_SQL} = 'proxy' GROUP BY day ORDER BY day DESC`);
+      expect(proxyDays).toContain('USING COVERING INDEX requests_by_source');
+      const proxyPage = plan(`SELECT id, event FROM requests WHERE day = ? AND ${SOURCE_KEY_SQL} = 'proxy' ORDER BY id DESC LIMIT 501`, localDay(Date.now()));
+      expect(proxyPage).toContain('USING INDEX requests_by_source');
+    } finally { db.close(); }
+  });
+
+  it('migrates pre-existing Antigravity effort suffixes in requests, identities and totals once on open', async () => {
+    const { openActivityDb } = await import('./activityDb');
+    const at = daysAgo(0);
+    activityLog.append(event(at, {
+      requestId: 'ag-legacy', source: 'client-log', provider: 'antigravity', client: 'antigravity-acp',
+      model: 'gemini-4-neon-high', reasoningEffort: null, authIndex: null,
+      inputTokens: 100_000, cachedTokens: 50_000, cacheWriteTokens: 0, outputTokens: 10_000,
+    }));
+    expect(activityLog.totalsList()[0]).toMatchObject({ model: 'gemini-4-neon-high', unpricedRequests: 1, costUsd: 0 });
+    activityLog.close();
+    const db = openActivityDb(dbFile, secrets.databaseKey);
+    db.prepare("DELETE FROM meta WHERE key = 'antigravity-effort-normalized-v1'").run();
+    db.close();
+    const rows = activityLog.day(localDay(at.getTime()));
+    expect(rows[0]).toMatchObject({ model: 'gemini-4-neon', reasoningEffort: 'high' });
+    const totals = activityLog.totalsList();
+    expect(totals).toHaveLength(1);
+    expect(totals[0]).toMatchObject({ model: 'gemini-4-neon', reasoningEffort: 'high', unpricedRequests: 0 });
+    expect(totals[0]!.costUsd).toBeGreaterThan(0);
+  });
+
+  it('backfills authIndex on existing local Antigravity sessions and totals once matching credentials arrive', async () => {
+    const agDir = mkdtempSync(path.join(tmpdir(), 'spillway-ag-backfill-'));
+    try {
+      const logDir = path.join(agDir, 'antigravity-acp', 'brain', 'sess-1', '.system_generated', 'logs');
+      mkdirSync(logDir, { recursive: true });
+      const transcript = path.join(logDir, 'transcript.jsonl');
+      writeFileSync(path.join(agDir, 'antigravity-acp', 'antigravity-oauth-token'), JSON.stringify({ id_token_email: 'owner@example.com' }));
+      const at = daysAgo(0);
+      activityLog.importBatch(transcript, 'done', [event(at, {
+        requestId: 'ag-unattributed', source: 'client-log', provider: 'antigravity', client: 'antigravity-acp',
+        sessionId: 'agy:sess-1', model: 'gemini-4-neon', reasoningEffort: 'high', authIndex: null,
+        inputTokens: 100_000, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 10_000,
+      })]);
+      expect(activityLog.day(localDay(at.getTime()))[0]?.authIndex).toBeNull();
+      expect(await activityLog.setAccountMap({ 'antigravity:owner@example.com': 'cred-ag-9' })).toBe(true);
+      expect(activityLog.day(localDay(at.getTime()))[0]?.authIndex).toBe('cred-ag-9');
+      expect(activityLog.totalsList()).toEqual([expect.objectContaining({ authIndex: 'cred-ag-9', requests: 1 })]);
+      // Idempotent once attributed.
+      expect(await activityLog.setAccountMap({ 'antigravity:owner@example.com': 'cred-ag-9' })).toBe(false);
+    } finally { rmSync(agDir, { recursive: true, force: true }); }
+  });
+
+  it('serves live WAL updates from a concurrent readonly ActivityLog connection', async () => {
+    const { ActivityLog } = await import('./activityStore');
+    const at = daysAgo(0);
+    activityLog.append(event(at, { requestId: 'w1', model: 'claude-opus-5-5' }));
+    const reader = new ActivityLog({ activityDb: dbFile, legacyActivityDir: legacyDir, databaseKey: secrets.databaseKey, retentionDays: 30, readonly: true });
+    try {
+      expect(reader.daySummaries()[0]?.requests).toBe(1);
+      expect(reader.totalsList()[0]?.requests).toBe(1);
+      activityLog.append(event(at, { requestId: 'w2', model: 'claude-opus-5-5' }));
+      expect(reader.daySummaries()[0]?.requests).toBe(2);
+      expect(reader.totalsList()[0]?.requests).toBe(2);
+      expect(reader.page({ day: localDay(at.getTime()), failedOnly: false, scope: EVERY_REQUEST, before: null }).events).toHaveLength(2);
+    } finally { reader.close(); }
+  });
+});

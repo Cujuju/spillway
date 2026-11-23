@@ -10,4 +10,5 @@ export const NOTICE_ICONS: Record<SpillwayNoticeKind, NoticeIcon> = {
   proxyStopped: Power,
   updateFound: Download,
   clientDrift: TriangleAlert,
+  captureIssue: TriangleAlert,
 };

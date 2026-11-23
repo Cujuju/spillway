@@ -13,6 +13,7 @@ import { ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
 import { pieceBytes } from './archivePieces';
 import { ArchiveExporter } from './archiveExport';
+import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [];
 afterEach(() => { for (const db of dbs.splice(0)) if (db.open) db.close(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -306,4 +307,37 @@ it('exports frozen complete wire bytes rather than bounded display previews', as
     const bytes = readFileSync(destination), trailer = lines.at(-1)!;
     expect(createHash('sha256').update(bytes.subarray(0, trailer.bytesBeforeTrailer)).digest('hex')).toBe(trailer.sha256);
   } finally { await exporter.dispose(); }
+});
+
+it('indexes prune queries, evicts thread pieces directly, and pauses missing-capture timeouts while draining a backlog', () => {
+  const { db, archive } = setup();
+  const threadPlan = db.prepare('EXPLAIN QUERY PLAN SELECT id FROM archive_threads ORDER BY last_at,id LIMIT 1').all() as { detail: string }[];
+  expect(threadPlan.some((p) => p.detail.includes('archive_threads_last_at'))).toBe(true);
+  const pendingPlan = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM archive_entries WHERE state='pending' AND at < ?").all(new Date().toISOString()) as { detail: string }[];
+  expect(pendingPlan.some((p) => p.detail.includes('archive_entries_pending'))).toBe(true);
+  const outboxPlan = db.prepare('EXPLAIN QUERY PLAN SELECT 1 FROM clickhouse_outbox WHERE trace_id=? AND content IS NOT NULL').all('trace-1') as { detail: string }[];
+  expect(outboxPlan.some((p) => p.detail.includes('clickhouse_outbox_trace'))).toBe(true);
+
+  const backlogAt = new Date(Date.now() - 20 * 60_000).toISOString();
+  const backlog = stream(Buffer.alloc(CAPTURE_CHUNK_BYTES * 2, 0x61), Buffer.from('ok')).map((r) => ({ ...r, startedAt: backlogAt }));
+  // Observe a newer trace before its capture arrives; while draining full v2 pages it must not be settled as missing.
+  archive.observe(parseActivityEvent(JSON.stringify({
+    request_id: 'req-newer', trace_id: 'trace-newer-pending', session_id: 'sess-1', provider: 'claude', model: 'opus', at: backlogAt,
+  }))!);
+  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, records: backlog.slice(0, 4) }]);
+  archive.prune(Date.now(), true);
+  expect(archive.detail('trace-newer-pending')?.state).toBe('pending');
+
+  // Once the backlog drains (non-full final page), genuinely missing traces older than 10m settle,
+  // and a late-arriving wire capture recovers a previously settled missing entry to complete.
+  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, records: backlog.slice(4) }]);
+  archive.prune(Date.now(), true);
+  expect(archive.detail('trace-wire-complete')).toMatchObject({ state: 'complete', response: 'ok' });
+  expect(archive.detail('trace-newer-pending')).toMatchObject({ state: 'missing', reason: 'capture-unavailable-or-interrupted' });
+
+  const recovery = stream(Buffer.from('recovered-req'), Buffer.from('recovered-res')).map((r, i) => ({
+    ...r, id: 'capture-recovered', traceId: 'trace-newer-pending', sequence: backlog.length + i + 1,
+  }));
+  archive.ingestBatch([{ version: 2, epoch: 'wire-epoch', dropped: 0, records: recovery }]);
+  expect(archive.detail('trace-newer-pending')).toMatchObject({ state: 'complete', request: 'recovered-req', response: 'recovered-res' });
 });

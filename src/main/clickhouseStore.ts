@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS clickhouse_outbox (
  thread_id TEXT NOT NULL DEFAULT '', expired INTEGER NOT NULL DEFAULT 0, capture_state TEXT NOT NULL, record TEXT NOT NULL, content TEXT, bytes INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS clickhouse_outbox_thread ON clickhouse_outbox(thread_id);
+CREATE INDEX IF NOT EXISTS clickhouse_outbox_trace ON clickhouse_outbox(trace_id) WHERE content IS NOT NULL;
 CREATE TRIGGER IF NOT EXISTS clickhouse_outbox_insert AFTER INSERT ON clickhouse_outbox BEGIN
  UPDATE clickhouse_export SET queued_rows=queued_rows+1,queued_bytes=queued_bytes+NEW.bytes;
 END;

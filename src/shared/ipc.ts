@@ -60,7 +60,7 @@ export interface DesktopApi {
   diagnosticSave(token: string): Promise<DiagnosticSaveResult>;
   diagnosticDiscard(tokenOrOperationId: string): Promise<void>;
   archiveDetail(traceId: string): Promise<ArchiveDetail | null>;
-  archiveStatus(): Promise<ArchiveStatus & { syncError: string | null }>;
+  archiveStatus(): Promise<ArchiveStatus & { syncError: string | null; syncLagAt: string | null }>;
   archivePolicy(policy: ArchivePolicy): Promise<ArchiveStatus>;
   archiveClear(): Promise<void>;
   driftQuery(query: DriftQuery): Promise<DriftReport>;

@@ -89,6 +89,13 @@ async function startNormalApp(): Promise<void> {
       activity.start();
       void syncPreferredAccounts().finally(() => usage.start());
     });
+    archiveSync.on('alert', (alert: { kind: 'error' | 'lag'; message: string }) => {
+      const title = alert.kind === 'error' ? 'Request capture sync failed' : 'Request capture is catching up';
+      const body = alert.kind === 'error'
+        ? alert.message
+        : `Capture ingest is behind (currently processing ${alert.message}). Bodies will appear once caught up.`;
+      notify(spillwayNotice('captureIssue', { target: 'capture', title, body, short: title }));
+    });
     proxy.on('crashed', (code) => {
       usage.stop();
       archiveSync.stop();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, LimitWindow, UsageSnapshot } from './types';
-import { consumedBetween, resetBetween, rollPastResets } from './usageWindows';
+import { consumedBetween, exhaustedBlocker, resetBetween, rollPastResets } from './usageWindows';
 
 const NOW = Date.parse('2026-10-25T12:00:00Z');
 const win = (resetsAt: string | null, status: LimitWindow['status'] = 'rejected'): LimitWindow => ({
@@ -63,5 +63,36 @@ describe('consumedBetween', () => {
   });
   it('is null when either sample lacks the window', () => {
     expect(consumedBetween({ at: '2026-10-25T10:00:00Z', used: {} }, at('2026-10-25T12:00:00Z', 1), 'a', 'k')).toBeNull();
+  });
+});
+
+describe('exhaustedBlocker', () => {
+  const H5 = 5 * 3_600_000;
+  const D7 = 7 * 24 * 3_600_000;
+  const mk = (key: string, label: string, durationMs: number, usedPercent: number, scoped = false): LimitWindow => ({
+    key, label, usedPercent, resetsAt: null, status: usedPercent >= 100 ? 'rejected' : 'allowed', durationMs, scoped, resetCadence: null,
+  });
+
+  it('returns an exhausted longer account-wide window capping a shorter one', () => {
+    const five = mk('five_hour', '5-hour', H5, 0);
+    const week = mk('seven_day', 'Weekly', D7, 100);
+    expect(exhaustedBlocker(five, [five, week])).toBe(week);
+    expect(exhaustedBlocker(week, [five, week])).toBeNull();
+  });
+
+  it('returns null when the longer window is not exhausted', () => {
+    const five = mk('five_hour', '5-hour', H5, 0);
+    const week = mk('seven_day', 'Weekly', D7, 85);
+    expect(exhaustedBlocker(five, [five, week])).toBeNull();
+  });
+
+  it('pairs scoped windows only within the same scope prefix', () => {
+    const g5 = mk('ag_summary:gemini-5h', '5-hour', H5, 0, false);
+    const gw = mk('ag_summary:gemini-weekly', 'Weekly', D7, 20, false);
+    const p5 = mk('ag_summary:3p-5h', 'Claude & GPT · 5-hour', H5, 0, true);
+    const pw = mk('ag_summary:3p-weekly', 'Claude & GPT · Weekly', D7, 100, true);
+    const all = [g5, gw, p5, pw];
+    expect(exhaustedBlocker(p5, all)).toBe(pw);
+    expect(exhaustedBlocker(g5, all)).toBeNull();
   });
 });

@@ -18,20 +18,21 @@ const PACE_BADGE = { over: 'amber', on: '', under: 'green' } as const;
 const RUNS_OUT_BADGE = 'red';
 
 /** One limit column: pace chip, percent, bar with tick and forecast, reset caption. `forecast` comes from the pool projection, so it matches the card. */
-export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast | null }) {
+export function LimitBar(props: { window: LimitWindow; cappedBy?: LimitWindow | null; forecast: AccountForecast | null }) {
   const unit = () => settings().trayIcons.value;
-  const used = () => props.window.usedPercent;
+  const used = () => (props.cappedBy ? BAR_FULL : props.window.usedPercent);
   const shown = () => shownPercent(used(), unit());
   /** Bar position of a used percent, in the bar's shown unit. */
   const at = (usedPercent: number) => Math.min(BAR_FULL, shownPercent(usedPercent, unit()) ?? 0);
-  const rejected = () => props.window.status === 'rejected';
-  const pace = () => windowPace(props.window, now());
+  const rejected = () => props.window.status === 'rejected' || !!props.cappedBy;
+  const pace = () => (props.cappedBy ? null : windowPace(props.window, now()));
   const runsOut = () => props.forecast?.runsOutAt != null;
   const rows = () => {
     const p = pace();
     return [
       { label: 'Used', value: quotaPercent(used()) },
       { label: 'Left', value: quotaPercent(shownPercent(used(), 'remaining')) },
+      ...(props.cappedBy ? [{ label: 'Capped by', value: props.cappedBy.label }] : []),
       { label: 'Resets', value: props.window.resetsAt ? dateTime(props.window.resetsAt) : 'No reset pending' },
       ...(p ? [{ label: 'Pace', value: p.state === 'on' ? 'On pace' : `${Math.round(Math.abs(p.deltaPercent))} ${p.state}` }] : []),
     ];

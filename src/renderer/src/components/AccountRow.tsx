@@ -2,6 +2,7 @@ import { ChartLine, RefreshCw, Settings2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
+import { exhaustedBlocker } from '@shared/usageWindows';
 import type { AccountForecast } from '../lib/forecast';
 import { compactDuration } from '../lib/format';
 import { isExhausted } from '../lib/quotaColor';
@@ -117,7 +118,7 @@ export function AccountRow(props: {
       </div>
       <div class="limits">
         <For each={c().windows} fallback={<span class="muted">{c().canRefresh ? 'No limit data yet — refresh to look it up.' : 'No quota reported'}</span>}>
-          {(w) => <LimitBar window={w} forecast={props.forecastOf?.(w.key) ?? null} />}
+          {(w) => <LimitBar window={w} cappedBy={exhaustedBlocker(w, c().windows)} forecast={props.forecastOf?.(w.key) ?? null} />}
         </For>
       </div>
     </div>

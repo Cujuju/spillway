@@ -73,3 +73,27 @@ export function consumedBetween(a: HistorySample, b: HistorySample, id: string, 
 
 /** When a summarised window stops counting: its reset, or earlier when a new window replaced it. */
 export const windowEnd = (s: WindowSummary): number => s.endedAt ?? s.resetAt;
+
+const FULL_PERCENT = 100;
+const SCOPE_SEPARATOR = ' · ';
+
+const scopePrefix = (label: string): string | null => {
+  const idx = label.lastIndexOf(SCOPE_SEPARATOR);
+  return idx > 0 ? label.slice(0, idx) : null;
+};
+
+const isWindowExhausted = (w: LimitWindow): boolean =>
+  w.status === 'rejected' || (w.usedPercent !== null && w.usedPercent >= FULL_PERCENT);
+
+/** Longer exhausted window in the same scope capping `target`, or null. */
+export function exhaustedBlocker(target: LimitWindow, windows: readonly LimitWindow[]): LimitWindow | null {
+  if (target.durationMs === null) return null;
+  const targetScope = target.scoped ? scopePrefix(target.label) : null;
+  for (const other of windows) {
+    if (other.key === target.key || other.scoped !== target.scoped) continue;
+    if (other.durationMs === null || other.durationMs <= target.durationMs) continue;
+    if (target.scoped && (!targetScope || scopePrefix(other.label) !== targetScope)) continue;
+    if (isWindowExhausted(other)) return other;
+  }
+  return null;
+}

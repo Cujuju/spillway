@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, HistorySample, WindowSummary } from '@shared/types';
-import { forecastRate } from './forecastRate';
+import { forecastRate, sustainedForecastRate } from './forecastRate';
 import { project } from './forecast';
+import { poolShares } from './poolCapacity';
 
 const H = 3_600_000;
 const NOW = Date.parse('2026-10-25T00:00:00Z');
@@ -103,5 +104,53 @@ describe('forecastRate', () => {
     f.credentials[0]!.windows[0]!.usedPercent = null;
     expect(f.rate([])).toBeNull();
     expect(f.rate([f.summary(0)])).toBe(0);
+  });
+});
+
+describe('sustainedForecastRate', () => {
+  it('aligns 5-hour and weekly projections on the same weekly exhaustion time', () => {
+    // 5-hour runs hot (20%/h), weekly runs steady (1%/h), history ratio is 5:1.
+    const credentials = [{
+      id: 'a', priority: 0, weight: 1, preferred: false, cooldownUntil: null, disabled: false, plan: null,
+      windows: [
+        { key: 'five_hour', usedPercent: 20, resetsAt: iso(NOW + 4 * H), durationMs: 5 * H, resetCadence: 'on_use', scoped: false, status: 'allowed' },
+        { key: 'seven_day', usedPercent: 30, resetsAt: iso(NOW + 138 * H), durationMs: 168 * H, resetCadence: 'fixed', scoped: false, status: 'allowed' },
+      ],
+    }] as Credential[];
+    const samples: HistorySample[] = [
+      { at: iso(NOW - 30 * H), used: { a: { five_hour: 0, seven_day: 0 } } },
+      { at: iso(NOW), used: { a: { five_hour: 50, seven_day: 10 } } },
+    ];
+    const fiveShares = poolShares(samples, credentials, 'five_hour', []);
+    const weekShares = poolShares(samples, credentials, 'seven_day', []);
+    const weekRate = sustainedForecastRate(samples, [], credentials, 'seven_day', weekShares, 'seven_day', weekShares, NOW, 24)!;
+    const fiveRate = sustainedForecastRate(samples, [], credentials, 'five_hour', fiveShares, 'seven_day', weekShares, NOW, 24)!;
+    expect(weekRate).toBeCloseTo(1);
+    expect(fiveRate).toBeCloseTo(5);
+
+    const weekProj = project(credentials, 'seven_day', weekRate, NOW, 96, 'soonest-reset', weekShares);
+    const fiveProj = project(credentials, 'five_hour', fiveRate, NOW, 96, 'soonest-reset', fiveShares);
+    const weekZero = weekProj.points.find((p) => p.remaining <= 0)?.t;
+    const fiveZero = fiveProj.points.find((p) => p.remaining <= 0)?.t;
+    expect(weekZero).toBe(weekProj.accounts.get('a')?.runsOutAt);
+    expect(fiveZero).toBe(weekZero);
+  });
+
+  it('keeps scoped windows on their own forecast rate', () => {
+    const credentials = [{
+      id: 'a', priority: 0, weight: 1, preferred: false, cooldownUntil: null, disabled: false, plan: null,
+      windows: [
+        { key: 'five_hour', usedPercent: 10, resetsAt: iso(NOW + 4 * H), durationMs: 5 * H, resetCadence: 'on_use', scoped: false, status: 'allowed' },
+        { key: 'seven_day', usedPercent: 50, resetsAt: iso(NOW + 118 * H), durationMs: 168 * H, resetCadence: 'fixed', scoped: false, status: 'allowed' },
+        { key: 'seven_day_fable', usedPercent: 10, resetsAt: iso(NOW + 118 * H), durationMs: 168 * H, resetCadence: 'fixed', scoped: true, status: 'allowed' },
+      ],
+    }] as Credential[];
+    const samples: HistorySample[] = [
+      { at: iso(NOW - 50 * H), used: { a: { five_hour: 0, seven_day: 0, seven_day_fable: 0 } } },
+      { at: iso(NOW), used: { a: { five_hour: 50, seven_day: 25, seven_day_fable: 10 } } },
+    ];
+    const scopedShares = poolShares(samples, credentials, 'seven_day_fable', []);
+    const weekShares = poolShares(samples, credentials, 'seven_day', []);
+    expect(sustainedForecastRate(samples, [], credentials, 'seven_day_fable', scopedShares, 'seven_day', weekShares, NOW, 24)).toBeCloseTo(10 / 50);
   });
 });

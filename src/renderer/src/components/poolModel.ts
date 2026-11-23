@@ -1,7 +1,7 @@
 import { createMemo, mapArray } from 'solid-js';
 import type { Credential } from '@shared/types';
-import { poolSummary, project } from '../lib/forecast';
-import { forecastRate } from '../lib/forecastRate';
+import { poolSummary, poolWindowKey, project } from '../lib/forecast';
+import { sustainedForecastRate } from '../lib/forecastRate';
 import { poolShares } from '../lib/poolCapacity';
 import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
 import { keyForDuration, lengthLineId, nextResetAt, poolSegments, scopedChoices, scopedLineId, type WindowChoice } from '../lib/poolWindows';
@@ -33,6 +33,11 @@ export const poolRemaining = (credentials: Credential[], key: string) =>
 export function createPoolModel(pool: () => PoolInput, key: () => string | null, strategy: () => string) {
   const rhythm = createMemo(() => rhythmProfile(forecastBuckets(), pool().provider, now()));
   const shares = createMemo(() => (key() ? poolShares(history(), pool().credentials, key()!, forecastBuckets()) : new Map()));
+  const anchorKey = createMemo(() => poolWindowKey(pool().credentials));
+  const anchorShares = createMemo(() => {
+    const ak = anchorKey();
+    return ak && ak !== key() ? poolShares(history(), pool().credentials, ak, forecastBuckets()) : null;
+  });
   const summary = createMemo(() => (key() ? poolSummary(pool().credentials, key()!, shares()) : null));
   const rate = createMemo(() => (key() ? drainRatePerHour(history(), shares(), key()!, now(), settings().dashboard.drainLookbackHours) : null));
   const past = createMemo(() => {
@@ -42,7 +47,7 @@ export function createPoolModel(pool: () => PoolInput, key: () => string | null,
     return [...pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), { t: now(), remaining: s.remaining }];
   });
   const projection = createMemo(() =>
-    key() ? project(pool().credentials, key()!, forecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), now(), settings().dashboard.drainLookbackHours, rhythm()) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares(), rhythm()) : null,
+    key() ? project(pool().credentials, key()!, sustainedForecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), anchorKey(), anchorShares(), now(), settings().dashboard.drainLookbackHours, rhythm()) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares(), rhythm()) : null,
   );
   const drain = createMemo(() => (key() ? drainSeries(history(), shares(), key()!, WHOLE_HISTORY) : []));
   const segments = createMemo(() => (key() ? poolSegments(pool().credentials, key()!, shares()) : []));

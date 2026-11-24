@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { comboKey, quantile, type CompareReport } from '@shared/activityCompare';
 import { tokenCost } from '@shared/modelPrices';
+import { FIVE_HOUR_MS, MONTH_FROM_WEEK, WEEK_MS } from '@shared/quotaValue';
 import type { ActivityEvent } from '@shared/types';
 import { ActivityLog } from './activityStore';
 
@@ -74,6 +75,36 @@ describe('compareActivity', () => {
     const r = log.compare({ scope: { accounts: ['b'], clients: null }, from: now - 2 * HOUR_MS, to: now })!;
     expect(r.combos[0]!.whole.requests).toBe(1);
     expect(r.combos[0]!.tasks?.tasks).toBe(1);
+    expect(r.combos[0]!.planReach).toBeNull();
     expect(log.compare({ scope: { accounts: null, clients: null }, from: now, to: now - 1 })).toBeNull();
+  });
+
+  it('attaches implied planReach when quota history is provided', () => {
+    const req1 = event(40, { sessionId: 'claude:s1', inputTokens: 1_000_000, outputTokens: 100_000 });
+    const req2 = event(20, { sessionId: 'claude:s2', inputTokens: 1_000_000, outputTokens: 100_000 });
+    log.append(req1);
+    log.append(req2);
+    const reqCost = cost(req1) + cost(req2);
+    const reset5 = now + FIVE_HOUR_MS;
+    const reset7 = now + WEEK_MS;
+    const r = log.compare({ scope: { accounts: null, clients: null }, from: now - 2 * HOUR_MS, to: now }, {
+      credentials: [{
+        id: 'claude-a.json', authIndex: 'a', provider: 'claude', planLabel: 'Max 20x',
+        windows: [
+          { key: 'five_hour', durationMs: FIVE_HOUR_MS, scoped: false },
+          { key: 'seven_day', durationMs: WEEK_MS, scoped: false },
+        ],
+      }],
+      samples: [
+        { at: new Date(now - 50 * 60_000).toISOString(), used: { 'claude-a.json': { five_hour: 10, seven_day: 20 } }, resets: { 'claude-a.json': { five_hour: reset5, seven_day: reset7 } } },
+        { at: new Date(now - 10 * 60_000).toISOString(), used: { 'claude-a.json': { five_hour: 20, seven_day: 22 } }, resets: { 'claude-a.json': { five_hour: reset5, seven_day: reset7 } } },
+      ],
+    })!;
+    const opus = r.combos.find((c) => c.key === OPUS)!;
+    expect(opus.provider).toBe('claude');
+    expect(opus.planReach?.fiveHour?.usdPerFull).toBeCloseTo(reqCost * 10);
+    expect(opus.planReach?.weekly?.usdPerFull).toBeCloseTo(reqCost * 50);
+    expect(opus.planReach?.monthlyUsd).toBeCloseTo(reqCost * 50 * MONTH_FROM_WEEK);
+    expect(opus.planReach?.plans).toEqual(['Max 20x']);
   });
 });

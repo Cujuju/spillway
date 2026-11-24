@@ -1,5 +1,6 @@
 /** Activity → Overview's combination cards and Compare table (#156): whole range from hourly totals, per task from retained requests. */
 import type { ActivityScope } from './activityScope';
+import type { PlanReach } from './quotaValue';
 import type { ActivityCounts } from './types';
 
 /** Columns the Compare table fits beside its labels. */
@@ -46,12 +47,16 @@ export interface TaskStats {
 
 export interface CompareRow extends Combo {
   key: string;
+  /** Dominant provider serving this combination in range; null when absent. */
+  provider: string | null;
   /** Whole range, from hourly totals. */
   whole: ActivityCounts & { promptTokens: number };
   /** Retained requests; null when no task started here. */
   tasks: TaskStats | null;
   /** This combination's cost inside tasks that started on another one. */
   asSubagentCostUsd: number;
+  /** Implied per-account quota bucket values for this model's provider; null without enough clean intervals. */
+  planReach: PlanReach | null;
 }
 
 /** Local days, YYYY-MM-DD, through the range's end. */

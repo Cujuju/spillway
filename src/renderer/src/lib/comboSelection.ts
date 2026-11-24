@@ -57,5 +57,5 @@ export function comboRow(report: CompareReport | null | undefined, key: string):
   const found = report?.combos.find((c) => c.key === key);
   if (found) return found;
   const c = parseComboKey(key);
-  return { key, model: c?.model ?? '', effort: c?.effort ?? '', whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, asSubagentCostUsd: 0 };
+  return { key, model: c?.model ?? '', effort: c?.effort ?? '', provider: null, whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, asSubagentCostUsd: 0, planReach: null };
 }

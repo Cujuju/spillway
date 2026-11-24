@@ -274,7 +274,16 @@ const handlers: Handlers = {
     }));
     return activityLog.call('thinking', q, lists.flat());
   },
-  activityCompare: (q) => activityLog.call('compare', q),
+  activityCompare: (q) => {
+    const credentials = (usage.latest()?.credentials ?? []).map((c) => ({
+      id: c.id,
+      authIndex: c.authIndex,
+      provider: c.provider,
+      planLabel: c.plan?.label ?? null,
+      windows: c.windows.map((w) => ({ key: w.key, durationMs: w.durationMs, scoped: w.scoped })),
+    }));
+    return activityLog.call('compare', q, { samples: history.all(), credentials });
+  },
   activityCoverage: () => activityLog.call('coverage'),
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
   traceAttempts: (q) => activityLog.call('traceAttempts', q),

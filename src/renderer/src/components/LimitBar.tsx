@@ -1,8 +1,10 @@
 import { Lock } from 'lucide-solid';
 import { Show } from 'solid-js';
 import { windowPace, type WindowPace } from '@shared/pace';
+import { RESET_GLYPH } from '@shared/resetTime';
 import type { LimitWindow } from '@shared/types';
 import { shownPercent } from '@shared/trayValues';
+import type { EarlyReset } from '@shared/usageWindows';
 import { compactDuration, dateTime, pct, quotaPercent } from '../lib/format';
 import type { AccountForecast } from '../lib/forecast';
 import { isExhausted, quotaColor } from '../lib/quotaColor';
@@ -18,20 +20,21 @@ const PACE_BADGE = { over: 'amber', on: '', under: 'green' } as const;
 const RUNS_OUT_BADGE = 'red';
 
 /** One limit column: pace chip, percent, bar with tick and forecast, reset caption. `forecast` comes from the pool projection, so it matches the card. */
-export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast | null }) {
+export function LimitBar(props: { window: LimitWindow; cappedBy?: LimitWindow | null; earlyReset?: EarlyReset | null; forecast: AccountForecast | null }) {
   const unit = () => settings().trayIcons.value;
-  const used = () => props.window.usedPercent;
+  const used = () => (props.cappedBy ? BAR_FULL : props.window.usedPercent);
   const shown = () => shownPercent(used(), unit());
   /** Bar position of a used percent, in the bar's shown unit. */
   const at = (usedPercent: number) => Math.min(BAR_FULL, shownPercent(usedPercent, unit()) ?? 0);
-  const rejected = () => props.window.status === 'rejected';
-  const pace = () => windowPace(props.window, now());
+  const rejected = () => props.window.status === 'rejected' || !!props.cappedBy;
+  const pace = () => (props.cappedBy ? null : windowPace(props.window, now()));
   const runsOut = () => props.forecast?.runsOutAt != null;
   const rows = () => {
     const p = pace();
     return [
       { label: 'Used', value: quotaPercent(used()) },
       { label: 'Left', value: quotaPercent(shownPercent(used(), 'remaining')) },
+      ...(props.cappedBy ? [{ label: 'Capped by', value: props.cappedBy.label }] : []),
       { label: 'Resets', value: props.window.resetsAt ? dateTime(props.window.resetsAt) : 'No reset pending' },
       ...(p ? [{ label: 'Pace', value: p.state === 'on' ? 'On pace' : `${Math.round(Math.abs(p.deltaPercent))} ${p.state}` }] : []),
     ];
@@ -41,6 +44,7 @@ export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast
       <div class="limit-head">
         <span class="truncate secondary">{props.window.label}</span>
         <span class="limit-figures">
+          <Show when={props.earlyReset}>{(er) => <EarlyResetChip early={er()} />}</Show>
           <Show when={pace()}>{(p) => <PaceChip pace={p()} runsOut={runsOut()} />}</Show>
           <span class="value">{quotaPercent(shown())}</span>
         </span>
@@ -59,10 +63,27 @@ export function LimitBar(props: { window: LimitWindow; forecast: AccountForecast
         </div>
       </HoverTip>
       <div class="limit-foot" classList={{ exhausted: isExhausted(used(), rejected()) }}>
-        <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
+        <span>
+          <Show when={props.window.resetsAt} fallback="No reset pending">{(r) => <ResetTime at={r()} now={now()} />}</Show>
+          <Show when={props.earlyReset}><span class="accent"> · Early</span></Show>
+        </span>
         <Show when={!isExhausted(used(), rejected()) && props.forecast}>{(f) => <Forecast forecast={f()} resetsAt={props.window.resetsAt} />}</Show>
       </div>
     </div>
+  );
+}
+
+function EarlyResetChip(props: { early: EarlyReset }) {
+  const rows = () => [
+    { label: 'Detected', value: dateTime(props.early.detectedAt) },
+    { label: 'Ahead of schedule', value: compactDuration(props.early.aheadByMs) },
+    { label: 'Previous reset', value: dateTime(props.early.previousResetAt) },
+    { label: 'New reset', value: dateTime(props.early.newResetAt) },
+  ];
+  return (
+    <HoverTip title="Provider reset early" rows={rows()}>
+      <span class="badge compact accent">{RESET_GLYPH} Early</span>
+    </HoverTip>
   );
 }
 

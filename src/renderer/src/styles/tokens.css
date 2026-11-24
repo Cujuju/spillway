@@ -128,9 +128,9 @@
   --color-taskbar-dark: #101010;
   --color-taskbar-light: #eeeeee;
 
-  /* Provider identity colours; Claude matches Theo's dashboard orange. */
+  /* Provider identity colours; Claude matches Theo's dashboard orange, Codex OpenAI's green. */
   --provider-claude: #d97757;
-  --provider-codex: #6366f1;
+  --provider-codex: #10a37f;
   --provider-antigravity: #3b82f6;
   --provider-kimi: #0ea5e9;
   --provider-devin: #14b8a6;

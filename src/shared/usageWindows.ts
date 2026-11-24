@@ -73,3 +73,60 @@ export function consumedBetween(a: HistorySample, b: HistorySample, id: string, 
 
 /** When a summarised window stops counting: its reset, or earlier when a new window replaced it. */
 export const windowEnd = (s: WindowSummary): number => s.endedAt ?? s.resetAt;
+
+const FULL_PERCENT = 100;
+const SCOPE_SEPARATOR = ' · ';
+
+const scopePrefix = (label: string): string | null => {
+  const idx = label.lastIndexOf(SCOPE_SEPARATOR);
+  return idx > 0 ? label.slice(0, idx) : null;
+};
+
+const isWindowExhausted = (w: LimitWindow): boolean =>
+  w.status === 'rejected' || (w.usedPercent !== null && w.usedPercent >= FULL_PERCENT);
+
+/** Longer exhausted window in the same scope capping `target`, or null. */
+export function exhaustedBlocker(target: LimitWindow, windows: readonly LimitWindow[]): LimitWindow | null {
+  if (target.durationMs === null) return null;
+  const targetScope = target.scoped ? scopePrefix(target.label) : null;
+  for (const other of windows) {
+    if (other.key === target.key || other.scoped !== target.scoped) continue;
+    if (other.durationMs === null || other.durationMs <= target.durationMs) continue;
+    if (target.scoped && (!targetScope || scopePrefix(other.label) !== targetScope)) continue;
+    if (isWindowExhausted(other)) return other;
+  }
+  return null;
+}
+
+/** Minimum lead time before the prior reset to count as an early provider reset. */
+const MIN_EARLY_RESET_MS = 10 * 60_000;
+
+export interface EarlyReset {
+  detectedAt: number;
+  previousResetAt: number;
+  newResetAt: number;
+  aheadByMs: number;
+}
+
+/** Most recent early provider reset still matching `currentResetsAt`, or null. */
+export function earlyResetFor(
+  history: readonly HistorySample[],
+  id: string,
+  key: string,
+  currentResetsAt: string | null,
+): EarlyReset | null {
+  const currentMs = currentResetsAt ? Date.parse(currentResetsAt) : null;
+  for (let i = history.length - 1; i > 0; i--) {
+    const prev = history[i - 1]!;
+    const next = history[i]!;
+    const prevReset = prev.resets?.[id]?.[key];
+    const nextReset = next.resets?.[id]?.[key];
+    if (prevReset === undefined || nextReset === undefined || sameReset(prevReset, nextReset)) continue;
+    const detectedAt = Date.parse(next.at);
+    const aheadByMs = prevReset - detectedAt;
+    if (aheadByMs < MIN_EARLY_RESET_MS) continue;
+    if (currentMs !== null && !sameReset(nextReset, currentMs)) return null;
+    return { detectedAt, previousResetAt: prevReset, newResetAt: nextReset, aheadByMs };
+  }
+  return null;
+}

@@ -1,6 +1,8 @@
 import { X } from 'lucide-solid';
 import { createMemo, For, Show } from 'solid-js';
+import { RESET_GLYPH } from '@shared/resetTime';
 import type { Credential } from '@shared/types';
+import { earlyResetFor } from '@shared/usageWindows';
 import { persistedSignal } from '../lib/persisted';
 import { pastSeries } from '../lib/poolHistory';
 import { providerVar } from '../lib/providers';
@@ -39,6 +41,13 @@ export function AccountPanel(props: { credential: Credential; onClose: () => voi
       past: [...pastSeries(history(), [c], w.key, WHOLE_HISTORY, shares), { t: now(), remaining: Math.max(0, FULL - w.usedPercent!) }],
     }));
   });
+  const markers = createMemo(() => {
+    const c = props.credential;
+    return windows().flatMap((w, i) => {
+      const er = earlyResetFor(history(), c.id, w.key, w.resetsAt);
+      return er ? [{ t: er.detectedAt, label: `${RESET_GLYPH} Early reset`, color: color(i) }] : [];
+    });
+  });
   // Opens on the longest window's whole length, so the current week shows at once.
   const from = () => {
     const longest = windows()[0]?.durationMs;
@@ -69,7 +78,7 @@ export function AccountPanel(props: { credential: Credential; onClose: () => voi
           when={tab() === 'remaining'}
           fallback={<PastWindows credentialId={props.credential.id} window={windows()[0]!} />}
         >
-          <QuotaChart series={series()} from={from()} to={now()} now={now()} yMax={() => FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Account quota chart" />
+          <QuotaChart series={series()} markers={markers()} from={from()} to={now()} now={now()} yMax={() => FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel="Account quota chart" />
         </Show>
       </Show>
     </section>

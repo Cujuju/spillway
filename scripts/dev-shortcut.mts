@@ -79,6 +79,7 @@ done
 [[ -f $pidfile ]] && kill -0 "$(<$pidfile)" 2>/dev/null && exit 0
 cd "$repo" || exit 1
 unset ELECTRON_RUN_AS_NODE
+export REMOTE_DEBUGGING_PORT="\${REMOTE_DEBUGGING_PORT:-9333}"
 nohup pnpm dev >"\${TMPDIR:-/tmp}/spillway-dev.log" 2>&1 &
 echo $! >"$pidfile"
 `;

@@ -6,6 +6,8 @@ export const DAYS_PER_WEEK = 7;
 export const DAYS_PER_MONTH = 30;
 /** Scales a 7-day weekly bucket to an equivalent 30-day monthly API allowance. */
 export const MONTH_FROM_WEEK = DAYS_PER_MONTH / DAYS_PER_WEEK;
+/** Claude caps Fable at 50% of the general weekly allowance (100% seven_day_fable = 50% seven_day). */
+export const FABLE_WEEKLY_SHARE_OF_SEVEN_DAY = 0.5;
 
 export type QuotaBucket = 'fiveHour' | 'weekly';
 
@@ -62,6 +64,8 @@ const AG_SUMMARY_GEMINI = /^ag_summary:gemini-/i;
 const AG_SUMMARY_3P = /^ag_summary:3p-/i;
 const AG_PER_MODEL_KEY = /^ag:/i;
 
+export const isFableModel = (model: string): boolean => FABLE_MODEL.test(model.trim());
+
 /** Classifies a credential window into a 5-hour or weekly bucket, or null when ignored (e.g. per-model AG duplicates). */
 export function windowBucket(provider: string, w: { key: string; durationMs: number | null }): QuotaBucket | null {
   const key = w.key.trim();
@@ -97,8 +101,8 @@ export function windowAppliesToModel(provider: string, windowKey: string, model:
   return true;
 }
 
-/** Priority for choosing a model's binding weekly window: a matching model-scoped window beats an account-wide one. */
-export function weeklyWindowPriority(provider: string, windowKey: string, model: string): number {
+/** Priority for choosing a model's binding window: a matching model-scoped window beats an account-wide one. */
+export function windowPriority(provider: string, windowKey: string, model: string): number {
   if (provider === 'claude' && FABLE_MODEL.test(model) && FABLE_WINDOW_KEY.test(windowKey)) return 2;
   if (provider === 'antigravity' && (AG_SUMMARY_GEMINI.test(windowKey) || AG_SUMMARY_3P.test(windowKey))) return 2;
   return 1;
@@ -146,11 +150,11 @@ export function planReachForCombo(
 
   const pickBucket = (bucket: QuotaBucket): QuotaWindowSummary[] => {
     const candidates = pool.filter((s) => s.bucket === bucket);
-    if (bucket !== 'weekly' || candidates.length <= 1) return candidates;
+    if (candidates.length <= 1) return candidates;
     const best = new Map<string, QuotaWindowSummary>();
     for (const s of candidates) {
       const prev = best.get(s.credentialId);
-      if (!prev || weeklyWindowPriority(provider, s.windowKey, model) > weeklyWindowPriority(provider, prev.windowKey, model)) {
+      if (!prev || windowPriority(provider, s.windowKey, model) > windowPriority(provider, prev.windowKey, model)) {
         best.set(s.credentialId, s);
       }
     }

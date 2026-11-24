@@ -20,3 +20,7 @@ it.runIf(shell && existsSync(shell))('assigns repo paths with quotes, spaces, $ 
 it.runIf(process.platform === 'darwin')('generates a launcher zsh parses', () => {
   for (const root of ROOTS) expect(spawnSync('/bin/zsh', ['-n'], { input: macLauncherScript(root) }).status).toBe(0);
 });
+
+it('sets a default dev CDP port in the launcher script', () => {
+  expect(macLauncherScript('/tmp/spillway')).toContain('export REMOTE_DEBUGGING_PORT="${REMOTE_DEBUGGING_PORT:-9333}"');
+});

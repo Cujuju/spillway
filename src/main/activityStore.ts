@@ -24,6 +24,7 @@ import { thinkingActivity, type OfferedModel } from './activityThinking';
 import { RetainedTurns } from './retainedTurns';
 import type { ThinkingQuery } from '@shared/thinking';
 import { compareActivity } from './activityCompare';
+import type { QuotaContext } from './quotaValue';
 import type { CompareQuery } from '@shared/activityCompare';
 export { oldestKeptDay, lastDays } from './activityTransfer';
 import { antigravityLogContext, antigravityOAuthTokenPath, clientLogKey, type ClientLogProvider } from './clientLogPaths';
@@ -415,7 +416,7 @@ export class ActivityLog {
   /** Thinking costs and alternatives from retained turns; null for a malformed query. */
   thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models, this.retainedTurns); }
   /** Combination cards and Compare table for the Overview; null for a malformed query. */
-  compare(q: CompareQuery) { return this.db.transaction(() => compareActivity(this.db, this.loadTotals().values(), q, Date.now()))(); }
+  compare(q: CompareQuery, quota?: QuotaContext) { return this.db.transaction(() => compareActivity(this.db, this.loadTotals().values(), q, Date.now(), quota))(); }
 
   totalsList(): ActivityDayTotal[] {
     return dailyTotals(this.loadTotals().values());

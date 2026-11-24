@@ -32,7 +32,7 @@ const methods: Omit<ActivityMethods, 'clear' | 'names'> & EvalMethods & { clear(
     return stored;
   },
   page: (q) => log.page(q), day: (...args) => log.day(...args), days: () => log.days(),
-  daySummaries: (scope) => log.daySummaries(scope), totalsList: () => log.totalsList(), thinking: (q, models) => log.thinking(q, models), compare: (q) => log.compare(q),
+  daySummaries: (scope) => log.daySummaries(scope), totalsList: () => log.totalsList(), thinking: (q, models) => log.thinking(q, models), compare: (q, quota) => log.compare(q, quota),
   buckets: (days) => log.buckets(days), bucketSnapshot: (days) => log.bucketSnapshot(days), coverage: () => log.coverage(),
   activityOlderBoundaries: () => log.activityOlderBoundaries(),
   clear: async () => { await stop(); log.clear(); stop = startSync(); }, prune: () => log.prune(), setRetention: (days) => log.setRetention(days),

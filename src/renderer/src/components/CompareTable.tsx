@@ -1,6 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import type { CompareReport, CompareRow, DaySpan } from '@shared/activityCompare';
 import { currentRates } from '@shared/modelPrices';
+import type { PlanReach, QuotaWindowEstimate } from '@shared/quotaValue';
 import { comboName, comboRow, modelName } from '../lib/comboSelection';
 import { coverageStart, daysOf, money, multiple, points, share, spanText } from '../lib/compareFormat';
 import { compactNumber, pct, usd } from '../lib/format';
@@ -8,16 +9,21 @@ import { costText } from './activityFormat';
 import { appLocale } from '@shared/timeFormat';
 
 const PER_MILLION = 1_000_000;
+const PERCENT = 100;
 /** Mean cost per request sits in fractions of a cent, so it gets a third decimal. */
 const REQUEST_COST_DIGITS = 3;
 const SHARE_DIGITS = 1;
 const MEDIAN_DIGITS = 1;
+const SMALL_QUOTA_PCT_THRESHOLD = 1;
+const SMALL_QUOTA_PCT_DIGITS = 2;
+const WHOLE_TASKS_FROM = 10;
 
 /** One table row. `value` feeds the baseline comparison; without `kind` the row shows no comparison. */
 interface Row {
   label: string;
   sub?: string;
   text: (c: CompareRow) => JSX.Element;
+  title?: (c: CompareRow) => string | undefined;
   value?: (c: CompareRow) => number | null;
   kind?: 'multiple' | 'points';
   coverage?: DaySpan | null;
@@ -71,6 +77,73 @@ function taskRows(): Row[] {
   ];
 }
 
+function estimateTitle(reach: PlanReach | null, est: QuotaWindowEstimate | null): string | undefined {
+  if (!reach || !est) return undefined;
+  const parts = [
+    `Weighted ${usd(est.usdPerFull, 0)} · median ${usd(est.medianUsdPerFull, 0)} (IQR ${usd(est.iqr[0], 0)}–${usd(est.iqr[1], 0)})`,
+    `${est.intervals} clean ${est.intervals === 1 ? 'interval' : 'intervals'} (${pct(est.observedPercent, SHARE_DIGITS)} observed, ${usd(est.observedUsd)} matched)`,
+  ];
+  if (reach.plans.length) parts.push(`Plan: ${reach.plans.join(', ')}`);
+  else if (reach.accounts > 0) parts.push(`${reach.accounts} ${reach.accounts === 1 ? 'account' : 'accounts'}`);
+  if (est.unmatchedIntervals > 0) {
+    parts.push(`${est.unmatchedIntervals} zero-local-spend ${est.unmatchedIntervals === 1 ? 'jump' : 'jumps'} skipped (possible other-machine or web use)`);
+  }
+  return parts.join('\n');
+}
+
+const weeklyQuotaPerTask = (c: CompareRow): number | null =>
+  c.tasks && c.planReach?.weekly && c.planReach.weekly.usdPerFull > 0
+    ? (c.tasks.medianCostUsd / c.planReach.weekly.usdPerFull) * PERCENT
+    : null;
+
+const tasksPerWeek = (c: CompareRow): number | null =>
+  c.tasks && c.tasks.medianCostUsd > 0 && c.planReach?.weekly
+    ? c.planReach.weekly.usdPerFull / c.tasks.medianCostUsd
+    : null;
+
+const quotaPctText = (v: number) => pct(v, v < SMALL_QUOTA_PCT_THRESHOLD ? SMALL_QUOTA_PCT_DIGITS : SHARE_DIGITS);
+const tasksCountText = (v: number) => v.toLocaleString(appLocale(), { maximumFractionDigits: v >= WHOLE_TASKS_FROM ? 0 : MEDIAN_DIGITS });
+
+function planReachRows(): Row[] {
+  return [
+    {
+      label: 'Est. monthly API value', sub: '30-day · per account',
+      value: (c) => c.planReach?.monthlyUsd ?? null,
+      text: (c) => shown(c.planReach?.monthlyUsd ?? null, (v) => usd(v, 0)),
+      title: (c) => estimateTitle(c.planReach, c.planReach?.weekly ?? null),
+      kind: 'multiple',
+    },
+    {
+      label: 'Est. weekly bucket', sub: '100% weekly · per account',
+      value: (c) => c.planReach?.weekly?.usdPerFull ?? null,
+      text: (c) => shown(c.planReach?.weekly?.usdPerFull ?? null, (v) => usd(v, 0)),
+      title: (c) => estimateTitle(c.planReach, c.planReach?.weekly ?? null),
+      kind: 'multiple',
+    },
+    {
+      label: 'Est. 5-hour bucket', sub: '100% 5-hour · per account',
+      value: (c) => c.planReach?.fiveHour?.usdPerFull ?? null,
+      text: (c) => shown(c.planReach?.fiveHour?.usdPerFull ?? null, (v) => usd(v, 0)),
+      title: (c) => estimateTitle(c.planReach, c.planReach?.fiveHour ?? null),
+      kind: 'multiple',
+    },
+    {
+      label: 'Weekly quota per task', sub: 'median task · % of weekly',
+      value: weeklyQuotaPerTask,
+      text: (c) => shown(weeklyQuotaPerTask(c), quotaPctText),
+      title: (c) => estimateTitle(c.planReach, c.planReach?.weekly ?? null),
+      kind: 'multiple',
+    },
+    {
+      label: 'Est. tasks per week', sub: 'per account · at median task',
+      value: tasksPerWeek,
+      text: (c) => <b>{shown(tasksPerWeek(c), tasksCountText)}</b>,
+      title: (c) => estimateTitle(c.planReach, c.planReach?.weekly ?? null),
+      kind: 'multiple',
+    },
+  ];
+}
+
 /** Relative to the baseline column: a multiple, or a difference in points for shares. */
 function relative(row: Row, c: CompareRow, base: CompareRow): string | null {
   if (!row.kind || !row.value || c.key === base.key) return null;
@@ -94,11 +167,13 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
       <td class="lab">{p.row.label}<Show when={p.row.sub}><small>{p.row.sub}</small></Show><Show when={p.row.coverage !== undefined}><Coverage part={p.row.coverage!} range={props.report.range} /></Show></td>
       <For each={columns()}>{(c) => {
         const rel = () => relative(p.row, c.row, base());
-        return <td class="num" classList={{ base: c.key === base().key }}>{p.row.text(c.row)} <span class="x" classList={{ blank: !rel() }}>{rel() ?? '0'}</span></td>;
+        const tip = () => p.row.title?.(c.row);
+        return <td class="num" classList={{ base: c.key === base().key }} title={tip()}>{p.row.text(c.row)} <span class="x" classList={{ blank: !rel() }}>{rel() ?? '0'}</span></td>;
       }}</For>
     </tr>
   );
   const unknown = () => props.report.unknownEffort;
+  const anyUnmatched = () => columns().some((c) => (c.row.planReach?.weekly?.unmatchedIntervals ?? 0) > 0 || (c.row.planReach?.fiveHour?.unmatchedIntervals ?? 0) > 0);
   return (
     <table class="table cmp">
       <thead><tr><th />
@@ -117,6 +192,9 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
           {props.report.retained ? `${spanText(props.report.retained)} · ${daysOf(props.report.retained, props.report.range)}` : 'No kept requests in this range'} · requests are kept {props.retentionDays} days</span>
           <Coverage part={props.report.retained} range={props.report.range} /></td></tr>
         <For each={taskRows()}>{(row) => <RowView row={row} />}</For>
+        <tr class="group-row"><td colSpan={span()}>Plan reach<span class="gnote">
+          from clean quota intervals · excludes resets and zero-spend jumps{anyUnmatched() ? ' · hover for skipped jumps' : ''}</span></td></tr>
+        <For each={planReachRows()}>{(row) => <RowView row={row} />}</For>
       </tbody>
       <Show when={unknown().requests > 0}>
         <tfoot><tr><td colSpan={span()}>

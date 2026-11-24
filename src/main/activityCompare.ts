@@ -6,6 +6,7 @@ import type { ActivityEvent } from '@shared/types';
 import type { Db } from './activityDb';
 import type { ActivityTotal } from './activityTotals';
 import { scopeClause } from './activityStore';
+import { estimateQuotaWindows, planReachForCombo, type QuotaContext } from './quotaValue';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Longest parent chain followed to a root; deeper or cyclic chains stop at the last session reached. */
@@ -27,17 +28,30 @@ function normalizeQuery(raw: Partial<CompareQuery> | undefined): CompareQuery | 
   return { scope: normalizeScope(raw?.scope), from, to };
 }
 
-/** Each combination's whole-range totals and the tasks in retained requests; see CompareReport. */
-export function compareActivity(db: Db, totals: Iterable<ActivityTotal>, raw: Partial<CompareQuery> | undefined, now: number): CompareReport | null {
+/** Each combination's whole-range totals, retained tasks, and implied plan reach; see CompareReport. */
+export function compareActivity(
+  db: Db,
+  totals: Iterable<ActivityTotal>,
+  raw: Partial<CompareQuery> | undefined,
+  now: number,
+  quota?: QuotaContext,
+): CompareReport | null {
   const q = normalizeQuery(raw);
   if (!q) return null;
   const to = Math.min(q.to, now);
   const range: DaySpan = { from: localDay(q.from), to: localDay(to), days: daysThrough(localDay(q.from), localDay(to)) };
   const rows = new Map<string, CompareRow>();
+  const providerWeights = new Map<string, Map<string, number>>();
+  const authWeights = new Map<string, Map<string, number>>();
   const row = (model: string, effort: string) => {
     const key = comboKey({ model, effort });
-    if (!rows.has(key)) rows.set(key, { key, model, effort, whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, asSubagentCostUsd: 0 });
+    if (!rows.has(key)) rows.set(key, { key, model, effort, provider: null, whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, asSubagentCostUsd: 0, planReach: null });
     return rows.get(key)!;
+  };
+  const addWeight = (map: Map<string, Map<string, number>>, key: string, item: string, weight: number) => {
+    let bucket = map.get(key);
+    if (!bucket) { bucket = new Map(); map.set(key, bucket); }
+    bucket.set(item, (bucket.get(item) ?? 0) + weight);
   };
   const unknown = new Map<string, CompareReport['unknownEffort']['models'][number]>();
   let sharesFrom: string | null = null;
@@ -57,10 +71,26 @@ export function compareActivity(db: Db, totals: Iterable<ActivityTotal>, raw: Pa
     const r = row(model, t.reasoningEffort);
     addCounts(r.whole, t);
     r.whole.promptTokens += promptTokens(t.provider, t);
+    const weight = t.costUsd > 0 ? t.costUsd : t.requests;
+    addWeight(providerWeights, r.key, t.provider, weight);
+    if (t.authIndex) addWeight(authWeights, r.key, t.authIndex, weight);
   }
   const oldest = (db.prepare('SELECT min(day) AS day FROM requests').get() as { day: string | null }).day;
   const retained = clip(oldest, range);
   if (retained) addTasks(db, q, retained, rows, row);
+  const quotaSummaries = quota && quota.samples.length > 0 && quota.credentials.length > 0
+    ? estimateQuotaWindows(db, quota)
+    : [];
+  const allowedAccounts = q.scope.accounts ? new Set(q.scope.accounts) : null;
+  for (const r of rows.values()) {
+    const provs = providerWeights.get(r.key);
+    if (provs?.size) {
+      r.provider = [...provs.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]![0];
+    }
+    if (r.provider && quotaSummaries.length > 0) {
+      r.planReach = planReachForCombo(quotaSummaries, r.provider, r.model, authWeights.get(r.key) ?? new Map(), allowedAccounts);
+    }
+  }
   const models = [...unknown.values()].filter((u) => u.requests > 0).sort((a, b) => b.costUsd - a.costUsd);
   return {
     combos: [...rows.values()].sort((a, b) => b.whole.costUsd - a.whole.costUsd || b.whole.requests - a.whole.requests),

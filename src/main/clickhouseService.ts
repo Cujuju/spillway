@@ -51,8 +51,12 @@ export function saveClickHouse(raw: ClickHouseConfig, rawCredentials?: ClickHous
     const changed = prev.config.endpoint !== config.endpoint || prev.config.database !== config.database || prev.config.tablePrefix !== config.tablePrefix;
     // The worker discards the old destination's queue before secrets change; a crash leaves the new destination disabled.
     if (changed) await activityLog.call('clickhouseConfigure', { ...config, enabled: false });
-    if (credentials !== undefined) await setClickHouseCredentials(credentials, config.endpoint);
-    else if (prev.config.endpoint !== config.endpoint) await setClickHouseCredentials(null);
+    if (credentials !== undefined) {
+      // Blank fields keep their saved value on the same endpoint; Forget sends null.
+      const saved = prev.config.endpoint === config.endpoint ? credentialsFor(config) : undefined;
+      const merged = credentials && saved ? { username: credentials.username || saved.username, password: credentials.password || saved.password } : credentials;
+      await setClickHouseCredentials(merged, config.endpoint);
+    } else if (prev.config.endpoint !== config.endpoint) await setClickHouseCredentials(null);
     await activityLog.call('clickhouseConfigure', config);
     clickhouseUploader.error = null;
     return clickhouseStatus();

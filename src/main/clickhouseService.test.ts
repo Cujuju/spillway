@@ -101,3 +101,12 @@ it('holds persistent delivery pause through Check, reports paused status, and re
   expect(await service.clickhouseUploader.runOnce()).toBe(true);
   expect(s.rows.size).toBe(1);
 });
+it('keeps the saved username or password when saving only the other field on the same endpoint', async () => {
+  const { config } = await setup();
+  await service.saveClickHouse(config, { username: '', password: 'rotated-password' });
+  expect(mock.credentials).toMatchObject({ username: 'old-user', password: 'rotated-password', endpoint: config.endpoint });
+  await service.saveClickHouse(config, { username: 'new-user', password: '' });
+  expect(mock.credentials).toMatchObject({ username: 'new-user', password: 'rotated-password', endpoint: config.endpoint });
+  await service.saveClickHouse({ ...config, endpoint: 'http://127.0.0.1:1' }, { username: '', password: 'other-password' });
+  expect(mock.credentials).toMatchObject({ username: '', password: 'other-password', endpoint: 'http://127.0.0.1:1' });
+});

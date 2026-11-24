@@ -3,8 +3,6 @@ import type { ActivityScope } from './activityScope';
 import type { PlanReach } from './quotaValue';
 import type { ActivityCounts } from './types';
 
-/** Combination cards and Compare columns; each position needs a `--color-series-<n>` in tokens.css. */
-export const MAX_COMBOS = 6;
 /** Combinations shown until the user picks: the costliest in the range. */
 export const DEFAULT_COMBOS = 3;
 

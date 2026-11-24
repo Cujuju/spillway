@@ -17,7 +17,8 @@ import type { TipRow } from './ChartTip';
 import { BreakdownTable } from './BreakdownTable';
 import { ComboCard } from './ComboCard';
 import { CompareTable } from './CompareTable';
-import { comboName } from '../lib/comboSelection';
+import { comboName, comboRow } from '../lib/comboSelection';
+import { ProviderGlyph } from './ui';
 import { TREND_MIN_HEIGHT_PX, TrendChart } from './TrendChart';
 
 /** The hit rate sits near 100% most of the time; 0/50/100% lines are enough. */
@@ -66,13 +67,10 @@ export interface ComboSelection {
 /** What a tile knows about its place on the board. */
 export interface TileContext { id: string; selection: ComboSelection }
 
-/** Swatch class for a shown combination: one series colour per position. */
-const seriesClass = (selection: ComboSelection, key: string) => `swatch series-${selection.shown().indexOf(key) + 1}`;
-
 interface PanelDef {
   title: (spec: ActivityPanelSpec) => string;
   /** Replaces the title text when the tile's title depends on its place on the board. */
-  heading?: (tile: TileContext) => JSX.Element;
+  heading?: (data: ActivityData, tile: TileContext) => JSX.Element;
   /** Small muted title, for a tile whose note says more. */
   quiet?: boolean;
   /** The body reaches the tile's edges, like a full-width table. */
@@ -172,9 +170,11 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   },
   combo: {
     title: () => 'Combination',
-    heading: (tile) => (
+    heading: (data, tile) => (
       <Show when={tile.selection.of(tile.id)} fallback="Combination">
-        {(key) => <span class="combo-title"><span class={seriesClass(tile.selection, key())} />{comboName(key())}</span>}
+        {(key) => <span class="combo-title">
+          <Show when={comboRow(data.compare(), key()).provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show>{comboName(key())}
+        </span>}
       </Show>
     ),
     note: (_data, tile) => (tile.selection.of(tile.id) !== null && tile.selection.of(tile.id) === tile.selection.baseline() ? 'baseline' : ''),

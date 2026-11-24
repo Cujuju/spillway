@@ -1,4 +1,14 @@
 /* ── Activity → Thinking ── */
+/* One series colour per compared setting, by rank (tokens.css derives them from the theme). */
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  background: var(--series);
+}
+.series-1 { --series: var(--color-series-1); }
+.series-2 { --series: var(--color-series-2); }
 .think-est {
   margin: 0 0 var(--spacing-2);
   font-size: var(--text-xs);

@@ -2,7 +2,7 @@ import { normalize, tileIds } from '@cujuju/solidjs-tiling-window-manager';
 import { createMemo, Show } from 'solid-js';
 import { Select } from './ui';
 import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelKind, type ActivityPanelSpec } from '@shared/activityBoard';
-import { DEFAULT_COMBOS, MAX_COMBOS, type CompareReport } from '@shared/activityCompare';
+import { DEFAULT_COMBOS, type CompareReport } from '@shared/activityCompare';
 import { baselineOf, comboName, comboTiles, pinCombos, resolveCombos, shownCombos } from '../lib/comboSelection';
 import { settings, updateSettings } from '../store';
 import { ADD_CHOICES, PANELS, type ActivityData, type ComboSelection } from './activityPanels';
@@ -21,7 +21,7 @@ export function AddChartSelect(props: { onPick: (chart: PendingChart) => void })
   );
 }
 
-/** "3 of 6 combinations" and a menu adding a card for a combination not shown; placing it is the board's job. */
+/** A menu adding a card for a combination not shown; placing it is the board's job. */
 export function AddComboSelect(props: { report: CompareReport | null | undefined; onPick: (chart: PendingChart) => void }) {
   const board = () => settings().activity.board;
   const cards = createMemo(() => comboTiles(tileIds(normalize(board().tiles, new Set(Object.keys(board().panels)))), board().panels));
@@ -31,12 +31,9 @@ export function AddComboSelect(props: { report: CompareReport | null | undefined
     return ranked().filter((key) => !shown.has(key)).map((key) => ({ value: key, label: comboName(key) }));
   });
   return (
-    <>
-      <span class="muted combo-count">{cards().length} of {MAX_COMBOS} combinations</span>
-      <Select label="Add combination" placeholder="Add combination…" options={options()} disabled={cards().length >= MAX_COMBOS || options().length === 0}
-        title={`Model and effort. Starts with the top ${DEFAULT_COMBOS} by cost in the range, then keeps your last selection.`}
-        onChange={(key) => props.onPick({ id: crypto.randomUUID(), label: comboName(key), spec: { kind: 'combo', metric: 'cost', combo: key } })} />
-    </>
+    <Select label="Add combination" placeholder="Add combination…" options={options()} disabled={options().length === 0}
+      title={`Model and effort. Starts with the top ${DEFAULT_COMBOS} by cost in the range, then keeps your last selection.`}
+      onChange={(key) => props.onPick({ id: crypto.randomUUID(), label: comboName(key), spec: { kind: 'combo', metric: 'cost', combo: key } })} />
   );
 }
 
@@ -68,7 +65,7 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
         const ctx = { id, selection };
         return (
           <>
-            <Show when={panel.switchesMetric} fallback={<div class="section-label" classList={{ quiet: panel.quiet }}>{panel.heading ? panel.heading(ctx) : panel.title(spec())}</div>}>
+            <Show when={panel.switchesMetric} fallback={<div class="section-label" classList={{ quiet: panel.quiet }}>{panel.heading ? panel.heading(props.data, ctx) : panel.title(spec())}</div>}>
               <Select class="section-label title-switch" label="Chart metric" title="Change metric" value={spec().metric}
                 options={ACTIVITY_METRICS.map((m) => ({ value: m, label: panel.title({ ...spec(), metric: m }) }))}
                 onChange={(metric) => void setMetric(id, metric)} />

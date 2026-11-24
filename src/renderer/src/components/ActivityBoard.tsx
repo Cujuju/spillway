@@ -21,7 +21,7 @@ export function AddChartSelect(props: { onPick: (chart: PendingChart) => void })
   );
 }
 
-/** "3 of 4 combinations" and a menu adding a card for a combination not shown; placing it is the board's job. */
+/** "3 of 6 combinations" and a menu adding a card for a combination not shown; placing it is the board's job. */
 export function AddComboSelect(props: { report: CompareReport | null | undefined; onPick: (chart: PendingChart) => void }) {
   const board = () => settings().activity.board;
   const cards = createMemo(() => comboTiles(tileIds(normalize(board().tiles, new Set(Object.keys(board().panels)))), board().panels));

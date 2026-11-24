@@ -97,3 +97,36 @@ export function exhaustedBlocker(target: LimitWindow, windows: readonly LimitWin
   }
   return null;
 }
+
+/** Minimum lead time before the prior reset to count as an early provider reset. */
+const MIN_EARLY_RESET_MS = 10 * 60_000;
+
+export interface EarlyReset {
+  detectedAt: number;
+  previousResetAt: number;
+  newResetAt: number;
+  aheadByMs: number;
+}
+
+/** Most recent early provider reset still matching `currentResetsAt`, or null. */
+export function earlyResetFor(
+  history: readonly HistorySample[],
+  id: string,
+  key: string,
+  currentResetsAt: string | null,
+): EarlyReset | null {
+  const currentMs = currentResetsAt ? Date.parse(currentResetsAt) : null;
+  for (let i = history.length - 1; i > 0; i--) {
+    const prev = history[i - 1]!;
+    const next = history[i]!;
+    const prevReset = prev.resets?.[id]?.[key];
+    const nextReset = next.resets?.[id]?.[key];
+    if (prevReset === undefined || nextReset === undefined || sameReset(prevReset, nextReset)) continue;
+    const detectedAt = Date.parse(next.at);
+    const aheadByMs = prevReset - detectedAt;
+    if (aheadByMs < MIN_EARLY_RESET_MS) continue;
+    if (currentMs !== null && !sameReset(nextReset, currentMs)) return null;
+    return { detectedAt, previousResetAt: prevReset, newResetAt: nextReset, aheadByMs };
+  }
+  return null;
+}

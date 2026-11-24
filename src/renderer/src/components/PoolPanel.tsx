@@ -4,7 +4,7 @@ import { persistedSignal } from '../lib/persisted';
 import { providerVar } from '../lib/providers';
 import { now, settings, updateSettings } from '../store';
 import { chartFrom, chartTo, type PoolModel } from './poolModel';
-import { QuotaChart } from './QuotaChart';
+import { QuotaChart, type QuotaMarker } from './QuotaChart';
 import type { TipRow } from './ChartTip';
 import { Seg, Select, Tabs } from './ui';
 
@@ -41,6 +41,8 @@ const px = (style: CSSStyleDeclaration, prop: string) => parseFloat(style.getPro
 export function PoolPanel(props: {
   /** Pool models charted for a window (card line id). */
   modelsOf: (line: string) => PoolModel[];
+  /** Optional vertical event markers per chart line. */
+  markersOf?: (line: string) => QuotaMarker[];
   /** Providers in view, legend order; those without the charted window show disabled. */
   providers: string[];
   windows: ChartWindow[];
@@ -86,7 +88,7 @@ export function PoolPanel(props: {
         <QuotaChart series={series(line, 'drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel={`${labelOf(line)} drain rate chart`} />
       }
     >
-      <QuotaChart series={series(line, 'remaining')} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel={`${labelOf(line)} remaining quota chart`} />
+      <QuotaChart series={series(line, 'remaining')} markers={props.markersOf?.(line)} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel={`${labelOf(line)} remaining quota chart`} />
     </Show>
   );
 

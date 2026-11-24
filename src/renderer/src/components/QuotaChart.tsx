@@ -20,9 +20,17 @@ export interface QuotaSeries {
   future?: SeriesPoint[];
 }
 
+export interface QuotaMarker {
+  t: number;
+  label: string;
+  color?: string;
+}
+
 export interface QuotaChartProps {
   /** Lines may reach past `from`; the wheel widens the view as far back as they go. */
   series: QuotaSeries[];
+  /** Optional vertical event markers (e.g., early provider resets). */
+  markers?: QuotaMarker[];
   /** Default view; `to` is also the furthest the view reaches ahead. */
   from: number;
   to: number;
@@ -192,6 +200,15 @@ export function QuotaChart(props: QuotaChartProps) {
               <Show when={s.future?.length}>
                 <path d={path(s.future!)} fill="none" stroke={s.color} stroke-width="1.6" stroke-dasharray="5 4" opacity="0.75" />
               </Show>
+            </>
+          )}
+        </For>
+        <For each={(props.markers ?? []).filter((m) => m.t >= view().from && m.t <= view().to)}>
+          {(m) => (
+            <>
+              <line x1={x(m.t)} x2={x(m.t)} y1={PAD.top} y2={y(0)} stroke={m.color ?? 'var(--color-accent-light)'} stroke-width="1.2" stroke-dasharray="3 3" />
+              <circle cx={x(m.t)} cy={PAD.top + 4} r="3" fill={m.color ?? 'var(--color-accent-light)'} />
+              <text x={x(m.t) + 6} y={PAD.top + 8} text-anchor="start" style={{ fill: m.color ?? 'var(--color-accent-light)', 'font-weight': '600' }}>{m.label}</text>
             </>
           )}
         </For>

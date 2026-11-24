@@ -2,7 +2,7 @@ import { ChartLine, RefreshCw, Settings2 } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
-import { exhaustedBlocker } from '@shared/usageWindows';
+import { exhaustedBlocker, type EarlyReset } from '@shared/usageWindows';
 import type { AccountForecast } from '../lib/forecast';
 import { compactDuration } from '../lib/format';
 import { isExhausted } from '../lib/quotaColor';
@@ -25,6 +25,7 @@ export function AccountRow(props: {
   selected?: boolean;
   onSelect?: () => void;
   forecastOf?: (key: string) => AccountForecast | null;
+  earlyResetOf?: (key: string) => EarlyReset | null;
   onNotice?: (tone: 'info' | 'error', text: string) => void;
 }) {
   const c = () => props.credential;
@@ -67,6 +68,9 @@ export function AccountRow(props: {
           </Show>
           <Show when={state() === 'next-pick'}>
             <span class="badge green" title="Picked for new conversations">Next pick</span>
+          </Show>
+          <Show when={c().windows.some((w) => props.earlyResetOf?.(w.key))}>
+            <span class="badge accent" title="Provider reset a quota window ahead of schedule">Reset early</span>
           </Show>
           <Show when={c().canRefresh}>
             <button class="btn ghost icon-btn" disabled={busy()} onClick={() => void refresh()} title="Refresh quota" aria-label="Refresh quota">
@@ -118,7 +122,7 @@ export function AccountRow(props: {
       </div>
       <div class="limits">
         <For each={c().windows} fallback={<span class="muted">{c().canRefresh ? 'No limit data yet — refresh to look it up.' : 'No quota reported'}</span>}>
-          {(w) => <LimitBar window={w} cappedBy={exhaustedBlocker(w, c().windows)} forecast={props.forecastOf?.(w.key) ?? null} />}
+          {(w) => <LimitBar window={w} cappedBy={exhaustedBlocker(w, c().windows)} earlyReset={props.earlyResetOf?.(w.key) ?? null} forecast={props.forecastOf?.(w.key) ?? null} />}
         </For>
       </div>
     </div>

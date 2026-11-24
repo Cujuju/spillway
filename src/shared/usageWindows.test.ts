@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credential, LimitWindow, UsageSnapshot } from './types';
-import { consumedBetween, exhaustedBlocker, resetBetween, rollPastResets } from './usageWindows';
+import { consumedBetween, earlyResetFor, exhaustedBlocker, resetBetween, rollPastResets } from './usageWindows';
 
 const NOW = Date.parse('2026-10-25T12:00:00Z');
 const win = (resetsAt: string | null, status: LimitWindow['status'] = 'rejected'): LimitWindow => ({
@@ -94,5 +94,41 @@ describe('exhaustedBlocker', () => {
     const all = [g5, gw, p5, pw];
     expect(exhaustedBlocker(p5, all)).toBe(pw);
     expect(exhaustedBlocker(g5, all)).toBeNull();
+  });
+});
+
+describe('earlyResetFor', () => {
+  const sample = (iso: string, resetIso: string) => ({
+    at: iso,
+    used: { a: { w: 10 } },
+    resets: { a: { w: Date.parse(resetIso) } },
+  });
+
+  it('detects a reset that jumped to a new window well before the prior reset', () => {
+    const history = [
+      sample('2026-11-23T22:00:27Z', '2026-11-29T08:30:14Z'),
+      sample('2026-11-23T22:05:27Z', '2026-11-30T20:03:03Z'),
+    ];
+    const er = earlyResetFor(history, 'a', 'w', '2026-11-30T20:03:03Z');
+    expect(er).not.toBeNull();
+    expect(er!.previousResetAt).toBe(Date.parse('2026-11-29T08:30:14Z'));
+    expect(er!.newResetAt).toBe(Date.parse('2026-11-30T20:03:03Z'));
+    expect(er!.aheadByMs).toBeGreaterThan(5 * 24 * 3_600_000);
+  });
+
+  it('returns null after the window rolls over to a later reset', () => {
+    const history = [
+      sample('2026-11-23T22:00:27Z', '2026-11-29T08:30:14Z'),
+      sample('2026-11-23T22:05:27Z', '2026-11-30T20:03:03Z'),
+    ];
+    expect(earlyResetFor(history, 'a', 'w', '2026-12-07T20:03:03Z')).toBeNull();
+  });
+
+  it('ignores normal resets occurring after the prior reset passed', () => {
+    const history = [
+      sample('2026-11-23T18:40:00Z', '2026-11-23T18:41:16Z'),
+      sample('2026-11-23T19:02:24Z', '2026-11-23T23:41:16Z'),
+    ];
+    expect(earlyResetFor(history, 'a', 'w', '2026-11-23T23:41:16Z')).toBeNull();
   });
 });

@@ -1,8 +1,10 @@
 import { Plus, RefreshCw, Search } from 'lucide-solid';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
+import { RESET_GLYPH } from '@shared/resetTime';
 import type { AppSettings } from '@shared/settings';
 import type { Credential } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';
+import { earlyResetFor, type EarlyReset } from '@shared/usageWindows';
 import { AccountPanel } from '../components/AccountPanel';
 import { HoverTip } from '../components/ChartTip';
 import { AccountRow } from '../components/AccountRow';
@@ -12,9 +14,11 @@ import { ALL_PROVIDERS as ALL, ProviderCards } from '../components/ProviderCards
 import { ShowEmailsButton } from '../components/ShowEmailsButton';
 import { Notice, Select } from '../components/ui';
 import { poolWindowKey } from '../lib/forecast';
+import { compactDuration } from '../lib/format';
 import { isString, isStringOrNull, persistedSignal } from '../lib/persisted';
 import { durationChoices, lengthLineId } from '../lib/poolWindows';
-import { proxyStatus, setPage, settings, shownText, snapshot, updateSettings, usageError } from '../store';
+import { providerVar } from '../lib/providers';
+import { history, proxyStatus, setPage, settings, shownText, snapshot, updateSettings, usageError } from '../store';
 import { PageHeader } from '../components/PageHeader';
 
 const ICON_PX = 14;
@@ -44,8 +48,29 @@ export function Dashboard() {
   const [refreshing, setRefreshing] = createSignal(false);
   /** Last reset-credit outcome from a row, until dismissed or replaced. */
   const [rowNotice, setRowNotice] = createSignal<{ tone: 'info' | 'error'; text: string } | null>(null);
+  const [dismissedEarly, setDismissedEarly] = createSignal<Set<string>>(new Set());
 
   const creds = () => snapshot()?.credentials ?? [];
+  const earlyResetMap = createMemo(() => {
+    const h = history();
+    const map = new Map<string, { credential: Credential; label: string; early: EarlyReset }>();
+    for (const c of creds()) {
+      for (const w of c.windows) {
+        const er = earlyResetFor(h, c.id, w.key, w.resetsAt);
+        if (er) map.set(`${c.id}\0${w.key}`, { credential: c, label: w.label, early: er });
+      }
+    }
+    return map;
+  });
+  const earlyResetOf = (c: Credential, key: string) => earlyResetMap().get(`${c.id}\0${key}`)?.early ?? null;
+  const earlyBannerItems = createMemo(() => {
+    const dismissed = dismissedEarly();
+    return [...earlyResetMap().entries()]
+      .filter(([, v]) => provider() === ALL || v.credential.provider === provider())
+      .map(([k, v]) => ({ id: `${k}\0${v.early.newResetAt}`, ...v }))
+      .filter((item) => !dismissed.has(item.id));
+  });
+  const dismissEarlyBanner = () => setDismissedEarly(new Set([...dismissedEarly(), ...earlyBannerItems().map((i) => i.id)]));
   const providers = createMemo(() => {
     const counts = new Map<string, number>();
     for (const c of creds()) counts.set(c.provider, (counts.get(c.provider) ?? 0) + 1);
@@ -92,6 +117,18 @@ export function Dashboard() {
     return longest ? lengthLineId(longest) : null;
   };
   const modelsOf = (id: string) => visibleLines().filter((v) => v.line.id === id).map((v) => v.line.model);
+  const markersOf = (id: string) => {
+    const models = modelsOf(id);
+    return models.flatMap((m) => {
+      const key = m.key();
+      if (!key) return [];
+      const prov = m.provider();
+      return credsOf(prov).flatMap((c) => {
+        const er = earlyResetOf(c, key);
+        return er ? [{ t: er.detectedAt, label: `${RESET_GLYPH} Early reset`, color: providerVar(prov) }] : [];
+      });
+    });
+  };
   // Chart window picker: each length in view, plus a charted scoped line; the tooltip names the providers it charts.
   const chartWindows = createMemo(() => {
     const charted = (id: string) => visibleLines().filter((v) => v.line.id === id).map((v) => providerLabel(v.provider)).join(', ');
@@ -167,6 +204,15 @@ export function Dashboard() {
           <Notice tone="error">Usage lookup failed: {shownText(usageError()!)}</Notice>
         </Match>
       </Switch>
+      <Show when={earlyBannerItems().length > 0}>
+        <Notice>
+          <span class="spacer">
+            <span class="badge compact accent">{RESET_GLYPH} Early reset</span>{' '}
+            {earlyBannerItems().map((item) => `${providerLabel(item.credential.provider)} reset ${item.label} ${compactDuration(item.early.aheadByMs)} ahead of schedule`).join(' · ')}
+          </span>
+          <button class="btn" onClick={dismissEarlyBanner}>Dismiss</button>
+        </Notice>
+      </Show>
       <Show when={rowNotice()}>
         {(n) => (
           <Notice tone={n().tone}>
@@ -202,7 +248,7 @@ export function Dashboard() {
           when={focused()}
           fallback={
             <Show when={!providerCreds().every((c) => c.apiKey)}>
-              <PoolPanel modelsOf={modelsOf} providers={chartProviders()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
+              <PoolPanel modelsOf={modelsOf} markersOf={markersOf} providers={chartProviders()} windows={chartWindows()} line={lineId()} onLine={pickLine} />
             </Show>
           }
         >
@@ -220,7 +266,7 @@ export function Dashboard() {
         {/* Slots: the most limit bars any row shows, so the bars block is as wide as the fullest row. */}
         <div class="account-list" style={{ '--limit-slots': Math.max(1, ...rows().map((c) => c.windows.length)) }}>
           <For each={rows()} fallback={<div class="empty-state">No accounts match “{query()}”.</div>}>
-            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} forecastOf={(key) => forecastOf(c, key)} onNotice={(tone, text) => setRowNotice({ tone, text })} />}
+            {(c) => <AccountRow credential={c} selected={focused()?.id === c.id} onSelect={hasQuota(c) ? () => toggleAccount(c.id) : undefined} forecastOf={(key) => forecastOf(c, key)} earlyResetOf={(key) => earlyResetOf(c, key)} onNotice={(tone, text) => setRowNotice({ tone, text })} />}
           </For>
         </div>
       </Show>

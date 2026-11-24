@@ -579,6 +579,8 @@ th[aria-sort] .sort-btn {
 .client-menu .account-menu-account {
   padding-left: var(--spacing-2);
 }
+.account-menu-provider:hover .account-menu-only,
+.account-menu-provider:focus-within .account-menu-only,
 .account-menu-account:hover .account-menu-only,
 .account-menu-only:focus-visible {
   visibility: visible;

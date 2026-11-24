@@ -37,13 +37,19 @@ export function AccountFilter(props: { groups: AccountGroup[]; value: AccountSco
           {(group) => {
             const keys = () => group.accounts.map((a) => a.key);
             const count = () => keys().filter(shown).length;
+            const groupLabel = () => (group.provider ? providerLabel(group.provider) : OTHER_GROUP);
             return (
               <div class="account-menu-group">
-                <label class="account-menu-row account-menu-provider">
-                  <Check checked={count() === keys().length} mixed={count() > 0 && count() < keys().length} onChange={(on) => set(keys(), on)} />
-                  {group.provider ? <ProviderGlyph provider={group.provider} size="sm" /> : null}
-                  <span>{group.provider ? providerLabel(group.provider) : OTHER_GROUP}</span>
-                </label>
+                <div class="account-menu-row account-menu-provider">
+                  <label class="account-menu-pick">
+                    <Check checked={count() === keys().length} mixed={count() > 0 && count() < keys().length} onChange={(on) => set(keys(), on)} />
+                    {group.provider ? <ProviderGlyph provider={group.provider} size="sm" /> : null}
+                    <span class="truncate">{groupLabel()}</span>
+                  </label>
+                  <button type="button" class="btn ghost account-menu-only" title={`Show only ${groupLabel()}`} onClick={() => props.onChange(keys())}>
+                    Only
+                  </button>
+                </div>
                 <For each={group.accounts}>
                   {(a) => (
                     <div class="account-menu-row account-menu-account">

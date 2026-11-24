@@ -12,6 +12,7 @@ import './styles/account.css';
 import './styles/board.css';
 import './styles/compare.css';
 import './styles/thinking.css';
+import './styles/waste.css';
 import './styles/pages.css';
 import './styles/help.css';
 import './styles/about.css';

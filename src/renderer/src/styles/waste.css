@@ -1,0 +1,189 @@
+/* Activity → Waste: prompt bloat buckets, cost anatomy, cold cache misses, and top burn sessions. */
+
+.waste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  /* Two analysis cards side by side on wide windows, stacked on narrow ones. */
+  --waste-card-min: 340px;
+  --waste-label-col: 96px;
+  --waste-bar-height: 7px;
+  --waste-cost-col: 56px;
+  --waste-share-col: 34px;
+  --waste-count-col: 66px;
+}
+.waste > .card + .card {
+  margin-top: 0;
+}
+
+.waste-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--waste-card-min), 1fr));
+  gap: var(--card-gap);
+}
+
+.waste-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2_5);
+  min-width: 0;
+}
+
+.waste-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.waste-bar-row {
+  display: grid;
+  grid-template-columns: var(--waste-label-col) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-2_5);
+  font-size: var(--text-xs);
+}
+
+.waste-bar-label {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.waste-bar-track {
+  height: var(--waste-bar-height);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.waste-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transition: width var(--duration-bar);
+}
+.waste-bar-fill.amber { background: var(--color-amber); }
+.waste-bar-fill.red { background: var(--color-red); }
+.waste-bar-fill.green { background: var(--color-green); }
+.waste-bar-fill.series { background: var(--color-series-2); }
+
+.waste-bar-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-1_5);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.waste-bar-cost {
+  min-width: var(--waste-cost-col);
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.waste-bar-share {
+  min-width: var(--waste-share-col);
+  text-align: right;
+  color: var(--color-text-secondary);
+}
+.waste-bar-count {
+  min-width: var(--waste-count-col);
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
+.waste-ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: var(--spacing-1) 0 0;
+  font-size: var(--text-xs);
+}
+.waste-ledger :is(dt, dd) {
+  margin: 0;
+  padding: var(--spacing-1_5) 0;
+  border-top: var(--border-width) solid var(--color-divider);
+}
+.waste-ledger dt {
+  padding-right: var(--spacing-2_5);
+  color: var(--color-text-secondary);
+}
+.waste-ledger dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.waste-table-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2_5);
+  padding: var(--spacing-3) var(--spacing-3) var(--spacing-2);
+}
+.waste-table-head .section-label {
+  margin: 0;
+}
+
+.waste-table td.session-col {
+  --fill-col-share: 28%;
+}
+.waste-table td.model-col {
+  color: var(--color-text-secondary);
+}
+.waste-table td.warn {
+  color: var(--color-amber);
+}
+.waste-table td.hot {
+  color: var(--color-red-light);
+}
+
+.waste-drivers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+}
+.waste-driver {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-0_5) var(--spacing-1_5);
+  border-radius: var(--radius-xs);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+.waste-driver.amber {
+  border-color: var(--color-amber-border);
+  background: var(--color-amber-subtle);
+  color: var(--color-amber);
+}
+.waste-driver.red {
+  border-color: var(--color-red-border);
+  background: var(--color-red-subtle);
+  color: var(--color-red-light);
+}
+
+.waste-empty {
+  display: flex;
+  gap: var(--spacing-3);
+  align-items: flex-start;
+  color: var(--color-text-muted);
+}
+.waste-empty h3 {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--color-text);
+}
+.waste-empty p {
+  margin: var(--spacing-1) 0 0;
+}
+.waste-table-empty {
+  padding: var(--spacing-3);
+  margin: 0;
+  border-top: var(--border-width) solid var(--color-divider);
+  font-size: var(--text-xs);
+}

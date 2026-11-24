@@ -142,6 +142,13 @@ export interface Cost {
   uncachedUsd: number;
 }
 
+export interface CostBreakdown extends Cost {
+  uncachedInputUsd: number;
+  cacheWriteUsd: number;
+  cacheReadUsd: number;
+  outputUsd: number;
+}
+
 /** Dated snapshot ids ("…-20260401") price like their model. */
 const DATE_SUFFIX = /-\d{8}$/;
 
@@ -215,10 +222,10 @@ export function cheapestModel(ids: readonly string[]): string | null {
 }
 
 /**
- * List-price cost of one request, or null for a model without a known price. A day's totals hide the
- * long-context step, so `long` rates are skipped.
+ * List-price cost breakdown of one request, or null for an unpriced model.
+ * Components sum to `usd`.
  */
-export function tokenCost(provider: string, model: string, at: string | number, t: TokenCounts, perRequest = true): Cost | null {
+export function tokenCostBreakdown(provider: string, model: string, at: string | number, t: TokenCounts, perRequest = true): CostBreakdown | null {
   const history = priceHistory(model);
   const price = history ? priceAt(history, at) : null;
   if (!price) return null;
@@ -231,7 +238,27 @@ export function tokenCost(provider: string, model: string, at: string | number, 
   const writes = reportsCacheWrites(provider) ? Math.max(0, t.cacheWriteTokens) : 0;
   const longWrites = Math.min(writes, Math.max(0, (apart ? t.cacheWrite1hTokens : t.cacheWriteLongTokens) ?? 0));
   const uncachedInput = apart ? t.inputTokens : Math.max(0, t.inputTokens - t.cachedTokens - writes);
-  const usd = (uncachedInput * rates.input + t.cachedTokens * rates.cacheRead + (writes - longWrites) * rates.cacheWrite + longWrites * rates.cacheWriteLong + t.outputTokens * rates.output) * PER_TOKEN;
-  const uncachedUsd = (prompt * rates.input + t.outputTokens * rates.output) * PER_TOKEN;
-  return { usd, uncachedUsd };
+  const uncachedInputRaw = uncachedInput * rates.input;
+  const cacheReadRaw = t.cachedTokens * rates.cacheRead;
+  const cacheWriteRaw = (writes - longWrites) * rates.cacheWrite + longWrites * rates.cacheWriteLong;
+  const outputRaw = t.outputTokens * rates.output;
+  const usd = (uncachedInputRaw + cacheReadRaw + cacheWriteRaw + outputRaw) * PER_TOKEN;
+  const uncachedUsd = (prompt * rates.input + outputRaw) * PER_TOKEN;
+  return {
+    usd,
+    uncachedUsd,
+    uncachedInputUsd: uncachedInputRaw * PER_TOKEN,
+    cacheWriteUsd: cacheWriteRaw * PER_TOKEN,
+    cacheReadUsd: cacheReadRaw * PER_TOKEN,
+    outputUsd: outputRaw * PER_TOKEN,
+  };
+}
+
+/**
+ * List-price cost of one request, or null for a model without a known price. A day's totals hide the
+ * long-context step, so `long` rates are skipped.
+ */
+export function tokenCost(provider: string, model: string, at: string | number, t: TokenCounts, perRequest = true): Cost | null {
+  const b = tokenCostBreakdown(provider, model, at, t, perRequest);
+  return b ? { usd: b.usd, uncachedUsd: b.uncachedUsd } : null;
 }

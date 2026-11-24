@@ -10,7 +10,9 @@ import { TRACE_MAX_DAYS } from '@shared/sessionTrace';
 import { AddChartSelect, AddComboSelect, type PendingChart } from '../components/ActivityBoard';
 import { createCompareReport } from '../lib/compareReport';
 import { createThinkingReport } from '../lib/thinkingReport';
+import { createWasteReport } from '../lib/wasteReport';
 import { AddThinkingSelect, ThinkingCoverage, ThinkingView, type PendingThinkingTile } from '../components/ThinkingView';
+import { WasteView } from '../components/WasteView';
 import { dayText, isCustomRange, RANGES, rangeSpan, type CustomRange, type Range } from '../lib/activityRange';
 import { ActivityOverview } from '../components/ActivityOverview';
 import { ActivityRequests, type RequestFilter } from '../components/ActivityRequests';
@@ -20,11 +22,11 @@ import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
 import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
-import { activityBuckets, now, proxyStatus, snapshot } from '../store';
+import { activityBuckets, now, proxyStatus, settings, snapshot } from '../store';
 import { PageHeader } from '../components/PageHeader';
 import { appLocale } from '@shared/timeFormat';
 
-const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'drift', label: 'Drift' }, { value: 'totals', label: 'Totals' }, { value: 'thinking', label: 'Thinking' }, { value: 'evals', label: 'Evals' }] as const;
+const VIEWS = [{ value: 'overview', label: 'Overview' }, { value: 'waste', label: 'Waste' }, { value: 'requests', label: 'Requests' }, { value: 'traces', label: 'Traces' }, { value: 'drift', label: 'Drift' }, { value: 'totals', label: 'Totals' }, { value: 'thinking', label: 'Thinking' }, { value: 'evals', label: 'Evals' }] as const;
 const FILTERS: readonly RequestFilter[] = ['all', 'failed'];
 /** Default custom span: the last 30 days. */
 const DEFAULT_CUSTOM_DAYS = 30;
@@ -71,6 +73,7 @@ export function Activity() {
   const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
   const overviewSpan = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
   const compare = createCompareReport(() => view() === 'overview', scope, overviewSpan);
+  const waste = createWasteReport(() => view() === 'waste', scope, overviewSpan, () => range() === 'all');
   const thinking = createThinkingReport(() => view() === 'thinking', scope, overviewSpan);
   const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(() => view() === 'requests', scope);
@@ -86,7 +89,7 @@ export function Activity() {
   const groups = createMemo(() => accountGroups(snapshot()?.credentials ?? [], activityBuckets(), accounts()));
   const clientChoices = createMemo(() => clientOptions(activityBuckets(), clients()));
   const timeFrame = (): TimeFrame | undefined => {
-    if (view() === 'overview' || view() === 'thinking') return { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom };
+    if (view() === 'overview' || view() === 'waste' || view() === 'thinking') return { range: range(), custom: custom(), today: dayText(now()), onRange: setRange, onCustom: setCustom };
     if (view() === 'traces') return { range: traceRange(), custom: traceCustom(), today: dayText(now()), onRange: setTraceRange, onCustom: setTraceCustom, ranges: TRACE_RANGES, maxDays: TRACE_MAX_DAYS };
     if (view() === 'drift') return { range: driftRange(), custom: driftCustom(), today: dayText(now()), onRange: setDriftRange, onCustom: setDriftCustom, ranges: DRIFT_RANGES };
     return undefined;
@@ -125,6 +128,9 @@ export function Activity() {
 
       <Show when={view() === 'overview'}>
         <ActivityOverview scope={scope()} account={accountName} range={range()} span={overviewSpan()} compare={compare()} placing={placing()} onPlacingEnd={() => setPlacing(null)} />
+      </Show>
+      <Show when={view() === 'waste'}>
+        <WasteView report={waste()} retentionDays={settings().activity.retentionDays} />
       </Show>
       <Show when={view() === 'traces'}><SessionTraces account={accountName} source={source()} filters={traceFilters()} onFilters={filterTraces} onLimit={setTraceLimit} onEval={startEval} window={{ range: traceRange(), custom: traceCustom() }} /></Show>
       <Show when={view() === 'drift'}><DriftView scope={scope()} from={driftFrom()} to={driftTo()} /></Show>

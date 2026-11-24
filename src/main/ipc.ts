@@ -284,6 +284,7 @@ const handlers: Handlers = {
     }));
     return activityLog.call('compare', q, { samples: history.all(), credentials });
   },
+  activityWaste: (q) => activityLog.call('waste', q),
   activityCoverage: () => activityLog.call('coverage'),
   traceQuery: (q) => activityLog.call('traceQuery', q ?? {}),
   traceAttempts: (q) => activityLog.call('traceAttempts', q),

@@ -11,6 +11,7 @@ import type { ActivityScope } from './activityScope';
 import type { OlderBuckets, OlderDays, OlderDaysQuery, OlderPage, OlderPageQuery, OlderRead } from './activityOlder';
 import type { ThinkingQuery, ThinkingReport } from './thinking';
 import type { CompareQuery, CompareReport } from './activityCompare';
+import type { WasteQuery, WasteReport } from './activityWaste';
 import type { BuildInfo } from './buildInfo';
 import type { DiagnosticPreview, DiagnosticSaveResult, DiagnosticSelection } from './diagnosticBundle';
 import type { DriftQuery, DriftReport } from './drift';
@@ -135,6 +136,8 @@ export interface DesktopApi {
   activityThinking(query: ThinkingQuery): Promise<ThinkingReport | null>;
   /** Combination cards and Compare table (Overview); null for a malformed query. */
   activityCompare(query: CompareQuery): Promise<CompareReport | null>;
+  /** Prompt bloat, cost anatomy, cold cache misses, and top burn sessions (Waste); null for a malformed query. */
+  activityWaste(query: WasteQuery): Promise<WasteReport | null>;
   /** Share of local client usage that went through the proxy. */
   activityImportState(): Promise<ActivityImportState>;
   archiveMigrationState(): Promise<ArchiveMigrationState>;
@@ -260,6 +263,7 @@ export const INVOKE = {
   activityTotals: 'activity:totals',
   activityThinking: 'activity:thinking',
   activityCompare: 'activity:compare',
+  activityWaste: 'activity:waste',
   activityImportState: 'activity:import-state',
   archiveMigrationState: 'archive:migration-state',
   activityCoverage: 'activity:coverage',

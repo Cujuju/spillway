@@ -40,6 +40,8 @@ if (-not $owned -or (Get-AppProcess)) {
 try {
     # Inherited from an Electron-hosted parent, it makes electron.exe run as plain Node.
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+    # Always expose loopback CDP on the dev build so tools can inspect live state unless overridden.
+    if (-not $env:REMOTE_DEBUGGING_PORT) { $env:REMOTE_DEBUGGING_PORT = '9333' }
     Set-Location -LiteralPath $repo
     Hide-ElectronShortcut
     # The headless console has no window; the log is the only place errors show.

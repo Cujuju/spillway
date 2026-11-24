@@ -163,7 +163,7 @@ describe('estimateQuotaWindows', () => {
     expect(out[0]!.estimate.unmatchedIntervals).toBe(1);
   });
 
-  it('attributes Antigravity 3P vs Gemini and Claude Fable vs general weekly buckets independently', () => {
+  it('attributes Antigravity 3P vs Gemini and isolates Claude non-Fable seven_day by subtracting 50% of seven_day_fable', () => {
     const r5 = BASE + 5 * HOUR;
     const rw = BASE + 7 * 24 * HOUR;
     const claude = claudeCred('claude-1.json', 'c-1', 'Max 20x');
@@ -171,9 +171,12 @@ describe('estimateQuotaWindows', () => {
     // Antigravity: Gemini spend ($10) + 3P Claude spend ($25) in the same interval.
     insertReq(10, { provider: 'antigravity', authIndex: 'ag-1', model: 'gemini-4-neon', effectiveModel: 'gemini-4-neon', costUsd: 10 });
     insertReq(20, { provider: 'antigravity', authIndex: 'ag-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 25 });
-    // Claude: Opus ($14) + Fable ($14) in the same interval; seven_day moves 2% ($1,400/wk), seven_day_fable moves 4% ($350/wk).
-    insertReq(15, { provider: 'claude', authIndex: 'c-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 14 });
+    // Opus $28 (+2% 7d) + Fable $14 (+4% fable, +2% 7d) -> +4% 7d total; net non-Fable = +2% ($1,400/wk).
+    insertReq(15, { provider: 'claude', authIndex: 'c-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 28 });
     insertReq(25, { provider: 'claude', authIndex: 'c-1', model: 'claude-fable-5-2', effectiveModel: 'claude-fable-5-2', costUsd: 14 });
+    // Pure non-Fable and pure Fable five_hour intervals to verify separate 5-hour estimates.
+    insertReq(55, { provider: 'claude', authIndex: 'c-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 20 });
+    insertReq(85, { provider: 'claude', authIndex: 'c-1', model: 'claude-fable-5-2', effectiveModel: 'claude-fable-5-2', costUsd: 10 });
 
     const samples = [
       sample(0, {
@@ -185,9 +188,21 @@ describe('estimateQuotaWindows', () => {
       }),
       sample(40, {
         [agCred.id]: { 'ag_summary:gemini-weekly': 12, 'ag_summary:3p-weekly': 20 },
-        [claude.id]: { five_hour: 20, seven_day: 12, seven_day_fable: 14 },
+        [claude.id]: { five_hour: 20, seven_day: 14, seven_day_fable: 14 },
       }, {
         [agCred.id]: { 'ag_summary:gemini-weekly': rw, 'ag_summary:3p-weekly': rw },
+        [claude.id]: { five_hour: r5, seven_day: rw, seven_day_fable: rw },
+      }),
+      // Pure Opus 5h step: +10% 5h for $20 ($200/5h).
+      sample(70, {
+        [claude.id]: { five_hour: 30, seven_day: 14, seven_day_fable: 14 },
+      }, {
+        [claude.id]: { five_hour: r5, seven_day: rw, seven_day_fable: rw },
+      }),
+      // Pure Fable 5h step: +10% 5h for $10 ($100/5h).
+      sample(100, {
+        [claude.id]: { five_hour: 40, seven_day: 14, seven_day_fable: 14 },
+      }, {
         [claude.id]: { five_hour: r5, seven_day: rw, seven_day_fable: rw },
       }),
     ];
@@ -195,14 +210,50 @@ describe('estimateQuotaWindows', () => {
     const out = estimateQuotaWindows(db, { samples, credentials: [agCred, claude] });
     const agGemini = planReachForCombo(out, 'antigravity', 'gemini-4-neon', new Map([['ag-1', 10]]), null)!;
     const ag3p = planReachForCombo(out, 'antigravity', 'claude-opus-5-5', new Map([['ag-1', 25]]), null)!;
-    const claudeOpus = planReachForCombo(out, 'claude', 'claude-opus-5-5', new Map([['c-1', 14]]), null)!;
-    const claudeFable = planReachForCombo(out, 'claude', 'claude-fable-5-2', new Map([['c-1', 14]]), null)!;
+    const claudeOpus = planReachForCombo(out, 'claude', 'claude-opus-5-5', new Map([['c-1', 48]]), null)!;
+    const claudeFable = planReachForCombo(out, 'claude', 'claude-fable-5-2', new Map([['c-1', 24]]), null)!;
 
     expect(agGemini.weekly?.usdPerFull).toBeCloseTo(500);
     expect(ag3p.weekly?.usdPerFull).toBeCloseTo(250);
-    // Opus uses general seven_day ($28 / 2% = $1,400/wk); Fable binds to seven_day_fable ($14 / 4% = $350/wk).
     expect(claudeOpus.weekly?.usdPerFull).toBeCloseTo(1400);
     expect(claudeFable.weekly?.usdPerFull).toBeCloseTo(350);
+    expect(claudeOpus.fiveHour?.usdPerFull).toBeCloseTo(200);
+    expect(claudeFable.fiveHour?.usdPerFull).toBeCloseTo(100);
+  });
+
+  it('ignores transient poll dips while accepting mid-window Fable reset credits', () => {
+    const rw = BASE + 7 * 24 * HOUR;
+    const claude = claudeCred('claude-1.json', 'c-1', 'Max 5x');
+
+    // Step 1 (0..30): Fable ticks +1% while seven_day stays flat (0.5% fractional carryover).
+    insertReq(10, { provider: 'claude', authIndex: 'c-1', model: 'claude-fable-5-2', effectiveModel: 'claude-fable-5-2', costUsd: 4 });
+    // Step 2 (30..60): Opus spends $35 -> seven_day +3% (2.5% net non-Fable = $1,400/wk).
+    insertReq(45, { provider: 'claude', authIndex: 'c-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 35 });
+    // Step 3 (60..90): Transient poll dip on seven_day_fable (81 -> 70 -> 82) with tiny $1 spend; must not produce a phantom +12% jump.
+    insertReq(80, { provider: 'claude', authIndex: 'c-1', model: 'claude-fable-5-2', effectiveModel: 'claude-fable-5-2', costUsd: 1 });
+    // Step 4 (120..150): After a mid-window Fable reset credit (seven_day 90 -> 40, fable 82 -> 0), Opus spends $28 for +2% ($1,400/wk).
+    insertReq(135, { provider: 'claude', authIndex: 'c-1', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 28 });
+
+    const samples = [
+      sample(0, { [claude.id]: { seven_day: 80, seven_day_fable: 80 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      sample(30, { [claude.id]: { seven_day: 80, seven_day_fable: 81 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      sample(60, { [claude.id]: { seven_day: 83, seven_day_fable: 81 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      // Transient dip on seven_day_fable (-11%, same reset): ignored.
+      sample(75, { [claude.id]: { seven_day: 83, seven_day_fable: 70 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      sample(90, { [claude.id]: { seven_day: 83, seven_day_fable: 82 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      // Real mid-window Fable reset credit (-43% seven_day, -82% fable, same reset): accepted as new baseline.
+      sample(120, { [claude.id]: { seven_day: 40, seven_day_fable: 0 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      sample(150, { [claude.id]: { seven_day: 42, seven_day_fable: 0 } }, { [claude.id]: { seven_day: rw, seven_day_fable: rw } }),
+    ];
+
+    const out = estimateQuotaWindows(db, { samples, credentials: [claude] });
+    const opus = planReachForCombo(out, 'claude', 'claude-opus-5-5', new Map([['c-1', 63]]), null)!;
+    const fable = planReachForCombo(out, 'claude', 'claude-fable-5-2', new Map([['c-1', 5]]), null);
+
+    expect(opus.weekly?.usdPerFull).toBeCloseTo(1400);
+    expect(opus.weekly?.intervals).toBe(2);
+    // The 81 -> 70 -> 82 dip must NOT create a phantom +12% interval on seven_day_fable.
+    expect(fable?.weekly?.usdPerFull).toBeCloseTo(400);
   });
 
   it('coalesces 1% integer ticks and weights multi-account tiers by combo spend while respecting account scope', () => {

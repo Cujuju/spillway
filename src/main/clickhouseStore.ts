@@ -6,6 +6,7 @@ import type { ArchiveFact, ArchiveFactSink, ArchiveStore } from './archiveStore'
 import { pieceBytes, rebuild, type PieceDetail } from './archivePieces';
 import { wireThread } from './archiveStreams';
 import { CDC_SCHEMA, emitCdcCaptureChunks } from './clickhouseCdc';
+import { CLICKHOUSE_DISK_FULL_ERROR } from './clickhouseHttp';
 import { CLICKHOUSE_BASE64_WIRE, CLICKHOUSE_CDC_WIRE_VERSION, CLICKHOUSE_RAW_WIRE_VERSION, encodeCdcPiece, encodeRawPiece, isCdcWireContent, isWireContent, wireContent, type ClickHouseWireVersion, type QueuedPieceContent } from './clickhouseWire';
 import { encodeClickHouseLine, encodeRecordLine, outboxBytes, type OutboxRow } from './clickhouseLine';
 import { backfillRecords, mirrorRecords, recordSpec, resolveRecord, restartRecordCursors, syncRecordTriggers, type MirrorPrune, type MirrorRecord } from './clickhouseRecords';
@@ -83,6 +84,7 @@ export class ClickHouseStore implements ArchiveFactSink {
         this.bindCdcDelivery(destination);
       }
       this.db.prepare('UPDATE clickhouse_export SET config=?,error=NULL').run(JSON.stringify(next));
+      if (prev.deliveryPaused && !next.deliveryPaused) this.db.exec('UPDATE clickhouse_export SET attempts=0,next_attempt=0');
       const everything = !prev.enabled || changed;
       if (next.enabled && next.stores.traces && (everything || !prev.stores.traces || !prev.includeBodies && next.includeBodies)) this.db.prepare('UPDATE clickhouse_export SET backfill_cursor=?').run(JSON.stringify(['', '']));
       if (next.enabled) restartRecordCursors(this.db, prev, next, everything);
@@ -164,9 +166,9 @@ export class ClickHouseStore implements ArchiveFactSink {
     }
   }
   prepare(): ClickHouseBatch | null {
-    if (!this.config().enabled || this.state().next_attempt > Date.now()) return null;
+    const initialConfig = this.config();
+    if (!initialConfig.enabled || initialConfig.deliveryPaused || this.state().next_attempt > Date.now()) return null;
     return this.db.transaction(() => {
-      const initialConfig = this.config();
       const destination = clickhouseDestination(initialConfig);
       this.bindRawDelivery(destination);
       this.bindCdcDelivery(destination);
@@ -257,12 +259,25 @@ export class ClickHouseStore implements ArchiveFactSink {
     })();
   }
   fail(token: string, now: number, error: string): void {
-    if (!token.startsWith(`${clickhouseDestination(this.config())}:`)) return;
+    const config = this.config();
+    if (!token.startsWith(`${clickhouseDestination(config)}:`)) return;
+    if (error === CLICKHOUSE_DISK_FULL_ERROR) {
+      // Server disk is full: persist delivery pause instead of retrying until space is freed.
+      this.db.prepare('UPDATE clickhouse_export SET config=?,attempts=0,next_attempt=0,error=?').run(JSON.stringify({ ...config, deliveryPaused: true }), error.slice(0, 256));
+      return;
+    }
     const delay = Math.min(RETRY_MAX_MS, RETRY_INITIAL_MS * 2 ** Math.min(this.state().attempts, RETRY_MAX_EXPONENT));
     this.db.prepare('UPDATE clickhouse_export SET attempts=attempts+1,next_attempt=?,error=?').run(now + delay * (1 - RETRY_JITTER_FRACTION * Math.random()), error.slice(0, 256));
   }
   mirror(store: ClickHouseStoreName, records: MirrorRecord[], prune: MirrorPrune): void { mirrorRecords(this.db, this.config(), store, records, prune); }
-  retry(): void { this.db.exec('UPDATE clickhouse_export SET next_attempt=0'); }
+  retry(): void {
+    const config = this.config();
+    if (config.deliveryPaused) {
+      this.db.prepare('UPDATE clickhouse_export SET config=?,attempts=0,next_attempt=0,error=NULL').run(JSON.stringify({ ...config, deliveryPaused: false }));
+    } else {
+      this.db.exec('UPDATE clickhouse_export SET next_attempt=0');
+    }
+  }
   clear(): void {
     this.db.transaction(() => {
       this.db.prepare("UPDATE clickhouse_export SET discarded=discarded+?,error=NULL,backfill_cursor=NULL,record_cursors='{}'").run(this.totals().n);

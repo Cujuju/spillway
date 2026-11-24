@@ -35,7 +35,7 @@ export function withClickHousePaused<T>(action: () => Promise<T>, resume = false
 }
 export async function clickhouseStatus(): Promise<ClickHouseStatus> {
   const state = await activityLog.call('clickhouseStatus');
-  return { ...state, hasCredentials: getSecrets().clickhouse?.endpoint === state.config.endpoint, running: clickhouseUploader.running, paused: clickhouseUploader.paused, error: clickhouseUploader.error ?? state.error };
+  return { ...state, hasCredentials: getSecrets().clickhouse?.endpoint === state.config.endpoint, running: clickhouseUploader.running, paused: state.config.deliveryPaused || clickhouseUploader.paused, error: clickhouseUploader.error ?? state.error };
 }
 export async function cancelClickHouse(shutdown = false): Promise<void> {
   pauseGeneration++; shuttingDown ||= shutdown; cancelled = true;
@@ -56,13 +56,14 @@ export function saveClickHouse(raw: ClickHouseConfig, rawCredentials?: ClickHous
     await activityLog.call('clickhouseConfigure', config);
     clickhouseUploader.error = null;
     return clickhouseStatus();
-  }, true);
+  }, !config.deliveryPaused);
 }
 export function diagnoseClickHouse(create: boolean): Promise<string> {
   return withClickHousePaused(async () => {
-    const result = await clickhouseUploader.diagnose((await activityLog.call('clickhouseStatus')).config, create === true);
+    const state = await activityLog.call('clickhouseStatus');
+    const result = await clickhouseUploader.diagnose(state.config, create === true);
     // A passing check makes the stored delivery error stale; upload now instead of after backoff.
-    await activityLog.call('clickhouseRetry');
+    if (!state.config.deliveryPaused) await activityLog.call('clickhouseRetry');
     return result;
   });
 }

@@ -66,6 +66,9 @@ export function ClickHouseSettings() {
         <Toggle value={draft().enabled} onChange={setEnabled} />
       </SettingRow>
       <Show when={draft().enabled}>
+        <SettingRow label="Pause delivery" help="Keeps queuing new data and pinning local bodies, but pauses uploads until resumed.">
+          <Toggle value={draft().deliveryPaused} onChange={(v) => update('deliveryPaused', v)} />
+        </SettingRow>
         <For each={CLICKHOUSE_STORES}>{(name) => (
           <SettingRow label={STORE_ROWS[name].label} help={STORE_ROWS[name].help}>
             <Toggle value={draft().stores[name]} onChange={(v) => setStore(name, v)} />
@@ -103,7 +106,7 @@ export function ClickHouseSettings() {
     </SettingsGroup>
     <SettingsGroup title="Delivery">
       <div class="stat-strip inset">
-        <div class="stat-cell"><div class="stat-label">Status</div><div class="stat-value">{state()}</div><div class="stat-sub">{status()?.backfilling ? 'adding stored requests' : status()?.config.enabled ? 'export on' : 'export off'}</div></div>
+        <div class="stat-cell"><div class="stat-label">Status</div><div class="stat-value">{state()}</div><div class="stat-sub">{status()?.config.deliveryPaused ? 'delivery paused · queuing' : status()?.backfilling ? 'adding stored requests' : status()?.config.enabled ? 'export on' : 'export off'}</div></div>
         <div class="stat-cell" title={SENT_TIP}><div class="stat-label">Sent</div><div class="stat-value">{(status()?.acknowledged ?? 0).toLocaleString(appLocale())}</div><div class="stat-sub">{status()?.lastAcknowledgedAt ? `last ${when(status()?.lastAcknowledgedAt)}` : 'rows'}</div></div>
         <div class="stat-cell" title={QUEUED_TIP}><div class="stat-label">Queued</div><div class="stat-value">{(status()?.queued ?? 0).toLocaleString(appLocale())}</div><div class="stat-sub">{mib(status()?.queuedBytes ?? 0)}{status()?.oldestQueuedAt ? ` · since ${when(status()?.oldestQueuedAt)}` : ''}</div></div>
         <div class="stat-cell"><div class="stat-label">Retries</div><div class="stat-value" classList={{ 'danger-text': !!status()?.attempts }}>{status()?.attempts ?? 0}</div><div class="stat-sub">{status()?.nextAttemptAt ? `next ${when(status()?.nextAttemptAt)}` : 'none pending'}</div></div>
@@ -119,8 +122,8 @@ export function ClickHouseSettings() {
           <button class="btn primary" disabled={busy()} onClick={() => void action(async () => setMessage(await window.api.clickhouseDiagnose(true)))}>{tablesOutdated() ? 'Upgrade tables' : 'Create tables'}</button>
         </Show>
       </SettingRow>
-      <SettingRow label="Outbox" help="Cancel pauses until Retry, Save or restart. Clear discards unsent rows; sent rows stay.">
-        <button class="btn" disabled={busy()} onClick={() => void action(() => window.api.clickhouseRetry())}>Retry / resume</button>
+      <SettingRow label="Outbox" help="Cancel pauses until Retry, Save or restart. Retry / resume also clears Pause delivery. Clear discards unsent rows; sent rows stay.">
+        <button class="btn" disabled={busy()} onClick={() => void action(async () => { await window.api.clickhouseRetry(); update('deliveryPaused', false); })}>Retry / resume</button>
         <button class="btn" onClick={() => void window.api.clickhouseCancel().then(refresh).catch((e) => setError(String(e)))}>Cancel</button>
         <button class="btn danger" disabled={busy()} onClick={() => setConfirming(true)}>Clear outbox</button>
       </SettingRow>

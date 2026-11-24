@@ -11,7 +11,7 @@ import { ClickHouseStore } from './clickhouseStore';
 import { encodeClickHouseLine, type OutboxRow } from './clickhouseLine';
 import { ActivityLog } from './activityStore';
 import { ClickHouseUploader } from './clickhouseUploader';
-import { checkClickHouseSchema, clickhouseRequest, clickhouseTimeout, insertClickHouse, sameClickHouseType } from './clickhouseHttp';
+import { checkClickHouseSchema, CLICKHOUSE_DISK_FULL_CODE, CLICKHOUSE_DISK_FULL_ERROR, clickhouseRequest, clickhouseTimeout, insertClickHouse, sameClickHouseType } from './clickhouseHttp';
 import { parseActivityEvent } from './sse';
 
 const dirs: string[] = [], dbs: Db[] = [], servers: Awaited<ReturnType<typeof startDemoClickHouse>>[] = [];
@@ -337,4 +337,80 @@ it('keeps the source label across a reopen', () => {
 it('reports missing tables so the page can offer Create tables', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('1\n')).mockResolvedValueOnce(new Response('', { status: 404 }));
   await expect(checkClickHouseSchema(config, undefined, new AbortController().signal)).rejects.toThrow(CLICKHOUSE_TABLES_MISSING);
+});
+
+it('pauses delivery losslessly across restarts, pins queued bodies, and resumes without backfill or duplicates', async () => {
+  const s = await server();
+  const { db, archive, store, file } = setup();
+  const cfg = { ...config, endpoint: s.endpoint, includeBodies: true };
+  archive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true });
+  store.configure(cfg); store.prepare();
+  ingest(archive, record(1, { traceId: 'trace-before-pause', request: 'before-pause-body' }));
+  const uploader = new ClickHouseUploader({
+    status: async () => store.status(), prepare: async () => store.prepare(),
+    acknowledge: async (t, d) => store.acknowledge(t, d), fail: async (t, n, e) => store.fail(t, n, e),
+  }, () => undefined);
+  expect(await uploader.runOnce()).toBe(true);
+  const sentBefore = (db.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get() as { n: number }).n;
+  const rowsBefore = s.rows.size;
+  expect(sentBefore).toBeGreaterThan(0);
+
+  store.configure({ ...cfg, deliveryPaused: true });
+  db.close();
+  const reopened = openActivityDb(file, 'ab'.repeat(32)); dbs.push(reopened);
+  let resumedStore!: ClickHouseStore;
+  const resumedArchive = new ArchiveStore(reopened, { append: (f) => resumedStore.append(f) });
+  resumedStore = new ClickHouseStore(reopened, resumedArchive);
+  expect(resumedStore.config().deliveryPaused).toBe(true);
+
+  const oldAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  ingest(resumedArchive, record(2, { id: 'capture-two', traceId: 'trace-while-paused', startedAt: oldAt, request: 'while-paused-body' }));
+  resumedArchive.setPolicy({ ...DEFAULT_ARCHIVE_POLICY, captureBodies: true, retentionDays: 1 });
+  resumedArchive.prune();
+  expect(resumedArchive.detail('trace-while-paused')?.request).toBe('while-paused-body');
+  expect(resumedStore.prepare()).toBeNull();
+  const resumedUploader = new ClickHouseUploader({
+    status: async () => resumedStore.status(), prepare: async () => resumedStore.prepare(),
+    acknowledge: async (t, d) => resumedStore.acknowledge(t, d), fail: async (t, n, e) => resumedStore.fail(t, n, e),
+  }, () => undefined);
+  const insertsBefore = s.requests.filter((r) => r.sql.startsWith('INSERT')).length;
+  expect(await resumedUploader.runOnce()).toBe(false);
+  expect(s.requests.filter((r) => r.sql.startsWith('INSERT')).length).toBe(insertsBefore);
+  const pausedStatus = resumedStore.status();
+  expect(pausedStatus.queued).toBeGreaterThan(0);
+  expect(pausedStatus.queuedBytes).toBeGreaterThan(0);
+  expect(pausedStatus.backfilling).toBe(false);
+
+  resumedStore.configure({ ...cfg, deliveryPaused: false });
+  expect(resumedStore.status().backfilling).toBe(false);
+  expect((reopened.prepare('SELECT count(*) AS n FROM archive_pieces WHERE sent=1').get() as { n: number }).n).toBe(sentBefore);
+  expect(await resumedUploader.runOnce()).toBe(true);
+  expect(resumedStore.status()).toMatchObject({ queued: 0, queuedBytes: 0, acknowledged: pausedStatus.acknowledged + pausedStatus.queued });
+  expect(s.rows.size).toBe(rowsBefore + pausedStatus.queued);
+  expect([...s.rows.values()].filter((r) => r.trace_id === 'trace-before-pause')).toHaveLength(rowsBefore);
+});
+
+it('auto-pauses delivery on ClickHouse NOT_ENOUGH_SPACE and resumes cleanly on retry', async () => {
+  const s = await server();
+  const { store } = setup();
+  store.configure({ ...config, endpoint: s.endpoint }); store.prepare();
+  store.append(fact(1));
+  const uploader = new ClickHouseUploader({
+    status: async () => store.status(), prepare: async () => store.prepare(),
+    acknowledge: async (t, d) => store.acknowledge(t, d), fail: async (t, n, e) => store.fail(t, n, e),
+  }, () => undefined);
+
+  s.behavior.insertStatus = 500; s.behavior.insertExceptionCode = CLICKHOUSE_DISK_FULL_CODE; s.behavior.partialRows = 0;
+  expect(await uploader.runOnce()).toBe(false);
+  expect(store.status()).toMatchObject({ config: { deliveryPaused: true }, queued: 1, attempts: 0, nextAttemptAt: 0, error: CLICKHOUSE_DISK_FULL_ERROR });
+  const insertsAfterPause = s.requests.filter((r) => r.sql.startsWith('INSERT')).length;
+  expect(await uploader.runOnce()).toBe(false);
+  expect(s.requests.filter((r) => r.sql.startsWith('INSERT')).length).toBe(insertsAfterPause);
+
+  s.behavior.insertStatus = 200; s.behavior.insertExceptionCode = ''; s.behavior.partialRows = -1;
+  store.retry();
+  expect(store.status()).toMatchObject({ config: { deliveryPaused: false }, error: null });
+  expect(await uploader.runOnce()).toBe(true);
+  expect(store.status()).toMatchObject({ queued: 0, queuedBytes: 0, acknowledged: 1, error: null });
+  expect(s.rows.size).toBe(1);
 });

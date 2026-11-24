@@ -86,3 +86,18 @@ it('holds an explicit cancellation through Check and Clear, until Retry resumes 
   await service.diagnoseClickHouse(false); expect(service.clickhouseUploader.paused).toBe(true);
   await service.retryClickHouse(); expect(service.clickhouseUploader.paused).toBe(false);
 });
+it('holds persistent delivery pause through Check, reports paused status, and resumes on Retry', async () => {
+  const { s, config } = await setup();
+  const saved = await service.saveClickHouse({ ...config, deliveryPaused: true });
+  expect(saved).toMatchObject({ paused: true, queued: 1, config: { deliveryPaused: true } });
+  await service.cancelClickHouse();
+  expect(await service.clickhouseUploader.runOnce()).toBe(false);
+  expect(s.rows.size).toBe(0);
+  await service.diagnoseClickHouse(false);
+  expect(await service.clickhouseStatus()).toMatchObject({ paused: true, config: { deliveryPaused: true } });
+  await service.retryClickHouse();
+  await service.cancelClickHouse();
+  expect(await service.clickhouseStatus()).toMatchObject({ config: { deliveryPaused: false } });
+  expect(await service.clickhouseUploader.runOnce()).toBe(true);
+  expect(s.rows.size).toBe(1);
+});

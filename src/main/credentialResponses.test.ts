@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCredentialModels, parseRenewAll } from './managementClient';
+import { oauthStartQuery, parseCredentialModels, parseRenewAll } from './managementClient';
 
 describe('parseCredentialModels', () => {
   it('maps the proxy rows and drops rows without an id', () => {
@@ -27,5 +27,17 @@ describe('parseRenewAll', () => {
 
   it('treats a missing result list as nothing renewed', () => {
     expect(parseRenewAll({ ok: true })).toEqual({ renewed: 0, failed: [] });
+  });
+});
+
+describe('oauthStartQuery', () => {
+  it('starts a new account by provider', () => {
+    expect(oauthStartQuery({ provider: 'claude' }).toString()).toBe('provider=claude&is_webui=true');
+  });
+
+  it('binds a re-sign-in to the auth file and lets the proxy resolve its provider', () => {
+    const q = oauthStartQuery({ name: 'claude-1a2b3c4d-a@b.c.json' });
+    expect(q.get('name')).toBe('claude-1a2b3c4d-a@b.c.json');
+    expect(q.has('provider')).toBe(false);
   });
 });

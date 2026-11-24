@@ -1,4 +1,4 @@
-import { Download, KeyRound, ListTree } from 'lucide-solid';
+import { Download, KeyRound, ListTree, LogIn } from 'lucide-solid';
 import { createResource, createSignal, Show } from 'solid-js';
 import type { Credential, CredentialRenewResult } from '@shared/types';
 import { ModelFamilyList } from './ModelFamilyList';
@@ -6,19 +6,21 @@ import { Dialog, ProviderGlyph } from './ui';
 
 const ICON_PX = 14;
 
-/** One line for a renewal: what worked, then each failure with its reason. */
-export function renewSummary(r: CredentialRenewResult): { ok: string | null; error: string | null } {
+/** One line for a renewal: what worked, then each failure with its reason; `failedNames` are the auth files to sign in again. */
+export function renewSummary(r: CredentialRenewResult): { ok: string | null; error: string | null; failedNames: string[] } {
   const ok = r.renewed > 0 ? `Renewed ${r.renewed} ${r.renewed === 1 ? 'login' : 'logins'}.` : null;
   const error = r.failed.length ? `Renewal failed: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}` : null;
-  return { ok, error };
+  return { ok, error, failedNames: r.failed.map((f) => f.name) };
 }
 
-/** Row actions on the Logins table: served models, token renewal and login-file export. */
+/** Row actions on the Logins table: served models, token renewal, sign-in again and login-file export. */
 export function CredentialActions(props: {
   credential: Credential;
   disabled: boolean;
   onDone: (message: string) => void;
-  onError: (message: string) => void;
+  /** `signIn` lists auth files whose renewal failed, so the caller can offer a fresh sign-in. */
+  onError: (message: string, signIn?: string[]) => void;
+  onSignIn: () => void;
 }) {
   const [busy, setBusy] = createSignal(false);
   const [showModels, setShowModels] = createSignal(false);
@@ -38,7 +40,7 @@ export function CredentialActions(props: {
     const { onDone, onError } = props;
     return run(async () => {
       const s = renewSummary(await window.api.renewCredentials(id));
-      if (s.error) onError(s.error);
+      if (s.error) onError(s.error, s.failedNames);
       else if (s.ok) onDone(`${label}: login renewed.`);
     });
   };
@@ -58,6 +60,9 @@ export function CredentialActions(props: {
       </button>
       <button class="btn ghost icon-btn" disabled={props.disabled || busy()} title="Renew login token now" onClick={() => void renew()}>
         <KeyRound size={ICON_PX} class={busy() ? 'spin' : undefined} />
+      </button>
+      <button class="btn ghost icon-btn" disabled={props.disabled} title="Sign in again (replaces this login's tokens)" onClick={() => props.onSignIn()}>
+        <LogIn size={ICON_PX} />
       </button>
       <button class="btn ghost icon-btn" disabled={props.disabled || busy()} title="Export login file" onClick={() => void exportFile()}>
         <Download size={ICON_PX} />

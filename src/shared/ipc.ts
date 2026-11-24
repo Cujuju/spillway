@@ -18,7 +18,7 @@ import type { TestPlanRequest, TestPlan, ThinkingTest } from './thinkingTest';
 import type { CanaryResult, CanaryStatus } from './canary';
 import type { AppSettings } from './settings';
 import type {
-  ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
+  ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, OAuthTarget, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
 import type { ManagedPolicyStatus } from './types';
 
@@ -148,7 +148,7 @@ export interface DesktopApi {
   /** Moves a conversation, and its subagents, to another account of the same provider; its prompt cache starts over. */
   moveConversation(sessionId: string, authIndex: string): Promise<void>;
 
-  oauthStart(provider: string): Promise<OAuthStart>;
+  oauthStart(target: OAuthTarget): Promise<OAuthStart>;
   oauthStatus(state: string): Promise<OAuthStatus>;
   oauthCancel(state: string): Promise<void>;
   setCredentialDisabled(credentialId: string, disabled: boolean): Promise<void>;

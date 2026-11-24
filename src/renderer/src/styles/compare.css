@@ -11,6 +11,8 @@
 .series-2 { --series: var(--color-series-2); }
 .series-3 { --series: var(--color-series-3); }
 .series-4 { --series: var(--color-series-4); }
+.series-5 { --series: var(--color-series-5); }
+.series-6 { --series: var(--color-series-6); }
 
 /* A card's title names its combination: larger than chart labels, in the text colour. */
 .board-tile-head > .section-label:has(> .combo-title) {
@@ -86,6 +88,8 @@
 .table.cmp {
   /* Fits "12.34×" and "−10.0 pt", so values line up whether or not a comparison follows. */
   --multiple-width: 54px;
+  /* Width the combination columns ask for together; the label column takes at least its content. */
+  --combo-share: 96%;
   font-size: var(--text-xs);
 }
 .table.cmp th {
@@ -120,8 +124,8 @@
   color: var(--color-text-secondary);
 }
 .cmp th.combo {
-  /* Four combinations share the width beside the labels. */
-  width: 24%;
+  /* Shown combinations split the width beside the labels evenly; the label column keeps its no-wrap width. */
+  width: calc(var(--combo-share) / var(--combo-columns));
   font-size: var(--text-xs);
   letter-spacing: 0;
   text-transform: none;

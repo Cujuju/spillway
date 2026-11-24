@@ -175,7 +175,7 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
   const unknown = () => props.report.unknownEffort;
   const anyUnmatched = () => columns().some((c) => (c.row.planReach?.weekly?.unmatchedIntervals ?? 0) > 0 || (c.row.planReach?.fiveHour?.unmatchedIntervals ?? 0) > 0);
   return (
-    <table class="table cmp">
+    <table class="table cmp" style={{ '--combo-columns': String(props.shown.length) }}>
       <thead><tr><th />
         <For each={columns()}>{(c) => (
           <th class="num combo" classList={{ base: c.key === base().key }} tabIndex={0} role="button" aria-pressed={c.key === base().key}

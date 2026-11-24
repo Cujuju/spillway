@@ -6,6 +6,7 @@ import { comboName, comboRow, modelName } from '../lib/comboSelection';
 import { coverageStart, daysOf, money, multiple, points, share, spanText } from '../lib/compareFormat';
 import { compactNumber, pct, usd } from '../lib/format';
 import { costText } from './activityFormat';
+import { ProviderGlyph } from './ui';
 import { appLocale } from '@shared/timeFormat';
 
 const PER_MILLION = 1_000_000;
@@ -180,7 +181,7 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
         <For each={columns()}>{(c) => (
           <th class="num combo" classList={{ base: c.key === base().key }} tabIndex={0} role="button" aria-pressed={c.key === base().key}
             onClick={() => props.onBaseline(c.key)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onBaseline(c.key); } }}>
-            <span class="n"><span class={`swatch series-${c.i + 1}`} />{comboName(c.key)}</span> <span class="x blank">0</span>
+            <span class="n"><Show when={c.row.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show>{comboName(c.key)}</span> <span class="x blank">0</span>
             <small><Show when={c.key === base().key} fallback={<span class="act">use as baseline</span>}>baseline</Show> <span class="x blank">0</span></small>
           </th>
         )}</For>

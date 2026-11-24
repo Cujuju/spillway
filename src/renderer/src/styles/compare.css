@@ -1,19 +1,4 @@
 /* ── Activity → Overview: combination cards and Compare (#156) ── */
-/* One series colour per shown combination, by position (tokens.css derives them from the theme). */
-.swatch {
-  display: inline-block;
-  flex: none;
-  width: var(--dot-size);
-  height: var(--dot-size);
-  background: var(--series);
-}
-.series-1 { --series: var(--color-series-1); }
-.series-2 { --series: var(--color-series-2); }
-.series-3 { --series: var(--color-series-3); }
-.series-4 { --series: var(--color-series-4); }
-.series-5 { --series: var(--color-series-5); }
-.series-6 { --series: var(--color-series-6); }
-
 /* A card's title names its combination: larger than chart labels, in the text colour. */
 .board-tile-head > .section-label:has(> .combo-title) {
   font-size: var(--text-sm);
@@ -27,9 +12,6 @@
 }
 .board-tile-head > .section-label.quiet {
   color: var(--color-text-muted);
-}
-.combo-count {
-  font-size: var(--text-xs);
 }
 
 .combo-lead {

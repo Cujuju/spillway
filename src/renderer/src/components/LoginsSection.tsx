@@ -1,5 +1,5 @@
 import { HoverTip } from './ChartTip';
-import { KeyRound, Plus, Trash2, Upload } from 'lucide-solid';
+import { KeyRound, LogIn, Plus, Trash2, Upload } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';
@@ -33,6 +33,10 @@ function statusBadge(c: Credential, at: number) {
 /** Signed-in subscription accounts (the proxy's login files), which the proxy rotates between. */
 export function LoginsSection() {
   const [adding, setAdding] = createSignal(false);
+  /** The login being signed in again; its dialog is bound to that auth file. */
+  const [signingIn, setSigningIn] = createSignal<Credential | null>(null);
+  /** Auth files whose renewal failed; the error notice offers each a fresh sign-in. */
+  const [signInOffers, setSignInOffers] = createSignal<string[]>([]);
   const [deleting, setDeleting] = createSignal<Credential | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [info, setInfo] = createSignal<string | null>(null);
@@ -40,14 +44,15 @@ export function LoginsSection() {
   const creds = () =>
     (snapshot()?.credentials ?? []).filter((c) => !c.apiKey).sort((a, b) => a.provider.localeCompare(b.provider) || a.label.localeCompare(b.label));
 
-  const report = (m: string) => { setError(null); setInfo(m); };
-  const fail = (m: string) => { setInfo(null); setError(m); };
+  const report = (m: string) => { setError(null); setSignInOffers([]); setInfo(m); };
+  const fail = (m: string, signIn: string[] = []) => { setInfo(null); setError(m); setSignInOffers(signIn); };
+  const offered = () => creds().filter((c) => signInOffers().includes(c.name));
   const [renewingAll, setRenewingAll] = createSignal(false);
   const renewAll = async () => {
     setRenewingAll(true);
     await act(async () => {
       const s = renewSummary(await window.api.renewCredentials());
-      if (s.error) fail([s.ok, s.error].filter(Boolean).join(' '));
+      if (s.error) fail([s.ok, s.error].filter(Boolean).join(' '), s.failedNames);
       else report(s.ok ?? 'No accounts have a login token to renew.');
     });
     setRenewingAll(false);
@@ -67,6 +72,7 @@ export function LoginsSection() {
   const act = async (fn: () => Promise<void>) => {
     setError(null);
     setInfo(null);
+    setSignInOffers([]);
     try {
       await fn();
     } catch (e) {
@@ -102,7 +108,16 @@ export function LoginsSection() {
         </Notice>
       </Show>
       <Show when={error()}>
-        <Notice tone="error">{shownText(error()!)}</Notice>
+        <Notice tone="error">
+          <span class="spacer">{shownText(error()!)}</span>
+          <For each={offered()}>
+            {(c) => (
+              <button class="btn" disabled={!running()} onClick={() => setSigningIn(c)}>
+                <LogIn size={ICON_PX} /> Sign in again{offered().length > 1 ? `: ${c.label}` : ''}
+              </button>
+            )}
+          </For>
+        </Notice>
       </Show>
       <Show when={info()}>
         <Notice tone="info">{shownText(info()!)}</Notice>
@@ -172,7 +187,7 @@ export function LoginsSection() {
                   </td>
                   <td class="row-actions">
                     <div class="row-actions-bar">
-                      <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} />
+                      <CredentialActions credential={c} disabled={!running()} onDone={report} onError={fail} onSignIn={() => setSigningIn(c)} />
                       <button class="btn ghost icon-btn" title="Remove account" onClick={() => setDeleting(c)}>
                         <Trash2 size={ICON_PX} />
                       </button>
@@ -187,6 +202,9 @@ export function LoginsSection() {
 
       <Show when={adding()}>
         <AddAccountDialog onClose={() => setAdding(false)} />
+      </Show>
+      <Show when={signingIn()} keyed>
+        {(c) => <AddAccountDialog target={c} onClose={() => { setSigningIn(null); setSignInOffers([]); setError(null); }} />}
       </Show>
       <Show when={deleting()}>
         {(c) => (

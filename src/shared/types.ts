@@ -167,6 +167,9 @@ export interface OAuthStart {
   url: string;
 }
 
+/** A new account for `provider`, or a fresh sign-in for one existing login (renderer credential id). */
+export type OAuthTarget = { provider: string } | { credentialId: string };
+
 export type OAuthStatus =
   | { status: 'wait' }
   | { status: 'ok' }

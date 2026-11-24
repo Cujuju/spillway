@@ -125,9 +125,8 @@ class ManagementClient {
     }
   }
 
-  async startOAuth(provider: string): Promise<OAuthStart> {
-    const q = new URLSearchParams({ provider, is_webui: 'true' });
-    const data = (await this.request('GET', `/oauth/auth-url?${q}`)) as { url?: unknown; state?: unknown };
+  async startOAuth(target: OAuthAuthTarget): Promise<OAuthStart> {
+    const data = (await this.request('GET', `/oauth/auth-url?${oauthStartQuery(target)}`)) as { url?: unknown; state?: unknown };
     if (typeof data?.url !== 'string' || typeof data.state !== 'string') throw new ManagementError('Proxy returned no sign-in URL', 0);
     return { url: data.url, state: data.state };
   }
@@ -231,6 +230,14 @@ export function parseCredentialModels(data: unknown): CredentialModel[] {
   return rows.flatMap((r: Record<string, unknown>) =>
     typeof r?.id === 'string' && r.id ? [{ id: r.id, displayName: optStr(r.display_name), ownedBy: optStr(r.owned_by), ...(typeof r.created === 'number' && Number.isFinite(r.created) && r.created > 0 ? { created: r.created } : {}) }] : [],
   );
+}
+
+/** A new account for a provider, or a re-sign-in bound to one auth file. */
+export type OAuthAuthTarget = { provider: string } | { name: string };
+
+/** `GET /oauth/auth-url` query. A `name` binds the session to that auth file: the proxy refuses another account and overwrites the file. */
+export function oauthStartQuery(target: OAuthAuthTarget): URLSearchParams {
+  return new URLSearchParams({ ...('name' in target ? { name: target.name } : { provider: target.provider }), is_webui: 'true' });
 }
 
 /** Reads `{ results: [{ id, success, error? }] }` from a refresh of every account. */

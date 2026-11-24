@@ -1,6 +1,7 @@
 import { CheckCircle2, ExternalLink, LoaderCircle } from 'lucide-solid';
-import { createSignal, For, Match, onCleanup, Switch } from 'solid-js';
-import type { OAuthStart } from '@shared/types';
+import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import type { Credential, OAuthStart } from '@shared/types';
+import { providerLabel } from '@shared/trayValues';
 import { OAUTH_PROVIDERS } from '../lib/providers';
 import { CopyButton, Dialog, Notice, ProviderGlyph } from './ui';
 
@@ -17,9 +18,9 @@ type Step =
   | { kind: 'done'; provider: string }
   | { kind: 'error'; provider: string | null; message: string };
 
-const labelOf = (id: string | null) => OAUTH_PROVIDERS.find((p) => p.id === id)?.label ?? id ?? '';
-/** Provider picker → sign-in link (copy or open) → poll until the proxy saves the credential. */
-export function AddAccountDialog(props: { onClose: () => void }) {
+const labelOf = (id: string | null) => OAUTH_PROVIDERS.find((p) => p.id === id)?.label ?? providerLabel(id ?? '');
+/** Provider picker → sign-in link → poll until saved. `target` skips the picker and signs that login in again. */
+export function AddAccountDialog(props: { target?: Credential; onClose: () => void }) {
   const [step, setStep] = createSignal<Step>({ kind: 'pick' });
   let timer: ReturnType<typeof setInterval> | undefined;
   let deadline = 0;
@@ -60,7 +61,8 @@ export function AddAccountDialog(props: { onClose: () => void }) {
   const start = async (provider: string) => {
     setStep({ kind: 'starting', provider });
     try {
-      const session = await window.api.oauthStart(provider);
+      const target = props.target;
+      const session = await window.api.oauthStart(target ? { credentialId: target.id } : { provider });
       setStep({ kind: 'waiting', provider, session });
       deadline = Date.now() + SESSION_TIMEOUT_MS;
       timer = setInterval(() => void poll(provider, session), POLL_MS);
@@ -68,6 +70,13 @@ export function AddAccountDialog(props: { onClose: () => void }) {
       setStep({ kind: 'error', provider, message: (e as Error).message });
     }
   };
+
+  const restart = () => {
+    const target = props.target;
+    if (target) void start(target.provider);
+    else setStep({ kind: 'pick' });
+  };
+  onMount(() => { if (props.target) restart(); });
 
   const close = () => {
     cancelSession();
@@ -80,17 +89,19 @@ export function AddAccountDialog(props: { onClose: () => void }) {
 
   return (
     <Dialog
-      title="Add account"
+      title={props.target ? 'Sign in again' : 'Add account'}
       onClose={close}
       actions={
         <Switch fallback={<button class="btn" onClick={close}>Cancel</button>}>
           <Match when={step().kind === 'done'}>
-            <button class="btn" onClick={() => setStep({ kind: 'pick' })}>Add another</button>
+            <Show when={!props.target}>
+              <button class="btn" onClick={() => setStep({ kind: 'pick' })}>Add another</button>
+            </Show>
             <button class="btn primary" onClick={props.onClose}>Done</button>
           </Match>
           <Match when={step().kind === 'error'}>
             <button class="btn" onClick={close}>Close</button>
-            <button class="btn primary" onClick={() => setStep({ kind: 'pick' })}>Try again</button>
+            <button class="btn primary" onClick={restart}>Try again</button>
           </Match>
         </Switch>
       }
@@ -120,10 +131,22 @@ export function AddAccountDialog(props: { onClose: () => void }) {
         <Match when={waiting()}>
           {(w) => (
             <>
-              <p>
-                Open the {labelOf(w().provider)} sign-in link in your browser. Adding another account? A browser signed in to {labelOf(w().provider)}{' '}
-                signs in as that account again, so copy the link into a private window, or sign out first.
-              </p>
+              <Show
+                when={props.target}
+                fallback={
+                  <p>
+                    Open the {labelOf(w().provider)} sign-in link in your browser. Adding another account? A browser signed in to {labelOf(w().provider)}{' '}
+                    signs in as that account again, so copy the link into a private window, or sign out first.
+                  </p>
+                }
+              >
+                {(t) => (
+                  <p>
+                    Open the {labelOf(w().provider)} sign-in link and sign in as <strong>{t().email ?? t().label}</strong>. The proxy replaces this login's
+                    tokens and keeps its settings; another account is refused. If your browser is signed in to a different account, use a private window.
+                  </p>
+                )}
+              </Show>
               <div class="row">
                 <CopyButton value={w().session.url} what="link" label="Copy link" />
                 <button class="btn primary" onClick={() => void window.api.openExternal(w().session.url)}>
@@ -138,7 +161,9 @@ export function AddAccountDialog(props: { onClose: () => void }) {
         </Match>
         <Match when={step().kind === 'done'}>
           <div class="oauth-wait" style={{ color: 'var(--color-green)' }}>
-            <CheckCircle2 size={ICON_PX} /> {labelOf((step() as { provider: string }).provider)} account added. Its limits are being looked up.
+            <CheckCircle2 size={ICON_PX} />{' '}
+            {props.target ? `${props.target.label} signed in again.` : `${labelOf((step() as { provider: string }).provider)} account added.`} Its limits are
+            being looked up.
           </div>
         </Match>
         <Match when={step().kind === 'error'}>

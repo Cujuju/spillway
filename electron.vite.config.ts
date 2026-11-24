@@ -56,7 +56,8 @@ export default defineConfig(({ command }) => {
         // Linked toolkit packages sit outside this tree; one Solid runtime, or their signals never update ours.
         dedupe: ['solid-js'],
       },
-      server: { fs: { allow: ['.', TOOLKIT_DIR] } },
+      // Bind IPv4 loopback explicitly so Vite never collides with IPv4-only apps via ::1/localhost split-brain.
+      server: { host: '127.0.0.1', fs: { allow: ['.', TOOLKIT_DIR] } },
       // The app window and the notification overlay window.
       build: { rollupOptions: { input: { index: resolve('src/renderer/index.html'), notice: resolve('src/renderer/notice.html') } } },
     },

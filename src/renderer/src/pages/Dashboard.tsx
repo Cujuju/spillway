@@ -51,6 +51,20 @@ export function Dashboard() {
   const [dismissedEarly, setDismissedEarly] = createSignal<Set<string>>(new Set());
 
   const creds = () => snapshot()?.credentials ?? [];
+  const providers = createMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of creds()) counts.set(c.provider, (counts.get(c.provider) ?? 0) + 1);
+    return [...counts]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => Number(b.id === PRIMARY_PROVIDER) - Number(a.id === PRIMARY_PROVIDER) || b.count - a.count);
+  });
+  const multi = () => providers().length > 1;
+  // Several providers open on All, so every pool's quota and drain show at once.
+  const provider = () => {
+    const p = chosen();
+    if (p && (providers().some((x) => x.id === p) || (p === ALL && multi()))) return p;
+    return multi() ? ALL : (providers()[0]?.id ?? null);
+  };
   const earlyResetMap = createMemo(() => {
     const h = history();
     const map = new Map<string, { credential: Credential; label: string; early: EarlyReset }>();
@@ -71,20 +85,6 @@ export function Dashboard() {
       .filter((item) => !dismissed.has(item.id));
   });
   const dismissEarlyBanner = () => setDismissedEarly(new Set([...dismissedEarly(), ...earlyBannerItems().map((i) => i.id)]));
-  const providers = createMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of creds()) counts.set(c.provider, (counts.get(c.provider) ?? 0) + 1);
-    return [...counts]
-      .map(([id, count]) => ({ id, count }))
-      .sort((a, b) => Number(b.id === PRIMARY_PROVIDER) - Number(a.id === PRIMARY_PROVIDER) || b.count - a.count);
-  });
-  const multi = () => providers().length > 1;
-  // Several providers open on All, so every pool's quota and drain show at once.
-  const provider = () => {
-    const p = chosen();
-    if (p && (providers().some((x) => x.id === p) || (p === ALL && multi()))) return p;
-    return multi() ? ALL : (providers()[0]?.id ?? null);
-  };
   const credsOf = (id: string) => creds().filter((c) => c.provider === id);
   const focused = () => creds().find((c) => c.id === chosenAccount() && hasQuota(c)) ?? null;
   const toggleAccount = (id: string) => setChosenAccount(focused()?.id === id ? null : id);

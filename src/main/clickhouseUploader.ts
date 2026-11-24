@@ -49,7 +49,7 @@ export class ClickHouseUploader {
       const state = await abortable(this.worker.status(), controller.signal);
       const destination = clickhouseDestination(state.config);
       if (this.verifiedDestination !== destination) this.verifiedDestination = null;
-      if (controller.signal.aborted || !state.config.enabled || state.nextAttemptAt > now) return false;
+      if (controller.signal.aborted || !state.config.enabled || state.config.deliveryPaused || state.nextAttemptAt > now) return false;
       batch = await abortable(this.worker.prepare(), controller.signal);
       if (!batch || controller.signal.aborted) return false;
       if (batch.destination !== destination) throw new Error('ClickHouse batch destination changed; delivery paused');

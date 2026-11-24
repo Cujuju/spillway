@@ -95,7 +95,7 @@ export async function startDemoClickHouse() {
     for (const row of records) { facts.push(row); rows.set(`${row.source_id}:${row.seq}`, row); }
   };
   const events = new EventEmitter();
-  const behavior = { schemaVersion: 2, sorting: 'source_id, at, seq', partition: 'toYYYYMM(at)', status: 200, body: '', partialRows: -1, disconnect: false, schema: true, delayMs: 0, insertStatus: 200, insertBody: '', insertDisconnect: false, insertDelayMs: 0, engine: 'ReplacingMergeTree PARTITION BY toYYYYMM(at) ORDER BY (source_id, at, seq) SETTINGS index_granularity = 8192' };
+  const behavior = { schemaVersion: 2, sorting: 'source_id, at, seq', partition: 'toYYYYMM(at)', status: 200, body: '', partialRows: -1, disconnect: false, schema: true, delayMs: 0, insertStatus: 200, insertBody: '', insertExceptionCode: '', insertDisconnect: false, insertDelayMs: 0, engine: 'ReplacingMergeTree PARTITION BY toYYYYMM(at) ORDER BY (source_id, at, seq) SETTINGS index_granularity = 8192' };
   const server = createServer((req, res) => {
     void (async () => {
       const chunks: Buffer[] = []; let size = 0;
@@ -130,8 +130,9 @@ export async function startDemoClickHouse() {
         }
         if (behavior.disconnect || sql.startsWith('INSERT') && behavior.insertDisconnect) { res.destroy(); return; }
         res.statusCode = sql.startsWith('INSERT') ? behavior.insertStatus : behavior.status;
+        if (sql.startsWith('INSERT') && behavior.insertExceptionCode) res.setHeader('X-ClickHouse-Exception-Code', behavior.insertExceptionCode);
         const reply = sql.startsWith('INSERT') ? behavior.insertBody : behavior.body;
-        if (res.statusCode !== 200 || reply) { res.end(reply); return; }
+        if (res.statusCode !== 200 || reply || sql.startsWith('INSERT') && behavior.insertExceptionCode) { res.end(reply); return; }
         if (sql === 'SELECT 1 FORMAT TabSeparated') res.end('1\n');
         else if (sql.startsWith('DESCRIBE')) res.end(JSON.stringify({ data: behavior.schema ? Object.entries(isPieces ? CLICKHOUSE_PIECE_COLUMNS : CLICKHOUSE_COLUMNS).filter(([name]) => behavior.schemaVersion > 1 || name !== 'record_key').map(([name, type]) => ({ name, type, default_type: '' })) : [] }));
         else if (sql.startsWith('SELECT engine_full')) res.end(JSON.stringify({ data: [{ engine_full: behavior.engine, sorting_key: isPieces && behavior.sorting.replaceAll(' ', '') === 'source_id,at,seq' ? 'source_id,thread_id,seq' : behavior.sorting, partition_key: behavior.partition }] }));

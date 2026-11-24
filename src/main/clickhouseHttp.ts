@@ -3,6 +3,8 @@ import { zstdCompress } from 'node:zlib';
 // Async zlib runs on the libuv threadpool, keeping up-to-8 MiB batches off the main thread.
 const compress = promisify(zstdCompress);
 import { CLICKHOUSE_TABLES_MISSING, CLICKHOUSE_TABLES_OUTDATED, validateClickHouseConfig, validateClickHouseCredentials, type ClickHouseConfig, type ClickHouseCredentials } from '@shared/clickhouse';
+export const CLICKHOUSE_DISK_FULL_CODE = '243';
+export const CLICKHOUSE_DISK_FULL_ERROR = 'ClickHouse server disk is full (NOT_ENOUGH_SPACE); delivery paused';
 const RESPONSE_LIMIT_BYTES = 64 * 1024;
 const QUERY_TIMEOUT_MS = 15_000, UPLOAD_BYTES_PER_SECOND = 32 * 1024;
 export const clickhouseTimeout = (bytes: number): number => QUERY_TIMEOUT_MS + Math.ceil(bytes / UPLOAD_BYTES_PER_SECOND) * 1000;
@@ -48,8 +50,10 @@ export async function clickhouseRequest(config: ClickHouseConfig, credentials: C
     const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]), headers: {
       ...(inserting ? { 'Content-Encoding': 'zstd' } : {}), 'Content-Type': binary ? 'application/octet-stream' : 'text/plain; charset=utf-8', 'X-ClickHouse-User': auth.username, 'X-ClickHouse-Key': auth.password,
     }, body: inserting ? new Uint8Array(await compress(binary ?? Buffer.from(sql))) : sql });
+    const exceptionCode = response.headers.get('X-ClickHouse-Exception-Code');
+    if (exceptionCode === CLICKHOUSE_DISK_FULL_CODE) { await response.body?.cancel(); throw new Error(CLICKHOUSE_DISK_FULL_ERROR); }
     if (!response.ok) { await response.body?.cancel(); throw new Error(`ClickHouse HTTP ${response.status} (${httpFailureHint(response.status)})`); }
-    if (response.headers.get('X-ClickHouse-Exception-Code') && response.headers.get('X-ClickHouse-Exception-Code') !== '0') {
+    if (exceptionCode && exceptionCode !== '0') {
       await response.body?.cancel(); throw new Error('ClickHouse reported a query failure');
     }
     const reader = response.body?.getReader(), decoder = new TextDecoder();
@@ -63,7 +67,7 @@ export async function clickhouseRequest(config: ClickHouseConfig, credentials: C
     return result + decoder.decode();
   } catch (e) {
     if (signal.aborted) throw new Error(read ? 'ClickHouse read cancelled' : 'ClickHouse operation cancelled; delivery may be uncertain');
-    if (e instanceof Error && /^ClickHouse (HTTP|reported|diagnostic|read response)/.test(e.message)) throw e;
+    if (e instanceof Error && /^ClickHouse (HTTP|reported|diagnostic|read response|server disk is full)/.test(e.message)) throw e;
     throw new Error('ClickHouse connection failed or timed out; check endpoint, TLS and network');
   }
 }

@@ -302,4 +302,20 @@ describe('estimateQuotaWindows', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.estimate.usdPerFull).toBeCloseTo(140);
   });
+
+  it('infers windows from usage history when live cred.windows is empty (e.g. after restart or expired token)', () => {
+    const rw = BASE + 7 * 24 * HOUR;
+    const staleClaude: QuotaCredentialContext = { id: 'claude-stale.json', authIndex: 'c-stale', provider: 'claude', planLabel: 'Max 5x', windows: [] };
+    insertReq(10, { provider: 'claude', authIndex: 'c-stale', model: 'claude-opus-5-5', effectiveModel: 'claude-opus-5-5', costUsd: 28 });
+    insertReq(20, { provider: 'claude', authIndex: 'c-stale', model: 'claude-fable-5-2', effectiveModel: 'claude-fable-5-2', costUsd: 14 });
+    const samples = [
+      sample(0, { [staleClaude.id]: { seven_day: 10, seven_day_fable: 10 } }, { [staleClaude.id]: { seven_day: rw, seven_day_fable: rw } }),
+      sample(30, { [staleClaude.id]: { seven_day: 14, seven_day_fable: 14 } }, { [staleClaude.id]: { seven_day: rw, seven_day_fable: rw } }),
+    ];
+    const out = estimateQuotaWindows(db, { samples, credentials: [staleClaude] });
+    const opus = planReachForCombo(out, 'claude', 'claude-opus-5-5', new Map([['c-stale', 28]]), null)!;
+    const fable = planReachForCombo(out, 'claude', 'claude-fable-5-2', new Map([['c-stale', 14]]), null)!;
+    expect(opus.weekly?.usdPerFull).toBeCloseTo(1400);
+    expect(fable.weekly?.usdPerFull).toBeCloseTo(350);
+  });
 });

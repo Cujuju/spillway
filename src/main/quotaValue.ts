@@ -270,6 +270,24 @@ function estimateClaudeSevenDayNonFable(
   return summarizeIntervals(intervals, unmatchedIntervals);
 }
 
+/** Merges live `cred.windows` with keys observed in `samples` so expired or not-yet-polled accounts still compute Plan Reach. */
+function windowsForCredential(
+  cred: QuotaCredentialContext,
+  samples: readonly DatedSample[],
+): { key: string; durationMs: number | null; scoped: boolean }[] {
+  const byKey = new Map(cred.windows.map((w) => [w.key, w]));
+  for (const { sample } of samples) {
+    const used = sample.used[cred.id];
+    if (!used) continue;
+    for (const key of Object.keys(used)) {
+      if (byKey.has(key)) continue;
+      const unscoped = key === 'five_hour' || key === 'seven_day' || key === 'primary' || key === 'secondary';
+      byKey.set(key, { key, durationMs: null, scoped: !unscoped });
+    }
+  }
+  return [...byKey.values()];
+}
+
 /** Computes implied API dollar values ($/100%) for every observed 5-hour and weekly credential window. */
 export function estimateQuotaWindows(db: Db, context: QuotaContext): QuotaWindowSummary[] {
   if (!context.samples.length || !context.credentials.length) return [];
@@ -292,11 +310,12 @@ export function estimateQuotaWindows(db: Db, context: QuotaContext): QuotaWindow
   for (const cred of context.credentials) {
     const events = spendByAuth.get(cred.authIndex);
     if (!events?.length) continue;
-    const hasFableWindow = cred.provider === 'claude' && cred.windows.some((w) => w.key === FABLE_WEEKLY_KEY);
+    const windows = windowsForCredential(cred, sortedSamples);
+    const hasFableWindow = cred.provider === 'claude' && windows.some((w) => w.key === FABLE_WEEKLY_KEY);
     const push = (windowKey: string, bucket: 'fiveHour' | 'weekly', scoped: boolean, estimate: QuotaWindowEstimate | null) => {
       if (estimate) results.push({ credentialId: cred.id, authIndex: cred.authIndex, provider: cred.provider, planLabel: cred.planLabel, windowKey, bucket, scoped, estimate });
     };
-    for (const w of cred.windows) {
+    for (const w of windows) {
       const bucket = windowBucket(cred.provider, w);
       if (!bucket) continue;
       if (cred.provider === 'claude' && w.key === 'seven_day' && hasFableWindow) {

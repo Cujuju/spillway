@@ -29,6 +29,9 @@ const ACCOUNT_SORTS: readonly { value: AppSettings['dashboard']['accountSort']; 
 ];
 /** Claude first: it is the provider this app was built around; the rest by account count. */
 const PRIMARY_PROVIDER = 'claude';
+/** Bounds stored early-reset dismissals in localStorage across restarts. */
+const MAX_DISMISSED_EARLY_RESETS = 50;
+const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every(isString);
 
 const used = (c: Credential, key: string | null) => c.windows.find((w) => w.key === key)?.usedPercent ?? null;
 /** Accounts with an account-wide limit reading have a quota history to chart. */
@@ -48,7 +51,7 @@ export function Dashboard() {
   const [refreshing, setRefreshing] = createSignal(false);
   /** Last reset-credit outcome from a row, until dismissed or replaced. */
   const [rowNotice, setRowNotice] = createSignal<{ tone: 'info' | 'error'; text: string } | null>(null);
-  const [dismissedEarly, setDismissedEarly] = createSignal<Set<string>>(new Set());
+  const [dismissedEarly, setDismissedEarly] = persistedSignal<string[]>('dashboard.dismissedEarlyResets', [], isStringArray);
 
   const creds = () => snapshot()?.credentials ?? [];
   const providers = createMemo(() => {
@@ -78,13 +81,14 @@ export function Dashboard() {
   });
   const earlyResetOf = (c: Credential, key: string) => earlyResetMap().get(`${c.id}\0${key}`)?.early ?? null;
   const earlyBannerItems = createMemo(() => {
-    const dismissed = dismissedEarly();
+    const dismissed = new Set(dismissedEarly());
     return [...earlyResetMap().entries()]
       .filter(([, v]) => provider() === ALL || v.credential.provider === provider())
       .map(([k, v]) => ({ id: `${k}\0${v.early.newResetAt}`, ...v }))
       .filter((item) => !dismissed.has(item.id));
   });
-  const dismissEarlyBanner = () => setDismissedEarly(new Set([...dismissedEarly(), ...earlyBannerItems().map((i) => i.id)]));
+  const dismissEarlyBanner = () =>
+    setDismissedEarly([...new Set([...dismissedEarly(), ...earlyBannerItems().map((i) => i.id)])].slice(-MAX_DISMISSED_EARLY_RESETS));
   const credsOf = (id: string) => creds().filter((c) => c.provider === id);
   const focused = () => creds().find((c) => c.id === chosenAccount() && hasQuota(c)) ?? null;
   const toggleAccount = (id: string) => setChosenAccount(focused()?.id === id ? null : id);

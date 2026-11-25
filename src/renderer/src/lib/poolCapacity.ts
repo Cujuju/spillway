@@ -1,6 +1,5 @@
 import type { ActivityBucket, Credential, HistorySample, LimitWindow } from '@shared/types';
 import { consumedBetween } from '@shared/usageWindows';
-import { consumed } from './poolHistory';
 
 /**
  * Account window sizes, in Pro 5-hour sessions, so plans add up. Session size is the plan multiplier,
@@ -23,6 +22,13 @@ export interface AccountShare {
   cost: Record<string, number>;
 }
 
+export interface PoolEvidence {
+  /** Cached per-account measured session USD (independent of window account-set normalization). */
+  measuredSessionUsd(c: Credential, session: string): number | null;
+  /** Cached per-account consumed percent for a window key across the evidence samples. */
+  consumed(id: string, key: string): number;
+}
+
 /** The account's session window: its shortest account-wide window with a known length. */
 function sessionWindow(c: Credential): LimitWindow | null {
   let best: LimitWindow | null = null;
@@ -34,22 +40,92 @@ function sessionWindow(c: Credential): LimitWindow | null {
 }
 
 /** Session percent per 1% of `key` on one account, or null when history is too thin. */
-function measuredRatio(samples: HistorySample[], id: string, session: string, key: string): number | null {
-  const s = consumed(samples, [id], session);
-  const k = consumed(samples, [id], key);
+function measuredRatio(evidence: PoolEvidence, id: string, session: string, key: string): number | null {
+  const s = evidence.consumed(id, session);
+  const k = evidence.consumed(id, key);
   return s >= MIN_MEASURED_PERCENT && k >= MIN_MEASURED_PERCENT ? s / k : null;
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-/** API cost an account's hourly buckets spent between `from` and `to`, spreading each hour evenly. */
-function costBetween(buckets: ActivityBucket[], from: number, to: number): number {
+type TimedSample = { sample: HistorySample; time: number };
+
+/** API cost an account's grouped hourly buckets spent between `from` and `to`, spreading each hour evenly. */
+function costBetween(buckets: ReadonlyMap<number, number>, from: number, to: number): number {
   let usd = 0;
-  for (const b of buckets) {
-    const overlap = Math.min(to, b.start + HOUR_MS) - Math.max(from, b.start);
-    if (overlap > 0) usd += (b.costUsd * overlap) / HOUR_MS;
+  for (const [start, costUsd] of buckets) {
+    const overlap = Math.min(to, start + HOUR_MS) - Math.max(from, start);
+    if (overlap > 0) usd += (costUsd * overlap) / HOUR_MS;
   }
   return usd;
+}
+
+function windowUsage(samples: TimedSample[], id: string, key: string, loggedFrom = -Infinity, measuredUntil = Infinity) {
+  let percent = 0;
+  let first: TimedSample | undefined;
+  let prev: TimedSample | undefined;
+  for (const next of samples) {
+    const { sample, time } = next;
+    const used = sample.used[id]?.[key];
+    if (used === undefined || time < loggedFrom || time > measuredUntil) continue;
+    if (prev) {
+      const reset = prev.sample.resets?.[id]?.[key];
+      // The missing-next-reset case uses the parsed timestamp instead of parsing again.
+      if (reset !== undefined && sample.resets?.[id]?.[key] === undefined) {
+        percent += reset <= time ? used : Math.max(0, used - prev.sample.used[id]![key]!);
+      } else {
+        percent += consumedBetween(prev.sample, sample, id, key) ?? 0;
+      }
+    }
+    first ??= next;
+    prev = next;
+  }
+  return { percent, from: first?.time ?? 0, to: prev?.time ?? 0 };
+}
+
+export function preparePoolEvidence(samples: HistorySample[], buckets: ActivityBucket[], measuredUntil = Infinity): PoolEvidence {
+  const sorted = samples.map((sample) => ({ sample, time: Date.parse(sample.at) }));
+  if (sorted.some(({ time }, i) => i > 0 && time < sorted[i - 1]!.time)) sorted.sort((a, b) => a.time - b.time);
+
+  let loggedFrom = Infinity;
+  const hourly = new Map<ActivityBucket['authIndex'], Map<number, number>>();
+  for (const b of buckets) {
+    if (b.wholeDay) continue;
+    loggedFrom = Math.min(loggedFrom, b.start);
+    const hours = hourly.get(b.authIndex) ?? new Map<number, number>();
+    hours.set(b.start, (hours.get(b.start) ?? 0) + b.costUsd);
+    hourly.set(b.authIndex, hours);
+  }
+
+  const sessions = new Map<string, number | null>();
+  const windows = new Map<string, number>();
+  return {
+    measuredSessionUsd(c, session) {
+      const key = `${c.authIndex}\0${c.id}\0${session}`;
+      const cached = sessions.get(key);
+      if (cached !== undefined) return cached;
+      let result = null;
+      const mine = hourly.get(c.authIndex);
+      if (mine) {
+        const { percent, from, to } = windowUsage(sorted, c.id, session, loggedFrom, measuredUntil);
+        if (percent >= MIN_SIZED_PERCENT) {
+          // Consecutive readings partition one span, so scan the account's buckets once for its total cost.
+          const usd = costBetween(mine, from, to);
+          if (usd > 0) result = (usd / percent) * FULL;
+        }
+      }
+      sessions.set(key, result);
+      return result;
+    },
+    consumed(id, key) {
+      const cacheKey = `${id}\0${key}`;
+      const cached = windows.get(cacheKey);
+      if (cached !== undefined) return cached;
+      const { percent } = windowUsage(sorted, id, key);
+      windows.set(cacheKey, percent);
+      return percent;
+    },
+  };
 }
 
 /**
@@ -57,22 +133,7 @@ function costBetween(buckets: ActivityBucket[], from: number, to: number): numbe
  * MIN_SIZED_PERCENT. Use outside the proxy moves the window without cost, so it reads low.
  */
 export function measuredSessionUsd(samples: HistorySample[], buckets: ActivityBucket[], c: Credential, session: string): number | null {
-  const hourly = buckets.filter((b) => !b.wholeDay);
-  if (!hourly.length) return null;
-  const loggedFrom = Math.min(...hourly.map((b) => b.start));
-  const mine = hourly.filter((b) => b.authIndex === c.authIndex);
-  let usd = 0;
-  let percent = 0;
-  let prev: HistorySample | undefined;
-  for (const s of samples) {
-    if (s.used[c.id]?.[session] === undefined || Date.parse(s.at) < loggedFrom) continue;
-    if (prev) {
-      percent += consumedBetween(prev, s, c.id, session) ?? 0;
-      usd += costBetween(mine, Date.parse(prev.at), Date.parse(s.at));
-    }
-    prev = s;
-  }
-  return percent >= MIN_SIZED_PERCENT && usd > 0 ? (usd / percent) * FULL : null;
+  return preparePoolEvidence(samples, buckets).measuredSessionUsd(c, session);
 }
 
 /**
@@ -80,9 +141,13 @@ export function measuredSessionUsd(samples: HistorySample[], buckets: ActivityBu
  * the known-plan accounts' dollars per Pro session. Otherwise Pro-sized.
  */
 export function sessionSizes(samples: HistorySample[], buckets: ActivityBucket[], accounts: Credential[]): Map<string, number> {
+  return sizesFromEvidence(accounts, preparePoolEvidence(samples, buckets));
+}
+
+function sizesFromEvidence(accounts: Credential[], evidence: PoolEvidence): Map<string, number> {
   const usd = new Map(accounts.map((c) => {
     const session = sessionWindow(c);
-    return [c.id, session ? measuredSessionUsd(samples, buckets, c, session.key) : null] as const;
+    return [c.id, session ? evidence.measuredSessionUsd(c, session.key) : null] as const;
   }));
   const multiplier = (c: Credential) => c.plan?.multiplier ?? null;
   const usdPerPro = mean(accounts.flatMap((c) => (multiplier(c) && usd.get(c.id) ? [usd.get(c.id)! / multiplier(c)!] : [])));
@@ -102,14 +167,14 @@ export function sessionSizes(samples: HistorySample[], buckets: ActivityBucket[]
  * Per-account share of the pool for `key` and the cost of 1 pool-percent in each window.
  * Uses all of `samples` and `buckets`: plans change rarely.
  */
-export function poolShares(samples: HistorySample[], credentials: Credential[], key: string, buckets: ActivityBucket[]): Map<string, AccountShare> {
+export function poolShares(samples: HistorySample[], credentials: Credential[], key: string, buckets: ActivityBucket[], evidence = preparePoolEvidence(samples, buckets)): Map<string, AccountShare> {
   const accounts = credentials.filter((c) => !c.disabled && c.windows.some((w) => w.key === key && w.usedPercent !== null));
   const measured = new Map<string, Map<string, number>>();
   for (const c of accounts) {
     const session = sessionWindow(c);
     const ratios = new Map<string, number>();
     for (const w of c.windows) {
-      const r = session && w.key !== session.key ? measuredRatio(samples, c.id, session.key, w.key) : null;
+      const r = session && w.key !== session.key ? measuredRatio(evidence, c.id, session.key, w.key) : null;
       if (r !== null) ratios.set(w.key, r);
     }
     measured.set(c.id, ratios);
@@ -123,7 +188,7 @@ export function poolShares(samples: HistorySample[], credentials: Credential[], 
     return of(accounts.filter((x) => c.plan && x.plan?.tier === c.plan.tier)) ?? of(accounts);
   };
   // For a scoped `key`, other traffic also moves the session window, so its size runs high.
-  const session = sessionSizes(samples, buckets, accounts);
+  const session = sizesFromEvidence(accounts, evidence);
   // Unknown ratios keep plan weighting; remaining quota cannot be converted, but exhaustion still blocks use.
   const sizes = new Map(accounts.map((c) => {
     const multiplier = session.get(c.id)!;

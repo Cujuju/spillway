@@ -49,7 +49,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 `pnpm lint && pnpm typecheck && pnpm test && pnpm smoke` (`smoke` builds first). Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
 Never report done, or commit, without a passing `pnpm smoke` this session; quote its `smoke: ok` line. It boots the built app on a throwaway profile and the fake proxy, opens every page, and fails on a crash or uncaught renderer error. It doesn't cover the `electron-vite dev` server: after changing `electron.vite.config.ts`, also start `pnpm dev`.
 `pnpm lint` is oxlint with the StockApp/MoManga/ChattyPop rule set (`.oxlintrc.json`); warnings fail it.
-`pnpm typecheck` first rebuilds stale `link:` toolkit packages (`scripts/build-linked.mjs`): their types come from their gitignored `dist/`. Never rebuild them unconditionally: the toolkit checkout is shared, and rewriting its `dist/` restarts other apps running from it.
+`pnpm typecheck` first rebuilds the `link:` toolkit packages (`scripts/build-linked.mjs`): their types come from their gitignored `dist/`.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.
 
 ## Worktrees

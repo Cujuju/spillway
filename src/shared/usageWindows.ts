@@ -122,6 +122,8 @@ export function earlyResetFor(
     const prevReset = prev.resets?.[id]?.[key];
     const nextReset = next.resets?.[id]?.[key];
     if (prevReset === undefined || nextReset === undefined || sameReset(prevReset, nextReset)) continue;
+    // An unused window is provisional: idle Codex reports `now + duration`, which moves every reading. Nothing reset.
+    if (!((prev.used[id]?.[key] ?? 0) > 0)) continue;
     const detectedAt = Date.parse(next.at);
     const aheadByMs = prevReset - detectedAt;
     if (aheadByMs < MIN_EARLY_RESET_MS) continue;

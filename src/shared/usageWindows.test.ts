@@ -131,4 +131,16 @@ describe('earlyResetFor', () => {
     ];
     expect(earlyResetFor(history, 'a', 'w', '2026-11-23T23:41:16Z')).toBeNull();
   });
+
+  it('ignores an idle window whose provisional reset moves forward every reading', () => {
+    // Recorded Codex weekly: reset at 20:50, then idle at 0% with reset = reading time + 7 days.
+    const at = (iso: string, resetIso: string, used: number) => ({ ...sample(iso, resetIso), used: { a: { w: used } } });
+    const history = [
+      at('2026-11-24T20:50:00Z', '2026-11-24T21:08:05Z', 100),
+      at('2026-11-24T20:55:00Z', '2026-12-01T20:50:10Z', 0),
+      at('2026-11-24T21:10:00Z', '2026-12-01T21:05:13Z', 0),
+      at('2026-11-24T21:25:00Z', '2026-12-01T21:20:49Z', 0),
+    ];
+    expect(earlyResetFor(history, 'a', 'w', '2026-12-01T21:20:49Z')).toBeNull();
+  });
 });

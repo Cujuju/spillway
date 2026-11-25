@@ -157,8 +157,15 @@ const DATE_SUFFIX = /-\d{8}$/;
 
 const stableJson = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
   v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
-/** Current rates per model from the downloaded catalog (main/priceCatalog.ts). */
-export type CatalogPrices = Record<string, ModelPrice>;
+/** Dated price history per model from the downloaded catalog (main/priceCatalog.ts), oldest first like the bundled table. */
+export type CatalogPrices = Record<string, readonly ModelPrice[]>;
+
+/** Same rates, tiers and context steps, ignoring when they started. */
+export function samePrice(a: ModelPrice, b: ModelPrice): boolean {
+  const { from: _a, ...ra } = a;
+  const { from: _b, ...rb } = b;
+  return stableJson(ra) === stableJson(rb);
+}
 /** `fetchedAt` is null before the first successful download. */
 export interface PriceCatalogInfo { fetchedAt: string | null; models: number }
 export interface PriceCatalogState { prices: CatalogPrices; info: PriceCatalogInfo }
@@ -169,7 +176,7 @@ let tableSnapshot = stableJson(PRICES);
 /** Prices models the bundled table lacks; bundled entries keep their dated history. Every thread that prices installs the same catalog. */
 export function installCatalogPrices(catalog: CatalogPrices): void {
   const merged: Record<string, readonly ModelPrice[]> = { ...PRICES };
-  for (const [id, price] of Object.entries(catalog)) if (!Object.hasOwn(PRICES, id)) merged[id] = [{ ...price, from: null }];
+  for (const [id, history] of Object.entries(catalog)) if (!Object.hasOwn(PRICES, id) && history.length) merged[id] = history;
   table = merged;
   tableSnapshot = stableJson(merged);
 }

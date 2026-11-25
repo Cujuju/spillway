@@ -1,10 +1,9 @@
-/**
- * Daily LiteLLM price catalog: prices models the bundled table (shared/modelPrices.ts) lacks, cached on disk so
- * pricing survives offline launches. The bundled table stays authoritative where both list a model.
- */
+/** Daily LiteLLM catalog for models the bundled table lacks. The cache file is their dated price history. */
+
+// Residual: a change starts on the UTC day it is first downloaded. Deleting the cache resets history to current rates.
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { installCatalogPrices, type CatalogPrices, type PriceCatalogInfo } from '@shared/modelPrices';
+import { installCatalogPrices, samePrice, type CatalogPrices, type ModelPrice, type PriceCatalogInfo } from '@shared/modelPrices';
 import { catalogFromLiteLLM } from './litellmPrices';
 
 export const LITELLM_PRICES_URL = 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
@@ -12,12 +11,29 @@ export const LITELLM_PRICES_URL = 'https://raw.githubusercontent.com/BerriAI/lit
 export const CATALOG_REFRESH_MS = 24 * 60 * 60 * 1000;
 /** A failed download retries hourly, so an outage costs one small request an hour. */
 export const CATALOG_RETRY_MS = 60 * 60 * 1000;
+/** "YYYY-MM-DD" of an ISO timestamp: price entries start on UTC dates (modelPrices.priceAt). */
+const UTC_DATE_LENGTH = 10;
 /** The file is ~1.5 MB; a healthy download takes a few seconds. */
 const REQUEST_TIMEOUT_MS = 60_000;
-/** Bump when catalogFromLiteLLM's output changes, so an older cache downloads again. */
-const CACHE_FORMAT = 1;
+/** Bump when the cache's shape changes, so an older cache downloads again. 2: dated histories. */
+const CACHE_FORMAT = 2;
 
 interface CachedCatalog { format: number; fetchedAt: string; prices: CatalogPrices }
+
+/** Changed rates start on `day` (UTC); earlier requests keep the old price. First rates cover all history; dropped models keep theirs. */
+export function mergeCatalog(previous: CatalogPrices, latest: Record<string, ModelPrice>, day: string): CatalogPrices {
+  const merged: Record<string, readonly ModelPrice[]> = { ...previous };
+  for (const [id, price] of Object.entries(latest)) {
+    const history = previous[id] ?? [];
+    const last = history.at(-1);
+    if (!last) merged[id] = [{ ...price, from: null }];
+    else if (samePrice(last, price)) continue;
+    // A second change on the same day replaces that day's entry.
+    else if (last.from === day) merged[id] = [...history.slice(0, -1), { ...price, from: day }];
+    else merged[id] = [...history, { ...price, from: day }];
+  }
+  return merged;
+}
 
 export interface PriceCatalogDeps {
   file: string;
@@ -51,10 +67,12 @@ export class PriceCatalog extends EventEmitter<{ change: [CatalogPrices] }> {
   async refresh(): Promise<boolean> {
     const res = await this.deps.fetch(LITELLM_PRICES_URL, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`HTTP ${res.status} from ${LITELLM_PRICES_URL}`);
-    const prices = catalogFromLiteLLM(await res.json());
-    if (!Object.keys(prices).length) throw new Error('LiteLLM price file lists no first-party models');
+    const latest = catalogFromLiteLLM(await res.json());
+    if (!Object.keys(latest).length) throw new Error('LiteLLM price file lists no first-party models');
+    const fetchedAt = new Date(this.now()).toISOString();
+    const prices = mergeCatalog(this.prices(), latest, fetchedAt.slice(0, UTC_DATE_LENGTH));
     const changed = JSON.stringify(prices) !== JSON.stringify(this.prices());
-    this.cached = { format: CACHE_FORMAT, fetchedAt: new Date(this.now()).toISOString(), prices };
+    this.cached = { format: CACHE_FORMAT, fetchedAt, prices };
     this.deps.write(this.deps.file, JSON.stringify(this.cached));
     if (changed) {
       installCatalogPrices(prices);
@@ -79,7 +97,7 @@ export class PriceCatalog extends EventEmitter<{ change: [CatalogPrices] }> {
     try {
       const parsed = JSON.parse(readFileSync(this.deps.file, 'utf8')) as Partial<CachedCatalog>;
       const valid = parsed.format === CACHE_FORMAT && typeof parsed.fetchedAt === 'string' && !Number.isNaN(Date.parse(parsed.fetchedAt))
-        && !!parsed.prices && typeof parsed.prices === 'object';
+        && !!parsed.prices && typeof parsed.prices === 'object' && Object.values(parsed.prices).every(Array.isArray);
       return valid ? parsed as CachedCatalog : null;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('[prices] cached catalog unreadable; downloading again:', error);

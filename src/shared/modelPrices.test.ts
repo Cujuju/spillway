@@ -25,13 +25,21 @@ describe('installCatalogPrices', () => {
   afterEach(() => installCatalogPrices({}));
   it('prices models the bundled table lacks and marks only them for repricing', () => {
     const before = priceTableSnapshot();
-    installCatalogPrices({ 'gpt-9-test': { from: '2030-01-01', rates } });
+    installCatalogPrices({ 'gpt-9-test': [{ from: null, rates }] });
     expect(tokenCost('codex', 'gpt-9-test', '2026-11-24T00:00:00Z', counts)!.usd).toBeCloseTo(1);
     expect([...repriceStart(before, priceTableSnapshot())]).toEqual([['gpt-9-test', null]]);
   });
+  it('prices each request at the catalog rate in effect that day and reprices only from the change', () => {
+    installCatalogPrices({ 'gpt-9-test': [{ from: null, rates }] });
+    const before = priceTableSnapshot();
+    installCatalogPrices({ 'gpt-9-test': [{ from: null, rates }, { from: '2026-12-01', rates: { ...rates, input: 4 } }] });
+    expect(tokenCost('codex', 'gpt-9-test', '2026-11-30T23:00:00Z', counts)!.usd).toBeCloseTo(1);
+    expect(tokenCost('codex', 'gpt-9-test', '2026-12-01T01:00:00Z', counts)!.usd).toBeCloseTo(4);
+    expect([...repriceStart(before, priceTableSnapshot())]).toEqual([['gpt-9-test', '2026-12-01']]);
+  });
   it('keeps bundled entries over the catalog', () => {
     const bundled = tokenCost('codex', 'gpt-6.2-sol', '2026-11-24T00:00:00Z', counts)!.usd;
-    installCatalogPrices({ 'gpt-6.2-sol': { from: null, rates } });
+    installCatalogPrices({ 'gpt-6.2-sol': [{ from: null, rates }] });
     expect(tokenCost('codex', 'gpt-6.2-sol', '2026-11-24T00:00:00Z', counts)!.usd).toBe(bundled);
   });
 });

@@ -2,7 +2,7 @@
  * Converts LiteLLM's public price file (model_prices_and_context_window.json) into Spillway's price shape.
  * Only first-party OpenAI, Anthropic and Gemini entries: resellers' rates are not list prices.
  */
-import { CLAUDE_LONG_WRITE_MULTIPLIER, type CatalogPrices, type ModelPrice, type Rates } from '@shared/modelPrices';
+import { CLAUDE_LONG_WRITE_MULTIPLIER, type ModelPrice, type Rates } from '@shared/modelPrices';
 
 /** LiteLLM providers whose entries carry the provider's own list prices. */
 const FIRST_PARTY = new Set(['openai', 'anthropic', 'gemini']);
@@ -59,9 +59,9 @@ function modelPrice(entry: Entry, provider: string): ModelPrice | null {
 }
 
 /** First-party models by bare id ("gemini/gemini-4-neon" → "gemini-4-neon"); a bare key wins over a prefixed duplicate. */
-export function catalogFromLiteLLM(file: unknown): CatalogPrices {
+export function catalogFromLiteLLM(file: unknown): Record<string, ModelPrice> {
   if (!file || typeof file !== 'object' || Array.isArray(file)) throw new Error('LiteLLM price file is not an object');
-  const out: CatalogPrices = {};
+  const out: Record<string, ModelPrice> = {};
   const bare = new Set<string>();
   for (const [key, value] of Object.entries(file as Record<string, unknown>)) {
     if (!value || typeof value !== 'object') continue;

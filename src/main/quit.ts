@@ -53,7 +53,14 @@ function relaunchDev(): void {
   const root = app.getAppPath();
   const child = process.platform === 'win32'
     // The Start Menu launcher, told to wait for this app and its `pnpm dev` to exit first.
-    ? spawn('conhost.exe', ['--headless', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'scripts', 'dev-launch.ps1'), '-AfterExit'], { cwd: root, detached: true, stdio: 'ignore' })
+    ? spawn('conhost.exe', [
+        '--headless', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-File', path.join(root, 'scripts', 'dev-launch.ps1'),
+        '-Name', 'SpillwayDev', '-TaskName', 'SpillwayDev',
+        '-MutexName', 'Local\\SpillwayDevLauncher', '-LogName', 'spillway-dev-shortcut.log',
+        '-SingleInstance', '-HideElectronShortcut', '-DefaultEnv', 'REMOTE_DEBUGGING_PORT=9333',
+        '-AfterExit',
+      ], { cwd: root, detached: true, stdio: 'ignore' })
     // Unix launchers wait for this process before restarting the dev app.
     : spawn(process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh', ['-l', '-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; unset ELECTRON_RUN_AS_NODE; export REMOTE_DEBUGGING_PORT="\${REMOTE_DEBUGGING_PORT:-9333}"; exec pnpm dev >"\${TMPDIR:-/tmp}/spillway-dev.log" 2>&1`], { cwd: root, detached: true, stdio: 'ignore' });
   child.unref();

@@ -10,19 +10,21 @@ import { appIdentity } from '../src/shared/app.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { id, name } = appIdentity(true);
+export const WINDOWS_TASK_NAME = 'SpillwayDev';
 
 function windowsShortcut() {
   if (!process.env.APPDATA || !process.env.SystemRoot) throw new Error('APPDATA and SystemRoot must be set');
   const file = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${name}.lnk`);
   // conhost --headless runs PowerShell without a console window.
   const target = path.join(process.env.SystemRoot, 'System32', 'conhost.exe');
-  const args = `--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${path.join(root, 'scripts', 'dev-launch.ps1')}"`;
+  const args = `--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${path.join(root, 'scripts', 'dev-launch.ps1')}" -Name SpillwayDev -TaskName ${WINDOWS_TASK_NAME} -MutexName Local\\SpillwayDevLauncher -LogName spillway-dev-shortcut.log -SingleInstance -HideElectronShortcut -DefaultEnv REMOTE_DEBUGGING_PORT=9333`;
   // Windows PowerShell 5 ships with Windows, so no extra runtime is needed.
   execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'scripts', 'dev-shortcut.ps1'),
     '-Path', file, '-Target', target, '-Arguments', args, '-WorkingDirectory', root, '-Icon', path.join(root, 'resources', 'icon.ico'),
-    '-AppId', id, '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml'),
+    '-AppId', id, '-Description', 'Spillway Dev, run from the repo', '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml'),
     // The `electron` package exports its exe's real path, the one `pnpm dev` runs.
-    '-ElectronExe', createRequire(import.meta.url)('electron') as string], { stdio: 'inherit' });
+    '-ElectronExe', createRequire(import.meta.url)('electron') as string,
+    '-TaskName', WINDOWS_TASK_NAME], { stdio: 'inherit' });
   return file;
 }
 

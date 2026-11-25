@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, open, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, open, readdir, stat, utimes } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { clientLogRoots, importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
+import { clientLogFiles, clientLogRoots, importClientFile, startClientLogSync, type ImportSink } from './clientLogSync';
 import type { ActivityEvent } from '@shared/types';
 import { createZstdDecompress, zstdCompressSync } from 'node:zlib';
 import { parseClientLine } from './clientLogParser';
@@ -10,6 +10,25 @@ import { parseClientLine } from './clientLogParser';
 vi.mock('node:fs/promises', { spy: true });
 vi.mock('node:zlib', { spy: true });
 vi.mock('./clientLogParser', { spy: true });
+
+it('walks canonical Antigravity logs without reading skipped subtrees', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-walk-'));
+  const session = path.join(dir, 'brain', 'session');
+  const skipped = path.join(session, '.system_generated', 'steps');
+  const logs = path.join(session, 'logs');
+  const expected = ['transcript.jsonl', 'transcript.jsonl.zst'].map((name) => path.join(logs, name));
+  try {
+    await mkdir(skipped, { recursive: true });
+    await mkdir(logs, { recursive: true });
+    await writeFile(path.join(skipped, 'transcript.jsonl'), '');
+    for (const file of expected) await writeFile(file, '');
+    vi.mocked(readdir).mockClear();
+    const files: string[] = [];
+    for await (const file of clientLogFiles(dir, 'antigravity')) files.push(file);
+    expect(files.sort()).toEqual(expected);
+    expect(vi.mocked(readdir).mock.calls.map(([dir]) => dir)).not.toContain(skipped);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 it('resumes complete UTF-8 lines, checkpoints context, tolerates truncation and deletion', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'spillway-sync-'));

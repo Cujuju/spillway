@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { antigravityLogContext, antigravityOAuthTokenPath, antigravitySummaryDbPath, clientLogKey, isClientLogFile } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, antigravitySummaryDbPath, clientLogKey, isClientLogFile, shouldSkipClientLogPath } from './clientLogPaths';
 import { openActivityDb } from './activityDb';
 import { ActivityLog } from './activityStore';
 
@@ -13,6 +13,22 @@ it('normalizes Windows checkpoint keys across case, separators and dot segments'
 
 it.each(['a.jsonl', 'a.jsonl.zst', 'a.txt'])('shares the log extension contract for %s', (name) => {
   expect(isClientLogFile(name)).toBe(name !== 'a.txt');
+});
+
+it('skips Antigravity artifact subtrees using case-insensitive path segments', () => {
+  for (const file of [
+    'C:\\BRAIN\\session\\.SYSTEM_GENERATED\\STEPS\\1', 'brain/id/.system_generated/messages',
+    'brain/id/.system_generated/tasks', 'brain/id/.system_generated/undelivered/transcript.jsonl',
+    'logs/chunks', 'logs/media/transcript.jsonl', 'brain/logs/scratch', 'brain/id/.user_uploaded/file',
+  ]) {
+    expect(shouldSkipClientLogPath(file, 'antigravity')).toBe(true);
+    expect(shouldSkipClientLogPath(file, 'claude')).toBe(false);
+    expect(shouldSkipClientLogPath(file, 'codex')).toBe(false);
+  }
+  for (const file of ['logs/transcript.jsonl', 'logs/transcript.jsonl.zst', 'brain/id/scratchpad/transcript.jsonl',
+    'brain/id/other/scratch/transcript.jsonl', 'logs/chunks/../transcript.jsonl']) {
+    expect(shouldSkipClientLogPath(file, 'antigravity')).toBe(false);
+  }
 });
 
 it('limits Antigravity log matching to canonical transcript files and derives session and client', () => {

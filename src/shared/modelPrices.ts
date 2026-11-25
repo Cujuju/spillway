@@ -74,6 +74,9 @@ const PRICES: Record<string, readonly ModelPrice[]> = {
   'claude-sonnet-4': SONNET_4,
   'claude-haiku-5-5': [{ from: null, rates: r(0.1, 0.125, 0.01, 0.5), longAbove: HAIKU_5_5_LONG_ABOVE, long: r(0.5, 0.625, 0.05, 2.5) }],
   'claude-haiku-4-5': [{ from: null, rates: r(1, 1.25, 0.1, 5) }],
+  /** OpenAI adds no Flex tier to new models. */
+  'gpt-6.2-sol': [{ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) } } }],
+  'gpt-6.2-astra': [{ from: null, rates: o(8, 0.4, 40, 10, 20), longAbove: OPENAI_LONG_ABOVE, long: o(16, 0.8, 60, 20, 40), tiers: { fast: { rates: o(16, 0.8, 80, 20, 40), long: o(32, 1.6, 120, 40, 80) } } }],
   'gpt-6.1-sol': [{ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) }, flex: { rates: o(1, 0.05, 5, 1.25, 2.5), long: o(2, 0.1, 7.5, 2.5, 5) } } }],
   'gpt-6-sol': [{ from: null, rates: o(2, 0.2, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 15, 5, 10), tiers: { fast: { rates: o(4, 0.4, 20, 5, 10), long: o(8, 0.8, 30, 10, 20) }, flex: { rates: o(1, 0.1, 5, 1.25, 2.5), long: o(2, 0.2, 7.5, 2.5, 5) } } }],
   'gpt-6-luna': [{ from: null, rates: o(0.1, 0.01, 0.5, 0.125, 0.25), longAbove: OPENAI_LONG_ABOVE, long: o(0.2, 0.02, 0.75, 0.25, 0.5), tiers: { fast: { rates: o(0.2, 0.02, 1, 0.25, 0.5), long: o(0.4, 0.04, 1.5, 0.5, 1) }, flex: { rates: o(0.05, 0.005, 0.25, 0.0625, 0.125), long: o(0.1, 0.01, 0.375, 0.125, 0.25) } } }],

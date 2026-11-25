@@ -4,7 +4,7 @@ import { InfoTip, type TipRow } from './ChartTip';
 import { appLocale } from '@shared/timeFormat';
 
 /** Date the price table in src/shared/modelPrices.ts was checked. */
-const PRICES_CHECKED = 'Oct 26, 2026';
+const PRICES_CHECKED = 'Nov 24, 2026';
 /** Coverage changes slowly; a minute keeps it current without re-querying every request burst. */
 const COVERAGE_REFRESH_MS = 60_000;
 const COST_NOTE = 'API cost is what the same tokens would cost on the pay-as-you-go API, not what a subscription charges.';

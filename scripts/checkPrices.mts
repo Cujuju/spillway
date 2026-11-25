@@ -101,7 +101,7 @@ export function parseAnthropic(md: string): Page {
 
 export function parseOpenAI(md: string): Page {
   const page = parseOpenAITables(section(md, '### Standard pricing data'));
-  for (const [tier, heading] of [['flex', '#### Flex'], ['fast', '### Fast pricing data']] as const) {
+  for (const [tier, heading] of [['flex', '### Flex pricing data'], ['fast', '### Fast pricing data']] as const) {
     for (const [id, price] of parseOpenAITables(section(md, heading))) {
       const entry = page.get(id);
       if (!entry) throw new Error(`OpenAI ${tier} model absent from standard table: ${id}`);
@@ -196,6 +196,16 @@ export async function fetchPage(url: string, get: typeof fetch = fetch, delays =
   }
 }
 
+/** Report lines for one page. An unreadable layout becomes a line, so the issue opens; a failed scheduled run alone goes unnoticed. */
+export function checkSource(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns' | 'parse'>, md: string, ours: Parameters<typeof compare>[2]): { lines: string[]; failed: boolean } {
+  try {
+    return { lines: compare(source, source.parse(md), ours), failed: false };
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    return { lines: [`### ${source.name} ([page](${source.url.replace(/\.md$/, '')}))`, `- **Check failed:** ${why}. Fix \`scripts/checkPrices.mts\` for the page's layout.`], failed: true };
+  }
+}
+
 async function main(): Promise<void> {
   const ours = latestPrices();
   const report: string[] = [];
@@ -203,7 +213,9 @@ async function main(): Promise<void> {
   for (const source of SOURCES) {
     const md = await fetchPage(source.url);
     if (md === null) { complete = false; continue; }
-    report.push(...compare(source, source.parse(md), ours));
+    const checked = checkSource(source, md, ours);
+    report.push(...checked.lines);
+    if (checked.failed) process.exitCode = 1;
   }
   const today = new Date().toISOString().slice(0, 10);
   const body = [...report, '', `Update \`src/shared/modelPrices.ts\` with a dated entry per change. "Detected" is when this check first saw it; use the announced date when known.`].join('\n');

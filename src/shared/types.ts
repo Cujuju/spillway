@@ -3,6 +3,7 @@ import type { RequestSettings } from './requestSettings';
 import type { ActivityScope } from './activityScope';
 import type { TransportMetadata } from './activityTransport';
 import type { BuildInfo } from './buildInfo';
+import type { BillingTier } from './modelPrices';
 
 export type ProviderId = string;
 
@@ -269,7 +270,7 @@ export interface ActivityEvent extends TransportMetadata {
   cacheWriteTokens: number;
   cacheWrite1hTokens?: number | null;
   cacheWriteLongTokens?: number | null;
-  tier?: 'standard' | 'fast' | 'flex' | null;
+  tier?: BillingTier | null;
   /** The client conversation as the proxy keys it ("claude:<session uuid>"); null when the client sent none. */
   sessionId: string | null;
   parentSessionId?: string | null;

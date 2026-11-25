@@ -64,3 +64,8 @@ describe('catalogFromLiteLLM', () => {
     expect(() => catalogFromLiteLLM([])).toThrow('not an object');
   });
 });
+
+it('reads OpenAI Ultrafast rates as their own tier', () => {
+  const entry = { litellm_provider: 'openai', input_cost_per_token: 2 * M, output_cost_per_token: 10 * M, input_cost_per_token_ultrafast: 12 * M, output_cost_per_token_ultrafast: 60 * M };
+  expect(catalogFromLiteLLM({ 'gpt-6.1-sol': entry })['gpt-6.1-sol']!.tiers).toEqual({ ultrafast: { rates: { input: 12, output: 60, cacheRead: 12, cacheWrite: 12, cacheWriteLong: 12 } } });
+});

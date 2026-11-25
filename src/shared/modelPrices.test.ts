@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cheapestModel, installCatalogPrices, priceAt, priceTableSnapshot, promptTokens, repriceStart, reportsCacheWrites, tokenCost } from './modelPrices';
+import { billingTier, cheapestModel, installCatalogPrices, priceAt, priceTableSnapshot, promptTokens, repriceStart, reportsCacheWrites, tokenCost } from './modelPrices';
 
 describe('price table changes', () => {
   const old = { from: null, rates: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 } };
@@ -164,5 +164,19 @@ describe('observed billing metadata', () => {
     }
     expect(tokenCost('claude', 'claude-sonnet-5-5', AT, { ...tokens, tier: 'flex' }))
       .toEqual(tokenCost('claude', 'claude-sonnet-5-5', AT, tokens));
+  });
+});
+
+describe('Ultrafast tier', () => {
+  // Under the 272K long-context step.
+  const counts = { inputTokens: 100_000, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, tier: 'ultrafast' as const };
+  it('bills GPT-6.2 at 3x standard through the promotion and 6x from March 1, 2027', () => {
+    expect(tokenCost('codex', 'gpt-6.2-sol', '2027-02-28T23:00:00Z', counts)!.usd).toBeCloseTo(0.6);
+    expect(tokenCost('codex', 'gpt-6.2-sol', '2027-03-01T00:00:00Z', counts)!.usd).toBeCloseTo(1.2);
+    expect(tokenCost('codex', 'gpt-6.2-astra', '2026-11-24T00:00:00Z', { ...counts, inputTokens: 300_000 })!.usd).toBeCloseTo(0.3 * 16 * 3);
+    expect(tokenCost('codex', 'gpt-6.1-sol', '2026-11-24T00:00:00Z', counts)!.usd).toBeCloseTo(1.2);
+  });
+  it('parses reported tiers and rejects unknown ones', () => {
+    expect(['standard', 'fast', 'flex', 'ultrafast', 'priority', 7, null].map(billingTier)).toEqual(['standard', 'fast', 'flex', 'ultrafast', null, null, null]);
   });
 });

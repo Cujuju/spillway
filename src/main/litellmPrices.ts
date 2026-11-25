@@ -53,8 +53,9 @@ function modelPrice(entry: Entry, provider: string): ModelPrice | null {
   const fast = provider === 'anthropic'
     ? typeof multiplier === 'number' && multiplier > 0 ? { rates: scaled(rates, multiplier), ...(long ? { long: scaled(long, multiplier) } : {}) } : undefined
     : tier('_priority');
-  const flex = tier('_flex');
-  if (fast || flex) price.tiers = { ...(fast ? { fast } : {}), ...(flex ? { flex } : {}) };
+  const tiers = { fast, flex: tier('_flex'), ultrafast: tier('_ultrafast') };
+  const listed = Object.fromEntries(Object.entries(tiers).filter(([, t]) => t)) as NonNullable<ModelPrice['tiers']>;
+  if (Object.keys(listed).length) price.tiers = listed;
   return price;
 }
 

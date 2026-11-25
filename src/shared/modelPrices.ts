@@ -17,13 +17,21 @@ export interface Rates {
 
 export interface TierPrice { rates: Rates; long?: Rates }
 
+/** Tiers with their own rates; standard and unlisted tiers bill at a model's base rates. */
+export const PRICED_TIERS = ['fast', 'flex', 'ultrafast'] as const;
+export type PricedTier = (typeof PRICED_TIERS)[number];
+export type BillingTier = 'standard' | PricedTier;
+/** A reported billing tier; null when absent or unknown. */
+export const billingTier = (value: unknown): BillingTier | null =>
+  value === 'standard' || (PRICED_TIERS as readonly unknown[]).includes(value) ? value as BillingTier : null;
+
 export interface ModelPrice {
   from: string | null;
   rates: Rates;
   /** Prompts over this many tokens bill at `long` instead. */
   longAbove?: number;
   long?: Rates;
-  tiers?: { fast?: TierPrice; flex?: TierPrice };
+  tiers?: Partial<Record<PricedTier, TierPrice>>;
 }
 
 /** Anthropic pricing: 1-hour writes cost twice base input. */
@@ -43,6 +51,17 @@ const OPENAI_LONG_ABOVE = 272_000;
 const GEMINI_LONG_ABOVE = 200_000;
 /** Gemini includes cached tokens in input and reports no separate cache-write fee. */
 const g = (input: number, cacheRead: number, output: number): Rates => o(input, cacheRead, output);
+/** OpenAI Ultrafast list price: every rate times this. */
+const ULTRAFAST_MULTIPLIER = 6;
+/** GPT-6.2 Ultrafast promotion rate, until ULTRAFAST_PROMO_END. */
+const ULTRAFAST_PROMO_MULTIPLIER = 3;
+/** OpenAI ends the promotion at Pacific midnight; UTC dates switch 8 hours early. */
+const ULTRAFAST_PROMO_END = '2027-03-01';
+const times = (x: Rates, k: number): Rates => o(x.input * k, x.cacheRead * k, x.output * k, x.cacheWrite * k, x.cacheWriteLong * k);
+const withUltrafast = (p: ModelPrice, k: number): ModelPrice =>
+  ({ ...p, tiers: { ...p.tiers, ultrafast: { rates: times(p.rates, k), ...(p.long ? { long: times(p.long, k) } : {}) } } });
+const ultrafastPromo = (p: ModelPrice): ModelPrice[] =>
+  [withUltrafast(p, ULTRAFAST_PROMO_MULTIPLIER), { ...withUltrafast(p, ULTRAFAST_MULTIPLIER), from: ULTRAFAST_PROMO_END }];
 
 const OPUS_4_5_TO_5 = [{ from: null, rates: r(5, 6.25, 0.5, 25) }];
 const OPUS_4 = [{ from: null, rates: r(15, 18.75, 1.5, 75) }];
@@ -75,12 +94,12 @@ const PRICES: Record<string, readonly ModelPrice[]> = {
   'claude-haiku-5-5': [{ from: null, rates: r(0.1, 0.125, 0.01, 0.5), longAbove: HAIKU_5_5_LONG_ABOVE, long: r(0.5, 0.625, 0.05, 2.5) }],
   'claude-haiku-4-5': [{ from: null, rates: r(1, 1.25, 0.1, 5) }],
   /** OpenAI adds no Flex tier to new models. */
-  'gpt-6.2-sol': [{ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) } } }],
-  'gpt-6.2-astra': [{ from: null, rates: o(8, 0.4, 40, 10, 20), longAbove: OPENAI_LONG_ABOVE, long: o(16, 0.8, 60, 20, 40), tiers: { fast: { rates: o(16, 0.8, 80, 20, 40), long: o(32, 1.6, 120, 40, 80) } } }],
-  'gpt-6.1-sol': [{ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) }, flex: { rates: o(1, 0.05, 5, 1.25, 2.5), long: o(2, 0.1, 7.5, 2.5, 5) } } }],
+  'gpt-6.2-sol': ultrafastPromo({ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) } } }),
+  'gpt-6.2-astra': ultrafastPromo({ from: null, rates: o(8, 0.4, 40, 10, 20), longAbove: OPENAI_LONG_ABOVE, long: o(16, 0.8, 60, 20, 40), tiers: { fast: { rates: o(16, 0.8, 80, 20, 40), long: o(32, 1.6, 120, 40, 80) } } }),
+  'gpt-6.1-sol': [withUltrafast({ from: null, rates: o(2, 0.1, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.2, 15, 5, 10), tiers: { fast: { rates: o(4, 0.2, 20, 5, 10), long: o(8, 0.4, 30, 10, 20) }, flex: { rates: o(1, 0.05, 5, 1.25, 2.5), long: o(2, 0.1, 7.5, 2.5, 5) } } }, ULTRAFAST_MULTIPLIER)],
   'gpt-6-sol': [{ from: null, rates: o(2, 0.2, 10, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 15, 5, 10), tiers: { fast: { rates: o(4, 0.4, 20, 5, 10), long: o(8, 0.8, 30, 10, 20) }, flex: { rates: o(1, 0.1, 5, 1.25, 2.5), long: o(2, 0.2, 7.5, 2.5, 5) } } }],
   'gpt-6-luna': [{ from: null, rates: o(0.1, 0.01, 0.5, 0.125, 0.25), longAbove: OPENAI_LONG_ABOVE, long: o(0.2, 0.02, 0.75, 0.25, 0.5), tiers: { fast: { rates: o(0.2, 0.02, 1, 0.25, 0.5), long: o(0.4, 0.04, 1.5, 0.5, 1) }, flex: { rates: o(0.05, 0.005, 0.25, 0.0625, 0.125), long: o(0.1, 0.01, 0.375, 0.125, 0.25) } } }],
-  'gpt-6-astra': [{ from: null, rates: o(10, 1, 50, 12.5, 25), longAbove: OPENAI_LONG_ABOVE, long: o(20, 2, 75, 25, 50), tiers: { fast: { rates: o(20, 2, 100, 25, 50), long: o(40, 4, 150, 50, 100) }, flex: { rates: o(5, 0.5, 25, 6.25, 12.5), long: o(10, 1, 37.5, 12.5, 25) } } }],
+  'gpt-6-astra': [withUltrafast({ from: null, rates: o(10, 1, 50, 12.5, 25), longAbove: OPENAI_LONG_ABOVE, long: o(20, 2, 75, 25, 50), tiers: { fast: { rates: o(20, 2, 100, 25, 50), long: o(40, 4, 150, 50, 100) }, flex: { rates: o(5, 0.5, 25, 6.25, 12.5), long: o(10, 1, 37.5, 12.5, 25) } } }, ULTRAFAST_MULTIPLIER)],
   'gpt-5.6-sol': [{ from: null, rates: o(4, 0.4, 20, 5, 10), longAbove: OPENAI_LONG_ABOVE, long: o(8, 0.8, 30, 10, 20), tiers: { fast: { rates: o(8, 0.8, 40, 10, 20), long: o(16, 1.6, 60, 20, 40) }, flex: { rates: o(2, 0.2, 10, 2.5, 5), long: o(4, 0.4, 15, 5, 10) } } }],
   'gpt-5.6-terra': [{ from: null, rates: o(2, 0.2, 12, 2.5, 5), longAbove: OPENAI_LONG_ABOVE, long: o(4, 0.4, 18, 5, 10), tiers: { fast: { rates: o(4, 0.4, 24, 5, 10), long: o(8, 0.8, 36, 10, 20) }, flex: { rates: o(1, 0.1, 6, 1.25, 2.5), long: o(2, 0.2, 9, 2.5, 5) } } }],
   'gpt-5.6-luna': [{ from: null, rates: o(0.2, 0.02, 1.2, 0.25, 0.5), longAbove: OPENAI_LONG_ABOVE, long: o(0.4, 0.04, 1.8, 0.5, 1), tiers: { fast: { rates: o(0.4, 0.04, 2.4, 0.5, 1), long: o(0.8, 0.08, 3.6, 1, 2) }, flex: { rates: o(0.1, 0.01, 0.6, 0.125, 0.25), long: o(0.2, 0.02, 0.9, 0.25, 0.5) } } }],
@@ -130,7 +149,7 @@ export interface TokenCounts {
   cacheWriteTokens: number;
   cacheWrite1hTokens?: number | null;
   cacheWriteLongTokens?: number | null;
-  tier?: 'standard' | 'fast' | 'flex' | null;
+  tier?: BillingTier | null;
 }
 
 /** Prompt tokens of a request or total: what the model read, cached or not. */
@@ -256,7 +275,7 @@ export function tokenCostBreakdown(provider: string, model: string, at: string |
   if (!price) return null;
   const prompt = promptTokens(provider, t);
   // Unknown or unlisted tiers use standard rates.
-  const tier = t.tier === 'fast' || t.tier === 'flex' ? price.tiers?.[t.tier] : undefined;
+  const tier = t.tier && t.tier !== 'standard' ? price.tiers?.[t.tier] : undefined;
   const selected = tier ?? price;
   const rates = perRequest && selected.long && prompt > price.longAbove! ? selected.long : selected.rates;
   const apart = CACHE_APART_FROM_INPUT.has(provider);

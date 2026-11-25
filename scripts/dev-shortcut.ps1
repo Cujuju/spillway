@@ -1,4 +1,4 @@
-# Called by scripts/dev-shortcut.mts: writes a Start Menu shortcut with an app ID and a tile manifest.
+# Writes a Start Menu shortcut with an AppUserModelID, optional tile manifest, and optional interactive Scheduled Task.
 # Electron's shell.writeShortcutLink can't set the manifest hint, which gives the Start tile its large logo.
 # -ElectronExe: also writes Electron's notification shortcut, hidden (see Save-ElectronShortcut).
 # -TaskName: registers an on-demand interactive Scheduled Task for launching onto WinSta0\Default.
@@ -9,18 +9,21 @@ param(
     [Parameter(Mandatory)][string]$WorkingDirectory,
     [Parameter(Mandatory)][string]$Icon,
     [Parameter(Mandatory)][string]$AppId,
-    [Parameter(Mandatory)][string]$TileManifest,
+    [string]$Description = 'Dev launcher',
+    [string]$TileManifest,
     [string]$ElectronExe,
     [string]$TaskName
 )
 $ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
+
+if (-not ('DevShortcut.Link' -as [type])) {
+    Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 
-namespace SpillwayShortcut {
+namespace DevShortcut {
     [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IShellLinkW {
         void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder file, int cch, IntPtr findData, uint flags);
@@ -75,42 +78,67 @@ namespace SpillwayShortcut {
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         static extern void SHChangeNotify(uint eventId, uint flags, string item1, IntPtr item2);
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file,
+                                                     StringBuilder path, uint cch, uint flags);
+
         static void SetString(IPropertyStore store, uint propertyId, string text) {
             var key = new PropertyKey { FormatId = AppUserModelFormat, PropertyId = propertyId };
             var value = new PropVariant { Type = VT_LPWSTR, Value = Marshal.StringToCoTaskMemUni(text) };
             try { store.SetValue(ref key, ref value); } finally { Marshal.FreeCoTaskMem(value.Value); }
         }
 
-        // Null arguments, icon, description and tile manifest are left unset.
-        public static void Save(string path, string target, string arguments, string workingDir, string icon, string description, string appId, string tileManifest) {
+        // Null or empty arguments, icon, description and tile manifest are left unset.
+        public static void Save(string path, string target, string arguments, string workingDir,
+                                string icon, string description, string appId, string tileManifest) {
             var link = (IShellLinkW)new ShellLinkCoClass();
             link.SetPath(target);
-            if (arguments != null) link.SetArguments(arguments);
+            if (!string.IsNullOrEmpty(arguments)) link.SetArguments(arguments);
             link.SetWorkingDirectory(workingDir);
-            if (icon != null) link.SetIconLocation(icon, 0);
-            if (description != null) link.SetDescription(description);
+            if (!string.IsNullOrEmpty(icon)) link.SetIconLocation(icon, 0);
+            if (!string.IsNullOrEmpty(description)) link.SetDescription(description);
             var store = (IPropertyStore)link;
             SetString(store, AppUserModelIdProperty, appId);
-            if (tileManifest != null) SetString(store, TileManifestHintProperty, tileManifest);
+            if (!string.IsNullOrEmpty(tileManifest)) SetString(store, TileManifestHintProperty, tileManifest);
             store.Commit();
             ((IPersistFile)link).Save(path, true);
             // Start caches a shortcut's tile; this makes it read the shortcut again.
             SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATH_FLUSHED, path, IntPtr.Zero);
         }
+
+        public static string FinalPath(string path) {
+            using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read,
+                                                     System.IO.FileShare.ReadWrite | System.IO.FileShare.Delete)) {
+                var buffer = new StringBuilder(1024);
+                uint length = GetFinalPathNameByHandleW(fs.SafeFileHandle, buffer, (uint)buffer.Capacity, 0);
+                if (length == 0 || length >= buffer.Capacity) throw new System.ComponentModel.Win32Exception();
+                return buffer.ToString();
+            }
+        }
     }
 }
 '@
-[SpillwayShortcut.Link]::Save($Path, $Target, $Arguments, $WorkingDirectory, $Icon, 'Spillway Dev, run from the repo', $AppId, $TileManifest)
+}
 
-# Unpackaged Electron keeps "Programs\<exe product name>.lnk" -> its exe, with the app's ID, for notifications,
-# rewriting it when its fields differ. Start lists one shortcut per app ID, so a visible one replaces "Spillway Dev".
-# A rewrite keeps the hidden attribute. An existing one is kept: it holds Electron's notification activator ID.
+$folder = Split-Path -Parent $Path
+if ($folder) { New-Item -ItemType Directory -Force -Path $folder | Out-Null }
+[DevShortcut.Link]::Save($Path, $Target, $Arguments, $WorkingDirectory, $Icon, $Description, $AppId, $TileManifest)
+
+# Processes launched by an MSIX-packaged app redirect AppData writes into a private copy Start never sees.
+$actual = [DevShortcut.Link]::FinalPath($Path) -replace '^\\\\\?\\', ''
+if ($actual -ne $Path) {
+    Remove-Item -LiteralPath $Path
+    throw "Windows redirected the shortcut to $actual, where Start can't see it. Run this from a terminal opened from Start."
+}
+
+# Unpackaged Electron keeps "Programs\<exe product name>.lnk" -> its exe, with the app's ID, for notifications.
+# Start lists one shortcut per app ID, so keeping it hidden prevents it from replacing the dev shortcut.
 function Save-ElectronShortcut {
     $name = (Get-Item -LiteralPath $ElectronExe).VersionInfo.ProductName
-    $file = Join-Path (Split-Path -Parent $Path) "$name.lnk"
+    $file = Join-Path ([Environment]::GetFolderPath('Programs')) "$name.lnk"
     if (-not (Test-Path -LiteralPath $file)) {
         $unset = [NullString]::Value
-        [SpillwayShortcut.Link]::Save($file, $ElectronExe, $unset, (Split-Path -Parent $ElectronExe), $unset, $unset, $AppId, $unset)
+        [DevShortcut.Link]::Save($file, $ElectronExe, $unset, (Split-Path -Parent $ElectronExe), $unset, $unset, $AppId, $unset)
     }
     $item = Get-Item -LiteralPath $file -Force
     $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
@@ -127,6 +155,6 @@ function Save-InteractiveTask {
         -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit ([TimeSpan]::Zero) `
         -MultipleInstances Parallel
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Settings $settings -Description 'Spillway Dev, run from the repo' -Force | Out-Null
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Settings $settings -Description $Description -Force | Out-Null
 }
 if ($TaskName) { Save-InteractiveTask }

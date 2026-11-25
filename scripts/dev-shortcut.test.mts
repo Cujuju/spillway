@@ -34,8 +34,9 @@ it('sets a default dev CDP port in the launcher script', () => {
 it('guards Windows dev-launch against non-Default desktops and registers a matching interactive task', () => {
   const launchScript = readFileSync(DEV_LAUNCH_PS1, 'utf8');
   const shortcutScript = readFileSync(DEV_SHORTCUT_PS1, 'utf8');
-  expect(launchScript).toContain(`$TaskName = '${WINDOWS_TASK_NAME}'`);
-  expect(launchScript).toContain("GetUserObjectInformationW");
+  const shortcutMts = readFileSync(path.join(SCRIPTS_DIR, 'dev-shortcut.mts'), 'utf8');
+  expect(shortcutMts).toContain(`WINDOWS_TASK_NAME = '${WINDOWS_TASK_NAME}'`);
+  expect(launchScript).toContain('GetUserObjectInformationW');
   expect(launchScript).toContain("$interactiveDesktop = 'Default'");
   expect(launchScript).toContain('Start-ScheduledTask -TaskName $TaskName');
   expect(launchScript).toContain('Show-RunningApp');

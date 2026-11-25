@@ -1,4 +1,4 @@
-import { computeTileLayout, type TileLayoutOptions, type TileNode, type TileSize } from '@cujuju/solidjs-tiling-window-manager';
+import { computeTileLayout, type TileLayoutOptions, type TileNode, type TileSize } from '@cujuju/solidjs-tiling-window-manager/model';
 
 /** Adds a bottom row while preserving the old rows' rendered pixels, including minimum-size clamping and gaps. */
 export function appendRow(tree: TileNode | undefined, id: string, size: TileSize, addPx: number, options: TileLayoutOptions): TileNode {

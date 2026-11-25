@@ -51,6 +51,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # updater.test.ts runs the built electron-updates package in Electron.
+      - run: node scripts/build-linked.mjs
       - run: pnpm test
 
   # macOS: tests, the smoke boot check, and a launch of both packaged architectures (x64 under Rosetta on the arm64 runner).

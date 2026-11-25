@@ -49,7 +49,7 @@ Electron 45 + SolidJS tray app supervising the CLIProxyAPI fork (Cujuju/CLIProxy
 `pnpm lint && pnpm typecheck && pnpm test && pnpm smoke` (`smoke` builds first). Unset `ELECTRON_RUN_AS_NODE` before launching Electron.
 Never report done, or commit, without a passing `pnpm smoke` this session; quote its `smoke: ok` line. It boots the built app on a throwaway profile and the fake proxy, opens every page, and fails on a crash or uncaught renderer error. It doesn't cover the `electron-vite dev` server: after changing `electron.vite.config.ts`, also start `pnpm dev`.
 `pnpm lint` is oxlint with the StockApp/MoManga/ChattyPop rule set (`.oxlintrc.json`); warnings fail it.
-`pnpm typecheck` reads the `link:` toolkit packages' source through the `cujuju-source` export condition (`customConditions` in both tsconfigs). Never build the toolkit from Spillway during local checks: its checkout is shared, and rewriting its `dist/` restarts other apps running from it. Only CI and packaging run `scripts/build-linked.mjs`, for the bundled `dist/`.
+`pnpm typecheck` and `pnpm test` read the `link:` toolkit packages' source through the `cujuju-source` export condition (`customConditions` in both tsconfigs, `ssr.resolve.conditions` in `vitest.config.ts`). Never build the toolkit from Spillway during local checks: its checkout is shared, and rewriting its `dist/` restarts other apps running from it. Only CI and packaging run `scripts/build-linked.mjs`, for the bundled `dist/`.
 `pnpm proxy:build all` cross-compiles the proxy for every shipped target; macOS packaging only runs on a Mac.
 
 ## Worktrees

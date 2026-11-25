@@ -1,6 +1,6 @@
 // Builds every `link:` dependency (the local solidjs-toolkit packages) for CI and packaging,
 // whose bundles import their gitignored dist/. Typecheck reads src/ via `cujuju-source`;
-// runtime and tests via `solid`. Never run it on a shared toolkit checkout: it restarts apps using it.
+// tests via `cujuju-source` too; the renderer via `solid`. Never run it on a shared toolkit checkout: it restarts apps using it.
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

@@ -10,6 +10,8 @@ import {
 import { appLocale } from '@shared/timeFormat';
 
 const BUCKET_NAME = { light: 'Light', typical: 'Typical', heavy: 'Heavy' } as const;
+const STEP_DIGITS = 1;
+const stepCountText = (n: number) => n.toLocaleString(appLocale(), { maximumFractionDigits: STEP_DIGITS });
 
 /** The verdict's line after the thinking share, from the buckets: says where the thinking cost sits. */
 function whereLine(s: SettingReport): string {
@@ -31,12 +33,22 @@ function Saving(props: { label: string; alt: Alternative | undefined; empty: str
   );
 }
 
-/** One setting: its thinking share, then the estimated saving at a lower effort and on a cheaper model. */
+/** One setting: its thinking share, per-turn step counts, and estimated savings. */
 export function Verdict(props: { s: SettingReport; status: JSX.Element }) {
   const lower = () => lowerEffort(props.s);
   return (
     <div class="think-verdict">
-      <p class="think-say"><span class="num">{share(props.s.thinkingShare)}</span> of what you spend on <b>{settingName(props.s.setting)}</b> is thinking. {whereLine(props.s)}</p>
+      <p class="think-say">
+        <Show when={props.s.measuredTurns > 0} fallback={<>Thinking token counts aren't reported for <b>{settingName(props.s.setting)}</b>.</>}>
+          <span class="num">{share(props.s.thinkingShare)}</span> of what you spend on <b>{settingName(props.s.setting)}</b> is thinking. {whereLine(props.s)}
+        </Show>
+      </p>
+      <p class="think-steps num">
+        Avg <b>{stepCountText(props.s.meanStepsPerTurn)}</b> steps/turn (median {stepCountText(props.s.medianStepsPerTurn)})
+        <Show when={props.s.meanThinkingStepsPerTurn !== null}>
+          {' · '}<b>{stepCountText(props.s.meanThinkingStepsPerTurn!)}</b> thinking steps/turn (median {stepCountText(props.s.medianThinkingStepsPerTurn!)})
+        </Show>
+      </p>
       <div class="think-alts">
         <Saving label="Same model, lower effort" alt={estimatedLowerEffort(props.s)}
           empty={lower() ? `Not enough of your turns at ${lower()!.setting.effort} to estimate.` : 'No lower effort to compare.'} />
@@ -72,25 +84,27 @@ export function ThinkingMix(props: { report: ThinkingReport; s: SettingReport; s
   return (
     <div class={`think-mix ${props.series}`}>
       <div class="think-mix-name"><span class="swatch" />{settingName(props.s.setting)}</div>
-      <p class="think-mix-say num">
-        <Show when={heavy()?.turns} fallback="No heavy turns in this range.">{share(heavy()!.turnShare)} of turns carry {share(heavy()!.thinkingCostShare)} of the thinking cost.</Show>
-      </p>
-      <Bar buckets={props.s.buckets} value={(b) => b.turnShare} label="Turns" what="turns" />
-      <Bar buckets={props.s.buckets} value={(b) => b.thinkingCostShare} label="Thinking cost" what="thinking cost" />
-      <table class="table think-mini">
-        <thead><tr><th>Turns that think</th><th class="num">Turns</th><th class="num">Of thinking</th><th class="num">Thinking a week</th></tr></thead>
-        <tbody>
-          <For each={THINKING_BUCKETS}>
-            {(bucket) => {
-              const b = () => props.s.buckets.find((x) => x.bucket === bucket)!;
-              return (
-                <tr><td><span class="think-key"><span class={`think-dot ${bucket}`} />{BUCKET_NAME[bucket]}</span></td>
-                  <td class="num">{share(b().turnShare)}</td><td class="num">{share(b().thinkingCostShare)}</td><td class="num">{usd(perWeek(props.report, b().thinkingCostUsd))}</td></tr>
-              );
-            }}
-          </For>
-        </tbody>
-      </table>
+      <Show when={props.s.measuredTurns > 0} fallback={<p class="think-mix-say">Thinking token counts aren't reported for this model.</p>}>
+        <p class="think-mix-say num">
+          <Show when={heavy()?.turns} fallback="No heavy turns in this range.">{share(heavy()!.turnShare)} of turns carry {share(heavy()!.thinkingCostShare)} of the thinking cost.</Show>
+        </p>
+        <Bar buckets={props.s.buckets} value={(b) => b.turnShare} label="Turns" what="turns" />
+        <Bar buckets={props.s.buckets} value={(b) => b.thinkingCostShare} label="Thinking cost" what="thinking cost" />
+        <table class="table think-mini">
+          <thead><tr><th>Turns that think</th><th class="num">Turns</th><th class="num">Of thinking</th><th class="num">Thinking a week</th></tr></thead>
+          <tbody>
+            <For each={THINKING_BUCKETS}>
+              {(bucket) => {
+                const b = () => props.s.buckets.find((x) => x.bucket === bucket)!;
+                return (
+                  <tr><td><span class="think-key"><span class={`think-dot ${bucket}`} />{BUCKET_NAME[bucket]}</span></td>
+                    <td class="num">{share(b().turnShare)}</td><td class="num">{share(b().thinkingCostShare)}</td><td class="num">{usd(perWeek(props.report, b().thinkingCostUsd))}</td></tr>
+                );
+              }}
+            </For>
+          </tbody>
+        </table>
+      </Show>
     </div>
   );
 }
@@ -110,7 +124,7 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
       <div class="table-wrap think-wrap">
         <table class="table think-table">
           <thead><tr>
-            <th>Kind of turn</th><th class="num">Turns a week</th><th class="num">Cost a week</th><th class="num">Thinking share</th>
+            <th>Kind of turn</th><th class="num">Turns a week</th><th class="num">Steps / turn<small>mean · thinking</small></th><th class="num">Cost a week</th><th class="num">Thinking share</th>
             <th class="num">Saving at {lowerName()}<small>estimate, a week</small></th><th class="num">Test at {lowerName()}</th>
           </tr></thead>
           <tbody>
@@ -121,8 +135,14 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
                   <tr>
                     <td class="name">{KIND_TEXT[kind].name}<small>{KIND_TEXT[kind].rule}</small></td>
                     <td class="num">{Math.round(perWeek(props.report, k().turns)).toLocaleString(appLocale())}<span class="sub">{share(props.s.turns ? k().turns / props.s.turns : 0)}</span></td>
+                    <td class="num">
+                      {k().turns ? stepCountText(k().meanStepsPerTurn) : '—'}
+                      <Show when={k().turns && k().meanThinkingStepsPerTurn !== null}>
+                        <span class="sub">{stepCountText(k().meanThinkingStepsPerTurn!)} think</span>
+                      </Show>
+                    </td>
                     <td class="num">{usd(perWeek(props.report, k().costUsd), 0)}<span class="sub">{share(k().costShare)}</span></td>
-                    <td class="num">{share(k().thinkingShare)}</td>
+                    <td class="num">{props.s.measuredTurns > 0 ? share(k().thinkingShare) : '—'}</td>
                     <td class="num">{k().lowerEffortSavingUsdPerWeek === null ? <span class="muted">not enough data</span> : usd(k().lowerEffortSavingUsdPerWeek!, 0)}</td>
                     <td class="num"><Matched result={kindsResult(tested(), [kind])} small /></td>
                   </tr>
@@ -131,8 +151,15 @@ export function KindsTable(props: { report: ThinkingReport; s: SettingReport; te
             </For>
           </tbody>
           <tfoot><tr>
-            <td>All turns</td><td class="num">{Math.round(perWeek(props.report, props.s.turns)).toLocaleString(appLocale())}</td><td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
-            <td class="num">{share(props.s.thinkingShare)}</td><td class="num">{saved() > 0 ? usd(saved(), 0) : '—'}</td>
+            <td>All turns</td><td class="num">{Math.round(perWeek(props.report, props.s.turns)).toLocaleString(appLocale())}</td>
+            <td class="num">
+              {stepCountText(props.s.meanStepsPerTurn)}
+              <Show when={props.s.meanThinkingStepsPerTurn !== null}>
+                <span class="sub">{stepCountText(props.s.meanThinkingStepsPerTurn!)} think</span>
+              </Show>
+            </td>
+            <td class="num">{usd(props.s.costUsdPerWeek, 0)}</td>
+            <td class="num">{props.s.measuredTurns > 0 ? share(props.s.thinkingShare) : '—'}</td><td class="num">{saved() > 0 ? usd(saved(), 0) : '—'}</td>
             <td class="num"><Matched result={tested()} /></td>
           </tr></tfoot>
         </table>

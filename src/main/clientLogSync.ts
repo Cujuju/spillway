@@ -6,7 +6,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { ClientLogWatcher } from './clientLogWatcher';
-import { antigravityLogContext, antigravityOAuthTokenPath, clientLogKey, isClientLogFile, t3UserdataDir, type ClientLogProvider } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, antigravitySummaryDbPath, clientLogKey, isClientLogFile, t3UserdataDir, type ClientLogProvider } from './clientLogPaths';
+import { readAllAntigravityParents, readAntigravityParents } from './antigravityParents';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
 
@@ -29,6 +30,8 @@ export interface ImportSink {
   importBatch(file: string, state: string, events: ActivityEvent[]): boolean | void;
   /** Resolves a local login email to a proxy credential's authIndex when known. */
   resolveAccount?(provider: ClientLogProvider, email: string): string | null;
+  /** Backfills parentSessionId onto retained sessions whose parent mapping arrived after import. */
+  relinkParents?(parents: ReadonlyMap<string, string>): boolean;
 }
 
 const oauthEmailCache = new Map<string, { mtimeMs: number; email: string | null }>();
@@ -133,6 +136,14 @@ export async function importClientFile(file: string, provider: ClientLogProvider
       const derived = antigravityLogContext(file);
       context.session ??= derived.session;
       context.client ??= derived.client;
+      const summaryDb = antigravitySummaryDbPath(file);
+      if (summaryDb && context.session) {
+        const parent = (await readAntigravityParents(summaryDb)).get(context.session);
+        if (parent) {
+          context.parentSession = parent;
+          context.sessionKind = 'subagent';
+        }
+      }
       if (sink.resolveAccount) {
         const tokenFile = antigravityOAuthTokenPath(file);
         antigravityEmail = tokenFile ? await readAntigravityOAuthEmail(tokenFile) : null;
@@ -273,6 +284,10 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
         catch (e) { root.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
         state.filesDone++;
         reportProgress();
+      }
+      if (sink.relinkParents && !stopped) {
+        const parents = await readAllAntigravityParents();
+        if (parents.size > 0 && sink.relinkParents(parents)) dirty = true;
       }
       if (dirty && !stopped) changed();
     } catch (e) { reconcile = true; state.error = `Local usage scan failed: ${String(e)}`; }

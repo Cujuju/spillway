@@ -78,10 +78,34 @@ function ownedRequest(db: Db, identity: IdentityRow): ActivityEvent | undefined 
   return undefined;
 }
 
+function mergeHasThinking(a: boolean | null | undefined, b: boolean | null | undefined): boolean | null {
+  if (a === true || b === true) return true;
+  if (a === false || b === false) return false;
+  return null;
+}
+
 function fillMetadata(db: Db, identity: IdentityRow, primary: ActivityEvent, secondary: ActivityEvent): void {
   const old = ownedRequest(db, identity);
   if (!old) return;
-  const fields = { turnKey: primary.turnKey ?? secondary.turnKey ?? null, thinkingTokens: primary.thinkingTokens ?? secondary.thinkingTokens ?? null, clientVersion: primary.clientVersion ?? secondary.clientVersion ?? null, settingsHash: primary.settingsHash ?? secondary.settingsHash ?? null, reasoningEffort: primary.reasoningEffort ?? secondary.reasoningEffort ?? null };
+  const parentSessionId = primary.parentSessionId ?? secondary.parentSessionId ?? null;
+  const sessionKind = !primary.parentSessionId && secondary.parentSessionId && secondary.sessionKind
+    ? secondary.sessionKind
+    : primary.sessionKind ?? secondary.sessionKind ?? null;
+  const sessionId = primary.sessionId && primary.sessionId === parentSessionId && secondary.sessionId && secondary.sessionId !== parentSessionId
+    ? secondary.sessionId
+    : primary.sessionId ?? secondary.sessionId ?? null;
+  const hasThinking = mergeHasThinking(primary.hasThinking, secondary.hasThinking);
+  const fields = {
+    turnKey: primary.turnKey ?? secondary.turnKey ?? null,
+    thinkingTokens: primary.thinkingTokens ?? secondary.thinkingTokens ?? null,
+    ...(hasThinking !== null || old.hasThinking !== undefined ? { hasThinking } : {}),
+    clientVersion: primary.clientVersion ?? secondary.clientVersion ?? null,
+    settingsHash: primary.settingsHash ?? secondary.settingsHash ?? null,
+    reasoningEffort: primary.reasoningEffort ?? secondary.reasoningEffort ?? null,
+    parentSessionId,
+    sessionKind,
+    sessionId,
+  };
   if (Object.entries(fields).some(([key, value]) => (old[key as keyof typeof fields] ?? null) !== value)) {
     metadataStatementsFor(db).updateRequest.run(JSON.stringify({ ...old, ...fields }), identity.row_id);
   }
@@ -94,14 +118,16 @@ export function reconcileUsage(db: Db, e: ActivityEvent): { skip: boolean; remov
   const existing = statements.identity.get(identityKey(e)) as IdentityRow | undefined;
   if (existing) {
     const old = identityEvent(existing);
+    const retained = ownedRequest(db, existing);
     // Streaming blocks can precede final usage; copied earlier blocks must never undo the final count.
     if (e.source === 'client-log' && !existing.matched && ((!old.upstreamId && e.upstreamId) || e.outputTokens > old.outputTokens)) {
       statements.removeIdentity.run(identityKey(e));
       statements.removeRequest.run(existing.row_id, old.requestId);
-      const updated = { ...e, upstreamId: e.upstreamId ?? old.upstreamId };
-      return { ...reconcileUsage(db, updated), removeCounts: countedUsage(existing), removeKey: removalKey(existing) };
+      e.upstreamId = e.upstreamId ?? old.upstreamId;
+      const hasThinking = mergeHasThinking(e.hasThinking, retained?.hasThinking ?? old.hasThinking);
+      if (hasThinking !== null) e.hasThinking = hasThinking;
+      return { ...reconcileUsage(db, e), removeCounts: countedUsage(existing), removeKey: removalKey(existing) };
     }
-    const retained = ownedRequest(db, existing);
     if (retained) fillMetadata(db, existing, retained, e);
     return { skip: true, id: existing.row_id };
   }

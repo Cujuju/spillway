@@ -27,17 +27,27 @@ export function antigravityLogContext(file: string): { session?: string; client:
   return { ...(session ? { session } : {}), client };
 }
 
-/** Returns `<parent-of-brain>/antigravity-oauth-token` for an Antigravity transcript path, or null. */
-export function antigravityOAuthTokenPath(file: string): string | null {
+/** Returns the parent directory of `brain` for an Antigravity transcript path, or null. */
+function antigravityBrainParent(file: string): string | null {
   let current = path.dirname(file);
   while (true) {
     const parent = path.dirname(current);
-    if (path.basename(current).toLowerCase() === 'brain' && parent !== current) {
-      return path.join(parent, 'antigravity-oauth-token');
-    }
+    if (path.basename(current).toLowerCase() === 'brain' && parent !== current) return parent;
     if (parent === current) return null;
     current = parent;
   }
+}
+
+/** Returns `<parent-of-brain>/antigravity-oauth-token` for an Antigravity transcript path, or null. */
+export function antigravityOAuthTokenPath(file: string): string | null {
+  const parent = antigravityBrainParent(file);
+  return parent ? path.join(parent, 'antigravity-oauth-token') : null;
+}
+
+/** Returns `<parent-of-brain>/conversation_summaries.db` for an Antigravity transcript path, or null. */
+export function antigravitySummaryDbPath(file: string): string | null {
+  const parent = antigravityBrainParent(file);
+  return parent ? path.join(parent, 'conversation_summaries.db') : null;
 }
 
 /** Existing Antigravity conversation summary SQLite databases across T3 ACP, CLI, and IDE roots. */

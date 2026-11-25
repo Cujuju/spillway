@@ -1,5 +1,5 @@
 import { addCounts, emptyCounts, localDay, localHourStart } from '@shared/activityCounts';
-import { comboKey, taskStats, type CompareQuery, type CompareReport, type CompareRow, type DaySpan, type TaskSums } from '@shared/activityCompare';
+import { comboKey, taskStats, turnStats, type CompareQuery, type CompareReport, type CompareRow, type DaySpan, type TaskSums } from '@shared/activityCompare';
 import { inScope, normalizeScope } from '@shared/activityScope';
 import { promptTokens, tokenCost } from '@shared/modelPrices';
 import type { ActivityEvent } from '@shared/types';
@@ -7,6 +7,7 @@ import type { Db } from './activityDb';
 import type { ActivityTotal } from './activityTotals';
 import { scopeClause } from './activityStore';
 import { estimateQuotaWindows, planReachForCombo, type QuotaContext } from './quotaValue';
+import { loadRetainedTurns, measureTurnSteps, scopedTurnRequests, type RetainedTurns } from './retainedTurns';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Longest parent chain followed to a root; deeper or cyclic chains stop at the last session reached. */
@@ -28,13 +29,14 @@ function normalizeQuery(raw: Partial<CompareQuery> | undefined): CompareQuery | 
   return { scope: normalizeScope(raw?.scope), from, to };
 }
 
-/** Each combination's whole-range totals, retained tasks, and implied plan reach; see CompareReport. */
+/** Each combination's whole-range totals, retained tasks, per-turn steps, and implied plan reach; see CompareReport. */
 export function compareActivity(
   db: Db,
   totals: Iterable<ActivityTotal>,
   raw: Partial<CompareQuery> | undefined,
   now: number,
   quota?: QuotaContext,
+  retainedTurns: Pick<RetainedTurns, 'get'> = { get: loadRetainedTurns },
 ): CompareReport | null {
   const q = normalizeQuery(raw);
   if (!q) return null;
@@ -45,7 +47,7 @@ export function compareActivity(
   const authWeights = new Map<string, Map<string, number>>();
   const row = (model: string, effort: string) => {
     const key = comboKey({ model, effort });
-    if (!rows.has(key)) rows.set(key, { key, model, effort, provider: null, whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, asSubagentCostUsd: 0, planReach: null });
+    if (!rows.has(key)) rows.set(key, { key, model, effort, provider: null, whole: { ...emptyCounts(), promptTokens: 0 }, tasks: null, turns: null, asSubagentCostUsd: 0, planReach: null });
     return rows.get(key)!;
   };
   const addWeight = (map: Map<string, Map<string, number>>, key: string, item: string, weight: number) => {
@@ -77,7 +79,10 @@ export function compareActivity(
   }
   const oldest = (db.prepare('SELECT min(day) AS day FROM requests').get() as { day: string | null }).day;
   const retained = clip(oldest, range);
-  if (retained) addTasks(db, q, retained, rows, row);
+  if (retained) {
+    addTasks(db, q, retained, rows, row);
+    addTurns(db, q, to, rows, row, retainedTurns);
+  }
   const quotaSummaries = quota && quota.samples.length > 0 && quota.credentials.length > 0
     ? estimateQuotaWindows(db, quota)
     : [];
@@ -143,4 +148,30 @@ function addTasks(db: Db, q: CompareQuery, span: DaySpan, rows: Map<string, Comp
     for (const [combo, cost] of task.byCombo) if (combo !== task.combo) rows.get(combo)!.asSubagentCostUsd += cost;
   }
   for (const [combo, list] of started) rows.get(combo)!.tasks = taskStats(combo, list);
+}
+
+/** Per-user-turn step and thinking-step counts via RetainedTurns so subagents roll into their parent turns. */
+function addTurns(
+  db: Db,
+  q: CompareQuery,
+  to: number,
+  rows: Map<string, CompareRow>,
+  row: (model: string, effort: string) => CompareRow,
+  retained: Pick<RetainedTurns, 'get'>,
+): void {
+  const { turns } = retained.get(db, q.from, to);
+  const byCombo = new Map<string, { steps: number; thinkingSteps: number | null }[]>();
+  for (const t of turns) {
+    if (!t.first.reasoningEffort) continue;
+    const hour = localHourStart(Date.parse(t.first.at));
+    if (hour < q.from || hour > q.to) continue;
+    const scoped = scopedTurnRequests(t, q.scope);
+    const measured = measureTurnSteps(scoped);
+    if (!measured.steps) continue;
+    const combo = row(t.first.effectiveModel ?? t.first.model, t.first.reasoningEffort).key;
+    const list = byCombo.get(combo) ?? [];
+    list.push(measured);
+    byCombo.set(combo, list);
+  }
+  for (const [combo, list] of byCombo) rows.get(combo)!.turns = turnStats(list);
 }

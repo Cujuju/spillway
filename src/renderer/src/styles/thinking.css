@@ -41,6 +41,12 @@
   text-wrap: balance;
 }
 .think-say b { font-weight: inherit; white-space: nowrap; }
+.think-steps {
+  margin: var(--spacing-1_5) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.think-steps b { color: var(--color-text); font-weight: 600; }
 .think-alts {
   display: grid;
   grid-template-columns: 1fr 1fr;

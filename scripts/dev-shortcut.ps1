@@ -1,6 +1,7 @@
 # Called by scripts/dev-shortcut.mts: writes a Start Menu shortcut with an app ID and a tile manifest.
 # Electron's shell.writeShortcutLink can't set the manifest hint, which gives the Start tile its large logo.
 # -ElectronExe: also writes Electron's notification shortcut, hidden (see Save-ElectronShortcut).
+# -TaskName: registers an on-demand interactive Scheduled Task for launching onto WinSta0\Default.
 param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Target,
@@ -9,7 +10,8 @@ param(
     [Parameter(Mandatory)][string]$Icon,
     [Parameter(Mandatory)][string]$AppId,
     [Parameter(Mandatory)][string]$TileManifest,
-    [string]$ElectronExe
+    [string]$ElectronExe,
+    [string]$TaskName
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -114,3 +116,17 @@ function Save-ElectronShortcut {
     $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
 }
 if ($ElectronExe) { Save-ElectronShortcut }
+
+# On-demand interactive task: lets non-Default desktops (e.g. agent sandboxes) hand off cleanly to WinSta0\Default.
+# Parallel allows repeat triggers while running to focus/reopen the window; PT0S prevents the 72h default kill.
+function Save-InteractiveTask {
+    $action = New-ScheduledTaskAction -Execute $Target -Argument $Arguments -WorkingDirectory $WorkingDirectory
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) `
+        -MultipleInstances Parallel
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Settings $settings -Description 'Spillway Dev, run from the repo' -Force | Out-Null
+}
+if ($TaskName) { Save-InteractiveTask }

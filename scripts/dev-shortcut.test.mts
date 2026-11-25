@@ -1,7 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { macLauncherScript } from './dev-shortcut.mts';
+import { macLauncherScript, WINDOWS_TASK_NAME } from './dev-shortcut.mts';
+
+const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DEV_LAUNCH_PS1 = path.join(SCRIPTS_DIR, 'dev-launch.ps1');
+const DEV_SHORTCUT_PS1 = path.join(SCRIPTS_DIR, 'dev-shortcut.ps1');
 
 // The launcher runs under zsh; its quoting is POSIX, so any POSIX shell checks the assignment.
 const SHELLS: Partial<Record<NodeJS.Platform, string>> = { darwin: '/bin/zsh', linux: '/bin/sh', win32: String.raw`C:\Program Files\Git\bin\sh.exe` };
@@ -23,4 +29,28 @@ it.runIf(process.platform === 'darwin')('generates a launcher zsh parses', () =>
 
 it('sets a default dev CDP port in the launcher script', () => {
   expect(macLauncherScript('/tmp/spillway')).toContain('export REMOTE_DEBUGGING_PORT="${REMOTE_DEBUGGING_PORT:-9333}"');
+});
+
+it('guards Windows dev-launch against non-Default desktops and registers a matching interactive task', () => {
+  const launchScript = readFileSync(DEV_LAUNCH_PS1, 'utf8');
+  const shortcutScript = readFileSync(DEV_SHORTCUT_PS1, 'utf8');
+  expect(launchScript).toContain(`$TaskName = '${WINDOWS_TASK_NAME}'`);
+  expect(launchScript).toContain("GetUserObjectInformationW");
+  expect(launchScript).toContain("$interactiveDesktop = 'Default'");
+  expect(launchScript).toContain('Start-ScheduledTask -TaskName $TaskName');
+  expect(launchScript).toContain('Show-RunningApp');
+  expect(shortcutScript).toContain('-LogonType Interactive');
+  expect(shortcutScript).toContain('-ExecutionTimeLimit ([TimeSpan]::Zero)');
+  expect(shortcutScript).toContain('-MultipleInstances Parallel');
+});
+
+it.runIf(process.platform === 'win32')('parses Windows launcher and shortcut scripts cleanly in Windows PowerShell', () => {
+  const check = [DEV_LAUNCH_PS1, DEV_SHORTCUT_PS1]
+    .map((file) => {
+      const escaped = file.replaceAll("'", "''");
+      return `$e = $null; [void][Management.Automation.Language.Parser]::ParseFile('${escaped}', [ref]$null, [ref]$e); if ($e.Count) { $e | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }`;
+    })
+    .join('; ');
+  const out = spawnSync('powershell.exe', ['-NoProfile', '-Command', check], { encoding: 'utf8' });
+  expect({ status: out.status, stderr: out.stderr }).toEqual({ status: 0, stderr: '' });
 });

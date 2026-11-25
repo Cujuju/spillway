@@ -10,6 +10,7 @@ import { appIdentity } from '../src/shared/app.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { id, name } = appIdentity(true);
+export const WINDOWS_TASK_NAME = 'SpillwayDev';
 
 function windowsShortcut() {
   if (!process.env.APPDATA || !process.env.SystemRoot) throw new Error('APPDATA and SystemRoot must be set');
@@ -22,7 +23,8 @@ function windowsShortcut() {
     '-Path', file, '-Target', target, '-Arguments', args, '-WorkingDirectory', root, '-Icon', path.join(root, 'resources', 'icon.ico'),
     '-AppId', id, '-TileManifest', path.join(root, 'resources', 'Spillway.VisualElementsManifest.xml'),
     // The `electron` package exports its exe's real path, the one `pnpm dev` runs.
-    '-ElectronExe', createRequire(import.meta.url)('electron') as string], { stdio: 'inherit' });
+    '-ElectronExe', createRequire(import.meta.url)('electron') as string,
+    '-TaskName', WINDOWS_TASK_NAME], { stdio: 'inherit' });
   return file;
 }
 

@@ -47,6 +47,7 @@ const LEGACY_IMPORTED = 'legacy-files-imported';
 const RETAINED_HOURS_REBUILT = 'retained-hours-rebuilt';
 const COMPACT_IDENTITIES = 'compact-usage-identities';
 const DRIFT_METADATA_BACKFILL = 'client-log-drift-metadata-backfilled';
+const TURN_METADATA_BACKFILL = 'client-log-turn-parent-backfilled-v1';
 const ANTIGRAVITY_EFFORT_NORMALIZED = 'antigravity-effort-normalized-v1';
 const INCREMENTAL_VACUUM = 'incremental-vacuum-enabled';
 
@@ -153,6 +154,11 @@ export function openActivityDb(file: string, hexKey: string): Db {
         repairMatchedIdentities(db);
         db.exec('DELETE FROM client_log_checkpoints');
         db.prepare('INSERT INTO meta VALUES (?, ?)').run(DRIFT_METADATA_BACKFILL, '1');
+      }
+      if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(TURN_METADATA_BACKFILL)) {
+        repairMatchedIdentities(db);
+        db.exec('DELETE FROM client_log_checkpoints');
+        db.prepare('INSERT INTO meta VALUES (?, ?)').run(TURN_METADATA_BACKFILL, '1');
       }
       if (!db.prepare('SELECT 1 FROM meta WHERE key = ?').get(ANTIGRAVITY_EFFORT_NORMALIZED)) {
         let normalized = false;

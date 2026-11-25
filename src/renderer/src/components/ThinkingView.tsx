@@ -19,7 +19,7 @@ const VERDICT_MIN = { width: 320, height: 270 };
 /** Two settings side by side: name, sentence, two bars and a three-row bucket table. */
 const MIX_MIN = { width: 420, height: 340 };
 /** Three kinds, the footer and the two-line recommendation. */
-const KINDS_MIN = { width: 480, height: 380 };
+const KINDS_MIN = { width: 540, height: 380 };
 /** The current setting and four alternatives; more scroll. */
 const ALTS_MIN = { width: 480, height: 300 };
 /** Five one- or two-line bullets. */

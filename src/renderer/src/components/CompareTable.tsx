@@ -34,6 +34,7 @@ interface Row {
 const dash = '—';
 const rate = (n: number) => `$${n.toLocaleString(appLocale(), { maximumFractionDigits: 2 })}`;
 const perTask = (c: CompareRow, f: (t: NonNullable<CompareRow['tasks']>) => number) => (c.tasks ? f(c.tasks) : null);
+const perTurn = (c: CompareRow, f: (t: NonNullable<CompareRow['turns']>) => number | null) => (c.turns ? f(c.turns) : null);
 const shown = (v: number | null, f: (v: number) => string) => (v === null ? dash : f(v));
 const percent = (v: number | null) => shown(v, (n) => pct(n, SHARE_DIGITS));
 
@@ -75,6 +76,17 @@ function taskRows(): Row[] {
     { label: '', sub: 'their other-model share of task cost', value: (c) => perTask(c, (t) => share(t.otherCostUsd, t.costUsd) ?? 0),
       text: (c) => shown(perTask(c, (t) => t.otherCostUsd), (o) => `${usd(o)} · ${pct(share(o, c.tasks!.costUsd) ?? 0, SHARE_DIGITS)}`), kind: 'points' },
     { label: 'As subagents in other tasks', sub: 'cost counted under those tasks', value: (c) => c.asSubagentCostUsd, text: (c) => `+ ${money(c.asSubagentCostUsd)}`, kind: 'multiple' },
+  ];
+}
+
+function turnRows(): Row[] {
+  const stepNum = (n: number) => n.toLocaleString(appLocale(), { maximumFractionDigits: MEDIAN_DIGITS });
+  return [
+    { label: 'Turns', sub: 'by user prompt', value: (c) => c.turns?.turns ?? null, text: (c) => (c.turns?.turns ?? 0).toLocaleString(appLocale()), kind: 'multiple' },
+    { label: 'Steps per turn', sub: 'mean', value: (c) => perTurn(c, (t) => t.meanSteps), text: (c) => <b>{shown(perTurn(c, (t) => t.meanSteps), stepNum)}</b>, kind: 'multiple' },
+    { label: '', sub: 'median', value: (c) => perTurn(c, (t) => t.medianSteps), text: (c) => shown(perTurn(c, (t) => t.medianSteps), stepNum), kind: 'multiple' },
+    { label: 'Thinking steps per turn', sub: 'mean', value: (c) => perTurn(c, (t) => t.meanThinkingSteps), text: (c) => <b>{shown(perTurn(c, (t) => t.meanThinkingSteps), stepNum)}</b>, kind: 'multiple' },
+    { label: '', sub: 'median', value: (c) => perTurn(c, (t) => t.medianThinkingSteps), text: (c) => shown(perTurn(c, (t) => t.medianThinkingSteps), stepNum), kind: 'multiple' },
   ];
 }
 
@@ -193,6 +205,10 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
           {props.report.retained ? `${spanText(props.report.retained)} · ${daysOf(props.report.retained, props.report.range)}` : 'No kept requests in this range'} · requests are kept {props.retentionDays} days</span>
           <Coverage part={props.report.retained} range={props.report.range} /></td></tr>
         <For each={taskRows()}>{(row) => <RowView row={row} />}</For>
+        <tr class="group-row"><td colSpan={span()}>Per turn (covered days)<span class="gnote">
+          {props.report.retained ? `${spanText(props.report.retained)} · ${daysOf(props.report.retained, props.report.range)}` : 'No kept requests in this range'} · agentic steps per user prompt</span>
+          <Coverage part={props.report.retained} range={props.report.range} /></td></tr>
+        <For each={turnRows()}>{(row) => <RowView row={row} />}</For>
         <tr class="group-row"><td colSpan={span()}>Plan reach<span class="gnote">
           from clean quota intervals · excludes resets and zero-spend jumps{anyUnmatched() ? ' · hover for skipped jumps' : ''}</span></td></tr>
         <For each={planReachRows()}>{(row) => <RowView row={row} />}</For>

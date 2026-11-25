@@ -107,4 +107,24 @@ describe('compareActivity', () => {
     expect(opus.planReach?.monthlyUsd).toBeCloseTo(reqCost * 50 * MONTH_FROM_WEEK);
     expect(opus.planReach?.plans).toEqual(['Max 20x']);
   });
+
+  it('computes per-turn step and thinking-step stats including subagents and hasThinking-only models', () => {
+    // Turn 1 on Opus: 2 root steps (1 thinking) + 1 Sonnet subagent step (thinking) = 3 steps, 2 thinking steps.
+    log.append(event(40, { sessionId: 'claude:r1', sessionKind: 'root', turnKey: 'claude:t1', thinkingTokens: 120 }));
+    log.append(event(39, { ...sonnet, sessionId: 'claude:r1:agent:a1', parentSessionId: 'claude:r1', sessionKind: 'subagent', turnKey: 'claude:st1', thinkingTokens: 40 }));
+    log.append(event(38, { sessionId: 'claude:r1', sessionKind: 'root', turnKey: 'claude:t1', thinkingTokens: 0 }));
+    // Turn 2 on Opus: 1 root step (0 thinking).
+    log.append(event(35, { sessionId: 'claude:r1', sessionKind: 'root', turnKey: 'claude:t2', thinkingTokens: 0 }));
+    // Turn 1 on Neon (thinkingTokens null, hasThinking set): 2 steps, 1 thinking.
+    log.append(event(30, { provider: 'antigravity', model: 'gemini-4-neon', effectiveModel: 'gemini-4-neon', reasoningEffort: 'high', sessionId: 'agy:n1', sessionKind: 'root', turnKey: 'agy:0', thinkingTokens: null, hasThinking: true }));
+    log.append(event(29, { provider: 'antigravity', model: 'gemini-4-neon', effectiveModel: 'gemini-4-neon', reasoningEffort: 'high', sessionId: 'agy:n1', sessionKind: 'root', turnKey: 'agy:0', thinkingTokens: null, hasThinking: false }));
+
+    const r = report();
+    const opus = r.combos.find((c) => c.key === OPUS)!;
+    expect(opus.turns).toEqual({ turns: 2, meanSteps: 2, medianSteps: 2, meanThinkingSteps: 1, medianThinkingSteps: 1 });
+    const son = r.combos.find((c) => c.key === SONNET)!;
+    expect(son.turns).toBeNull();
+    const neon = r.combos.find((c) => c.key === comboKey({ model: 'gemini-4-neon', effort: 'high' }))!;
+    expect(neon.turns).toEqual({ turns: 1, meanSteps: 2, medianSteps: 2, meanThinkingSteps: 1, medianThinkingSteps: 1 });
+  });
 });

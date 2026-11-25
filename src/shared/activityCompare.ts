@@ -43,6 +43,16 @@ export interface TaskStats {
   otherCostUsd: number;
 }
 
+/** Per-user-turn step counts (subagents included) for turns that started on one combination. */
+export interface TurnStats {
+  turns: number;
+  meanSteps: number;
+  medianSteps: number;
+  /** Null when no turn reported thinking tokens or thinking presence on every step. */
+  meanThinkingSteps: number | null;
+  medianThinkingSteps: number | null;
+}
+
 export interface CompareRow extends Combo {
   key: string;
   /** Dominant provider serving this combination in range; null when absent. */
@@ -51,6 +61,8 @@ export interface CompareRow extends Combo {
   whole: ActivityCounts & { promptTokens: number };
   /** Retained requests; null when no task started here. */
   tasks: TaskStats | null;
+  /** Retained turns; null when no user turn started here. */
+  turns: TurnStats | null;
   /** This combination's cost inside tasks that started on another one. */
   asSubagentCostUsd: number;
   /** Implied per-account quota bucket values for this model's provider; null without enough clean intervals. */
@@ -98,5 +110,20 @@ export function taskStats(combo: string, tasks: TaskSums[]): TaskStats | null {
     medianTokens: median(tasks.map((t) => t.tokens)), medianRequests: median(tasks.map((t) => t.requests)), costUsd,
     mixed: tasks.filter((t) => other(t).length > 0).length,
     otherCostUsd: tasks.reduce((sum, t) => sum + other(t).reduce((s, [, c]) => s + c, 0), 0),
+  };
+}
+
+/** Per-turn step and thinking-step stats; null when no turns exist. */
+export function turnStats(turns: readonly { steps: number; thinkingSteps: number | null }[]): TurnStats | null {
+  if (!turns.length) return null;
+  const steps = turns.map((t) => t.steps);
+  const meanSteps = steps.reduce((a, b) => a + b, 0) / steps.length;
+  const thinking = turns.flatMap((t) => (t.thinkingSteps === null ? [] : [t.thinkingSteps]));
+  return {
+    turns: turns.length,
+    meanSteps,
+    medianSteps: median(steps),
+    meanThinkingSteps: thinking.length ? thinking.reduce((a, b) => a + b, 0) / thinking.length : null,
+    medianThinkingSteps: thinking.length ? median(thinking) : null,
   };
 }

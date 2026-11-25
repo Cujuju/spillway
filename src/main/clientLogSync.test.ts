@@ -336,3 +336,54 @@ it('resolves Antigravity authIndex at batch commit when the account map arrives 
     expect(committed[0]?.authIndex).toBe('cred-new');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+it('reads Antigravity parent_conversation_id from conversation_summaries.db and relinks late updates', async () => {
+  const Database = (await import('better-sqlite3-multiple-ciphers')).default;
+  const { ActivityLog } = await import('./activityStore');
+  const dir = await mkdtemp(path.join(tmpdir(), 'spillway-ag-parents-'));
+  vi.stubEnv('CLAUDE_CONFIG_DIR', path.join(dir, 'claude'));
+  vi.stubEnv('CODEX_HOME', path.join(dir, 'codex'));
+  vi.stubEnv('T3_USERDATA_DIR', path.join(dir, 't3'));
+  vi.stubEnv('GEMINI_HOME', path.join(dir, 'gemini'));
+  const agRoot = path.join(dir, 't3', 'providers', 'antigravity', 'acct', 'antigravity-acp');
+  const summaryDbPath = path.join(agRoot, 'conversation_summaries.db');
+  const childLogs = path.join(agRoot, 'brain', 'conv-child', '.system_generated', 'logs');
+  const lateLogs = path.join(agRoot, 'brain', 'conv-late', '.system_generated', 'logs');
+  const log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 30 });
+  const nowIso = new Date().toISOString();
+  const transcript = [
+    JSON.stringify({ step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: nowIso }),
+    JSON.stringify({ step_index: 1, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: nowIso, model: 'gemini-4-neon-high', input_tokens: 100, cache_read_tokens: 0, output_tokens: 20, thinking: 'plan' }),
+  ].join('\n') + '\n';
+  try {
+    await mkdir(childLogs, { recursive: true });
+    await mkdir(lateLogs, { recursive: true });
+    const summaryDb = new Database(summaryDbPath);
+    summaryDb.exec('CREATE TABLE conversation_summaries (conversation_id TEXT PRIMARY KEY, parent_conversation_id TEXT NOT NULL DEFAULT "")');
+    summaryDb.prepare('INSERT INTO conversation_summaries VALUES (?, ?)').run('conv-child', 'conv-root');
+    summaryDb.close();
+    await writeFile(path.join(childLogs, 'transcript.jsonl'), transcript);
+    await writeFile(path.join(lateLogs, 'transcript.jsonl'), transcript);
+
+    const runOnce = async () => {
+      let done!: () => void;
+      const idle = new Promise<void>((resolve) => { done = resolve; });
+      const stop = startClientLogSync(log, vi.fn(), (p) => { if (p.state === 'idle') done(); });
+      await idle; await stop();
+    };
+    await runOnce();
+    const initial = log.page({ day: null, failedOnly: false, scope: { accounts: null, clients: null, source: 'all' }, before: null }).events;
+    expect(initial.find((e) => e.sessionId === 'agy:conv-child')).toMatchObject({ parentSessionId: 'agy:conv-root', sessionKind: 'subagent', turnKey: 'agy:0', hasThinking: true });
+    expect(initial.find((e) => e.sessionId === 'agy:conv-late')).toMatchObject({ parentSessionId: null, sessionKind: 'root', turnKey: 'agy:0', hasThinking: true });
+
+    // Late write to conversation_summaries.db relinks conv-late on next scan without duplicating rows.
+    const lateDb = new Database(summaryDbPath);
+    lateDb.prepare('INSERT INTO conversation_summaries VALUES (?, ?)').run('conv-late', 'conv-root');
+    lateDb.close();
+    await utimes(summaryDbPath, new Date(Date.now() + 2000), new Date(Date.now() + 2000));
+    await runOnce();
+    const updated = log.page({ day: null, failedOnly: false, scope: { accounts: null, clients: null, source: 'all' }, before: null }).events;
+    expect(updated).toHaveLength(2);
+    expect(updated.find((e) => e.sessionId === 'agy:conv-late')).toMatchObject({ parentSessionId: 'agy:conv-root', sessionKind: 'subagent' });
+  } finally { log.close(); vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
+});

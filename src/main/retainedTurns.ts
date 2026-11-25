@@ -1,4 +1,5 @@
-import type { ActivityEvent } from '@shared/types';
+import { inScope, type ActivityScope } from '@shared/activityScope';
+import { stepHasThinking, type ActivityEvent } from '@shared/types';
 import { IDENTITY_BY_ROW_INDEX, PARENT_SESSION_SQL, type Db } from './activityDb';
 import { connectionStatements } from './connectionStatements';
 import { identityKeySql } from './usageLedger';
@@ -7,6 +8,27 @@ import { identityKeySql } from './usageLedger';
 export type Request = ActivityEvent & { costUsd?: number };
 export interface Turn { first: Request; requests: Request[] }
 export interface Grouped { turns: Turn[]; excluded: Request[] }
+
+/** Scoped requests for a turn whose root request is itself in scope; empty when the root is filtered out. */
+export function scopedTurnRequests(turn: Turn, scope: ActivityScope): Request[] {
+  return inScope(scope, turn.first) ? turn.requests.filter((e) => inScope(scope, e)) : [];
+}
+
+/** Counts non-compaction steps and thinking steps for one turn's scoped requests; null when any step's thinking presence is unknown. */
+export function measureTurnSteps(requests: readonly Request[]): { steps: number; thinkingSteps: number | null } {
+  let steps = 0;
+  let thinkingSteps: number | null = 0;
+  for (const e of requests) {
+    if (e.sessionKind === 'compaction') continue;
+    steps += 1;
+    if (thinkingSteps !== null) {
+      const has = stepHasThinking(e);
+      if (has === null) thinkingSteps = null;
+      else if (has) thinkingSteps += 1;
+    }
+  }
+  return { steps, thinkingSteps };
+}
 
 /** Requests must arrive oldest first. Subagent and compaction sessions join the parent turn active at their first request. */
 export function group(requests: Request[]): Grouped {

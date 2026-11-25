@@ -162,9 +162,37 @@ export class ActivityLog {
   private conversationAccounts = new Map<string, string | null>();
   /** Maps `provider:email` (lowercased) to proxy credential `authIndex` for local-log attribution. */
   private accounts = new Map<string, string>();
+  /** Child→parent links discovered from summary DBs; applied on append and backfilled once per new link. */
+  private knownParents = new Map<string, string>();
 
   resolveAccount(provider: ClientLogProvider, email: string): string | null {
     return this.accounts.get(`${provider}:${email.trim().toLowerCase()}`) ?? null;
+  }
+
+  /** Backfills `parentSessionId` and `sessionKind: 'subagent'` onto retained rows whose parent link arrived late. */
+  relinkParents(parents: ReadonlyMap<string, string>): boolean {
+    const pending: [string, string][] = [];
+    for (const [child, parent] of parents) {
+      if (child && parent && child !== parent && this.knownParents.get(child) !== parent) pending.push([child, parent]);
+    }
+    if (!pending.length) return false;
+    const byChild = new Map(pending);
+    const ids = JSON.stringify([...byChild.keys()]);
+    const changed = this.db.transaction(() => {
+      const rows = this.db.prepare(`SELECT id, event FROM requests WHERE json_extract(event, '$.sessionId') IN (SELECT value FROM json_each(?)) AND json_extract(event, '$.parentSessionId') IS NULL`).all(ids) as RequestRow[];
+      if (!rows.length) return false;
+      const update = this.db.prepare('UPDATE requests SET event = ? WHERE id = ?');
+      for (const row of rows) {
+        const e = JSON.parse(row.event) as Record<string, unknown>;
+        const parent = typeof e.sessionId === 'string' ? byChild.get(e.sessionId) : undefined;
+        if (!parent || parent === e.sessionId) continue;
+        update.run(JSON.stringify({ ...e, parentSessionId: parent, sessionKind: 'subagent' }), row.id);
+      }
+      return true;
+    }).immediate();
+    for (const [child, parent] of pending) this.knownParents.set(child, parent);
+    if (changed) this.revision += 1;
+    return changed;
   }
 
   /** Updates known email→authIndex pairs and backfills unattributed local Antigravity sessions. */
@@ -287,8 +315,9 @@ export class ActivityLog {
     }
     const { costUsd, uncachedCostUsd, requestSettings, ...details } = event;
     if (event.settingsHash && requestSettings) this.statements.saveSettings.run(event.settingsHash, JSON.stringify(requestSettings), event.at);
+    const knownParent = !event.parentSessionId && event.sessionId ? this.knownParents.get(event.sessionId) ?? null : null;
     const e = { ...details, ...normalizeTransport(event), effectiveModel: event.effectiveModel ?? null, reasoningEffort: event.reasoningEffort ?? null,
-      parentSessionId: event.parentSessionId ?? null, sessionKind: event.sessionKind ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
+      parentSessionId: event.parentSessionId ?? knownParent, sessionKind: knownParent ? 'subagent' : event.sessionKind ?? null, latencyMs: event.source === 'client-log' ? null : event.latencyMs ?? null,
       ttftMs: event.source === 'client-log' ? null : event.ttftMs ?? null,
       source: event.source ?? 'proxy', upstreamId: event.upstreamId ?? null, movedFrom: this.movedFrom(event) };
     const accounted = { ...e, costUsd, uncachedCostUsd };
@@ -298,7 +327,8 @@ export class ActivityLog {
       id = this.db.transaction(() => {
         const totals = this.loadTotals();
         const merge = reconcileUsage(this.db, accounted);
-        for (const key of ['turnKey', 'thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
+        for (const key of ['upstreamId', 'turnKey', 'thinkingTokens', 'clientVersion', 'settingsHash', 'reasoningEffort', 'parentSessionId', 'sessionKind', 'sessionId'] as const) Object.assign(e, { [key]: accounted[key] ?? null });
+        if (accounted.hasThinking !== undefined) Object.assign(e, { hasThinking: accounted.hasThinking });
         if (merge.removeCounts) {
           this.revision += 1;
           const counts = merge.removeCounts;
@@ -420,7 +450,7 @@ export class ActivityLog {
   /** Thinking costs and alternatives from retained turns; null for a malformed query. */
   thinking(q: ThinkingQuery, models: OfferedModel[]) { return thinkingActivity(this.db, q, models, this.retainedTurns); }
   /** Combination cards and Compare table for the Overview; null for a malformed query. */
-  compare(q: CompareQuery, quota?: QuotaContext) { return this.db.transaction(() => compareActivity(this.db, this.loadTotals().values(), q, Date.now(), quota))(); }
+  compare(q: CompareQuery, quota?: QuotaContext) { return this.db.transaction(() => compareActivity(this.db, this.loadTotals().values(), q, Date.now(), quota, this.retainedTurns))(); }
   /** Prompt bloat, cost anatomy, cold cache misses and top burn sessions for Activity → Waste. */
   waste(q: WasteQuery) { return this.db.transaction(() => wasteActivity(this.db, q, Date.now()))(); }
 
@@ -484,6 +514,7 @@ export class ActivityLog {
     });
     this.totals = new Map();
     this.conversationAccounts.clear();
+    this.knownParents.clear();
   }
 
   /** Drops the caches too: the next open may find another file (set aside, or imported). */
@@ -496,6 +527,7 @@ export class ActivityLog {
     this.archiveStore = null;
     this.totals = null;
     this.conversationAccounts.clear();
+    this.knownParents.clear();
     this.checkpoints.clear();
   }
 

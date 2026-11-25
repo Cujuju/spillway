@@ -220,12 +220,22 @@ export const SESSION_KINDS = ['root', 'subagent', 'fork', 'compaction'] as const
 export type SessionKind = typeof SESSION_KINDS[number];
 export const sessionKind = (v: unknown): SessionKind | null => typeof v === 'string' && SESSION_KINDS.includes(v as SessionKind) ? v as SessionKind : null;
 
+/** Whether a request performed thinking: true/false when known, null when unreported. */
+export function stepHasThinking(e: Pick<ActivityEvent, 'thinkingTokens' | 'hasThinking'>): boolean | null {
+  if (e.hasThinking === true) return true;
+  if (typeof e.thinkingTokens === 'number' && Number.isFinite(e.thinkingTokens)) return e.thinkingTokens > 0;
+  if (e.hasThinking === false) return false;
+  return null;
+}
+
 /** One upstream attempt from the proxy's live event stream (GET /usage/events). */
 export interface ActivityEvent extends TransportMetadata {
   turnKey?: string | null;
   /** Transient: stored once in request_settings, stripped from the stored event */
   requestSettings?: RequestSettings | null;
   thinkingTokens?: number | null;
+  /** Whether the step emitted thinking when token counts are unavailable (e.g. Antigravity transcripts). */
+  hasThinking?: boolean | null;
   clientVersion?: string | null;
   settingsHash?: string | null;
   /** Full inbound identity; absent on historical and metadata-only client imports. */

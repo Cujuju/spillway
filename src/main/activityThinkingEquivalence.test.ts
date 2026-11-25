@@ -6,7 +6,7 @@ import { localDay } from '@shared/activityCounts';
 import { inScope, normalizeScope, type ActivityScope } from '@shared/activityScope';
 import { currentRates, tokenCost } from '@shared/modelPrices';
 import { LIGHT_THINKING_MAX, MIN_RATIO_TURNS, THINKING_BUCKETS, TURN_KINDS, TYPICAL_THINKING_MAX, settingKey, type Alternative, type ThinkingQuery, type ThinkingReport, type ThinkingSetting, type TurnKind } from '@shared/thinking';
-import type { ActivityEvent } from '@shared/types';
+import { stepHasThinking, type ActivityEvent } from '@shared/types';
 import { openKeyed, type Db } from './activityDb';
 import { ActivityLog } from './activityStore';
 import { kind, setting, type OfferedModel } from './activityThinking';
@@ -30,7 +30,13 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 function oracle(db: Db, raw: ThinkingQuery, models: OfferedModel[]): ThinkingReport {
   const EFFORTS = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none'];
   const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((n, x) => n + f(x), 0);
+  const mean = (xs: number[]) => (xs.length ? sum(xs, (x) => x) / xs.length : 0);
   const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b), mid = Math.floor(s.length / 2); return s.length ? s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2 : 0; };
+  const stepsOf = (t: Turn) => t.requests.filter((e) => e.sessionKind !== 'compaction');
+  const thinkingStepsOf = (t: Turn) => {
+    const steps = stepsOf(t);
+    return steps.every((e) => stepHasThinking(e) !== null) ? steps.filter((e) => stepHasThinking(e) === true).length : null;
+  };
   const cost = (e: Request) => e.costUsd ?? tokenCost(e.provider, e.effectiveModel ?? e.model, e.at, { ...e, cacheWriteTokens: e.cacheWriteTokens ?? 0 })?.usd ?? 0;
   const counts = (e: Request) => ({ ...e, cacheWriteTokens: e.cacheWriteTokens ?? 0 });
   const thinkingCost = (e: Request) => {
@@ -59,10 +65,9 @@ function oracle(db: Db, raw: ThinkingQuery, models: OfferedModel[]): ThinkingRep
   const turns: Turn[] = [];
   for (const t of all) {
     if (!inTime(t.first)) continue;
-    const scoped = t.requests.filter((e) => inScope(q.scope, e));
-    for (const e of scoped) if (!e.turnKey || !EFFORTS.includes(e.reasoningEffort ?? '') || !EFFORTS.includes(t.first.reasoningEffort ?? '')) omit(e);
-    const tracked = scoped.filter((e) => e.turnKey && EFFORTS.includes(e.reasoningEffort ?? '') && EFFORTS.includes(t.first.reasoningEffort ?? ''));
+    const tracked = EFFORTS.includes(t.first.reasoningEffort ?? '') && inScope(q.scope, t.first) ? t.requests.filter((e) => inScope(q.scope, e)) : [];
     if (tracked.length) turns.push({ first: t.first, requests: tracked });
+    else for (const e of t.requests) if (inScope(q.scope, e)) omit(e);
   }
   const days = [...new Set(turns.map((t) => localDay(Date.parse(t.first.at))))].sort();
   const factor = days.length ? 7 / days.length : 0;
@@ -115,13 +120,21 @@ function oracle(db: Db, raw: ThinkingQuery, models: OfferedModel[]): ThinkingRep
     }), 'unpriced'));
     const mixedEffort = lower.find((effort) => ratio(effort, 'question') !== null && ratio(effort, 'change') !== null && own.every((t) => kind(t) === 'long' || estimate(t, effort) !== null));
     if (mixedEffort) alternatives.push(alternative({ ...s, effort: mixedEffort }, 'mixed', own.map((t) => kind(t) === 'long' ? turnCost(t) : estimate(t, mixedEffort))));
+    const knownThinkingSteps = own.flatMap((t) => { const n = thinkingStepsOf(t); return n === null ? [] : [n]; });
     return {
-      setting: s, turns: own.length, costUsd: total, costUsdPerWeek: total * factor, thinkingCostUsd: tc, thinkingShare: total ? tc / total : 0, medianTurnCostUsd: median(own.map(turnCost)),
+      setting: s, turns: own.length, measuredTurns: own.filter((t) => t.requests.every((e) => e.thinkingTokens != null)).length,
+      costUsd: total, costUsdPerWeek: total * factor, thinkingCostUsd: tc, thinkingShare: total ? tc / total : 0, medianTurnCostUsd: median(own.map(turnCost)),
+      meanStepsPerTurn: mean(own.map((t) => stepsOf(t).length)), medianStepsPerTurn: median(own.map((t) => stepsOf(t).length)),
+      meanThinkingStepsPerTurn: knownThinkingSteps.length ? mean(knownThinkingSteps) : null,
+      medianThinkingStepsPerTurn: knownThinkingSteps.length ? median(knownThinkingSteps) : null,
       buckets: THINKING_BUCKETS.map((b) => { const selected = own.filter((t) => bucket(t) === b), thinkingCostUsd = sum(selected, (t) => sum(t.requests, thinkingCost)); return { bucket: b, turns: selected.length, turnShare: selected.length / own.length, thinkingCostUsd, thinkingCostShare: tc ? thinkingCostUsd / tc : 0 }; }),
       kinds: TURN_KINDS.map((k) => {
         const selected = own.filter((t) => kind(t) === k), costUsd = sum(selected, turnCost);
         const effort = lower.find((e) => selected.length > 0 && selected.every((t) => estimate(t, e) !== null));
+        const kindThinking = selected.flatMap((t) => { const n = thinkingStepsOf(t); return n === null ? [] : [n]; });
         return { kind: k, turns: selected.length, costUsd, costShare: total ? costUsd / total : 0, thinkingShare: costUsd ? sum(selected, (t) => sum(t.requests, thinkingCost)) / costUsd : 0,
+          meanStepsPerTurn: mean(selected.map((t) => stepsOf(t).length)),
+          meanThinkingStepsPerTurn: kindThinking.length ? mean(kindThinking) : null,
           lowerEffortSavingUsdPerWeek: effort ? sum(selected, (t) => turnCost(t) - estimate(t, effort)!) * factor : null };
       }), alternatives,
     };

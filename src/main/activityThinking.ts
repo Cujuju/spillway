@@ -3,7 +3,7 @@ import { inScope, normalizeScope } from '@shared/activityScope';
 import { currentRates, tokenCost } from '@shared/modelPrices';
 import { CHANGE_MAX_REQUESTS, LIGHT_THINKING_MAX, MIN_RATIO_TURNS, QUESTION_MAX_REQUESTS, THINKING_BUCKETS, TURN_KINDS, TYPICAL_THINKING_MAX, settingKey, type Alternative, type ThinkingQuery, type ThinkingReport, type ThinkingSetting, type TurnKind } from '@shared/thinking';
 import type { Db } from './activityDb';
-import { loadRetainedTurns, type RetainedTurns, type Request, type Turn } from './retainedTurns';
+import { loadRetainedTurns, measureTurnSteps, scopedTurnRequests, type RetainedTurns, type Request, type Turn } from './retainedTurns';
 
 export interface OfferedModel { id: string; provider: string; created?: number | null }
 const EFFORTS = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none'];
@@ -12,6 +12,7 @@ const UNIVERSAL_COMPARISON_EFFORT = 'medium';
 const DAYS_PER_WEEK = 7;
 const MAX_MODEL_ALTERNATIVES = 3;
 const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((n, x) => n + f(x), 0);
+const mean = (xs: number[]) => (xs.length ? sum(xs, (x) => x) / xs.length : 0);
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b), mid = Math.floor(s.length / 2); return s.length ? s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2 : 0; };
 export const setting = (e: Request): ThinkingSetting => ({ provider: e.provider, model: e.effectiveModel ?? e.model, effort: e.reasoningEffort! });
 const sameSetting = (a: Request, b: Request) => a.provider === b.provider && (a.effectiveModel ?? a.model) === (b.effectiveModel ?? b.model) && a.reasoningEffort === b.reasoningEffort;
@@ -42,6 +43,7 @@ interface Measured extends Turn {
   /** Requests at the turn's own setting; subagents can run another. */
   own: Request[];
   kind: TurnKind; costUsd: number; thinkingTokens: number; thinkingCostUsd: number; ownThinkingCostUsd: number;
+  steps: number; thinkingSteps: number | null;
   /** Every request reported its thinking tokens. */
   measured: boolean;
   /** Measured, and every request's model has a list price. */
@@ -49,10 +51,12 @@ interface Measured extends Turn {
 }
 function measure(turn: Turn): Measured {
   const own = turn.requests.filter((e) => sameSetting(e, turn.first));
+  const { steps, thinkingSteps } = measureTurnSteps(turn.requests);
   const measured = turn.requests.every((e) => e.thinkingTokens != null);
   return {
     ...turn, own, kind: kind(turn), costUsd: sum(turn.requests, cost), thinkingTokens: sum(turn.requests, (e) => e.thinkingTokens ?? 0),
     thinkingCostUsd: sum(turn.requests, thinkingCost), ownThinkingCostUsd: sum(own, thinkingCost),
+    steps, thinkingSteps,
     measured, estimable: measured && turn.requests.every((e) => currentRates(e.effectiveModel ?? e.model)),
   };
 }
@@ -70,10 +74,9 @@ export function thinkingActivity(db: Db, raw: Partial<ThinkingQuery> | undefined
   const turns: Measured[] = [];
   for (const t of all) {
     if (!inTime(t.first)) continue;
-    const scoped = t.requests.filter((e) => inScope(q.scope, e));
-    for (const e of scoped) if (!e.turnKey || !EFFORTS.includes(e.reasoningEffort ?? '') || !EFFORTS.includes(t.first.reasoningEffort ?? '')) omit(e);
-    const tracked = scoped.filter((e) => e.turnKey && EFFORTS.includes(e.reasoningEffort ?? '') && EFFORTS.includes(t.first.reasoningEffort ?? ''));
+    const tracked = EFFORTS.includes(t.first.reasoningEffort ?? '') ? scopedTurnRequests(t, q.scope) : [];
     if (tracked.length) turns.push(measure({ first: t.first, requests: tracked }));
+    else for (const e of t.requests) if (inScope(q.scope, e)) omit(e);
   }
   const days = [...new Set(turns.map((t) => localDay(Date.parse(t.first.at))))].sort();
   const factor = days.length ? DAYS_PER_WEEK / days.length : 0;
@@ -124,13 +127,21 @@ export function thinkingActivity(db: Db, raw: Partial<ThinkingQuery> | undefined
     }), 'unpriced'));
     const mixedEffort = lower.find((effort) => ratio(effort, 'question') !== null && ratio(effort, 'change') !== null && own.every((t) => t.kind === 'long' || estimate(t, effort) !== null));
     if (mixedEffort) alternatives.push(alternative({ ...s, effort: mixedEffort }, 'mixed', own.map((t) => t.kind === 'long' ? t.costUsd : estimate(t, mixedEffort))));
+    const knownThinkingSteps = own.flatMap((t) => (t.thinkingSteps === null ? [] : [t.thinkingSteps]));
     return {
-      setting: s, turns: own.length, costUsd: total, costUsdPerWeek: total * factor, thinkingCostUsd: tc, thinkingShare: total ? tc / total : 0, medianTurnCostUsd: median(own.map((t) => t.costUsd)),
+      setting: s, turns: own.length, measuredTurns: own.filter((t) => t.measured).length,
+      costUsd: total, costUsdPerWeek: total * factor, thinkingCostUsd: tc, thinkingShare: total ? tc / total : 0, medianTurnCostUsd: median(own.map((t) => t.costUsd)),
+      meanStepsPerTurn: mean(own.map((t) => t.steps)), medianStepsPerTurn: median(own.map((t) => t.steps)),
+      meanThinkingStepsPerTurn: knownThinkingSteps.length ? mean(knownThinkingSteps) : null,
+      medianThinkingStepsPerTurn: knownThinkingSteps.length ? median(knownThinkingSteps) : null,
       buckets: THINKING_BUCKETS.map((b) => { const selected = own.filter((t) => bucket(t) === b), thinkingCostUsd = sum(selected, (t) => t.thinkingCostUsd); return { bucket: b, turns: selected.length, turnShare: selected.length / own.length, thinkingCostUsd, thinkingCostShare: tc ? thinkingCostUsd / tc : 0 }; }),
       kinds: TURN_KINDS.map((k) => {
         const selected = own.filter((t) => t.kind === k), costUsd = sum(selected, (t) => t.costUsd);
         const effort = lower.find((e) => selected.length > 0 && selected.every((t) => estimate(t, e) !== null));
+        const kindThinking = selected.flatMap((t) => (t.thinkingSteps === null ? [] : [t.thinkingSteps]));
         return { kind: k, turns: selected.length, costUsd, costShare: total ? costUsd / total : 0, thinkingShare: costUsd ? sum(selected, (t) => t.thinkingCostUsd) / costUsd : 0,
+          meanStepsPerTurn: mean(selected.map((t) => t.steps)),
+          meanThinkingStepsPerTurn: kindThinking.length ? mean(kindThinking) : null,
           lowerEffortSavingUsdPerWeek: effort ? sum(selected, (t) => t.costUsd - estimate(t, effort)!) * factor : null };
       }), alternatives,
     };

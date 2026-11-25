@@ -44,6 +44,10 @@ export interface KindStat {
   costShare: number;
   /** 0..1 of this kind's cost that was thinking. */
   thinkingShare: number;
+  /** Mean non-compaction requests per user turn in this kind. */
+  meanStepsPerTurn: number;
+  /** Mean thinking steps per user turn in this kind; null when thinking presence is unreported. */
+  meanThinkingStepsPerTurn: number | null;
   /** At the next lower effort with an estimate; null when not enough data. */
   lowerEffortSavingUsdPerWeek: number | null;
 }
@@ -67,12 +71,20 @@ export interface Alternative {
 export interface SettingReport {
   setting: ThinkingSetting;
   turns: number;
+  /** Turns whose requests all reported thinking token counts. */
+  measuredTurns: number;
   costUsd: number;
   costUsdPerWeek: number;
   thinkingCostUsd: number;
   /** 0..1 of cost that was thinking. */
   thinkingShare: number;
   medianTurnCostUsd: number;
+  /** Non-compaction agentic steps per user turn, subagents included. */
+  meanStepsPerTurn: number;
+  medianStepsPerTurn: number;
+  /** Steps with thinking per user turn; null when neither thinking tokens nor thinking presence was reported. */
+  meanThinkingStepsPerTurn: number | null;
+  medianThinkingStepsPerTurn: number | null;
   buckets: BucketStat[];
   kinds: KindStat[];
   /** Lower efforts on this model first, then cheaper models at this effort, then the mixed option. */

@@ -13,30 +13,41 @@ const clip = (s: string) => (s.length > TOOLTIP_MAX ? `${s.slice(0, TOOLTIP_MAX 
 
 /** Keeps the per-limit tray icons and the app tray tooltip in step with the latest usage. */
 export function TrayIconSync() {
+  let lastLimitSignature: string | null = null;
+  let lastAppTooltip: string | null = null;
+
   createEffect(() => {
     const t = settings().trayIcons;
     const snap = snapshot();
     const time = now();
     const darkTaskbar = taskbarDark();
+    const palette = activeTheme().palette;
     if (!t.enabled) {
-      void window.api.setLimitTrays([]);
+      if (lastLimitSignature !== '') {
+        lastLimitSignature = '';
+        void window.api.setLimitTrays([]);
+      }
       return;
     }
-    const images = t.items.map((spec) => {
+    const specs = t.items.map((spec) => {
       const reading = readTray(spec, snap, poolRemaining);
       const shown = shownPercent(reading.usedPercent, t.value);
       const text = trayIconText(shown);
-      const paint = paintFor(spec, darkTaskbar, reading.usedPercent, t, activeTheme().palette);
+      const paint = paintFor(spec, darkTaskbar, reading.usedPercent, t, palette);
       const valueText = shown === null ? 'no data' : `${percentText(shown)}% ${t.value}`;
       const reset = reading.resetsAt ? ` · ${resetText(reading.resetsAt, time)}` : '';
-      return {
-        id: spec.id,
-        png1x: drawTrayIcon(TRAY_PX_1X, text, paint),
-        png2x: drawTrayIcon(TRAY_PX_2X, text, paint),
-        tooltip: clip(`${reading.title}: ${valueText}${reset}\n${reading.source}`),
-      };
+      const tooltip = clip(`${reading.title}: ${valueText}${reset}\n${reading.source}`);
+      return { id: spec.id, text, paint, tooltip };
     });
-    void window.api.setLimitTrays(images);
+    const signature = specs.map((s) => `${s.id}\0${s.text}\0${s.paint.shape}\0${s.paint.fill}\0${s.paint.color}\0${s.paint.darkTaskbar ? 1 : 0}\0${s.tooltip}`).join('\u0001');
+    if (signature === lastLimitSignature) return;
+    lastLimitSignature = signature;
+    void window.api.setLimitTrays(specs.map((s) => ({
+      id: s.id,
+      png1x: drawTrayIcon(TRAY_PX_1X, s.text, s.paint),
+      png2x: drawTrayIcon(TRAY_PX_2X, s.text, s.paint),
+      tooltip: s.tooltip,
+    })));
   });
 
   createEffect(() => {
@@ -50,7 +61,10 @@ export function TrayIconSync() {
       if (!key) continue;
       lines.push(`${providerLabel(provider)}: ${percentText(poolRemaining(creds, key))}% of pool left`);
     }
-    void window.api.setAppTooltip(clip(lines.join('\n')));
+    const next = clip(lines.join('\n'));
+    if (next === lastAppTooltip) return;
+    lastAppTooltip = next;
+    void window.api.setAppTooltip(next);
   });
 
   return null;

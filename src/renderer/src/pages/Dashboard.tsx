@@ -89,7 +89,23 @@ export function Dashboard() {
   });
   const dismissEarlyBanner = () =>
     setDismissedEarly([...new Set([...dismissedEarly(), ...earlyBannerItems().map((i) => i.id)])].slice(-MAX_DISMISSED_EARLY_RESETS));
-  const credsOf = (id: string) => creds().filter((c) => c.provider === id);
+  const credsByProvider = createMemo<Map<string, Credential[]>>((prev) => {
+    const grouped = new Map<string, Credential[]>();
+    for (const c of creds()) {
+      const list = grouped.get(c.provider);
+      if (list) list.push(c);
+      else grouped.set(c.provider, [c]);
+    }
+    if (prev) {
+      for (const [id, list] of grouped) {
+        const old = prev.get(id);
+        if (old && old.length === list.length && old.every((c, i) => c === list[i])) grouped.set(id, old);
+      }
+    }
+    return grouped;
+  });
+  const EMPTY_CREDS: Credential[] = [];
+  const credsOf = (id: string) => credsByProvider().get(id) ?? EMPTY_CREDS;
   const focused = () => creds().find((c) => c.id === chosenAccount() && hasQuota(c)) ?? null;
   const toggleAccount = (id: string) => setChosenAccount(focused()?.id === id ? null : id);
   const pickProvider = (p: string) => {

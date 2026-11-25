@@ -37,6 +37,22 @@ const SHAPE_TEXT: Record<TrayIconShape, { fontRatio: number; fitRatio: number }>
 /** Regular weight in the OS UI font, like the taskbar clock beside it. */
 const TRAY_FONT_WEIGHT = 400;
 const TRAY_FONT = "'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif";
+const MAX_TRAY_PNG_CACHE = 128;
+
+const colorCache = new Map<string, string>();
+const canvases = new Map<number, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
+const pngCache = new Map<string, string>();
+let cachedDocument: Document | undefined;
+let colorContext: CanvasRenderingContext2D | undefined;
+
+function useCurrentDocument(): void {
+  if (cachedDocument === document) return;
+  cachedDocument = document;
+  colorContext = undefined;
+  colorCache.clear();
+  canvases.clear();
+  pngCache.clear();
+}
 
 /** WCAG relative luminance of a #rrggbb colour. */
 export function luminance(hex: string): number {
@@ -66,9 +82,15 @@ function digitColor(p: TrayIconPaint): string {
 
 /** Any CSS colour as the canvas normalizes it: #rrggbb when opaque, rgba() otherwise. */
 function canvasColor(css: string): string {
-  const ctx = document.createElement('canvas').getContext('2d')!;
+  useCurrentDocument();
+  const cached = colorCache.get(css);
+  if (cached !== undefined) return cached;
+  const ctx = colorContext ??= document.createElement('canvas').getContext('2d')!;
+  ctx.fillStyle = '#000000';
   ctx.fillStyle = css;
-  return String(ctx.fillStyle);
+  const color = String(ctx.fillStyle);
+  colorCache.set(css, color);
+  return color;
 }
 
 /** Warning colours override the normal icon colour without changing its shape or fill. */
@@ -86,10 +108,22 @@ export function paintFor(
 
 /** Draws one tray icon: a number in an optional outlined or filled shape, returned as a PNG data URL. */
 export function drawTrayIcon(size: number, text: string, p: TrayIconPaint): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+  useCurrentDocument();
+  const key = `${size}\0${text}\0${p.shape}\0${p.fill}\0${p.color}\0${p.darkTaskbar ? 1 : 0}`;
+  const cached = pngCache.get(key);
+  if (cached !== undefined) return cached;
+
+  let drawing = canvases.get(size);
+  if (!drawing) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    drawing = { canvas, ctx: canvas.getContext('2d')! };
+    canvases.set(size, drawing);
+  }
+  const { canvas, ctx } = drawing;
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
 
   const line = p.shape !== 'none' && p.fill === 'outline' ? Math.max(1, Math.round(size * OUTLINE_PER_EDGE)) : 0;
   if (p.shape !== 'none') {
@@ -121,5 +155,9 @@ export function drawTrayIcon(size: number, text: string, p: TrayIconPaint): stri
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(text, size / 2, size / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
-  return canvas.toDataURL('image/png');
+  ctx.restore();
+  const png = canvas.toDataURL('image/png');
+  if (pngCache.size >= MAX_TRAY_PNG_CACHE) pngCache.delete(pngCache.keys().next().value!);
+  pngCache.set(key, png);
+  return png;
 }

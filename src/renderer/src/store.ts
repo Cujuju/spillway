@@ -1,5 +1,5 @@
 import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
-import { batch, createComputed, createRoot, createSignal } from 'solid-js';
+import { batch, createComputed, createRoot, createSignal, untrack } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { maskEmails, maskSnapshot } from '@shared/privacy';
@@ -9,6 +9,7 @@ import { resolveTheme, THEMES, type Theme } from '@shared/themes';
 import { paintTheme } from './lib/theme';
 import { persistedSignal } from './lib/persisted';
 import { createActivityReload } from './lib/activityReload';
+import { localHourStart } from './lib/rhythmProfile';
 import { installCatalogPrices, type PriceCatalogInfo, type PriceCatalogState } from '@shared/modelPrices';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
@@ -77,6 +78,8 @@ export const [logs, setLogs] = createSignal<LogLine[]>([]);
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
 /** Fixed forecast evidence, independent of the Activity page's chosen range. */
 export const [forecastBuckets, setForecastBuckets] = createSignal<ActivityBucket[]>([]);
+/** Snapshot timestamp for `forecastBuckets`, bounding measured session sizing so 5-minute history refreshes do not drift ahead of frozen costs. */
+export const [forecastAsOf, setForecastAsOf] = createSignal(Infinity);
 export const [activityImport, setActivityImport] = createSignal<ActivityImportState>({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null });
 /** One-time re-encoding of recorded bodies; the Activity worker answers nothing else meanwhile. */
 export const [archiveMigration, setArchiveMigration] = createSignal<ArchiveMigrationState>({ state: 'idle', done: 0, total: 0 });
@@ -95,14 +98,39 @@ const [activityDays, setActivityDays] = createSignal<number | null>(MIN_ACTIVITY
 let activityGeneration = 0;
 let activityRequest = 0;
 let activityAppliedRequest = 0;
-const loadActivity = () => {
+let forecastDirty = true;
+let forecastDirtyRequest = 0;
+let lastForecastHour: number | undefined;
+let pendingForecastHour: number | undefined;
+const loadActivity = (wantsForecast: boolean) => {
+  const requestedAt = Date.now();
+  const requestHour = localHourStart(requestedAt);
   const generation = activityGeneration;
   const request = ++activityRequest;
-  void api.activityBucketSnapshot(activityDays()).then(({ held, forecast }) => {
+  if (wantsForecast) {
+    forecastDirty = true;
+    forecastDirtyRequest = request;
+    pendingForecastHour = requestHour;
+  }
+  void api.activityBucketSnapshot(untrack(activityDays)).then(({ held, forecast }) => {
     if (generation !== activityGeneration || request < activityAppliedRequest) return;
     activityAppliedRequest = request;
-    batch(() => { setActivityBuckets(held); setForecastBuckets(forecast); });
-  }).catch((err: unknown) => console.error('[activity] aggregates failed to load:', err));
+    if (wantsForecast || (forecastDirty && request >= forecastDirtyRequest)) {
+      if (request >= forecastDirtyRequest) forecastDirty = false;
+      lastForecastHour = requestHour;
+      if (pendingForecastHour === requestHour) pendingForecastHour = undefined;
+      batch(() => {
+        setActivityBuckets(held);
+        setForecastBuckets(forecast);
+        setForecastAsOf(requestHour);
+      });
+    } else {
+      setActivityBuckets(held);
+    }
+  }).catch((err: unknown) => {
+    if (request === forecastDirtyRequest) pendingForecastHour = undefined;
+    console.error('[activity] aggregates failed to load:', err);
+  });
 };
 
 /** Holds at least `days` local days of activity (null: all), reloading when that widens or narrows. */
@@ -111,7 +139,7 @@ export function holdActivityDays(days: number | null): void {
   if (next === activityDays()) return;
   activityGeneration++;
   setActivityDays(next);
-  loadActivity();
+  loadActivity(true);
 }
 async function saveSettings(next: AppSettings): Promise<void> {
   // Edits can copy store-backed values into the draft; IPC cannot clone Solid proxies.
@@ -170,9 +198,9 @@ export async function initStore(): Promise<void> {
   setWindowSummaries(summaries);
   setObservedSpans(spans);
   setLogs(logLines);
-  const bucketsReload = createActivityReload(loadActivity);
-  bucketsReload.refresh();
-  reloadActivity = () => { activityGeneration++; bucketsReload.refresh(); };
+  const bucketsReload = createActivityReload(() => loadActivity(false));
+  reloadActivity = () => { activityGeneration++; bucketsReload.cancel(); loadActivity(true); };
+  reloadActivity();
   api.onActivityReset(reloadActivity);
 
   api.onSnapshot((next) => {
@@ -199,7 +227,10 @@ export async function initStore(): Promise<void> {
 /** Re-aims at the next minute from the wall clock each time, so ticks never drift off it. */
 function tickEachMinute(): void {
   setTimeout(() => {
-    setNow(Date.now());
+    const nextNow = Date.now();
+    setNow(nextNow);
+    const hour = localHourStart(nextNow);
+    if (hour !== lastForecastHour && hour !== pendingForecastHour) loadActivity(true);
     tickEachMinute();
   }, msToNextMinute(Date.now()));
 }

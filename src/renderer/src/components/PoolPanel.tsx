@@ -70,25 +70,36 @@ export function PoolPanel(props: {
   const charts = (id: string) => shown().some((m) => m.provider() === id);
   const single = () => new Set(shown().map((m) => m.provider())).size === 1;
   const drainMax = (peak: number) => Math.max(MIN_DRAIN_AXIS, Math.ceil(peak * DRAIN_HEADROOM));
-  const series = (line: string, kind: 'remaining' | 'drain') =>
-    shownOf(line).map((m) => ({
-      id: m.provider(),
-      label: providerLabel(m.provider()),
-      color: providerVar(m.provider()),
-      past: kind === 'remaining' ? m.past() : m.drain(),
-      future: kind === 'remaining' ? m.projection()?.points : undefined,
-    }));
   const color = () => (single() ? providerVar(shown()[0]!.provider()) : undefined);
   const labelOf = (line: string) => props.windows.find((w) => w.value === line)?.label ?? 'this';
   const windowLabel = () => lines().map(labelOf).join(' or ') || 'this';
+  const RemainingChart = (p: { line: string }) => {
+    const series = createMemo(() =>
+      shownOf(p.line).map((m) => ({
+        id: m.provider(),
+        label: providerLabel(m.provider()),
+        color: providerVar(m.provider()),
+        past: m.past(),
+        future: m.projection()?.points,
+      })),
+    );
+    return <QuotaChart series={series()} markers={props.markersOf?.(p.line)} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel={`${labelOf(p.line)} remaining quota chart`} />;
+  };
+  const DrainChart = (p: { line: string }) => {
+    const series = createMemo(() =>
+      shownOf(p.line).map((m) => ({
+        id: m.provider(),
+        label: providerLabel(m.provider()),
+        color: providerVar(m.provider()),
+        past: m.drain(),
+        future: undefined,
+      })),
+    );
+    return <QuotaChart series={series()} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel={`${labelOf(p.line)} drain rate chart`} />;
+  };
   const chart = (line: string) => (
-    <Show
-      when={tab() === 'remaining'}
-      fallback={
-        <QuotaChart series={series(line, 'drain')} from={chartFrom()} to={now()} now={now()} yMax={drainMax} yLabel={(v) => `${v.toFixed(1)}%/h`} ariaLabel={`${labelOf(line)} drain rate chart`} />
-      }
-    >
-      <QuotaChart series={series(line, 'remaining')} markers={props.markersOf?.(line)} from={chartFrom()} to={chartTo()} now={now()} yMax={() => POOL_FULL} yLabel={(v) => `${Math.round(v)}%`} ariaLabel={`${labelOf(line)} remaining quota chart`} />
+    <Show when={tab() === 'remaining'} fallback={<DrainChart line={line} />}>
+      <RemainingChart line={line} />
     </Show>
   );
 

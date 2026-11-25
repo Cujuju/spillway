@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket, Credential, CredentialPlan, HistorySample } from '@shared/types';
-import { measuredSessionUsd, poolShares } from './poolCapacity';
+import { consumedBetween } from '@shared/usageWindows';
+import { measuredSessionUsd, poolShares, preparePoolEvidence } from './poolCapacity';
 import { poolSummary, project } from './forecast';
 import { pastSeries } from './poolHistory';
 import { poolSegments } from './poolWindows';
@@ -158,5 +159,86 @@ describe('measured session sizes', () => {
   it('keeps the published multiple over a measurement', () => {
     const { samples, buckets } = hour({ max: [50, 100], pro: [50, 5] });
     expect(poolShares(samples, [account('max', MAX_5X), account('pro', PRO)], 'five_hour', buckets).get('max')!.share).toBeCloseTo(5 / 6);
+  });
+
+  it('matches interval-by-interval costing across randomized samples and buckets', () => {
+    const session = 'five_hour';
+    const accounts = ['a', 'b', 'missing'].map((id) => account(id, null));
+    let seed = 42;
+    const random = () => {
+      seed = (Math.imul(1_664_525, seed) + 1_013_904_223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const naive = (samples: HistorySample[], buckets: ActivityBucket[], c: Credential) => {
+      const hourly = buckets.filter((b) => !b.wholeDay);
+      const loggedFrom = Math.min(...hourly.map((b) => b.start));
+      const relevant = samples.map((sample) => ({ sample, time: Date.parse(sample.at) }))
+        .filter(({ sample, time }) => time >= loggedFrom && sample.used[c.id]?.[session] !== undefined)
+        .sort((a, b) => a.time - b.time);
+      let percent = 0;
+      let usd = 0;
+      for (let i = 1; i < relevant.length; i++) {
+        const prev = relevant[i - 1]!;
+        const next = relevant[i]!;
+        percent += consumedBetween(prev.sample, next.sample, c.id, session) ?? 0;
+        for (const b of hourly) {
+          if (b.authIndex !== c.authIndex) continue;
+          const overlap = Math.min(next.time, b.start + H) - Math.max(prev.time, b.start);
+          if (overlap > 0) usd += (b.costUsd * overlap) / H;
+        }
+      }
+      return percent >= 20 && usd > 0 ? 100 * (usd / percent) : null;
+    };
+
+    for (let trial = 0; trial < 100; trial++) {
+      const samples = Array.from({ length: 25 }, () => {
+        const time = NOW + Math.floor(random() * 30 - 3) * (H / 4);
+        const used = Object.fromEntries(accounts.filter(() => random() > 0.2).map(({ id }) => [id, { [session]: Math.floor(random() * 100) }]));
+        const resets = Object.fromEntries(accounts.filter(() => random() > 0.3).map(({ id }) => [id, { [session]: NOW + Math.floor(random() * 8) * H }]));
+        return { ...at(time, used), resets };
+      });
+      const buckets = [{ ...bucket('missing', NOW - H, 100), wholeDay: true }];
+      if (trial % 5 !== 0) {
+        buckets.push(bucket('b', NOW, 1));
+        for (let i = 0; i < 20; i++) {
+          const start = NOW + (1 + Math.floor(random() * 6)) * H;
+          const id = random() < 0.5 ? 'a' : 'b';
+          buckets.push(bucket(id, start, random() * 3), { ...bucket(id, start, random() * 2), model: 'other' });
+        }
+      }
+      for (const c of accounts) {
+        const expected = naive(samples, buckets, c);
+        const actual = measuredSessionUsd(samples, buckets, c, session);
+        if (expected === null) expect(actual).toBeNull();
+        else expect(actual).toBeCloseTo(expected, 10);
+      }
+    }
+  });
+
+  it('reuses evidence while normalizing session sizes for each window account set', () => {
+    const { samples, buckets } = hour({ pro: [50, 5], max: [50, 100], team: [50, 20] });
+    const credentials = [account('pro', PRO), account('max', MAX_5X), account('team', TEAM)];
+    credentials[0]!.windows[1]!.usedPercent = null;
+    const evidence = preparePoolEvidence(samples, buckets);
+
+    const session = poolShares(samples, credentials, 'five_hour', buckets, evidence);
+    const weekly = poolShares(samples, credentials, 'seven_day', buckets, evidence);
+    expect(session).toEqual(poolShares(samples, credentials, 'five_hour', buckets));
+    expect(weekly).toEqual(poolShares(samples, credentials, 'seven_day', buckets));
+    expect(weekly.has('pro')).toBe(false);
+    expect(session.get('team')!.share).toBeCloseTo((40 / 25) / (6 + 40 / 25));
+    expect(weekly.get('team')!.share).toBeCloseTo(1 / 6);
+  });
+
+  it('bounds measuredSessionUsd at the completed-hour cutoff so newer history samples do not dilute frozen costs', () => {
+    const samples = [
+      at(NOW - H, { a: { five_hour: 0 } }),
+      at(NOW, { a: { five_hour: 25 } }),
+      // Arrives during the live hour before forecast buckets refresh.
+      at(NOW + 15 * 60_000, { a: { five_hour: 100 } }),
+    ];
+    const buckets = [bucket('a', NOW - H, 1.25)];
+    const evidence = preparePoolEvidence(samples, buckets, NOW);
+    expect(evidence.measuredSessionUsd(account('a', null), 'five_hour')).toBeCloseTo(5);
   });
 });

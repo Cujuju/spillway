@@ -3,6 +3,7 @@ import { createComputed, createRoot } from 'solid-js';
 import { unwrap } from 'solid-js/store';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { emptyCounts } from '@shared/activityCounts';
+import type { PriceCatalogState } from '@shared/modelPrices';
 import type { ActivityBucket, ActivityBucketSnapshot, Credential, UsageSnapshot } from '@shared/types';
 
 // IPC clones the request before main normalizes it.
@@ -71,6 +72,31 @@ it('masks displayed log text according to Show emails while preserving the raw d
 });
 const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', strategy: 'round-robin', credentials });
 
+function mockActivityEvents() {
+  let live = () => {};
+  let reset = () => {};
+  let price = (_state: PriceCatalogState) => {};
+  const catalog: PriceCatalogState = { prices: {}, info: { fetchedAt: null, models: 0 } };
+  const subscribe = () => () => {};
+  Object.assign(api, {
+    onOpenSettings: subscribe, onOpenProxy: subscribe, onActivityImport: subscribe, onArchiveMigration: subscribe,
+    priceCatalog: async () => catalog,
+    archiveMigrationState: async () => ({ state: 'idle', done: 0, total: 0 }),
+    activityImportState: async () => ({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null }),
+    getSettings: async () => structuredClone(unwrap(settings())), usageLatest: async () => ({ snapshot: null, error: null }),
+    proxyStatus: async () => null, usageHistory: async () => [], usageWindowSummaries: async () => [], usageObservedSpans: async () => [],
+    proxyLogs: async () => [], taskbarDark: async () => true,
+    onSnapshot: subscribe, onUsageError: subscribe, onProxyStatus: subscribe, onProxyLog: subscribe,
+    onMaximized: subscribe, onTaskbarDark: subscribe, onSettings: subscribe,
+    onActivity: (cb: () => void) => { live = cb; return () => {}; },
+    onActivityReset: (cb: () => void) => { reset = cb; return () => {}; },
+    onPriceCatalog: (cb: (state: PriceCatalogState) => void) => { price = cb; return () => {}; },
+  });
+  return { live: () => live(), reset: () => reset(), price: () => price(catalog) };
+}
+
+const bucketSnapshot = (start: number): ActivityBucketSnapshot => ({ held: [{ start } as ActivityBucket], forecast: [{ start } as ActivityBucket] });
+
 describe('forecast activity evidence', () => {
   it('keeps pool capacity and forecasts fixed when the Activity page widens or narrows', async () => {
     const bucket: ActivityBucket = {
@@ -137,24 +163,10 @@ describe('forecast activity evidence', () => {
 
   it('advances slow live reads, ignores out-of-order replies and invalidates pre-reset snapshots', async () => {
     vi.useFakeTimers();
-    let live = () => {};
-    let reset = () => {};
-    const subscribe = () => () => {};
-    Object.assign(api, {
-      onOpenSettings: subscribe, onOpenProxy: subscribe, onActivityImport: subscribe, onArchiveMigration: subscribe, onPriceCatalog: subscribe,
-      priceCatalog: async () => ({ prices: {}, info: { fetchedAt: null, models: 0 } }),
-      archiveMigrationState: async () => ({ state: 'idle', done: 0, total: 0 }),
-      activityImportState: async () => ({ state: 'idle', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null }),
-      getSettings: async () => structuredClone(unwrap(settings())), usageLatest: async () => ({ snapshot: null, error: null }),
-      proxyStatus: async () => null, usageHistory: async () => [], usageWindowSummaries: async () => [], usageObservedSpans: async () => [],
-      proxyLogs: async () => [], taskbarDark: async () => true,
-      onSnapshot: subscribe, onUsageError: subscribe, onProxyStatus: subscribe, onProxyLog: subscribe,
-      onMaximized: subscribe, onTaskbarDark: subscribe, onSettings: subscribe,
-      onActivity: (cb: () => void) => { live = cb; return () => {}; },
-      onActivityReset: (cb: () => void) => { reset = cb; return () => {}; },
-    });
+    vi.setSystemTime(new Date('2026-11-25T14:00:00Z'));
+    const { live, reset } = mockActivityEvents();
     const replies: ((value: ActivityBucketSnapshot) => void)[] = [];
-    const value = (start: number): ActivityBucketSnapshot => ({ held: [{ start } as ActivityBucket], forecast: [{ start } as ActivityBucket] });
+    const value = bucketSnapshot;
     const poll = async () => { live(); await vi.advanceTimersByTimeAsync(2_000); };
     try {
       await initStore();
@@ -182,6 +194,118 @@ describe('forecast activity evidence', () => {
       expect(activityBuckets()).toEqual(value(6).held);
       expect(forecastBuckets()).toEqual(value(6).forecast);
     } finally {
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
+      vi.clearAllTimers(); vi.useRealTimers();
+    }
+  });
+
+  it('keeps the forecast reference on live polls and refreshes it on reset, repricing and hour rollover', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T14:58:00Z'));
+    const { live, reset, price } = mockActivityEvents();
+    const previousNow = now();
+    const startup = bucketSnapshot(1);
+    const next = bucketSnapshot(2);
+    api.activityBucketSnapshot.mockResolvedValueOnce(startup).mockResolvedValueOnce(next);
+    try {
+      await initStore();
+      expect(forecastBuckets()).toBe(startup.forecast);
+      live();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(activityBuckets()).toBe(next.held);
+      expect(forecastBuckets()).toBe(startup.forecast);
+
+      const afterReset = bucketSnapshot(3);
+      api.activityBucketSnapshot.mockResolvedValueOnce(afterReset);
+      reset();
+      await Promise.resolve();
+      expect(forecastBuckets()).toBe(afterReset.forecast);
+
+      const afterPrice = bucketSnapshot(4);
+      api.activityBucketSnapshot.mockResolvedValueOnce(afterPrice);
+      price();
+      await Promise.resolve();
+      expect(forecastBuckets()).toBe(afterPrice.forecast);
+
+      await vi.advanceTimersByTimeAsync(117_000);
+      expect(forecastBuckets()).toBe(afterPrice.forecast);
+      let resolveRollover!: (value: ActivityBucketSnapshot) => void;
+      const afterRollover = bucketSnapshot(5);
+      api.activityBucketSnapshot.mockReturnValueOnce(new Promise((resolve) => { resolveRollover = resolve; })).mockResolvedValueOnce(afterRollover);
+      live();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(forecastBuckets()).toBe(afterPrice.forecast);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(activityBuckets()).toBe(afterRollover.held);
+      expect(forecastBuckets()).toBe(afterRollover.forecast);
+      resolveRollover(bucketSnapshot(6));
+      await Promise.resolve();
+      expect(forecastBuckets()).toBe(afterRollover.forecast);
+    } finally {
+      setNow(previousNow);
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
+      vi.clearAllTimers(); vi.useRealTimers();
+    }
+  });
+
+  it('distinguishes null plans from empty-tier plans in the shared poolShares cache', () => {
+    const previousHistory = history();
+    const withWeekly = (id: string, used5h: number, used7d: number, plan: Credential['plan']): Credential => ({
+      ...cred(id, used5h),
+      plan,
+      windows: [
+        { key: '5h', label: '5h', usedPercent: used5h, resetsAt: null, durationMs: 5 * 3_600_000, status: null, scoped: false, resetCadence: null },
+        { key: '7d', label: '7d', usedPercent: used7d, resetsAt: null, durationMs: 168 * 3_600_000, status: null, scoped: false, resetCadence: null },
+      ],
+    });
+    setHistory([
+      { at: new Date(0).toISOString(), used: { a: { '5h': 0, '7d': 0 }, b: { '5h': 0, '7d': 0 } } },
+      { at: new Date(3_600_000).toISOString(), used: { a: { '5h': 20, '7d': 10 }, b: { '5h': 40, '7d': 10 } } },
+    ]);
+    try {
+      const a = withWeekly('a', 0, 0, { tier: '', label: 'Custom', multiplier: null });
+      const b = withWeekly('b', 0, 0, { tier: 'pro', label: 'Pro', multiplier: 1 });
+      const cNull = withWeekly('c', 0, 100, null);
+      const cEmptyTier = withWeekly('c', 0, 100, { tier: '', label: 'Custom', multiplier: null });
+      // cNull borrows the mean ratio (3) across a (2) and b (4); cEmptyTier borrows same-tier a's ratio (2).
+      expect(poolRemaining([a, b, cNull], '7d')).toBeCloseTo(600 / 9);
+      expect(poolRemaining([a, b, cEmptyTier], '7d')).toBeCloseTo(600 / 8);
+    } finally {
+      setHistory(previousHistory);
+    }
+  });
+
+  it('keeps an in-flight rollover forecast pending when an earlier live reply arrives first', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T14:59:57Z'));
+    const { live } = mockActivityEvents();
+    const previousNow = now();
+    const startup = bucketSnapshot(1);
+    const liveSnap = bucketSnapshot(2);
+    const rolloverSnap = bucketSnapshot(3);
+    let resolveLive!: (value: ActivityBucketSnapshot) => void;
+    let resolveRollover!: (value: ActivityBucketSnapshot) => void;
+    api.activityBucketSnapshot
+      .mockResolvedValueOnce(startup)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveLive = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveRollover = resolve; }));
+    try {
+      await initStore();
+      live();
+      await vi.advanceTimersByTimeAsync(2_000); // 14:59:59: sends pre-rollover live request
+      await vi.advanceTimersByTimeAsync(1_000); // 15:00:00: sends rollover forecast request
+      const callsAtRollover = api.activityBucketSnapshot.mock.calls.length;
+      resolveLive(liveSnap);
+      await Promise.resolve();
+      expect(activityBuckets()).toBe(liveSnap.held);
+      expect(forecastBuckets()).toBe(startup.forecast);
+      await vi.advanceTimersByTimeAsync(60_000); // 15:01:00: must not issue duplicate rollover request
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(callsAtRollover);
+      resolveRollover(rolloverSnap);
+      await Promise.resolve();
+      expect(forecastBuckets()).toBe(rolloverSnap.forecast);
+    } finally {
+      setNow(previousNow);
       api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
       vi.clearAllTimers(); vi.useRealTimers();
     }

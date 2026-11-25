@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCounts } from '@shared/activityCounts';
 import type { ActivityBucket } from '@shared/types';
-import { FLAT_RHYTHM, RHYTHM_FLAT_SHARE, RHYTHM_LOOKBACK_DAYS, RHYTHM_MIN_DAYS, rhythmProfile, weightedHours } from './rhythmProfile';
+import { FLAT_RHYTHM, localHourStart, RHYTHM_FLAT_SHARE, RHYTHM_LOOKBACK_DAYS, RHYTHM_MIN_DAYS, rhythmProfile, weightedHours } from './rhythmProfile';
 
 const H = 3_600_000;
 const DAY = 24 * H;
@@ -79,5 +79,10 @@ describe('weightedHours', () => {
     const profile = Array<number>(24).fill(1);
     profile[1] = 3;
     expect(weightedHours(transition - H, transition + H, profile, offset)).toBe(6);
+  });
+  it('floors localHourStart in half-hour timezone offsets without crossing back over local midnight', () => {
+    const ist = () => -330; // UTC+05:30
+    // 00:15 local in UTC+05:30 floors to 00:00 local (18:30Z), not 18:00Z on the previous local day.
+    expect(localHourStart(Date.parse('2026-10-25T18:45:00Z'), ist)).toBe(Date.parse('2026-10-25T18:30:00Z'));
   });
 });

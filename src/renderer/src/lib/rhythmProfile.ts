@@ -14,7 +14,10 @@ export type TimezoneOffset = (t: number) => number;
 export const localOffset: TimezoneOffset = (t) => new Date(t).getTimezoneOffset();
 const localTime = (t: number, offset: TimezoneOffset) => t - offset(t) * 60_000;
 export const localHour = (t: number, offset: TimezoneOffset) => new Date(localTime(t, offset)).getUTCHours();
-export const nextLocalHour = (t: number, offset: TimezoneOffset) => t + HOUR_MS - ((localTime(t, offset) % HOUR_MS + HOUR_MS) % HOUR_MS);
+/** Epoch ms of the start of the local clock hour containing `t` (handles non-whole-hour UTC offsets). */
+export const localHourStart = (t: number, offset: TimezoneOffset = localOffset) =>
+  t - (((localTime(t, offset) % HOUR_MS) + HOUR_MS) % HOUR_MS);
+export const nextLocalHour = (t: number, offset: TimezoneOffset) => localHourStart(t, offset) + HOUR_MS;
 
 /** Learn hourly demand from total tokens. */
 export function rhythmProfile(buckets: ActivityBucket[], provider: string, now: number, offset: TimezoneOffset = localOffset): RhythmProfile {

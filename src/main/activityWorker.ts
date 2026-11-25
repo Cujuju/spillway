@@ -1,9 +1,11 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { ActivityLog } from './activityStore';
+import { installCatalogPrices } from '@shared/modelPrices';
 import { startClientLogSync } from './clientLogSync';
 import { startTitleExport } from './titleExport';
 import type { ActivityMethods, EvalMethods, Request, WorkerConfig } from './activityProtocol';
 const port = parentPort!;
+installCatalogPrices((workerData as WorkerConfig).catalogPrices);
 const log = new ActivityLog(workerData as WorkerConfig, (value) => port.postMessage({ event: 'migration', value }));
 log.prune();
 try { log.archiveExportReset(); }
@@ -19,6 +21,7 @@ const methods: Omit<ActivityMethods, 'clear' | 'names'> & EvalMethods & { clear(
   thinkingTestPrepare: (req) => log.thinkingTestPrepare(req), thinkingTestSave: (test) => log.thinkingTestSave(test), thinkingTests: () => log.thinkingTests(),
   priceSnapshot: () => log.priceSnapshot(),
   pricesChanged: () => { log.pricesChanged(); port.postMessage({ event: 'reset' }); },
+  setPrices: (prices) => log.setPrices(prices),
   canaryLastRunAt: () => log.canaryLastRunAt(),
   driftQuery: (q) => log.driftQuery(q), canarySave: (r) => log.canarySave(r), canaryResults: (q) => log.canaryResults(q),
   evalList: () => log.evalList(), evalGet: (id, revision) => log.evalGet(id, revision),

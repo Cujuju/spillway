@@ -1,11 +1,14 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { ActivityLog } from './activityStore';
+import { installCatalogPrices, type CatalogPrices } from '@shared/modelPrices';
 import type { Request, WorkerConfig } from './activityProtocol';
 
 const port = parentPort!;
+installCatalogPrices((workerData as WorkerConfig).catalogPrices);
 const log = new ActivityLog({ ...(workerData as WorkerConfig), readonly: true });
 
 const methods = {
+  setPrices: (prices: CatalogPrices) => log.setPrices(prices),
   page: (q: Parameters<ActivityLog['page']>[0]) => log.page(q),
   day: (...args: Parameters<ActivityLog['day']>) => log.day(...args),
   days: () => log.days(),

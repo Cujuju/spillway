@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ postMessage: vi.fn(), prune: vi.fn(), start: vi.fn(), exportReset: vi.fn(), exportError: vi.fn() }));
-vi.mock('node:worker_threads', () => ({ parentPort: Object.assign(new EventEmitter(), { postMessage: state.postMessage }), workerData: {} }));
+vi.mock('node:worker_threads', () => ({ parentPort: Object.assign(new EventEmitter(), { postMessage: state.postMessage }), workerData: { catalogPrices: {} } }));
 vi.mock('./activityStore', () => ({ ActivityLog: class { prune = state.prune; archiveExportReset = state.exportReset; archiveExportStartupError = state.exportError; } }));
 vi.mock('./clientLogSync', () => ({ startClientLogSync: state.start }));
 it('invalidates renderer after each initialization even when checkpointed scans change nothing', async () => {

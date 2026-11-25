@@ -2,8 +2,9 @@ import { createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { dateTime, pct } from '../lib/format';
 import { InfoTip, type TipRow } from './ChartTip';
 import { appLocale } from '@shared/timeFormat';
+import { priceCatalogInfo } from '../store';
 
-/** Date the price table in src/shared/modelPrices.ts was checked. */
+/** Date the bundled price table in src/shared/modelPrices.ts was checked. */
 const PRICES_CHECKED = 'Nov 24, 2026';
 /** Coverage changes slowly; a minute keeps it current without re-querying every request burst. */
 const COVERAGE_REFRESH_MS = 60_000;
@@ -19,10 +20,15 @@ export function ActivityInfo(props: { unpriced: string[] }) {
   onCleanup(() => clearInterval(timer));
 
   const clients = createMemo(() => (coverage()?.clients ?? []).filter((c) => c.requests > 0));
+  const catalogLine = () => {
+    const { fetchedAt, models } = priceCatalogInfo();
+    return fetchedAt ? `LiteLLM catalog, ${models.toLocaleString(appLocale())} models, updated ${dateTime(fetchedAt)}` : 'LiteLLM catalog not downloaded yet';
+  };
   const rows = createMemo((): TipRow[] => {
     const since = coverage()?.since;
     return [
       { label: 'Prices checked', value: PRICES_CHECKED },
+      { label: 'Other models', value: catalogLine() },
       { label: 'Cache writes', value: '5-minute rate' },
       ...(props.unpriced.length ? [{ label: 'No price (left out)', value: props.unpriced.join(', ') }] : []),
       ...(since && clients().length ? [{ label: 'Proxy coverage since', value: dateTime(since) }] : []),

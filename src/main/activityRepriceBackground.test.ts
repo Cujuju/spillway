@@ -65,6 +65,20 @@ it('logs worker failures without throwing', async () => {
   await job.stop();
 });
 
+it('runs one more pass when prices change during a pass', async () => {
+  const workers = [new EventEmitter(), new EventEmitter()];
+  const create = vi.fn(() => workers[create.mock.calls.length - 1] as Worker);
+  const job = new ActivityRepriceJob(create, vi.fn());
+  job.start(null);
+  job.start(null);
+  expect(create).toHaveBeenCalledTimes(1);
+  workers[0]!.emit('exit', 0);
+  expect(create).toHaveBeenCalledTimes(2);
+  workers[1]!.emit('exit', 0);
+  expect(create).toHaveBeenCalledTimes(2);
+  await job.stop();
+});
+
 it('commits newest days first, leaves no snapshot on failure, and reruns idempotently', () => {
   const { db, event, save } = fixture();
   try {

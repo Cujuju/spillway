@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { cheapestModel, priceAt, priceTableSnapshot, promptTokens, repriceStart, reportsCacheWrites, tokenCost } from './modelPrices';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cheapestModel, installCatalogPrices, priceAt, priceTableSnapshot, promptTokens, repriceStart, reportsCacheWrites, tokenCost } from './modelPrices';
 
 describe('price table changes', () => {
   const old = { from: null, rates: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 } };
@@ -16,6 +16,23 @@ describe('price table changes', () => {
     for (const [prev, next] of [['{}', table([old])], [table([old]), '{}'], [null, table([old])], [table([old]), table([{ ...current, from: null }])]]) {
       expect([...repriceStart(prev!, next!)]).toEqual([['model', null]]);
     }
+  });
+});
+
+describe('installCatalogPrices', () => {
+  const rates = { input: 1, output: 2, cacheRead: 1, cacheWrite: 1, cacheWriteLong: 1 };
+  const counts = { inputTokens: 1_000_000, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 };
+  afterEach(() => installCatalogPrices({}));
+  it('prices models the bundled table lacks and marks only them for repricing', () => {
+    const before = priceTableSnapshot();
+    installCatalogPrices({ 'gpt-9-test': { from: '2030-01-01', rates } });
+    expect(tokenCost('codex', 'gpt-9-test', '2026-11-24T00:00:00Z', counts)!.usd).toBeCloseTo(1);
+    expect([...repriceStart(before, priceTableSnapshot())]).toEqual([['gpt-9-test', null]]);
+  });
+  it('keeps bundled entries over the catalog', () => {
+    const bundled = tokenCost('codex', 'gpt-6.2-sol', '2026-11-24T00:00:00Z', counts)!.usd;
+    installCatalogPrices({ 'gpt-6.2-sol': { from: null, rates } });
+    expect(tokenCost('codex', 'gpt-6.2-sol', '2026-11-24T00:00:00Z', counts)!.usd).toBe(bundled);
   });
 });
 

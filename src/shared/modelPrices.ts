@@ -17,7 +17,7 @@ export interface Rates {
 
 export interface TierPrice { rates: Rates; long?: Rates }
 
-interface ModelPrice {
+export interface ModelPrice {
   from: string | null;
   rates: Rates;
   /** Prompts over this many tokens bill at `long` instead. */
@@ -27,7 +27,7 @@ interface ModelPrice {
 }
 
 /** Anthropic pricing: 1-hour writes cost twice base input. */
-const CLAUDE_LONG_WRITE_MULTIPLIER = 2;
+export const CLAUDE_LONG_WRITE_MULTIPLIER = 2;
 const r = (input: number, cacheWrite: number, cacheRead: number, output: number): Rates =>
   ({ input, cacheWrite, cacheWriteLong: input * CLAUDE_LONG_WRITE_MULTIPLIER, cacheRead, output });
 /** Unlisted cache-write rates retain input pricing. */
@@ -157,10 +157,25 @@ const DATE_SUFFIX = /-\d{8}$/;
 
 const stableJson = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
   v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
-const PRICE_TABLE_SNAPSHOT = stableJson(PRICES);
+/** Current rates per model from the downloaded catalog (main/priceCatalog.ts). */
+export type CatalogPrices = Record<string, ModelPrice>;
+/** `fetchedAt` is null before the first successful download. */
+export interface PriceCatalogInfo { fetchedAt: string | null; models: number }
+export interface PriceCatalogState { prices: CatalogPrices; info: PriceCatalogInfo }
+
+let table: Record<string, readonly ModelPrice[]> = PRICES;
+let tableSnapshot = stableJson(PRICES);
+
+/** Prices models the bundled table lacks; bundled entries keep their dated history. Every thread that prices installs the same catalog. */
+export function installCatalogPrices(catalog: CatalogPrices): void {
+  const merged: Record<string, readonly ModelPrice[]> = { ...PRICES };
+  for (const [id, price] of Object.entries(catalog)) if (!Object.hasOwn(PRICES, id)) merged[id] = [{ ...price, from: null }];
+  table = merged;
+  tableSnapshot = stableJson(merged);
+}
 
 /** Full dated table, independent of object insertion order. */
-export const priceTableSnapshot = (): string => PRICE_TABLE_SNAPSHOT;
+export const priceTableSnapshot = (): string => tableSnapshot;
 
 /** Earliest breakpoint at which effective rates differ; redundant history entries do not count. */
 export function repriceStart(prev: string | null, next: string): Map<string, string | null> {
@@ -186,7 +201,7 @@ export function repriceStart(prev: string | null, next: string): Map<string, str
 
 function priceHistory(model: string): readonly ModelPrice[] | null {
   const id = model.trim().toLowerCase();
-  return PRICES[id] ?? PRICES[id.replace(DATE_SUFFIX, '')] ?? null;
+  return table[id] ?? table[id.replace(DATE_SUFFIX, '')] ?? null;
 }
 
 // A date-only `from` parses as UTC midnight, so comparing times matches comparing UTC dates without formatting one per request.
@@ -207,7 +222,7 @@ export function priceAt(history: readonly ModelPrice[], at: string | number): Mo
 /** A model's current list rates; null when unpriced. */
 export const currentRates = (model: string): Rates | null => priceHistory(model)?.at(-1)?.rates ?? null;
 
-/** Each priced model's current rates, for the price check script. */
+/** Each bundled model's current rates, for the price check script. */
 export const latestPrices = (): Map<string, ModelPrice> => new Map(Object.entries(PRICES).map(([id, history]) => [id, history.at(-1)!]));
 
 /**

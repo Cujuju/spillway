@@ -7,7 +7,7 @@ import type { ApiProviderGroup, ApiProviderList } from '@shared/apiProviders';
 import { parseBuildInfo } from '@shared/buildInfo';
 import { INVOKE, SEND, type DesktopApi } from '@shared/ipc';
 import type { ClientId } from '@shared/types';
-import { activityLog, activityImportState, archiveMigrationState } from './activityService';
+import { activityLog, activityImportState, archiveMigrationState, priceCatalog } from './activityService';
 import type { StorageDestination } from './activityStorage';
 import { archiveSync } from './archiveSync';
 import { clickhouseActivityReader, clickhouseStatus, saveClickHouse, diagnoseClickHouse, retryClickHouse, clearClickHouse, cancelClickHouse, withClickHousePaused } from './clickhouseService';
@@ -173,6 +173,7 @@ const handlers: Handlers = {
   diagnosticSave: (token) => diagnosticExporter.save(token),
   diagnosticDiscard: (id) => diagnosticExporter.discard(id),
   appBuild: () => parseBuildInfo(app.getVersion(), __APP_BUILD__, null),
+  priceCatalog: () => ({ prices: priceCatalog.prices(), info: priceCatalog.info() }),
   getSettings: () => getSettings(),
   setSettings: (next) => applySettings(next),
   proxyStatus: () => proxy.getStatus(),

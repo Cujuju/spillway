@@ -18,6 +18,7 @@ import type { DriftQuery, DriftReport } from './drift';
 import type { TestPlanRequest, TestPlan, ThinkingTest } from './thinkingTest';
 import type { CanaryResult, CanaryStatus } from './canary';
 import type { AppSettings } from './settings';
+import type { PriceCatalogState } from './modelPrices';
 import type {
   ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, OAuthTarget, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
@@ -78,6 +79,8 @@ export interface DesktopApi {
 
   /** Spillway's own version and build. */
   appBuild(): Promise<BuildInfo>;
+  /** Downloaded catalog prices; the renderer installs them before it prices anything. */
+  priceCatalog(): Promise<PriceCatalogState>;
   getSettings(): Promise<AppSettings>;
   setSettings(next: AppSettings): Promise<AppSettings>;
 
@@ -205,6 +208,7 @@ export interface DesktopApi {
   onActivityImport(cb: (state: ActivityImportState) => void): () => void;
   onArchiveMigration(cb: (state: ArchiveMigrationState) => void): () => void;
   onActivityReset(cb: () => void): () => void;
+  onPriceCatalog(cb: (state: PriceCatalogState) => void): () => void;
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
   onTaskbarDark(cb: (dark: boolean) => void): () => void;
@@ -223,6 +227,7 @@ export const INVOKE = {
   driftQuery: 'drift:query', canaryStatus: 'canary:status', canaryRunNow: 'canary:run-now', canaryResults: 'canary:results',
   traceQuery: 'trace:query', traceAttempts: 'trace:attempts',
   appBuild: 'app:build',
+  priceCatalog: 'prices:catalog',
   getSettings: 'settings:get',
   setSettings: 'settings:set',
   proxyStatus: 'proxy:status',
@@ -320,6 +325,7 @@ export const EVENTS = {
   onArchiveMigration: 'archive:migration',
   onCanaryChange: 'canary:change',
   onActivityReset: 'activity:reset',
+  onPriceCatalog: 'prices:catalog-changed',
   onUpdateStatus: 'update:status-changed',
   onTaskbarDark: 'tray:taskbar-dark-changed',
 } as const satisfies Partial<Record<keyof DesktopApi, string>>;

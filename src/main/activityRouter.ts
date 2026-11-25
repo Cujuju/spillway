@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { ActivityRpc } from './activityRpc';
 import { READ_ONLY_ACTIVITY_METHODS, type ActivityMethods, type EvalMethods, type Method } from './activityProtocol';
+import type { CatalogPrices } from '@shared/modelPrices';
 
 type AllMethods = ActivityMethods & EvalMethods;
 
@@ -67,6 +68,12 @@ export class ActivityRouter extends EventEmitter {
       return this.reader.call(method, ...args);
     }
     return this.writer.call(method, ...args);
+  }
+
+  /** Both workers price requests; a restarted worker takes the catalog from its spawn config instead. */
+  async setPrices(prices: CatalogPrices): Promise<void> {
+    const reader = this.readerReady ? this.reader : null;
+    await Promise.all([this.writer.call('setPrices', prices), reader?.call('setPrices', prices)]);
   }
 
   cancel(): void {

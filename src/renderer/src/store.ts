@@ -9,6 +9,7 @@ import { resolveTheme, THEMES, type Theme } from '@shared/themes';
 import { paintTheme } from './lib/theme';
 import { persistedSignal } from './lib/persisted';
 import { createActivityReload } from './lib/activityReload';
+import { installCatalogPrices, type PriceCatalogInfo, type PriceCatalogState } from '@shared/modelPrices';
 import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings', 'help'] as const;
@@ -81,6 +82,8 @@ export const [activityImport, setActivityImport] = createSignal<ActivityImportSt
 export const [archiveMigration, setArchiveMigration] = createSignal<ArchiveMigrationState>({ state: 'idle', done: 0, total: 0 });
 export const [maximized, setMaximized] = createSignal(false);
 export const [taskbarDark, setTaskbarDark] = createSignal(true);
+export const [priceCatalogInfo, setPriceCatalogInfo] = createSignal<PriceCatalogInfo>({ fetchedAt: null, models: 0 });
+const applyPriceCatalog = (state: PriceCatalogState) => { installCatalogPrices(state.prices); setPriceCatalogInfo(state.info); };
 
 const MAX_LOG_LINES = 2000;
 /** History refetch after a snapshot is cheap (local file) and keeps the chart current. */
@@ -144,11 +147,16 @@ export async function initStore(): Promise<void> {
   // Before any await: main sends this once the page loads, which can beat the startup reads below.
   api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
   api.onOpenProxy(() => setPage('proxy'));
+  // Before the startup read, so a catalog download finishing meanwhile is not lost.
+  let receivedCatalogEvent = false;
+  let reloadActivity: (() => void) | undefined;
+  api.onPriceCatalog((state) => { receivedCatalogEvent = true; applyPriceCatalog(state); reloadActivity?.(); });
   let receivedImportEvent = false;
   api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
   let receivedMigrationEvent = false;
   api.onArchiveMigration((state) => { receivedMigrationEvent = true; setArchiveMigration(state); });
-  const [initialImport, initialMigration] = await Promise.all([api.activityImportState(), api.archiveMigrationState()]);
+  const [initialImport, initialMigration, initialCatalog] = await Promise.all([api.activityImportState(), api.archiveMigrationState(), api.priceCatalog()]);
+  if (!receivedCatalogEvent) applyPriceCatalog(initialCatalog);
   if (!receivedImportEvent) setActivityImport(initialImport);
   if (!receivedMigrationEvent) setArchiveMigration(initialMigration);  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
     api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.usageObservedSpans(), api.proxyLogs(), api.taskbarDark(),
@@ -164,7 +172,8 @@ export async function initStore(): Promise<void> {
   setLogs(logLines);
   const bucketsReload = createActivityReload(loadActivity);
   bucketsReload.refresh();
-  api.onActivityReset(() => { activityGeneration++; bucketsReload.refresh(); });
+  reloadActivity = () => { activityGeneration++; bucketsReload.refresh(); };
+  api.onActivityReset(reloadActivity);
 
   api.onSnapshot((next) => {
     setSnapshot(next);

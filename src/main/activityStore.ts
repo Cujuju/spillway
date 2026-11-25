@@ -6,6 +6,7 @@ import { settingKey } from '@shared/thinking';
 import type { CanaryResult } from '@shared/canary';
 import type { ArchiveMigrationState } from '@shared/ipc';
 import { activityPriceSnapshot, invalidateActivityPrices } from './activityReprice';
+import { installCatalogPrices, type CatalogPrices } from '@shared/modelPrices';
 import { backfillLegacyUsage, matchLegacyUsage } from './legacyUsage';
 import { ARCHIVE_CLEAR_SQL, ArchiveStore } from './archiveStore';
 import { ClickHouseStore } from './clickhouseStore';
@@ -147,6 +148,7 @@ export class ActivityLog {
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   priceSnapshot(): string | null { return activityPriceSnapshot(this.db); }
   pricesChanged(): void { this.totals = null; this.revision += 1; }
+  setPrices(prices: CatalogPrices): void { installCatalogPrices(prices); this.pricesChanged(); }
   revision = 0;
   private totalsVersion: number | undefined;
   private conn: Db | null = null;

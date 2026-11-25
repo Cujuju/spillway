@@ -19,7 +19,7 @@ else void startNormalApp();
 
 async function startNormalApp(): Promise<void> {
   const { EVENTS } = await import('@shared/ipc');
-  const { activityLog, stopActivityReprice } = await import('./activityService');
+  const { activityLog, applyCatalogPrices, priceCatalog, stopActivityReprice } = await import('./activityService');
   const { installAppMenu } = await import('./appMenu');
   const { activity } = await import('./activityStream');
   const { archiveSync } = await import('./archiveSync');
@@ -104,6 +104,10 @@ async function startNormalApp(): Promise<void> {
         syncAccountMap(latestAccounts);
       }
       send(EVENTS.onActivityReset, undefined);
+    });
+    priceCatalog.on('change', (prices) => {
+      send(EVENTS.onPriceCatalog, { prices, info: priceCatalog.info() });
+      void applyCatalogPrices(prices).catch((error) => console.error('[prices] catalog not applied to activity:', error));
     });
     activityLog.on('progress', (state) => send(EVENTS.onActivityImport, state));
     activityLog.on('migration', (state) => send(EVENTS.onArchiveMigration, state));
@@ -191,6 +195,8 @@ async function startNormalApp(): Promise<void> {
       registerIpc();
       wireEvents();
       installAppMenu(() => openSettingsSection('about'));
+      // Before the workers spawn: they take the cached catalog from their config.
+      priceCatalog.start();
       activityLog.start();
       clickhouseUploader.start();
       exportUsage(true);
@@ -221,7 +227,7 @@ async function startNormalApp(): Promise<void> {
       invalidateEval();
       archiveSync.stop();
       const closing = Promise.allSettled([
-        thinkingTestRunner.clear().then(() => stopActivityReprice()).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain && !proxy.attached), activityLog)),
+        thinkingTestRunner.clear().then(() => { priceCatalog.stop(); return stopActivityReprice(); }).then(() => cancelClickHouse(true)).catch(console.error).then(() => drainActivity(() => proxy.stop(), (drain) => activity.stop(drain && !proxy.attached), activityLog)),
         stopDiagnosticExport(),
       ]);
       void closing.then(async (results) => {

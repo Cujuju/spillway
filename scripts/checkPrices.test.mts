@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { compare, fetchPage, money, parseAnthropic, parseOpenAI } from './checkPrices.mts';
+import { checkSource, compare, fetchPage, money, parseAnthropic, parseOpenAI } from './checkPrices.mts';
 
 const ANTHROPIC = `
 ## Model pricing
@@ -42,7 +42,7 @@ const OPENAI = `
 | --- | --- | --- | --- |
 | gpt-6.1-sol | $1.00 | $5.00 | $0.05 |
 
-#### Flex
+### Flex pricing data
 
 | Model | Input | Output | Cached input |
 | --- | --- | --- | --- |
@@ -144,6 +144,17 @@ describe('compare', () => {
   });
 });
 
+describe('checkSource', () => {
+  it('turns an unreadable page layout into a report line for the issue', () => {
+    const checked = checkSource({ ...openai, parse: parseOpenAI }, OPENAI.replace('### Flex pricing data', '#### Flex'), new Map());
+    expect(checked.failed).toBe(true);
+    expect(checked.lines).toEqual([
+      '### OpenAI ([page](https://o/pricing))',
+      '- **Check failed:** heading not found: ### Flex pricing data. Fix `scripts/checkPrices.mts` for the page\'s layout.',
+    ]);
+  });
+});
+
 
 it('compares Claude 1-hour writes and fast cache multipliers', () => {
   const page = parseAnthropic(ANTHROPIC);
@@ -158,7 +169,7 @@ it('compares Claude 1-hour writes and fast cache multipliers', () => {
 
 it('reads and compares both OpenAI tier lifetime columns and long-context rates', () => {
   const table = OPENAI.split('### Standard pricing data')[1]!.split('| Model | Input')[0]!;
-  const page = parseOpenAI(OPENAI.replace(/#### Flex[\s\S]*$/, `#### Flex\n${table}\n### Fast pricing data\n${table}`));
+  const page = parseOpenAI(OPENAI.replace(/### Flex pricing data[\s\S]*$/, `### Flex pricing data\n${table}\n### Fast pricing data\n${table}`));
   const listed = page.get('gpt-6.1-sol')!;
   expect(listed.tiers!.flex!.rates.cacheWriteLong).toBe(5);
   expect(listed.tiers!.fast!.long!.cacheWrite).toBe(5);

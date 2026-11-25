@@ -9,12 +9,20 @@ import { ActivityRouter } from './activityRouter';
 import { activityStorage, appPaths } from './paths';
 import { getSecrets, getSettings } from './settingsStore';
 import type { ActivityImportState, ArchiveMigrationState } from '@shared/ipc';
+import type { CatalogPrices } from '@shared/modelPrices';
+import { net } from 'electron';
+import { PriceCatalog } from './priceCatalog';
+import { writeFileAtomic } from './settingsStore';
+import type { WorkerConfig } from './activityProtocol';
 
-const workerConfig = () => {
+export const priceCatalog = new PriceCatalog({ file: appPaths.priceCatalogFile, fetch: (url, init) => net.fetch(url, init), write: writeFileAtomic });
+
+const workerConfig = (): WorkerConfig => {
   activityStorage().verifyActive();
   return {
     activityDb: appPaths.activityDb, legacyActivityDir: appPaths.legacyActivityDir,
     databaseKey: getSecrets().databaseKey, retentionDays: getSettings().activity.retentionDays,
+    catalogPrices: priceCatalog.prices(),
   };
 };
 
@@ -41,7 +49,7 @@ export const archiveMigrationState = () => migration;
 const repricing = new ActivityRepriceJob(() => {
   activityStorage().verifyActive();
   return new Worker(repriceWorkerPath, { workerData: {
-    activityDb: appPaths.activityDb, databaseKey: getSecrets().databaseKey,
+    activityDb: appPaths.activityDb, databaseKey: getSecrets().databaseKey, catalogPrices: priceCatalog.prices(),
   } });
 }, () => activityLog.call('pricesChanged'));
 let checkedPrices = false;
@@ -52,3 +60,9 @@ activityLog.on('reset', () => {
     .catch((error) => console.error('[activity] price snapshot failed:', error));
 });
 export const stopActivityReprice = () => repricing.stop();
+
+/** New catalog prices reach both activity workers first, so requests stored after this price with them; then history reprices. */
+export async function applyCatalogPrices(prices: CatalogPrices): Promise<void> {
+  await activityLog.setPrices(prices);
+  repricing.start(await activityLog.call('priceSnapshot'));
+}

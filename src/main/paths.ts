@@ -44,6 +44,10 @@ export const appPaths = {
   get updatesDir() {
     return path.join(this.root, 'updates');
   },
+  /** Last downloaded LiteLLM price catalog (priceCatalog.ts). */
+  get priceCatalogFile() {
+    return path.join(this.root, 'price-catalog.json');
+  },
   get windowStateFile() {
     return path.join(this.root, 'window-state.json');
   },

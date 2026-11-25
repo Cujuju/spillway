@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { ClientLogWatcher } from './clientLogWatcher';
-import { antigravityLogContext, antigravityOAuthTokenPath, antigravitySummaryDbPath, clientLogKey, isClientLogFile, t3UserdataDir, type ClientLogProvider } from './clientLogPaths';
+import { antigravityLogContext, antigravityOAuthTokenPath, antigravitySummaryDbPath, clientLogKey, isClientLogFile, shouldSkipClientLogPath, t3UserdataDir, type ClientLogProvider } from './clientLogPaths';
 import { readAllAntigravityParents, readAntigravityParents } from './antigravityParents';
 import { parseClientLine, type LogContext } from './clientLogParser';
 import type { ActivityEvent } from '@shared/types';
@@ -15,6 +15,8 @@ import type { ActivityEvent } from '@shared/types';
 export const CLIENT_LOG_POLL_MS = 30_000;
 /** Safety net for watchers that hide dropped events (Node on macOS without fsevents). */
 export const CLIENT_LOG_RECONCILE_MS = 5 * 60_000;
+/** Bounds burst reconciles requested during a scan so watcher overflows cannot spin. */
+export const CLIENT_LOG_RECONCILE_DEBOUNCE_MS = 1_000;
 /** Bound renderer progress traffic during large individual files. */
 const IMPORT_PROGRESS_INTERVAL_MS = 100;
 const CHECKPOINT_ANCHOR_BYTES = 256;
@@ -73,6 +75,7 @@ async function isDirectory(file: string): Promise<boolean> {
 }
 
 export async function* clientLogFiles(dir: string, provider: ClientLogProvider): AsyncGenerator<string> {
+  if (shouldSkipClientLogPath(dir, provider)) return;
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
@@ -216,23 +219,33 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
   let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
   let running: Promise<void>;
-  let reconcile = true;
-  let lastReconcile = 0;
   let active = false;
+  let debouncing = false;
   const roots = clientLogRoots().map((root) => {
-    const dirty = new Map<string, string>();
-    return { ...root, dirty, watcher: new ClientLogWatcher(root.dir, (file) => dirty.set(clientLogKey(file), file), requestReconcile, (file) => isClientLogFile(file, root.provider)) };
+    const state = { ...root, dirty: new Map<string, string>(), watched: false, reconcile: true, refreshWatch: false, lastReconcile: 0 };
+    const watcher = new ClientLogWatcher(root.dir, (file) => state.dirty.set(clientLogKey(file), file),
+      () => requestReconcile(state), (file) => isClientLogFile(file, root.provider), (file) => shouldSkipClientLogPath(file, root.provider));
+    return Object.assign(state, { watcher });
   });
-  function requestReconcile() {
+  function requestReconcile(root: { reconcile: boolean; refreshWatch: boolean }) {
     if (stopped) return;
-    reconcile = true;
-    if (!active) { clearTimeout(timer); running = scan(); }
+    root.reconcile = true;
+    root.refreshWatch = true;
+    if (!active && !debouncing) { clearTimeout(timer); running = scan(); }
   }
   const scan = async () => {
     active = true;
+    debouncing = false;
     let dirty = false;
     const state: import('@shared/ipc').ActivityImportState = { state: 'importing', filesDone: 0, filesTotal: 0, recordsImported: 0, error: null };
     const pending: { file: string; root: (typeof roots)[number] }[] = [];
+    const walk = async (dir: string, root: (typeof roots)[number]) => {
+      for await (const file of clientLogFiles(dir, root.provider)) {
+        if (stopped) return;
+        pending.push({ file, root });
+        state.filesTotal++;
+      }
+    };
     let lastProgress = 0;
     const reportProgress = () => {
       if (Date.now() - lastProgress < IMPORT_PROGRESS_INTERVAL_MS) return;
@@ -252,33 +265,45 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
     };
     reportProgress();
     try {
-      const full = reconcile || (roots.some((root) => root.watcher.needsPeriodicReconcile) && Date.now() - lastReconcile >= CLIENT_LOG_RECONCILE_MS);
-      reconcile = false;
-      if (full) lastReconcile = Date.now();
-      for (const root of roots) {
-        // Swap the work set before awaiting: events during this scan belong to the next poll.
+      const now = Date.now();
+      const work = roots.map((root) => {
+        const { reconcile, refreshWatch } = root;
+        root.reconcile = false;
+        root.refreshWatch = false;
+        return { root, reconcile, refreshWatch };
+      });
+      for (const { root, reconcile, refreshWatch } of work) {
+        if (stopped) return;
         const dirtyFiles = [...root.dirty.values()];
         root.dirty.clear();
         const polling = root.watcher.fallback;
-        if (full || polling) await root.watcher.refresh();
-        if (full || polling || root.watcher.fallback) {
-          for await (const file of clientLogFiles(root.dir, root.provider)) {
-            if (stopped) return;
-            pending.push({ file, root });
+        const periodic = root.watcher.needsPeriodicReconcile && now - root.lastReconcile >= CLIENT_LOG_RECONCILE_MS;
+        try {
+          if (!root.watched || refreshWatch || polling || periodic) {
+            await root.watcher.refresh();
+            root.watched = true;
           }
-        } else for (const file of dirtyFiles) {
-          if (isClientLogFile(file, root.provider)) pending.push({ file, root });
-          // Renames can introduce populated directories; only a walk finds their children.
-          else if (await isDirectory(file)) reconcile = true;
+          if (reconcile || periodic || polling || root.watcher.fallback) {
+            await walk(root.dir, root);
+            root.lastReconcile = now;
+          } else for (const file of dirtyFiles) {
+            if (shouldSkipClientLogPath(file, root.provider)) continue;
+            if (isClientLogFile(file, root.provider)) {
+              pending.push({ file, root });
+              state.filesTotal++;
+            } else if (await isDirectory(file)) await walk(file, root);
+          }
+        } catch (e) {
+          root.reconcile = true;
+          state.error = `Local usage scan failed: ${String(e)}`;
         }
       }
-      state.filesTotal = pending.length;
       reportProgress();
       for (const { file, root } of pending) {
         if (stopped) return;
         try {
           const result = await importClientFile(file, root.provider, counted, () => stopped);
-          if (result === 'directory') reconcile = true;
+          if (result === 'directory') await walk(file, root);
           else dirty = result || dirty;
         }
         catch (e) { root.dirty.set(clientLogKey(file), file); state.error = `Local usage import failed: ${String(e)}`; console.error('[activity]', file, e); }
@@ -290,11 +315,15 @@ export function startClientLogSync(sink: ImportSink, changed: () => void, progre
         if (parents.size > 0 && sink.relinkParents(parents)) dirty = true;
       }
       if (dirty && !stopped) changed();
-    } catch (e) { reconcile = true; state.error = `Local usage scan failed: ${String(e)}`; }
+    } catch (e) { state.error = `Local usage scan failed: ${String(e)}`; }
     finally {
       progress({ ...state, state: 'idle' });
       active = false;
-      if (!stopped) timer = setTimeout(() => { running = scan(); }, reconcile && !state.error ? 0 : CLIENT_LOG_POLL_MS);
+      if (!stopped) {
+        const scheduledDebounce = roots.some((root) => root.reconcile) && !state.error;
+        debouncing = scheduledDebounce;
+        timer = setTimeout(() => { running = scan(); }, scheduledDebounce ? CLIENT_LOG_RECONCILE_DEBOUNCE_MS : CLIENT_LOG_POLL_MS);
+      }
     }
   };
   running = scan();

@@ -11,6 +11,17 @@ const ANTIGRAVITY_LOG_FILE = /(?:^|[\\/])transcript\.jsonl(?:\.zst)?$/;
 export const isClientLogFile = (file: string, provider?: ClientLogProvider): boolean =>
   provider === 'antigravity' ? ANTIGRAVITY_LOG_FILE.test(file) : ANY_LOG_FILE.test(file);
 
+export function shouldSkipClientLogPath(file: string, provider: ClientLogProvider): boolean {
+  if (provider !== 'antigravity') return false;
+  const segments = path.posix.normalize(file.replaceAll('\\', '/')).toLowerCase().split('/');
+  return segments.some((name, index) => {
+    const parent = segments[index - 1];
+    return (parent === '.system_generated' && ['steps', 'messages', 'tasks', 'undelivered'].includes(name))
+      || (parent === 'logs' && (name === 'chunks' || name === 'media'))
+      || (segments[index - 2] === 'brain' && (name === 'scratch' || name === '.user_uploaded'));
+  });
+}
+
 /** Resolves T3 Code's userdata root from env or default ~/.t3/userdata. */
 export function t3UserdataDir(): string {
   return process.env.T3_USERDATA_DIR || path.join(process.env.T3CODE_HOME || path.join(homedir(), '.t3'), 'userdata');

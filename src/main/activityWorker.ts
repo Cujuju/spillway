@@ -11,10 +11,8 @@ log.prune();
 try { log.archiveExportReset(); }
 catch (error) { log.archiveExportStartupError(`Portable export startup cleanup failed: ${String(error)}`); }
 port.postMessage({ event: 'reset' });
-const startSync = () => startClientLogSync(log, () => {
-  log.prune();
-  port.postMessage({ event: 'reset' });
-}, (value) => port.postMessage({ event: 'progress', value }));
+const startSync = () => startClientLogSync(log, () => port.postMessage({ event: 'reset' }),
+  (value) => port.postMessage({ event: 'progress', value }));
 let stop = startSync();
 const titles = startTitleExport(log);
 const methods: Omit<ActivityMethods, 'clear' | 'names'> & EvalMethods & { clear(): Promise<void> } = {

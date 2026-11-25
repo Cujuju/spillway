@@ -20,3 +20,13 @@ it('continues worker initialization when portable export recovery unexpectedly f
   expect(state.exportError).toHaveBeenLastCalledWith(expect.stringContaining('export recovery unavailable'));
   expect(state.postMessage).toHaveBeenCalledWith({ event: 'reset' });
 });
+it('publishes client log changes without pruning again', async () => {
+  vi.resetModules(); state.prune.mockClear(); state.start.mockClear();
+  await import('./activityWorker');
+  expect(state.prune).toHaveBeenCalledTimes(1);
+  state.postMessage.mockClear();
+  const [, changed] = state.start.mock.lastCall as Parameters<typeof import('./clientLogSync').startClientLogSync>;
+  changed();
+  expect(state.prune).toHaveBeenCalledTimes(1);
+  expect(state.postMessage).toHaveBeenCalledExactlyOnceWith({ event: 'reset' });
+});

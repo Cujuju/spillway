@@ -2,16 +2,17 @@ import { EventEmitter } from 'node:events';
 import { watch, existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, appendFile, rm, stat, readdir, utimes, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { zstdCompressSync } from 'node:zlib';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, clientLogRoots, startClientLogSync, importClientFile } from './clientLogSync';
+import { CLIENT_LOG_POLL_MS, CLIENT_LOG_RECONCILE_MS, CLIENT_LOG_RECONCILE_DEBOUNCE_MS, clientLogRoots, startClientLogSync, importClientFile } from './clientLogSync';
 import { ClientLogWatcher, CLIENT_LOG_WATCH_RETRY_MS } from './clientLogWatcher';
 import { loadNativeClientLogEvents, type NativeClientLogEvents } from './nativeClientLogWatcher';
 import { ActivityLog } from './activityStore';
 import { parseClientLine } from './clientLogParser';
 import type { ActivityImportState } from '@shared/ipc';
 
-vi.mock('node:fs', { spy: true });
+vi.mock('node:fs', async (original) => ({ ...await original<typeof import('node:fs')>(), watch: vi.fn() }));
 vi.mock('node:fs/promises', { spy: true });
 vi.mock('./nativeClientLogWatcher', async (original) => ({
   ...await original<typeof import('./nativeClientLogWatcher')>(), loadNativeClientLogEvents: vi.fn(() => null),
@@ -68,8 +69,6 @@ afterEach(async () => {
 const file = () => path.join(dir, 'projects', 'old', 'subagents', 'old.jsonl');
 async function start() { const done = waitIdle(); stop = startClientLogSync(log, changed, progress); await done; }
 async function poll() { const done = waitIdle(); await vi.advanceTimersByTimeAsync(CLIENT_LOG_POLL_MS); await done; }
-/** A poll that finds a directory schedules an immediate full walk. */
-async function pollAndWalk() { await poll(); const done = waitIdle(); await vi.advanceTimersByTimeAsync(1); await done; }
 function nativeRoot() { return nativeHandles[0]!; }
 function root() { return handles.findLast((h) => h.dir === path.join(dir, 'projects') && h.recursive)!; }
 
@@ -85,14 +84,18 @@ it('imports old-file appends without walking and does no filesystem work on an i
   expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
 });
 
-it.each(['null', 'error', 'replacement'])('reconciles immediately on %s and closes watchers', async (event) => {
+it.each(['null', 'error', 'replacement'])('reconciles only the affected root immediately on %s', async (event) => {
   await start(); vi.mocked(readdir).mockClear();
+  const projects = root().dir;
+  const siblings = handles.filter((h) => h.dir !== dir && h.dir !== projects);
   const done = waitIdle();
   if (event === 'null') root().emit('change', null);
   else if (event === 'error') root().handle.emit('error', new Error('lost watch'));
   else handles.find((h) => h.dir === dir)!.emit('rename', 'projects');
   await vi.advanceTimersByTimeAsync(0); await done;
-  expect(readdir).toHaveBeenCalled();
+  expect(vi.mocked(readdir).mock.calls.map(([dir]) => dir)).toEqual([projects, path.join(projects, 'old'), path.join(projects, 'old', 'subagents')]);
+  expect(handles.filter((h) => h.dir !== dir && h.dir !== projects)).toEqual(siblings);
+  for (const sibling of siblings) expect(sibling.handle.close).not.toHaveBeenCalled();
   await stop!();
   expect(handles.every((h) => h.handle.close.mock.calls.length === 1)).toBe(true);
   const oldHandles = handles.slice();
@@ -127,8 +130,10 @@ it.each(['darwin', 'linux'] as const)('reconciles at five minutes on a %s Node w
   const restore = onPlatform(platform);
   try {
     await start(); await writeFile(file(), line('missed'));
+    const refresh = vi.spyOn(ClientLogWatcher.prototype, 'refresh');
     for (let n = 0; n < CLIENT_LOG_RECONCILE_MS / CLIENT_LOG_POLL_MS; n++) await poll();
     expect(log.totalsList()).toHaveLength(1);
+    expect(refresh).toHaveBeenCalledTimes(clientLogRoots().length);
   } finally { restore(); }
 });
 
@@ -153,6 +158,24 @@ it('retains events arriving during an active scan for the next poll', async () =
   await appendFile(file(), line('later'));
   await poll();
   expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+});
+
+it('debounces overflow received during a scan and coalesces follow-ups during the debounce window', async () => {
+  await writeFile(file(), line('first'));
+  const original = log.importBatch.bind(log);
+  vi.spyOn(log, 'importBatch').mockImplementationOnce((...args) => {
+    root().emit('change', null);
+    return original(...args);
+  });
+  await start();
+  vi.mocked(readdir).mockClear();
+  // A second overflow during the debounce window must not cancel the timer and run early.
+  root().emit('change', null);
+  await vi.advanceTimersByTimeAsync(CLIENT_LOG_RECONCILE_DEBOUNCE_MS - 1);
+  expect(readdir).not.toHaveBeenCalled();
+  const done = waitIdle();
+  await vi.advanceTimersByTimeAsync(1); await done;
+  expect(readdir).toHaveBeenCalledWith(root().dir, { withFileTypes: true });
 });
 
 it('emits resets for coverage-only matches and usage replacement, but not replay', async () => {
@@ -224,10 +247,13 @@ it.each(['archive.jsonl', 'x.jsonl.zst', 'ordinary'])('discovers populated renam
   const source = path.join(dir, 'staged');
   await mkdir(path.join(source, 'nested'), { recursive: true });
   await writeFile(path.join(source, 'nested', 'child.jsonl'), line('child'));
-  await rename(source, path.join(dir, 'projects', name));
+  const destination = path.join(root().dir, name);
+  await rename(source, destination);
   vi.mocked(readdir).mockClear();
-  root().emit('rename', name); await pollAndWalk();
-  expect(readdir).toHaveBeenCalled();
+  const refresh = vi.spyOn(ClientLogWatcher.prototype, 'refresh');
+  root().emit('rename', name); await poll();
+  expect(vi.mocked(readdir).mock.calls.map(([dir]) => dir)).toEqual([destination, path.join(destination, 'nested')]);
+  expect(refresh).not.toHaveBeenCalled();
   expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(1);
   const batch = vi.spyOn(log, 'importBatch');
   root().emit('change', name); await poll();
@@ -280,7 +306,7 @@ it.each([['archive.jsonl', 'rename'], ['x.jsonl.zst', 'rename'], ['archive.jsonl
   await start();
   const nested = path.join(dir, 'projects', name, 'nested');
   await mkdir(nested, { recursive: true }); await writeFile(path.join(nested, 'child.jsonl'), line('created'));
-  root().emit(event, name); await pollAndWalk();
+  root().emit(event, name); await poll();
   expect(log.totalsList()).toHaveLength(1);
   expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
 });
@@ -327,8 +353,12 @@ it('finds populated native directory moves without descendant notifications', as
   await start();
   const nested = path.join(dir, 'projects', 'archive.jsonl', 'nested');
   await mkdir(nested, { recursive: true }); await writeFile(path.join(nested, 'child.jsonl'), line('moved'));
+  vi.mocked(readdir).mockClear();
+  const refresh = vi.spyOn(ClientLogWatcher.prototype, 'refresh');
   nativeRoot().emit(path.join(nativeRoot().dir, 'projects', 'archive.jsonl'), native.constants.ItemIsDir | native.constants.ItemRenamed);
-  await pollAndWalk(); expect(log.totalsList()).toHaveLength(1);
+  await poll(); expect(log.totalsList()).toHaveLength(1);
+  expect(vi.mocked(readdir).mock.calls.map(([dir]) => dir)).toEqual([path.dirname(nested), nested]);
+  expect(refresh).not.toHaveBeenCalled();
 });
 
 it('ignores unrelated native paths and follows missing ancestors and root replacement', async () => {
@@ -373,6 +403,45 @@ it('retries a failed native recovery scan without requiring another event or a p
   await poll();
   expect(log.totalsList()).toHaveLength(1);
   expect(progress.mock.calls.at(-1)?.[0].error).toBeNull();
+});
+
+it.each(['Node', 'native'])('ignores Antigravity artifact events and imports bare transcripts with %s watches', async (transport) => {
+  if (transport === 'native') vi.mocked(loadNativeClientLogEvents).mockReturnValue(native);
+  await start();
+  const brain = path.join(dir, 'gemini', 'antigravity', 'brain');
+  const send = (file: string, directory: boolean) => {
+    const relative = path.relative(brain, file);
+    if (transport === 'native') {
+      const stream = nativeHandles.find((h) => path.basename(h.dir) === 'antigravity')!;
+      const flags = native.constants.ItemRenamed | (directory ? native.constants.ItemIsDir : 0);
+      stream.emit(path.join(stream.dir, 'brain', relative), flags);
+    } else handles.find((h) => h.dir === brain && h.recursive)!.emit('rename', relative);
+  };
+  const session = path.join(brain, 'conv-1');
+  const refresh = vi.spyOn(ClientLogWatcher.prototype, 'refresh');
+  vi.mocked(stat).mockClear(); vi.mocked(readdir).mockClear();
+  for (const artifact of ['.system_generated/steps/1', '.system_generated/messages', '.system_generated/tasks',
+    '.system_generated/undelivered', 'logs/chunks', 'logs/media', 'scratch', '.user_uploaded']) {
+    const directory = path.join(session, artifact);
+    const transcript = path.join(directory, 'transcript.jsonl');
+    await mkdir(directory, { recursive: true }); await writeFile(transcript, '');
+    send(directory, true); send(transcript, false);
+  }
+  await poll();
+  expect(stat).not.toHaveBeenCalled(); expect(readdir).not.toHaveBeenCalled(); expect(refresh).not.toHaveBeenCalled();
+
+  const step = (idx: number) => JSON.stringify({
+    step_index: idx, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-30T12:00:00Z',
+    model: 'gemini-4-neon-medium', input_tokens: 100, output_tokens: 20,
+  }) + '\n';
+  const plain = path.join(session, 'logs', 'transcript.jsonl');
+  const archive = `${plain}.zst`;
+  await writeFile(plain, step(1));
+  await writeFile(archive, zstdCompressSync(step(2)));
+  send(plain, false); send(archive, false);
+  await poll();
+  expect(log.totalsList().reduce((n, t) => n + t.requests, 0)).toBe(2);
+  expect(readdir).not.toHaveBeenCalled(); expect(refresh).not.toHaveBeenCalled();
 });
 
 it('watches Antigravity transcript.jsonl appends, ignores transcript_full.jsonl, and deduplicates with proxy', async () => {

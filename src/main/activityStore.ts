@@ -275,23 +275,23 @@ export class ActivityLog {
   }
   importEvents(events: AccountedActivityEvent[], checkpoint?: { file: string; state: string }): boolean {
     try {
-      const changed = this.db.transaction(() => {
+      const { changed, pruned } = this.db.transaction(() => {
         const changes = () => (this.statements.changes.get() as { n: number }).n;
         const before = events.length ? changes() : 0;
         this.importing = true;
         try { for (const e of events) this.append(e); }
         finally { this.importing = false; }
         if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
-        this.statements.prune.run(oldestKeptDay(Date.now(), this.config.retentionDays));
+        const pruned = events.length > 0 && this.statements.prune.run(oldestKeptDay(Date.now(), this.config.retentionDays)).changes > 0;
         const changed = events.length > 0 && changes() !== before;
         if (changed && events.some((e) => e.costUsd !== undefined || e.uncachedCostUsd !== undefined)) {
           invalidateActivityPrices(this.db);
         }
         if (checkpoint) this.statements.saveCheckpoint.run(checkpoint.file, checkpoint.state);
-        return changed;
+        return { changed, pruned };
       }).immediate();
       if (checkpoint) this.checkpoints.set(checkpoint.file, checkpoint.state);
-      this.db.pragma('incremental_vacuum');
+      if (pruned) this.db.pragma('incremental_vacuum');
       return changed;
     } catch (e) {
       this.totals = null;

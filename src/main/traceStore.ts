@@ -1,7 +1,7 @@
 import { sessionKind } from '@shared/types';
 import type { Db } from './activityDb';
 import { normalizeTransport } from '@shared/activityTransport';
-import { tokenCost, type TokenCounts } from '@shared/modelPrices';
+import { billingTier, tokenCost, type TokenCounts } from '@shared/modelPrices';
 import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_MAX_DAYS, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, traceNodeId, type TraceAttempt, type TraceAttemptPage, type TraceAttemptQuery, type TraceCoverage, type TracePage, type TraceQuery, type TraceRange } from '@shared/sessionTrace';
 import { traceNodes } from './traceGraph';
 import { archiveTextMatch } from './archiveStore';
@@ -60,7 +60,7 @@ function observation(r: Raw): TraceAttempt | null {
   const tokens = keys.every((k) => number(usage[k]) !== null)
     ? { ...Object.fromEntries(keys.map((k) => [k, usage[k]])),
       cacheWrite1hTokens: number(usage.cacheWrite1hTokens), cacheWriteLongTokens: number(usage.cacheWriteLongTokens),
-      tier: usage.tier === 'standard' || usage.tier === 'fast' || usage.tier === 'flex' ? usage.tier : null } as TokenCounts : null;
+      tier: billingTier(usage.tier) } as TokenCounts : null;
   // Token conventions need the provider; legacy archive links take it from their exact ledger row.
   const model = text(p.model), effectiveModel = text(p.effectiveModel), provider = text(p.provider) ?? (r.origin === 'archive' ? text(ledger.provider) : null);
   const recordedCost = number(ledger.costUsd);

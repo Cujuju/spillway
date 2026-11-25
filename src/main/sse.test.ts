@@ -78,7 +78,7 @@ it('parses observed success status and only supported session kinds', () => {
 
 
 it('parses cache lifetime subsets and known billed tiers, preserving zero and unknown', () => {
-  for (const tier of ['standard', 'fast', 'flex']) {
+  for (const tier of ['standard', 'fast', 'flex', 'ultrafast']) {
     expect(parseActivityEvent(JSON.stringify({ request_id: 'billing', cache_creation_tokens: 40,
       cache_creation_1h_tokens: 0, cache_creation_long_tokens: 20, tier })))
       .toMatchObject({ cacheWriteTokens: 40, cacheWrite1hTokens: 0, cacheWriteLongTokens: 20, tier });

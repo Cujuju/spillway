@@ -1,6 +1,7 @@
 import { parseRequestSettings } from '@shared/requestSettings';
 import { requestSettingsHash } from './requestSettings';
 import { sessionKind, type ActivityEvent } from '@shared/types';
+import { billingTier } from '@shared/modelPrices';
 import { clientName } from '@shared/activityScope';
 import { activityTransport, transportReason } from '@shared/activityTransport';
 
@@ -90,7 +91,7 @@ export function parseActivityEvent(data: string): ActivityEvent | null {
     cacheWriteTokens: n(r.cache_creation_tokens),
     cacheWrite1hTokens: tokenSubset(r.cache_creation_1h_tokens),
     cacheWriteLongTokens: tokenSubset(r.cache_creation_long_tokens),
-    tier: r.tier === 'standard' || r.tier === 'fast' || r.tier === 'flex' ? r.tier : null,
+    tier: billingTier(r.tier),
     sessionId: s(r.session_id),
     parentSessionId: s(r.parent_session_id),
     sessionKind: sessionKind(r.session_kind),

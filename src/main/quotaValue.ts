@@ -1,6 +1,6 @@
 import { localDay } from '@shared/activityCounts';
 import { quantile } from '@shared/activityCompare';
-import { tokenCost } from '@shared/modelPrices';
+import { billingTier, tokenCost } from '@shared/modelPrices';
 import {
   FABLE_WEEKLY_SHARE_OF_SEVEN_DAY,
   isFableModel,
@@ -82,7 +82,7 @@ function loadSpendByAuth(db: Db, fromMs: number, toMs: number, authIndices: Read
     if (!r.authIndex || !authIndices.has(r.authIndex) || !r.at || !r.provider || !r.model) continue;
     const atMs = Date.parse(r.at);
     if (!Number.isFinite(atMs) || atMs < fromMs || atMs > toMs) continue;
-    const tier = r.tier === 'fast' || r.tier === 'flex' || r.tier === 'standard' ? r.tier : null;
+    const tier = billingTier(r.tier);
     const costUsd = typeof r.costUsd === 'number' && Number.isFinite(r.costUsd)
       ? r.costUsd
       : tokenCost(r.provider, r.model, r.at, {

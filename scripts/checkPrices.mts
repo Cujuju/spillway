@@ -3,7 +3,7 @@
  * listing the differences. Run daily by .github/workflows/prices.yml; `--dry-run` prints the report only.
  */
 import { execFileSync } from 'node:child_process';
-import { latestPrices, reportsCacheWrites, type TierPrice, type Rates } from '../src/shared/modelPrices.ts';
+import { latestPrices, PRICED_TIERS, reportsCacheWrites, type PricedTier, type TierPrice, type Rates } from '../src/shared/modelPrices.ts';
 
 const ANTHROPIC_URL = 'https://platform.claude.com/docs/en/about-claude/pricing.md';
 const OPENAI_URL = 'https://developers.openai.com/api/docs/pricing.md';
@@ -20,7 +20,7 @@ const isTransientStatus = (status: number) => status === 403 || status === 408 |
 
 /** Page rates; null where the page lists none ("-"). */
 export interface PageRates { input: number; output: number; cacheRead: number | null; cacheWrite: number | null; cacheWriteLong: number | null }
-export interface PagePrice { rates: PageRates; long?: PageRates; tiers?: { fast?: PagePrice; flex?: PagePrice } }
+export interface PagePrice { rates: PageRates; long?: PageRates; tiers?: Partial<Record<PricedTier, PagePrice>> }
 type Page = Map<string, PagePrice>;
 
 interface Source { name: string; url: string; provider: string; owns: (id: string) => boolean; parse: (md: string) => Page }
@@ -99,9 +99,14 @@ export function parseAnthropic(md: string): Page {
   return page;
 }
 
+/** GPT-6.2's Ultrafast list rates, apart while its promotion runs (dated history in modelPrices.ts); may be dropped after. */
+const ULTRAFAST_LIST = '### Ultrafast list pricing data';
+
 export function parseOpenAI(md: string): Page {
   const page = parseOpenAITables(section(md, '### Standard pricing data'));
-  for (const [tier, heading] of [['flex', '### Flex pricing data'], ['fast', '### Fast pricing data']] as const) {
+  const tierTables = [['flex', '### Flex pricing data'], ['fast', '### Fast pricing data'], ['ultrafast', '### Ultrafast pricing data'], ['ultrafast', ULTRAFAST_LIST]] as const;
+  for (const [tier, heading] of tierTables) {
+    if (heading === ULTRAFAST_LIST && !md.includes(`\n${heading}\n`)) continue;
     for (const [id, price] of parseOpenAITables(section(md, heading))) {
       const entry = page.get(id);
       if (!entry) throw new Error(`OpenAI ${tier} model absent from standard table: ${id}`);
@@ -143,7 +148,7 @@ function rateDiffs(provider: string, ours: Rates, page: PageRates, label: string
 }
 
 /** Markdown lines describing how one source's page differs from the table; empty when it matches. */
-export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns'>, page: Page, ours: Map<string, { rates: Rates; long?: Rates; tiers?: { fast?: TierPrice; flex?: TierPrice } }>): string[] {
+export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns'>, page: Page, ours: Map<string, { rates: Rates; long?: Rates; tiers?: Partial<Record<PricedTier, TierPrice>> }>): string[] {
   const tracked = [...ours.keys()].filter(source.owns);
   if (!tracked.some((id) => page.has(id))) throw new Error(`${source.name}: no tracked model found on the page; its layout may have changed`);
   const lines: string[] = [];
@@ -153,7 +158,7 @@ export function compare(source: Pick<Source, 'name' | 'url' | 'provider' | 'owns
     const diffs = [...rateDiffs(source.provider, mine.rates, p.rates, ''),
       ...(p.long && mine.long ? rateDiffs(source.provider, mine.long, p.long, 'long-context ') : []),
       ...(p.long && !mine.long ? ['long-context rates listed but not tracked'] : [])];
-    for (const tier of ['fast', 'flex'] as const) {
+    for (const tier of PRICED_TIERS) {
       const listed = p.tiers?.[tier];
       const tracked = mine.tiers?.[tier];
       if (listed && !tracked) diffs.push(`${tier} rates listed but not tracked`);

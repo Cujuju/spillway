@@ -53,6 +53,12 @@ const OPENAI = `
 | Model | Input | Output | Cached input |
 | --- | --- | --- | --- |
 | gpt-6.1-sol | $4.00 | $20.00 | $0.20 |
+
+### Ultrafast pricing data
+
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| gpt-6.1-sol | $12.00 | $60.00 | $0.60 |
 `;
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -131,13 +137,15 @@ describe('compare', () => {
   it('compares OpenAI write lifetimes and tier tables', () => {
     const page = new Map([...parseOpenAI(OPENAI)].filter(([id]) => id === 'gpt-6.1-sol'));
     const rates = { ...r(2, 2.5, 0.1, 10), cacheWriteLong: 5 };
-    const tiers = { fast: { rates: r(4, 4, 0.2, 20) }, flex: { rates: r(1, 1, 0.05, 5) } };
+    const tiers = { fast: { rates: r(4, 4, 0.2, 20) }, flex: { rates: r(1, 1, 0.05, 5) }, ultrafast: { rates: r(12, 12, 0.6, 60) } };
     const ours = new Map([['gpt-6.1-sol', { rates, long: { ...r(4, 5, 0.2, 15), cacheWriteLong: 10 }, tiers }]]);
     expect(compare(openai, page, ours)).toEqual([]);
     ours.get('gpt-6.1-sol')!.rates.cacheWriteLong = 2;
     tiers.fast.rates.input = 3;
+    tiers.ultrafast.rates.output = 30;
     expect(compare(openai, page, ours).join('\n')).toContain('cacheWriteLong: $2 → $5');
     expect(compare(openai, page, ours).join('\n')).toContain('fast input: $3 → $4');
+    expect(compare(openai, page, ours).join('\n')).toContain('ultrafast output: $30 → $60');
   });
   it('fails when no tracked model is on the page', () => {
     expect(() => compare(openai, new Map(), new Map([['gpt-6.1-sol', { rates: r(2, 2, 0.1, 10) }]]))).toThrow('no tracked model');
@@ -169,7 +177,7 @@ it('compares Claude 1-hour writes and fast cache multipliers', () => {
 
 it('reads and compares both OpenAI tier lifetime columns and long-context rates', () => {
   const table = OPENAI.split('### Standard pricing data')[1]!.split('| Model | Input')[0]!;
-  const page = parseOpenAI(OPENAI.replace(/### Flex pricing data[\s\S]*$/, `### Flex pricing data\n${table}\n### Fast pricing data\n${table}`));
+  const page = parseOpenAI(OPENAI.replace(/### Flex pricing data[\s\S]*$/, `### Flex pricing data\n${table}\n### Fast pricing data\n${table}\n### Ultrafast pricing data\n${table}`));
   const listed = page.get('gpt-6.1-sol')!;
   expect(listed.tiers!.flex!.rates.cacheWriteLong).toBe(5);
   expect(listed.tiers!.fast!.long!.cacheWrite).toBe(5);

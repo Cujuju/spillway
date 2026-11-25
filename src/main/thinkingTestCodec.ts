@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { TokenCounts } from '@shared/modelPrices';
+import { billingTier, type TokenCounts } from '@shared/modelPrices';
 import type { ThinkingSetting } from '@shared/thinking';
 import { object } from './evalCaseCodec';
 
@@ -19,7 +19,7 @@ export function responseTokens(data: Record<string, any>, claude: boolean): Toke
     cacheWriteTokens: claude ? u.cache_creation_input_tokens ?? 0 : details.cache_creation_tokens ?? details.cache_write_tokens ?? u.cache_write_input_tokens ?? 0,
     cacheWrite1hTokens: claude ? u.cache_creation?.ephemeral_1h_input_tokens ?? null : null,
     cacheWriteLongTokens: claude ? null : details.cache_write_tokens_details?.ttl_12h_tokens ?? null,
-    tier: tier === 'priority' ? 'fast' : tier === 'default' ? 'standard' : ['standard', 'fast', 'flex'].includes(tier) ? tier : null,
+    tier: tier === 'priority' ? 'fast' : tier === 'default' ? 'standard' : billingTier(tier),
   };
 }
 export function rewriteTestBody(raw: Record<string, unknown>, route: string, setting: ThinkingSetting): Record<string, unknown> {

@@ -8,8 +8,8 @@ const WINDOWS_CI_WORKERS = 1;
 
 export default defineConfig({
   resolve: { alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } },
-  // Solid's browser build: its default node export is the non-reactive server renderer.
-  ssr: { resolve: { conditions: ['browser'] } },
+  // `cujuju-source`: toolkit packages run from src/, as typecheck reads them. `browser`: Solid's reactive build, not its server renderer.
+  ssr: { resolve: { conditions: ['cujuju-source', 'browser'] } },
   test: {
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mts', 'appVersion.test.ts'], environment: 'node',
     ...(process.env.CI ? { testTimeout: CI_TEST_TIMEOUT_MS } : {}),

@@ -1,4 +1,4 @@
-import { computeTileLayout, normalize, tileIds, type TileNode } from '@cujuju/solidjs-tiling-window-manager';
+import { computeTileLayout, normalize, tileIds, type TileNode } from '@cujuju/solidjs-tiling-window-manager/model';
 import { describe, expect, it, vi } from 'vitest';
 import { appendRow } from './boardGrow';
 

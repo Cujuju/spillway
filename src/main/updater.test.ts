@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { buildManifest } from '@cujuju/electron-updates/node';
 import { expect, it } from 'vitest';
@@ -35,7 +36,10 @@ it.skipIf(process.platform === 'linux')('downloads and stages ASAR bundle bytes 
     const listing = manifest.files[0]!;
     const pack = 'update-darwin-arm64.pack';
     const require = createRequire(import.meta.url);
-    const moduleUrl = import.meta.resolve('@cujuju/electron-updates');
+    // Electron loads the built `import` entry; vitest would resolve the `cujuju-source` one.
+    const packageDir = join(process.cwd(), 'node_modules', '@cujuju', 'electron-updates');
+    const { exports } = JSON.parse(await readFile(join(packageDir, 'package.json'), 'utf8')) as { exports: { '.': { import: string } } };
+    const moduleUrl = pathToFileURL(join(packageDir, exports['.'].import)).href;
     const script = join(dir, 'main.cjs');
     await writeFile(script, `
 const fs=require('original-fs');

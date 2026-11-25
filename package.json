@@ -9,7 +9,7 @@
     "dev": "node -e \"require('electron')\" && node scripts/build-proxy.mjs --keep-last-good && node scripts/build-native.mjs && electron-vite dev",
     "build": "node scripts/build-native.mjs && electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "node scripts/build-linked.mjs && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings",
     "proxy:build": "node scripts/build-proxy.mjs",

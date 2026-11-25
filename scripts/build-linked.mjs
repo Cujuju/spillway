@@ -1,6 +1,6 @@
-// Rebuilds every `link:` dependency (the local solidjs-toolkit packages) before a typecheck.
-// Their `types` export is the gitignored dist/, so without this tsc reads whatever was last built.
-// Runtime and tests read their src/ through the `solid` export condition and need no build.
+// Builds every `link:` dependency (the local solidjs-toolkit packages) for CI and packaging,
+// whose bundles import their gitignored dist/. Typecheck reads src/ via `cujuju-source`;
+// tests via `cujuju-source` too; the renderer via `solid`. Never run it on a shared toolkit checkout: it restarts apps using it.
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

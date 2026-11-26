@@ -111,6 +111,7 @@ async function startNormalApp(): Promise<void> {
     });
     activityLog.on('progress', (state) => send(EVENTS.onActivityImport, state));
     activityLog.on('migration', (state) => send(EVENTS.onArchiveMigration, state));
+    activityLog.on('buckets', (delta) => send(EVENTS.onActivityBuckets, delta));
     activity.on('reset', () => send(EVENTS.onActivityReset, undefined));
     activity.on('event', (e) => send(EVENTS.onActivity, e));
     proxy.on('log', (l) => send(EVENTS.onProxyLog, l));

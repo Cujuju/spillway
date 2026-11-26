@@ -1,24 +1,31 @@
 import { createResource, type Accessor } from 'solid-js';
 import type { ActivityScope } from '@shared/activityScope';
-import { settingKey, type Alternative, type SettingReport, type ThinkingReport, type ThinkingSetting, type TurnKind } from '@shared/thinking';
-import { activityBuckets } from '../store';
+import { settingKey, type Alternative, type SettingReport, type ThinkingQuery, type ThinkingReport, type ThinkingSetting, type TurnKind } from '@shared/thinking';
+import { createReportQuery } from './reportRefresh';
 import type { Span } from './activityRange';
 import { modelName } from './comboSelection';
 
 const DAYS_PER_WEEK = 7;
 const PERCENT = 100;
 
-/** The Thinking tab's report, refetched with the scope, span and each hourly-totals reload. Undefined until answered; null on failure. */
-export function createThinkingReport(active: Accessor<boolean>, scope: Accessor<ActivityScope>, span: Accessor<Span>): Accessor<ThinkingReport | null | undefined> {
-  const [report] = createResource(
+/** The Thinking tab's latest resolved report and the exact query that produced it. Undefined until answered; null on failure. */
+export function createThinkingReport(active: Accessor<boolean>, scope: Accessor<ActivityScope>, span: Accessor<Span>, rangeKey: Accessor<string>): { report: Accessor<ThinkingReport | null | undefined>; query: Accessor<ThinkingQuery | false> } {
+  const query = createReportQuery<{ scope: ActivityScope; rangeKey: string }, ThinkingQuery>(
+    active,
     // Effort is what the tab compares, so the scope's effort filter never narrows it.
-    () => active() && { scope: { ...scope(), efforts: null }, from: span().from, to: span().to, totals: activityBuckets() },
-    ({ scope, from, to }) => window.api.activityThinking({ scope, from, to }).catch((err: unknown) => {
-      console.error('[activity] thinking report failed:', err);
-      return null;
-    }),
+    () => ({ scope: { ...scope(), efforts: null }, rangeKey: rangeKey() }),
+    ({ scope }) => ({ scope, from: span().from, to: span().to }),
   );
-  return () => report.latest;
+  const [resolved] = createResource(
+    query,
+    (q) => window.api.activityThinking(q)
+      .then((report) => ({ report, query: q }))
+      .catch((err: unknown) => {
+        console.error('[activity] thinking report failed:', err);
+        return { report: null as ThinkingReport | null, query: q };
+      }),
+  );
+  return { report: () => resolved.latest?.report, query: () => resolved.latest?.query ?? false };
 }
 
 /** "Opus 5.5 · high". */

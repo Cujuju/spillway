@@ -77,7 +77,7 @@ function SettingTitle(props: { report: ThinkingReport | null | undefined; prefix
 /** Thinking's panels as tiles: verdicts for the costliest settings, where the thinking goes, kinds of turn, alternatives and the method. */
 export function ThinkingView(props: { report: ThinkingReport | null | undefined; query: ThinkingQuery; placing: PendingThinkingTile | null; onPlacingEnd: () => void }) {
   const tests = createThinkingTests();
-  const [testing, setTesting] = createSignal<SettingReport | null>(null);
+  const [testing, setTesting] = createSignal<{ s: SettingReport; query: ThinkingQuery } | null>(null);
   const [mismatches, setMismatches] = createSignal<ThinkingTest | null>(null);
   /** Tables show a test's results only once it has finished; the verdict shows progress. */
   const finished = (s: SettingReport) => { const t = tests.of(s.setting); return t?.state === 'complete' ? t : undefined; };
@@ -105,7 +105,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
           <Show when={at(spec) && props.report}>{(r) => <span class="chart-head-note num">{usd(at(spec)!.costUsdPerWeek, 0)} a week · {Math.round(perWeek(r(), at(spec)!.turns)).toLocaleString(appLocale())} turns</span>}</Show>
         </>
       ),
-      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} kinds={s().kinds} onTest={() => setTesting(s())} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
+      createBody: (spec) => ready(() => <Show when={at(spec)} fallback={<div class="muted">No other setting in this range.</div>}>{(s) => <Verdict s={s()} status={<TestStatus test={tests.of(s().setting)} kinds={s().kinds} onTest={() => setTesting({ s: s(), query: props.query })} onCancel={tests.cancel} onMismatches={setMismatches} />} />}</Show>),
     },
     buckets: {
       minSize: MIX_MIN,
@@ -143,7 +143,7 @@ export function ThinkingView(props: { report: ThinkingReport | null | undefined;
       </p>
       <TileBoard class="activity-board" state={state} def={(kind) => DEFS[kind]} same={sameSpec} placing={props.placing} onPlacingEnd={props.onPlacingEnd}
         empty="No panels. Use “Add panel” to place one." placeBelowLabel="Place below all panels" />
-      <Show when={testing()}>{(s) => <TestDialog s={s()} query={props.query} onStarted={tests.started} onClose={() => setTesting(null)} />}</Show>
+      <Show when={testing()}>{(t) => <TestDialog s={t().s} query={t().query} onStarted={tests.started} onClose={() => setTesting(null)} />}</Show>
       <Show when={mismatches()}>{(t) => <MismatchDialog test={t()} onClose={() => setMismatches(null)} />}</Show>
     </>
   );

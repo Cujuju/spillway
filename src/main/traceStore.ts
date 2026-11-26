@@ -154,11 +154,15 @@ export class TraceStore {
     const sort = q.sort === 'failed' || q.sort === 'recent' ? q.sort : 'cost';
     const key = JSON.stringify([bounds, sort, q.nodeId ?? '', q.parentSessionId ?? '', q.text ?? '']);
     if (c && (c.key !== key || (sort === 'recent' ? !date(c.after[0]) : typeof c.after[0] !== 'number'))) throw new Error('Trace cursor does not match query');
-    const raw = this.read(q, bounds, TRACE_SCAN_LIMIT + 1), limited = raw.length > TRACE_SCAN_LIMIT;
-    const observations = raw.slice(0, TRACE_SCAN_LIMIT).map(observation);
-    const coverage: TraceCoverage = { ...bounds, scanned: observations.length, limit: TRACE_SCAN_LIMIT, limited, rejected: observations.filter((a) => !a).length };
+    // One WAL read snapshot keeps requests, archive_attempts and archive_entries consistent with concurrent writes.
+    const { observations, coverage, recorded } = this.db.transaction(() => {
+      const raw = this.read(q, bounds, TRACE_SCAN_LIMIT + 1), limited = raw.length > TRACE_SCAN_LIMIT;
+      const observations = raw.slice(0, TRACE_SCAN_LIMIT).map(observation);
+      const coverage: TraceCoverage = { ...bounds, scanned: observations.length, limit: TRACE_SCAN_LIMIT, limited, rejected: observations.filter((a) => !a).length };
+      const recorded = this.recordedTextNodes(q.text, observations);
+      return { observations, coverage, recorded };
+    })();
     const needle = (typeof q.text === 'string' ? q.text.slice(0, 256) : '').toLowerCase();
-    const recorded = this.recordedTextNodes(q.text, observations);
     const children = new Set(observations.filter((a) => a?.parentSessionId === q.parentSessionId && a?.sessionId).map((a) => a!.sessionId));
     const score = (n: ReturnType<typeof traceNodes>[number]): number | string => sort === 'recent' ? n.lastAt : sort === 'failed' ? n.metrics.failed : n.metrics.costUsd ?? -1;
     const nodes = traceNodes(observations.filter((a): a is TraceAttempt => a !== null))
@@ -175,7 +179,7 @@ export class TraceStore {
     const c = cursor(q.before), bounds = range({ from: q.from ?? c?.range.from, to: q.to ?? c?.range.to, source: q.source ?? c?.range.source });
     const key = JSON.stringify([bounds, q.nodeId]);
     if (c && (c.key !== key || !date(c.after[0]))) throw new Error('Trace cursor does not match query');
-    const rows = this.read(q, bounds, TRACE_ATTEMPT_PAGE_SIZE + 1, c?.after);
+    const rows = this.db.transaction(() => this.read(q, bounds, TRACE_ATTEMPT_PAGE_SIZE + 1, c?.after))();
     const attempts = rows.slice(0, TRACE_ATTEMPT_PAGE_SIZE).map(observation).filter((a): a is TraceAttempt => a !== null && traceNodeId(a) === q.nodeId);
     const last = rows.slice(0, TRACE_ATTEMPT_PAGE_SIZE).at(-1), more = rows.length > TRACE_ATTEMPT_PAGE_SIZE;
     return { attempts, more, next: more && last ? JSON.stringify({ range: bounds, key, after: [last.at, last.id] }) : null, from: bounds.from, to: bounds.to };

@@ -363,7 +363,8 @@ export interface ActivityDayTotal extends ActivityCounts {
   client: string | null;
 }
 
-export interface ActivityBucketSnapshot { held: ActivityBucket[]; forecast: ActivityBucket[] }
+export interface ActivityBucketSnapshot { held: ActivityBucket[]; forecast: ActivityBucket[]; watermark: number }
+export interface ActivityBucketDelta { watermark: number; buckets: ActivityBucket[] }
 
 /** Activity for one local hour, account, model and client. */
 export interface ActivityBucket extends ActivityCounts {

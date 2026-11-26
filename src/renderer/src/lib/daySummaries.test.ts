@@ -4,10 +4,13 @@ import type { ActivityScope } from '@shared/activityScope';
 import type { ActivityDaySummary, StoredActivityEvent } from '@shared/types';
 
 const activityDaySummaries = vi.fn<(scope: ActivityScope) => Promise<ActivityDaySummary[]>>();
+let onActivity = (_e: StoredActivityEvent) => {};
+let onReset = () => {};
 vi.stubGlobal('window', {
   api: {
     activityDaySummaries,
-    onActivity: () => () => {},
+    onActivity: (cb: (e: StoredActivityEvent) => void) => { onActivity = cb; return () => {}; },
+    onActivityReset: (cb: () => void) => { onReset = cb; return () => {}; },
   },
 });
 
@@ -49,6 +52,62 @@ describe('createDaySummaries', () => {
         });
       });
     });
+  });
+
+  it('defers reset reloads while hidden, exposes resetCount on reveal, and drops stale old-scope replies', async () => {
+    const doc = Object.assign(new EventTarget(), { hidden: false });
+    vi.stubGlobal('document', doc);
+    let resolveOld!: (rows: ActivityDaySummary[]) => void;
+    activityDaySummaries.mockClear()
+      .mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValue([]);
+    let dispose!: () => void;
+    let days!: ReturnType<typeof createDaySummaries>;
+    let setScope!: (s: ActivityScope) => void;
+    try {
+      createRoot((stop) => {
+        dispose = stop;
+        const [active] = createSignal(true);
+        const [scope, _setScope] = createSignal<ActivityScope>({ accounts: null, clients: null, source: 'all' });
+        setScope = _setScope;
+        days = createDaySummaries(active, scope);
+      });
+      await Promise.resolve();
+      expect(activityDaySummaries).toHaveBeenCalledTimes(1);
+      expect(days.resetCount()).toBe(0);
+
+      // Hiding + scope change drops the in-flight old-scope response without issuing IPC while hidden.
+      doc.hidden = true;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      setScope({ accounts: null, clients: null, source: 'proxy' });
+      onReset();
+      resolveOld([{ day: '2026-11-23', requests: 9, failed: 0, costUsd: 1, unpricedRequests: 0, newestId: 9 }]);
+      await Promise.resolve();
+      expect(activityDaySummaries).toHaveBeenCalledTimes(1);
+      expect(days.list()).toEqual([]);
+      expect(days.resetCount()).toBe(0);
+
+      doc.hidden = false;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+      expect(activityDaySummaries).toHaveBeenCalledTimes(2);
+      expect(days.resetCount()).toBe(1);
+
+      // Ordinary hidden live traffic reloads summaries on reveal without bumping resetCount for open day sections.
+      doc.hidden = true;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      onActivity(row(10));
+      await Promise.resolve();
+      expect(activityDaySummaries).toHaveBeenCalledTimes(2);
+      doc.hidden = false;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+      expect(activityDaySummaries).toHaveBeenCalledTimes(3);
+      expect(days.resetCount()).toBe(1);
+    } finally {
+      dispose?.();
+      vi.stubGlobal('document', undefined);
+    }
   });
 });
 

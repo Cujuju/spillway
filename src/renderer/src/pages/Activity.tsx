@@ -22,7 +22,7 @@ import { accountGroups, clientOptions } from '../lib/accountScope';
 import { createDaySummaries } from '../lib/daySummaries';
 import { persistedSignal } from '../lib/persisted';
 import { TOTALS_PERIODS, type TotalsPeriod } from '../lib/totalsPeriod';
-import { activityBuckets, now, proxyStatus, settings, snapshot } from '../store';
+import { activityBuckets, now, proxyStatus, settings, snapshot, subscribeActivityBuckets } from '../store';
 import { PageHeader } from '../components/PageHeader';
 import { appLocale } from '@shared/timeFormat';
 
@@ -67,14 +67,18 @@ export function Activity() {
   const startEval = (traceId: string) => { setEvalSource(traceId); setView('evals'); };
   const [placing, setPlacing] = createSignal<PendingChart | null>(null);
   const [placingThinking, setPlacingThinking] = createSignal<PendingThinkingTile | null>(null);
-  const [revision, setRevision] = createSignal(0);
-  onCleanup(window.api.onActivityReset(() => setRevision((n) => n + 1)));
-  const scope = createMemo<ActivityScope>(() => (revision(), { accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
+  onCleanup(subscribeActivityBuckets());
+  const scope = createMemo<ActivityScope>(() => ({ accounts: accounts(), clients: clients(), source: source(), efforts: effort() === ANY_EFFORT ? null : [effort()] }));
   const earliest = createMemo(() => activityBuckets().reduce<number | null>((min, r) => (min === null || r.start < min ? r.start : min), null));
   const overviewSpan = createMemo(() => rangeSpan(range(), now(), custom(), earliest()));
-  const compare = createCompareReport(() => view() === 'overview', scope, overviewSpan);
-  const waste = createWasteReport(() => view() === 'waste', scope, overviewSpan, () => range() === 'all');
-  const thinking = createThinkingReport(() => view() === 'thinking', scope, overviewSpan);
+  // Reports compute the span at emit time so live refreshes include requests after the last minute tick.
+  const currentOverviewSpan = () => rangeSpan(range(), Date.now(), custom(), earliest());
+  const baseRangeKey = createMemo(() => (range() === 'custom' ? `custom:${custom().from}:${custom().to}` : range()));
+  const overviewRangeKey = createMemo(() => (range() === 'all' ? `all:${earliest() ?? ''}` : baseRangeKey()));
+  const compare = createCompareReport(() => view() === 'overview', scope, currentOverviewSpan, overviewRangeKey);
+  // Waste uses `from: null` in All mode, so earliest-bucket arrival never changes its range selection.
+  const waste = createWasteReport(() => view() === 'waste', scope, currentOverviewSpan, () => range() === 'all', baseRangeKey);
+  const thinking = createThinkingReport(() => view() === 'thinking', scope, currentOverviewSpan, overviewRangeKey);
   const efforts = createMemo(() => [...new Set([...activityBuckets().map((r) => r.reasoningEffort ?? ''), ...(effort() === ANY_EFFORT ? [] : [effort()])])].filter(Boolean).sort());
   const days = createDaySummaries(() => view() === 'requests', scope);
   // The stored and failed totals ride on the filter it switches between.
@@ -106,7 +110,7 @@ export function Activity() {
             traces={view() === 'traces' ? { value: traceFilters(), onChange: filterTraces } : undefined} time={timeFrame()} />
           <div class="scope-row-end">
             <Show when={view() === 'overview'}><AddComboSelect report={compare()} onPick={setPlacing} /><AddChartSelect onPick={setPlacing} /></Show>
-            <Show when={view() === 'thinking'}><ThinkingCoverage report={thinking()} /><AddThinkingSelect onPick={setPlacingThinking} /></Show>
+            <Show when={view() === 'thinking'}><ThinkingCoverage report={thinking.report()} /><AddThinkingSelect onPick={setPlacingThinking} /></Show>
             <Show when={view() === 'traces' && traceLimit()}>{(n) => <TraceLimitNote limit={n()} />}</Show>
             <Show when={view() === 'totals'}>
               <Seg label="Group by" value={period()} options={TOTALS_PERIODS} onChange={setPeriod} />
@@ -140,7 +144,7 @@ export function Activity() {
       <Show when={view() === 'requests'}>
         <ActivityRequests account={accountName} scope={scope()} filter={filter()} days={days} />
       </Show>
-      <Show when={view() === 'thinking'}><ThinkingView report={thinking()} query={{ scope: { ...scope(), efforts: null }, from: overviewSpan().from, to: overviewSpan().to }} placing={placingThinking()} onPlacingEnd={() => setPlacingThinking(null)} /></Show>
+      <Show when={view() === 'thinking'}><ThinkingView report={thinking.report()} query={thinking.query() || { scope: { ...scope(), efforts: null }, from: overviewSpan().from, to: overviewSpan().to }} placing={placingThinking()} onPlacingEnd={() => setPlacingThinking(null)} /></Show>
       <Show when={view() === 'evals'}><EvalCases traceId={evalSource()} onSourceUsed={() => setEvalSource(undefined)} /></Show>
     </>
   );

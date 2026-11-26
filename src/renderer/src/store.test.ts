@@ -13,7 +13,7 @@ const api = {
 };
 const stubWindow = () => vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
 stubWindow();
-const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, liveActivityVersion, logs, now, setHistory, setLogs, setNow, setPage, setSnapshot, settings, settingsError, shownText, snapshot, subscribeActivityBuckets, updateSettings } = await import('./store');
+const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, liveActivityVersion, logs, now, retryStartup, setHistory, setLogs, setNow, setPage, setSnapshot, settings, settingsError, shownText, snapshot, storeStartup, subscribeActivityBuckets, updateSettings } = await import('./store');
 const { createPoolModel, poolRemaining } = await import('./components/poolModel');
 
 const cred = (id: string, usedPercent: number): Credential => ({
@@ -106,6 +106,36 @@ function mockActivityEvents() {
   const show = (visible: boolean) => { doc.hidden = !visible; doc.dispatchEvent(new Event('visibilitychange')); };
   return { doc, live: () => live(), delta: (value: ActivityBucketDelta) => delta(value), reset: () => reset(), price: () => price(catalog), show, log: (line: LogLine) => logListeners.forEach((cb) => cb(line)) };
 }
+
+it('retries a failed startup read without registering the pre-read listeners again', async () => {
+  vi.useFakeTimers();
+  mockActivityEvents();
+  const failure = new Error('settings unavailable');
+  const getSettings = vi.spyOn(window.api, 'getSettings').mockRejectedValueOnce(failure);
+  const onOpenSettings = vi.spyOn(window.api, 'onOpenSettings');
+  const onSnapshot = vi.spyOn(window.api, 'onSnapshot');
+  const logError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await expect(initStore()).resolves.toBeUndefined();
+    expect(storeStartup()).toEqual({ status: 'error', message: failure.message });
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(onSnapshot).not.toHaveBeenCalled();
+
+    await retryStartup();
+    expect(storeStartup()).toEqual({ status: 'ready' });
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+  } finally {
+    getSettings.mockRestore();
+    onOpenSettings.mockRestore();
+    onSnapshot.mockRestore();
+    logError.mockRestore();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    stubWindow();
+  }
+});
 
 describe('proxy log batching', () => {
   const logLimit = 2_000;

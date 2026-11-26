@@ -139,6 +139,10 @@ export function createMainWindow(show: boolean): BrowserWindow {
   win.on('move', scheduleSave);
   win.on('maximize', () => win?.webContents.send(EVENTS.onMaximized, true));
   win.on('unmaximize', () => win?.webContents.send(EVENTS.onMaximized, false));
+  // Events fire only on change; a fresh page (launch maximized, reload) needs the current state.
+  win.webContents.on('did-finish-load', () => {
+    if (win) win.webContents.send(EVENTS.onMaximized, win.isMaximized());
+  });
   win.on('close', (e) => {
     saveState();
     if (!quitting && getSettings().general.closeToTray) {

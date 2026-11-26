@@ -105,6 +105,19 @@ a {
   grid-template-rows: var(--titlebar-height) 1fr;
   height: 100%;
 }
+/* Startup or render failure in place of the app (Root.tsx). */
+.boot-state {
+  /* A readable line length for the error text. */
+  --boot-notice-max: 72ch;
+  display: grid;
+  place-items: center;
+  padding: var(--page-pad);
+  min-height: 0;
+}
+.boot-notice {
+  max-width: min(100%, var(--boot-notice-max));
+  overflow-wrap: anywhere;
+}
 .shell-body {
   display: grid;
   /* Sidebar is as wide as its widest item. */

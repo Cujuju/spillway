@@ -34,6 +34,8 @@ export interface TrendChartProps {
   yMax?: number;
   /** Gridlines above the baseline. */
   yTicks?: number;
+  /** Cheap per-point label for the SVG `<desc>`; defaults to `tooltip(i).title` when omitted. */
+  pointTitle?: (index: number) => string;
   tooltip: (index: number) => { title: string; rows: TipRow[] };
 }
 
@@ -123,7 +125,7 @@ export function TrendChart(props: TrendChartProps) {
       <svg class="chart" style={{ height: `${height()}px` }} width={width()} height={height()} role="img" aria-label={props.ariaLabel} aria-describedby={descriptionId}
         tabindex="0" onKeyDown={onKey} onBlur={() => setHover(null)}>
         <desc id={descriptionId}>
-          {props.points.map((p, i) => `${props.tooltip(i).title}: ${p.value === null ? 'No data' : props.yLabel(p.value)}`).join('; ')}
+          {props.points.map((p, i) => `${props.pointTitle ? props.pointTitle(i) : props.tooltip(i).title}: ${p.value === null ? 'No data' : props.yLabel(p.value)}`).join('; ')}
         </desc>
         <For each={yTicks()}>
           {(v) => (

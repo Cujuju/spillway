@@ -2,7 +2,7 @@ import { BASIC_TONES, DEFAULT_NOTICE_CONFIG, type NoticeDelivery, type NoticeInp
 import type { AppSettings } from './settings';
 import { darkTheme, resolveTheme, type Palette } from './themes';
 
-export type SpillwayNoticeKind = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyStopped' | 'updateFound' | 'clientDrift' | 'captureIssue';
+export type SpillwayNoticeKind = 'limitHit' | 'limitReset' | 'accountSwitched' | 'proxyStopped' | 'updateFound' | 'clientDrift' | 'captureIssue' | 'windowCrashed';
 export type SpillwayNoticeTarget = 'window' | 'proxy' | 'updates' | 'capture';
 export const NOTICE_KINDS: Record<SpillwayNoticeKind, { tone: keyof typeof BASIC_TONES; tag: string }> = {
   limitHit: { tone: 'warn', tag: 'LIMIT' },
@@ -12,6 +12,7 @@ export const NOTICE_KINDS: Record<SpillwayNoticeKind, { tone: keyof typeof BASIC
   updateFound: { tone: 'info', tag: 'UPDATE' },
   clientDrift: { tone: 'warn', tag: 'DRIFT' },
   captureIssue: { tone: 'warn', tag: 'CAPTURE' },
+  windowCrashed: { tone: 'error', tag: 'WINDOW' },
 };
 export function spillwayNotice(kind: SpillwayNoticeKind, input: { title: string; body?: string; short?: string; target?: SpillwayNoticeTarget }): NoticeInput {
   return { ...input, ...NOTICE_KINDS[kind], icon: kind };

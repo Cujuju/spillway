@@ -11,4 +11,5 @@ export const NOTICE_ICONS: Record<SpillwayNoticeKind, NoticeIcon> = {
   updateFound: Download,
   clientDrift: TriangleAlert,
   captureIssue: TriangleAlert,
+  windowCrashed: TriangleAlert,
 };

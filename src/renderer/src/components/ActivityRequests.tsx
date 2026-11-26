@@ -83,7 +83,7 @@ export function ActivityRequests(props: { account: (authIndex: string | null) =>
   const refreshBuffers = new Map<string, StoredActivityEvent[]>();
   const queryIdentity = (filter: RequestFilter, scope: ActivityScope, order: RequestSort) => JSON.stringify({ filter, scope, sort: order });
   let previousIdentity: string | undefined;
-  createEffect(on([() => props.filter, () => props.scope, sort], ([filter, scope, order]) => {
+  createEffect(on([() => props.filter, () => props.scope, sort, () => props.days.resetCount()], ([filter, scope, order]) => {
     const identity = queryIdentity(filter, scope, order);
     if (previousIdentity === undefined) {
       previousIdentity = identity;

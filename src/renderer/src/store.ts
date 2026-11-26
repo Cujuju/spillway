@@ -8,10 +8,9 @@ import { msToNextMinute } from '@shared/resetTime';
 import { resolveTheme, THEMES, type Theme } from '@shared/themes';
 import { paintTheme } from './lib/theme';
 import { persistedSignal } from './lib/persisted';
-import { createActivityReload } from './lib/activityReload';
 import { localHourStart } from './lib/rhythmProfile';
 import { installCatalogPrices, type PriceCatalogInfo, type PriceCatalogState } from '@shared/modelPrices';
-import type { ActivityBucket, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
+import type { ActivityBucket, ActivityBucketDelta, HistorySample, LogLine, ObservedSpan, ProxyStatus, UsageSnapshot, WindowSummary } from '@shared/types';
 
 const PAGES = ['dashboard', 'activity', 'providers', 'proxy', 'logs', 'settings', 'help'] as const;
 export type Page = (typeof PAGES)[number];
@@ -76,6 +75,7 @@ export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(nu
 export const [logs, setLogs] = createSignal<LogLine[]>([]);
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
+export const [liveActivityVersion, setLiveActivityVersion] = createSignal(0);
 /** Fixed forecast evidence, independent of the Activity page's chosen range. */
 export const [forecastBuckets, setForecastBuckets] = createSignal<ActivityBucket[]>([]);
 /** Snapshot timestamp for `forecastBuckets`, bounding measured session sizing so 5-minute history refreshes do not drift ahead of frozen costs. */
@@ -95,52 +95,166 @@ const HISTORY_REFRESH_MS = 5 * 60_000;
 const MIN_ACTIVITY_DAYS = 31;
 /** Local days of activity held; null holds all. The Activity page widens it to its time frame. */
 const [activityDays, setActivityDays] = createSignal<number | null>(MIN_ACTIVITY_DAYS);
-let activityGeneration = 0;
+/** Bounds buffered deltas during a slow snapshot; overflow falls back to a clean resync. */
+const MAX_PENDING_BUCKET_DELTAS = 256;
+/** Bounded backoff when an active bucket snapshot fails. */
+const BUCKET_RETRY_INITIAL_MS = 2_000;
+const BUCKET_RETRY_MAX_MS = 30_000;
+const isDocumentHidden = () => typeof document !== 'undefined' && document.hidden;
+const canMergeLiveBuckets = () => bucketSubscribers > 0 && !isDocumentHidden();
+const bucketKey = (b: ActivityBucket) => JSON.stringify([b.wholeDay, b.start, b.provider, b.authIndex, b.model, b.client, b.source ?? 'proxy', b.effectiveModel ?? null, b.reasoningEffort ?? null]);
+let storeInitialized = false;
+let bucketSubscribers = 0;
+let activityDirty = true;
+let dirtiedDuringLoad = false;
+let activityWatermark = 0;
 let activityRequest = 0;
-let activityAppliedRequest = 0;
+let activityLoading = false;
+let pendingDeltas: ActivityBucketDelta[] = [];
+const bucketIndices = new Map<string, number>();
 let forecastDirty = true;
-let forecastDirtyRequest = 0;
+let forecastDirtiedDuringLoad = false;
 let lastForecastHour: number | undefined;
 let pendingForecastHour: number | undefined;
-const loadActivity = (wantsForecast: boolean) => {
-  const requestedAt = Date.now();
-  const requestHour = localHourStart(requestedAt);
-  const generation = activityGeneration;
-  const request = ++activityRequest;
-  if (wantsForecast) {
-    forecastDirty = true;
-    forecastDirtyRequest = request;
-    pendingForecastHour = requestHour;
+let bucketRetryTimer: ReturnType<typeof setTimeout> | undefined;
+let bucketRetryDelay = 0;
+
+function clearBucketRetry(): void {
+  clearTimeout(bucketRetryTimer);
+  bucketRetryTimer = undefined;
+}
+
+function scheduleBucketRetry(): void {
+  if (bucketRetryTimer || activityLoading || isDocumentHidden()) return;
+  if (bucketSubscribers === 0 && !forecastDirty) return;
+  bucketRetryDelay = bucketRetryDelay ? Math.min(bucketRetryDelay * 2, BUCKET_RETRY_MAX_MS) : BUCKET_RETRY_INITIAL_MS;
+  bucketRetryTimer = setTimeout(() => {
+    bucketRetryTimer = undefined;
+    if (isDocumentHidden() || activityLoading) return;
+    if (bucketSubscribers === 0 && !forecastDirty) return;
+    loadActivity(forecastDirty || localHourStart(Date.now()) !== lastForecastHour);
+  }, bucketRetryDelay);
+}
+
+function mergeBucketDeltas(held: ActivityBucket[], deltas: ActivityBucketDelta[]): ActivityBucket[] {
+  const days = untrack(activityDays);
+  const today = new Date();
+  const cutoff = days === null ? -Infinity : new Date(today.getFullYear(), today.getMonth(), today.getDate() - days + 1).getTime();
+  let next = held;
+  for (const delta of deltas) {
+    if (delta.watermark <= activityWatermark) continue;
+    activityWatermark = delta.watermark;
+    for (const bucket of delta.buckets) {
+      if (bucket.start < cutoff) continue;
+      if (next === held) next = held.slice();
+      const key = bucketKey(bucket);
+      const index = bucketIndices.get(key) ?? next.length;
+      bucketIndices.set(key, index);
+      next[index] = bucket;
+    }
   }
-  void api.activityBucketSnapshot(untrack(activityDays)).then(({ held, forecast }) => {
-    if (generation !== activityGeneration || request < activityAppliedRequest) return;
-    activityAppliedRequest = request;
-    if (wantsForecast || (forecastDirty && request >= forecastDirtyRequest)) {
-      if (request >= forecastDirtyRequest) forecastDirty = false;
-      lastForecastHour = requestHour;
-      if (pendingForecastHour === requestHour) pendingForecastHour = undefined;
-      batch(() => {
-        setActivityBuckets(held);
+  return next;
+}
+
+const loadActivity = (wantsForecast: boolean, forceHeld = false) => {
+  clearBucketRetry();
+  const includeHeld = forceHeld || canMergeLiveBuckets();
+  const requestHour = localHourStart(Date.now());
+  const request = ++activityRequest;
+  activityLoading = true;
+  dirtiedDuringLoad = false;
+  forecastDirtiedDuringLoad = false;
+  pendingDeltas = [];
+  forecastDirty ||= wantsForecast;
+  if (forecastDirty) pendingForecastHour = requestHour;
+  void api.activityBucketSnapshot(untrack(activityDays), includeHeld).then(({ held, forecast, watermark }) => {
+    if (request !== activityRequest) return;
+    bucketRetryDelay = 0;
+    let nextHeld: ActivityBucket[] | undefined;
+    if (includeHeld) {
+      activityWatermark = watermark;
+      bucketIndices.clear();
+      held.forEach((bucket, index) => bucketIndices.set(bucketKey(bucket), index));
+      const canReplay = canMergeLiveBuckets();
+      if (!canReplay && pendingDeltas.length) dirtiedDuringLoad = true;
+      nextHeld = canReplay ? mergeBucketDeltas(held, pendingDeltas) : held;
+      activityDirty = dirtiedDuringLoad;
+    } else {
+      activityDirty = true;
+    }
+    pendingDeltas = [];
+    activityLoading = false;
+    batch(() => {
+      if (nextHeld) setActivityBuckets(nextHeld);
+      if (forecastDirty) {
+        forecastDirty = forecastDirtiedDuringLoad;
+        if (!forecastDirty) lastForecastHour = requestHour;
+        pendingForecastHour = undefined;
         setForecastBuckets(forecast);
         setForecastAsOf(requestHour);
-      });
-    } else {
-      setActivityBuckets(held);
-    }
+      }
+    });
+    if (activityDirty && canMergeLiveBuckets()) loadActivity(forecastDirty);
   }).catch((err: unknown) => {
-    if (request === forecastDirtyRequest) pendingForecastHour = undefined;
+    if (request !== activityRequest) return;
+    activityLoading = false;
+    activityDirty = true;
+    pendingDeltas = [];
+    pendingForecastHour = undefined;
     console.error('[activity] aggregates failed to load:', err);
+    scheduleBucketRetry();
   });
 };
+
+function receiveBucketDelta(delta: ActivityBucketDelta): void {
+  if (!canMergeLiveBuckets()) {
+    activityDirty = dirtiedDuringLoad = true;
+    return;
+  }
+  if (activityLoading) {
+    if (dirtiedDuringLoad) return;
+    if (pendingDeltas.length < MAX_PENDING_BUCKET_DELTAS) pendingDeltas.push(delta);
+    else {
+      pendingDeltas = [];
+      activityDirty = dirtiedDuringLoad = true;
+    }
+    return;
+  }
+  if (activityDirty) {
+    scheduleBucketRetry();
+    return;
+  }
+  setActivityBuckets((held) => mergeBucketDeltas(held, [delta]));
+}
+
+export function subscribeActivityBuckets(): () => void {
+  if (++bucketSubscribers === 1) {
+    queueMicrotask(() => {
+      if (bucketSubscribers > 0 && !isDocumentHidden() && activityDirty && !activityLoading) {
+        loadActivity(forecastDirty || localHourStart(Date.now()) !== lastForecastHour);
+      }
+    });
+  }
+  return () => {
+    bucketSubscribers--;
+    if (bucketSubscribers === 0 && !forecastDirty) clearBucketRetry();
+  };
+}
 
 /** Holds at least `days` local days of activity (null: all), reloading when that widens or narrows. */
 export function holdActivityDays(days: number | null): void {
   const next = days === null ? null : Math.max(MIN_ACTIVITY_DAYS, days);
   if (next === activityDays()) return;
-  activityGeneration++;
   setActivityDays(next);
-  loadActivity(true);
+  loadActivity(true, true);
 }
+
+// Resets while unsubscribed defer forecast refreshes until returning to dashboard, reveal, or hourly rollover.
+createRoot(() => createComputed(() => {
+  if (page() === 'dashboard' && storeInitialized && !isDocumentHidden() && forecastDirty && !activityLoading) {
+    loadActivity(true);
+  }
+}));
 async function saveSettings(next: AppSettings): Promise<void> {
   // Edits can copy store-backed values into the draft; IPC cannot clone Solid proxies.
   setSettingsSignal(await api.setSettings(unwrap(next)));
@@ -198,10 +312,26 @@ export async function initStore(): Promise<void> {
   setWindowSummaries(summaries);
   setObservedSpans(spans);
   setLogs(logLines);
-  const bucketsReload = createActivityReload(() => loadActivity(false));
-  reloadActivity = () => { activityGeneration++; bucketsReload.cancel(); loadActivity(true); };
+  storeInitialized = true;
+  reloadActivity = () => loadActivity(true);
   reloadActivity();
-  api.onActivityReset(reloadActivity);
+  api.onActivityReset(() => {
+    setLiveActivityVersion((version) => version + 1);
+    if (!canMergeLiveBuckets()) {
+      activityDirty = dirtiedDuringLoad = forecastDirty = forecastDirtiedDuringLoad = true;
+      return;
+    }
+    loadActivity(true);
+  });
+  api.onActivityBuckets(receiveBucketDelta);
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+    if (isDocumentHidden()) {
+      clearBucketRetry();
+      return;
+    }
+    const wantsForecast = forecastDirty || localHourStart(Date.now()) !== lastForecastHour;
+    if ((activityDirty && canMergeLiveBuckets()) || wantsForecast) loadActivity(wantsForecast);
+  });
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -213,7 +343,7 @@ export async function initStore(): Promise<void> {
   api.onMaximized(setMaximized);
   api.onTaskbarDark(setTaskbarDark);
   api.onSettings(setSettingsSignal);
-  api.onActivity(bucketsReload.schedule);
+  api.onActivity(() => { setLiveActivityVersion((version) => version + 1); });
 
   tickEachMinute();
   setInterval(() => {

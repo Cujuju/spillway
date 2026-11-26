@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityRpc, type RpcPort } from './activityRpc';
 import type { Request } from './activityProtocol';
 import { ActivityRouter } from './activityRouter';
@@ -96,5 +96,32 @@ describe('ActivityRouter', () => {
     namesPort.reply();
     writerPort.reply();
     await closing;
+  });
+
+  it('routes trace reads to the WAL reader, keeps archive status on the writer, and forwards bucket deltas', async () => {
+    const { router, writerPort, readerPorts } = createHarness();
+    router.start();
+    writerPort.emit('message', { event: 'reset' });
+    const reader = readerPorts[0]!;
+    const query = { from: '2026-11-23T00:00:00Z', to: '2026-11-24T00:00:00Z', sort: 'cost' as const };
+    const nodes = router.call('traceQuery', query);
+    expect(reader.sent.at(-1)?.method).toBe('traceQuery');
+    reader.reply([]);
+    await nodes;
+    const attempts = router.call('traceAttempts', { ...query, nodeId: 'session:claude:main' });
+    expect(reader.sent.at(-1)?.method).toBe('traceAttempts');
+    reader.reply([]);
+    await attempts;
+    const status = router.call('archiveStatus');
+    expect(writerPort.sent.at(-1)?.method).toBe('archiveStatus');
+    writerPort.reply({});
+    await status;
+
+    const buckets = vi.fn();
+    router.on('buckets', buckets);
+    const delta = { watermark: 1, buckets: [] };
+    writerPort.emit('message', { event: 'buckets', value: delta });
+    expect(buckets).toHaveBeenCalledExactlyOnceWith(delta);
+    router.cancel();
   });
 });

@@ -20,7 +20,7 @@ export class ActivityRouter extends EventEmitter {
   ) {
     super();
     this.names.on('failure', (error: unknown) => console.error('[activity:names]', error));
-    for (const event of ['reset', 'progress', 'migration', 'failure'] as const) {
+    for (const event of ['reset', 'progress', 'migration', 'failure', 'buckets'] as const) {
       this.writer.on(event, (value: unknown) => {
         if (event === 'reset' && !this.closed && this.clearing === 0) this.ensureReader();
         this.emit(event, value);

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { TRACE_ATTEMPT_PAGE_SIZE, TRACE_PAGE_SIZE, TRACE_SCAN_LIMIT, type TraceAttemptQuery, type TraceQuery } from '@shared/sessionTrace';
 import type { CaptureRecord } from '@shared/archive';
 import type { ActivityEvent } from '@shared/types';
@@ -26,6 +26,39 @@ function setup() {
   return { log, config, observe, edit };
 }
 const query: TraceQuery = { from: new Date(Date.parse(at) - 86_400_000).toISOString(), to: new Date(Date.parse(at) + 30_000).toISOString(), sort: 'cost' };
+
+it('reads both trace endpoints through a read-only WAL connection', () => {
+  const { config, observe } = setup();
+  const e = observe(event());
+  const reader = new ActivityLog({ ...config, readonly: true });
+  logs.unshift(reader);
+  const nodeId = `session:${e.sessionId}`;
+  expect(reader.traceQuery(query).nodes[0]?.id).toBe(nodeId);
+  expect(reader.traceAttempts({ ...query, nodeId }).attempts[0]?.traceId).toBe(e.traceId);
+});
+
+it('expires retained archive bodies on maintenance without trace reads pruning them', () => {
+  const { log, observe } = setup();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const retentionDays = 7;
+    log.archivePolicy({ captureBodies: true, retentionDays, maxBytes: 100 * 1024 * 1024 });
+    const e = observe(event());
+    log.archiveIngest({ version: 1, epoch: 'epoch-a', dropped: 0, records: [{
+      id: 'capture', traceId: e.traceId!, epoch: 'epoch-a', sequence: 1, startedAt: at,
+      method: 'POST', path: '/v1/messages', status: 200, state: 'complete', reason: '', request: '{"prompt":"needle"}', response: '',
+      requestType: 'application/json', responseType: '', requestEncoding: '', responseEncoding: '',
+    }] });
+    const nodeId = `session:${e.sessionId}`;
+    const search = { ...query, text: 'needle' };
+    vi.setSystemTime(Date.now() + retentionDays * 86_400_000);
+    expect(log.traceQuery(search).nodes).toHaveLength(1);
+    expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.captureState).toBe('complete');
+    log.archivePrune();
+    expect(log.traceQuery(search).nodes).toHaveLength(0);
+    expect(log.traceAttempts({ ...query, nodeId }).attempts[0]?.captureState).toBe('expired');
+  } finally { vi.useRealTimers(); }
+});
 
 it('counts retries once, keeps own usage separate from parents, and preserves account moves and transport', () => {
   const { log, observe } = setup();

@@ -88,12 +88,31 @@ it('reads both bucket ranges with one clock across midnight, DST and legacy dail
         clock.mockClear();
         const result = log.bucketSnapshot(days);
         expect(clock).toHaveBeenCalledOnce();
-        expect(result).toEqual({ held: log.buckets(days), forecast: log.buckets(21) });
+        expect(result).toEqual({ held: log.buckets(days), forecast: log.buckets(21), watermark: 6 });
+        expect(log.bucketSnapshot(days, false)).toEqual({ held: [], forecast: result.forecast, watermark: 6 });
         expect(result.forecast.filter((b) => b.start === Date.parse('2026-11-01T01:00:00-07:00') || b.start === Date.parse('2026-11-01T01:00:00-08:00'))).toHaveLength(2);
         expect(result.forecast.some((b) => b.wholeDay && b.requests === 5)).toBe(true);
       }
     }
   } finally { clock.mockRestore(); log.close(); vi.unstubAllEnvs(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('keeps bucket watermarks strictly monotonic even when pruning deletes the highest request id and SQLite reuses it', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'spillway-watermark-'));
+  const log = new ActivityLog({ activityDb: path.join(dir, 'activity.db'), legacyActivityDir: path.join(dir, 'legacy'), databaseKey: 'ab'.repeat(32), retentionDays: 7 });
+  try {
+    const oldAt = new Date(Date.now() - 20 * 86_400_000);
+    const first = log.append(event(oldAt, 'old-req', 'proxy'))!;
+    const firstWatermark = log.lastAppendWatermark;
+    expect(firstWatermark).toBeGreaterThan(0);
+    // Pruning deletes the sole (highest) row; SQLite reuses id = first.id on the next append.
+    log.prune();
+    expect(log.bucketSnapshot(31).watermark).toBe(firstWatermark);
+    const second = log.append(event(new Date(), 'new-req', 'proxy'))!;
+    expect(second.id).toBe(first.id);
+    expect(log.lastAppendWatermark).toBeGreaterThan(firstWatermark);
+    expect(log.bucketSnapshot(31).watermark).toBe(log.lastAppendWatermark);
+  } finally { log.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 it('keeps the database usable and retries maintenance next open after VACUUM fails', () => {

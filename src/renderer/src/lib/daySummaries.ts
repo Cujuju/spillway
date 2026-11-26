@@ -19,6 +19,8 @@ export interface DaySummaries {
   /** Totals across every stored day, for the requests shown. */
   stored: () => { requests: number; failed: number };
   loaded: () => boolean;
+  /** Bumps on visible activity resets (or once on reveal after hidden resets) so open day sections refresh in place. */
+  resetCount: () => number;
 }
 
 /** Per-day request counts for `scope`, loaded only while `active` and kept current from the live stream. Call in a component. */
@@ -41,21 +43,59 @@ export function createDaySummaries(active: () => boolean, scope: () => ActivityS
     setList((all) => (current ? all.map((s) => (s.day === day ? next : s)) : [next, ...all].sort((a, b) => b.day.localeCompare(a.day))));
   };
 
+  const [reloadTick, setReloadTick] = createSignal(0);
+  const [resetTick, setResetTick] = createSignal(0);
+  let pendingReload = false;
+  let pendingReset = false;
+  const isHidden = () => typeof document !== 'undefined' && document.hidden;
+
   onMount(() => {
     // An IPC event handler: it reads current state on each event, untracked by design.
     // oxlint-disable-next-line solid/reactivity
     onCleanup(window.api.onActivity((e) => {
       if (!active()) return;
+      if (isHidden()) { pendingReload = true; return; }
       if (liveDuringLoad) liveDuringLoad.push(e);
       else count(e);
     }));
+    // oxlint-disable-next-line solid/reactivity
+    onCleanup(window.api.onActivityReset(() => {
+      if (!active()) return;
+      if (isHidden()) { pendingReload = true; pendingReset = true; return; }
+      setResetTick((n) => n + 1);
+    }));
+    const onVisibility = () => {
+      if (isHidden() || !active()) return;
+      if (pendingReset) {
+        pendingReset = false;
+        pendingReload = false;
+        setResetTick((n) => n + 1);
+      } else if (pendingReload) {
+        pendingReload = false;
+        setReloadTick((n) => n + 1);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+      onCleanup(() => document.removeEventListener('visibilitychange', onVisibility));
+    }
   });
-  createEffect(on([active, scope], ([isActive, current]) => {
+  createEffect(on([active, scope, reloadTick, resetTick], ([isActive, current]) => {
     if (!isActive) {
+      pendingReload = false;
+      pendingReset = false;
       generation += 1;
       liveDuringLoad = null;
       return;
     }
+    if (isHidden()) {
+      generation += 1;
+      liveDuringLoad = null;
+      pendingReload = true;
+      return;
+    }
+    pendingReload = false;
+    pendingReset = false;
     const gen = ++generation;
     liveDuringLoad ??= [];
     setLoaded(false);
@@ -77,5 +117,5 @@ export function createDaySummaries(active: () => boolean, scope: () => ActivityS
       });
   }));
 
-  return { list, byDay, stored, loaded };
+  return { list, byDay, stored, loaded, resetCount: resetTick };
 }

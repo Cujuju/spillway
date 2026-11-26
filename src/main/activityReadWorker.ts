@@ -15,12 +15,14 @@ const methods = {
   daySummaries: (scope: Parameters<ActivityLog['daySummaries']>[0]) => log.daySummaries(scope),
   totalsList: () => log.totalsList(),
   buckets: (days: Parameters<ActivityLog['buckets']>[0]) => log.buckets(days),
-  bucketSnapshot: (days: Parameters<ActivityLog['bucketSnapshot']>[0]) => log.bucketSnapshot(days),
+  bucketSnapshot: (...args: Parameters<ActivityLog['bucketSnapshot']>) => log.bucketSnapshot(...args),
   compare: (...args: Parameters<ActivityLog['compare']>) => log.compare(...args),
   waste: (q: Parameters<ActivityLog['waste']>[0]) => log.waste(q),
   driftQuery: (q: Parameters<ActivityLog['driftQuery']>[0]) => log.driftQuery(q),
   coverage: () => log.coverage(),
   thinkingTests: () => log.thinkingTests(),
+  traceQuery: (q: Parameters<ActivityLog['traceQuery']>[0]) => log.traceQuery(q),
+  traceAttempts: (q: Parameters<ActivityLog['traceAttempts']>[0]) => log.traceAttempts(q),
   close: () => { log.close(); },
 };
 

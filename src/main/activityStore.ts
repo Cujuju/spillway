@@ -57,6 +57,8 @@ const statementsFor = connectionStatements({
   insertRequest: 'INSERT INTO requests (day, failed, event) VALUES (?, ?, ?)',
   linkIdentity: 'UPDATE usage_identities SET row_id = ? WHERE key = ?',
   identityRow: 'SELECT row_id FROM usage_identities WHERE key = ?',
+  readWatermark: "SELECT CAST(value AS INTEGER) AS v FROM meta WHERE key = 'bucket-watermark'",
+  saveWatermark: "INSERT OR REPLACE INTO meta (key, value) VALUES ('bucket-watermark', ?)",
   conversation: `SELECT event FROM requests WHERE (${CONVERSATION_KEY_SQL}) = (?, ?) ORDER BY id DESC LIMIT 1`,
 });
 
@@ -121,6 +123,7 @@ export class ActivityLog {
   archiveIngest(page: CapturePage): void { this.archive.ingest(page); }
   archiveIngestBatch(pages: CapturePage[]): void { this.archive.ingestBatch(pages); }
   archiveDetail(traceId: string) { return this.archive.detail(traceId); }
+  archivePrune(): void { this.archive.prune(); }
   archiveStatus() { this.archive.prune(); return { ...this.archive.status(), exportWarning: this.exporter ? this.exporter.cleanupWarning : this.exportStartupWarning }; }
   archivePolicy(policy: ArchivePolicy) { return this.archive.setPolicy(policy); }
   archiveClear(): void { this.exporter?.cancelCurrent(); this.archive.clear(); }
@@ -142,8 +145,8 @@ export class ActivityLog {
   }
   clickhouseExportsTitles(): boolean { const c = this.clickhouse.config(); return c.enabled && c.stores.titles; }
   diagnosticSnapshot(traceId: string, includeBodies: boolean) { return diagnosticSnapshot(this.db, this.archive, traceId, includeBodies === true); }
-  traceQuery(q: TraceQuery) { this.archive.prune(); return new TraceStore(this.db).query(q); }
-  traceAttempts(q: TraceAttemptQuery) { this.archive.prune(); return new TraceStore(this.db).attempts(q); }
+  traceQuery(q: TraceQuery) { return new TraceStore(this.db).query(q); }
+  traceAttempts(q: TraceAttemptQuery) { return new TraceStore(this.db).attempts(q); }
   constructor(private config: ActivityConfig, private migrationProgress?: (state: ArchiveMigrationState) => void) {}
   setRetention(days: number): void { this.config.retentionDays = days; this.prune(); }
   priceSnapshot(): string | null { return activityPriceSnapshot(this.db); }
@@ -228,6 +231,7 @@ export class ActivityLog {
         const authIndex = typeof e.sessionId === 'string' ? bySession.get(e.sessionId) : undefined;
         return authIndex ? { authIndex } : null;
       })) updated = true;
+      if (updated) this.bumpBucketWatermark();
       return updated;
     }).immediate();
     if (changed) {
@@ -281,7 +285,7 @@ export class ActivityLog {
         this.importing = true;
         try { for (const e of events) this.append(e); }
         finally { this.importing = false; }
-        if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; }
+        if (matchLegacyUsage(this.db, events.map(identityKey))) { this.totals = null; this.revision += 1; this.bumpBucketWatermark(); }
         const pruned = events.length > 0 && this.statements.prune.run(oldestKeptDay(Date.now(), this.config.retentionDays)).changes > 0;
         const changed = events.length > 0 && changes() !== before;
         if (changed && events.some((e) => e.costUsd !== undefined || e.uncachedCostUsd !== undefined)) {
@@ -302,7 +306,14 @@ export class ActivityLog {
   }
   exportEvents(): Generator<AccountedActivityEvent> { return exportActivityEvents(this.db); }
 
+  private appendedBuckets: ActivityBucket[] = [];
+  private appendedWatermark = 0;
+  get lastAppendBuckets(): readonly ActivityBucket[] { return this.appendedBuckets; }
+  get lastAppendWatermark(): number { return this.appendedWatermark; }
+
   append(event: AccountedActivityEvent): StoredActivityEvent | null {
+    this.appendedBuckets = [];
+    this.appendedWatermark = 0;
     // A committed append can lose its reply in a worker crash; preserve its original movedFrom on replay.
     if (event.source !== 'client-log') {
       const existing = this.statements.storedRequest.get(identityKey(event)) as RequestRow | undefined;
@@ -337,25 +348,32 @@ export class ActivityLog {
           if (total) {
             for (const k of Object.keys(counts) as (keyof typeof counts)[]) total[k] -= counts[k];
             this.statements.saveTotal.run(key, JSON.stringify(total));
+            this.bumpBucketWatermark();
           }
         }
         if (merge.skip) return merge.id ?? 0;
         const row = addToTotals(totals, e);
         if (this.importing) preserveImportedCost(row, accounted);
         this.statements.saveTotal.run(storedTotalKey(row), JSON.stringify(row));
+        const watermark = this.bumpBucketWatermark();
         const id = Number(this.statements.insertRequest.run(day, e.failed ? 1 : 0, JSON.stringify(e)).lastInsertRowid);
         rememberUsage(this.db, accounted, id);
         this.statements.linkIdentity.run(id, identityKey(e));
         if (merge.relinkKey) this.statements.linkIdentity.run(id, merge.relinkKey);
         if (!this.importing && matchLegacyUsage(this.db, [identityKey(e)])) {
           this.totals = null; this.revision += 1;
+          this.bumpBucketWatermark();
           return (this.statements.identityRow.get(identityKey(e)) as { row_id: number }).row_id;
         }
+        this.appendedBuckets = [toBucket(row)];
+        this.appendedWatermark = watermark;
         return id;
       }).immediate();
     } catch (err) {
       // The mirror already counted it; reload from the rolled-back table.
       this.totals = null;
+      this.appendedBuckets = [];
+      this.appendedWatermark = 0;
       throw err;
     }
     if (this.prunedOn !== localDay(Date.now())) this.prune();
@@ -479,21 +497,35 @@ export class ActivityLog {
   }
 
   /** Both ranges use one clock and share bucket objects from the same totals. */
-  bucketSnapshot(days: number | null): ActivityBucketSnapshot {
-    const now = Date.now();
-    const heldDays = days === null ? null : new Set(lastDays(now, days));
-    const forecastDays = new Set(lastDays(now, RHYTHM_LOOKBACK_DAYS));
-    const held: ActivityBucket[] = [];
-    const forecast: ActivityBucket[] = [];
-    for (const total of this.loadTotals().values()) {
-      const inHeld = heldDays === null || heldDays.has(total.day);
-      const inForecast = forecastDays.has(total.day);
-      if (!inHeld && !inForecast) continue;
-      const bucket = toBucket(total);
-      if (inHeld) held.push(bucket);
-      if (inForecast) forecast.push(bucket);
-    }
-    return { held, forecast };
+  bucketSnapshot(days: number | null, includeHeld = true): ActivityBucketSnapshot {
+    return this.db.transaction(() => {
+      const watermark = this.bucketWatermark();
+      const now = Date.now();
+      const heldDays = !includeHeld || days === null ? null : new Set(lastDays(now, days));
+      const forecastDays = new Set(lastDays(now, RHYTHM_LOOKBACK_DAYS));
+      const held: ActivityBucket[] = [];
+      const forecast: ActivityBucket[] = [];
+      for (const total of this.loadTotals().values()) {
+        const inHeld = includeHeld && (heldDays === null || heldDays.has(total.day));
+        const inForecast = forecastDays.has(total.day);
+        if (!inHeld && !inForecast) continue;
+        const bucket = toBucket(total);
+        if (inHeld) held.push(bucket);
+        if (inForecast) forecast.push(bucket);
+      }
+      return { held, forecast, watermark };
+    })();
+  }
+
+  private bucketWatermark(): number {
+    return (this.statements.readWatermark.get() as { v: number } | undefined)?.v ?? 0;
+  }
+
+  /** Monotonic totals mutation sequence; decoupled from `requests.id` so pruning never reuses watermarks. */
+  private bumpBucketWatermark(): number {
+    const next = this.bucketWatermark() + 1;
+    this.statements.saveWatermark.run(String(next));
+    return next;
   }
 
   /** Deletes requests outside the retention setting; their totals stay. */
@@ -511,6 +543,7 @@ export class ActivityLog {
       this.db.exec("DELETE FROM thinking_tests; DELETE FROM request_settings; DELETE FROM canary_results; DELETE FROM requests; DELETE FROM activity_totals; DELETE FROM usage_identities; DELETE FROM meta WHERE key = 'first-matchable-proxy';");
       this.db.exec(ARCHIVE_CLEAR_SQL);
       this.db.exec('DELETE FROM eval_cases; DELETE FROM archive_pins; DELETE FROM archive_pieces WHERE thread_id IS NULL OR thread_id NOT IN (SELECT id FROM archive_threads)');
+      this.bumpBucketWatermark();
     });
     this.totals = new Map();
     this.conversationAccounts.clear();

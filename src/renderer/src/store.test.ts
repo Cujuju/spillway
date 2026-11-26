@@ -4,15 +4,15 @@ import { unwrap } from 'solid-js/store';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { emptyCounts } from '@shared/activityCounts';
 import type { PriceCatalogState } from '@shared/modelPrices';
-import type { ActivityBucket, ActivityBucketSnapshot, Credential, UsageSnapshot } from '@shared/types';
+import type { ActivityBucket, ActivityBucketDelta, ActivityBucketSnapshot, Credential, UsageSnapshot } from '@shared/types';
 
 // IPC clones the request before main normalizes it.
 const api = {
   setSettings: async (s: AppSettings) => normalizeSettings(structuredClone(s)),
-  activityBucketSnapshot: vi.fn<(days: number | null) => Promise<ActivityBucketSnapshot>>().mockResolvedValue({ held: [], forecast: [] }),
+  activityBucketSnapshot: vi.fn<(days: number | null, includeHeld?: boolean) => Promise<ActivityBucketSnapshot>>().mockResolvedValue({ held: [], forecast: [], watermark: 0 }),
 };
 vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
-const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, logs, now, setHistory, setLogs, setNow, setSnapshot, settings, settingsError, shownText, snapshot, updateSettings } = await import('./store');
+const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, liveActivityVersion, logs, now, setHistory, setLogs, setNow, setPage, setSnapshot, settings, settingsError, shownText, snapshot, subscribeActivityBuckets, updateSettings } = await import('./store');
 const { createPoolModel, poolRemaining } = await import('./components/poolModel');
 
 const cred = (id: string, usedPercent: number): Credential => ({
@@ -74,8 +74,11 @@ const snap = (...credentials: Credential[]): UsageSnapshot => ({ fetchedAt: '', 
 
 function mockActivityEvents() {
   let live = () => {};
+  let delta = (_value: ActivityBucketDelta) => {};
   let reset = () => {};
   let price = (_state: PriceCatalogState) => {};
+  const doc = Object.assign(new EventTarget(), { hidden: false });
+  vi.stubGlobal('document', doc);
   const catalog: PriceCatalogState = { prices: {}, info: { fetchedAt: null, models: 0 } };
   const subscribe = () => () => {};
   Object.assign(api, {
@@ -89,13 +92,16 @@ function mockActivityEvents() {
     onSnapshot: subscribe, onUsageError: subscribe, onProxyStatus: subscribe, onProxyLog: subscribe,
     onMaximized: subscribe, onTaskbarDark: subscribe, onSettings: subscribe,
     onActivity: (cb: () => void) => { live = cb; return () => {}; },
+    onActivityBuckets: (cb: (value: ActivityBucketDelta) => void) => { delta = cb; return () => {}; },
     onActivityReset: (cb: () => void) => { reset = cb; return () => {}; },
     onPriceCatalog: (cb: (state: PriceCatalogState) => void) => { price = cb; return () => {}; },
   });
-  return { live: () => live(), reset: () => reset(), price: () => price(catalog) };
+  const show = (visible: boolean) => { doc.hidden = !visible; doc.dispatchEvent(new Event('visibilitychange')); };
+  return { live: () => live(), delta: (value: ActivityBucketDelta) => delta(value), reset: () => reset(), price: () => price(catalog), show };
 }
 
-const bucketSnapshot = (start: number): ActivityBucketSnapshot => ({ held: [{ start } as ActivityBucket], forecast: [{ start } as ActivityBucket] });
+const bucketSnapshot = (start: number, watermark = start): ActivityBucketSnapshot => ({ held: [{ start } as ActivityBucket], forecast: [{ start } as ActivityBucket], watermark });
+const liveBucket = (requests: number): ActivityBucket => ({ ...emptyCounts(), start: new Date().setMinutes(0, 0, 0), wholeDay: false, provider: 'claude', authIndex: 'a', model: 'm', client: null, requests });
 
 describe('forecast activity evidence', () => {
   it('keeps pool capacity and forecasts fixed when the Activity page widens or narrows', async () => {
@@ -117,10 +123,10 @@ describe('forecast activity evidence', () => {
       let expectedProjection: ReturnType<ReturnType<typeof createPoolModel>['projection']> | undefined;
       for (const days of [90, null, 31]) {
         const pageBuckets = [{ ...bucket, costUsd: days ?? 1000 }, { ...bucket, authIndex: 'b' }];
-        api.activityBucketSnapshot.mockResolvedValueOnce({ held: pageBuckets, forecast });
+        api.activityBucketSnapshot.mockResolvedValueOnce({ held: pageBuckets, forecast, watermark: 1 });
         holdActivityDays(days);
         await Promise.resolve();
-        expect(api.activityBucketSnapshot).toHaveBeenLastCalledWith(days);
+        expect(api.activityBucketSnapshot).toHaveBeenLastCalledWith(days, true);
         expect(activityBuckets()).toEqual(pageBuckets);
         expect(forecastBuckets()).toEqual(forecast);
         createRoot((dispose) => {
@@ -145,7 +151,7 @@ describe('forecast activity evidence', () => {
       .mockReturnValueOnce(new Promise((resolve) => { resolveNew = resolve; }));
     holdActivityDays(90);
     holdActivityDays(null);
-    const latest = { held: [{ start: 1 } as ActivityBucket], forecast: [{ start: 2 } as ActivityBucket] };
+    const latest = { held: [{ start: 1 } as ActivityBucket], forecast: [{ start: 2 } as ActivityBucket], watermark: 2 };
     const observed: [ActivityBucket[], ActivityBucket[]][] = [];
     let dispose!: () => void;
     createRoot((stop) => { dispose = stop; createComputed(() => { observed.push([activityBuckets(), forecastBuckets()]); }); });
@@ -153,7 +159,7 @@ describe('forecast activity evidence', () => {
       resolveNew(latest);
       await Promise.resolve();
       expect(observed.slice(1)).toEqual([[latest.held, latest.forecast]]);
-      resolveOld({ held: [], forecast: [] });
+      resolveOld({ held: [], forecast: [], watermark: 1 });
       await Promise.resolve();
       expect(activityBuckets()).toEqual(latest.held);
       expect(forecastBuckets()).toEqual(latest.forecast);
@@ -161,89 +167,137 @@ describe('forecast activity evidence', () => {
     } finally { dispose(); holdActivityDays(31); await Promise.resolve(); }
   });
 
-  it('advances slow live reads, ignores out-of-order replies and invalidates pre-reset snapshots', async () => {
+  it('replays newer deltas over a snapshot, excludes old buckets and invalidates pre-reset reads', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-25T14:00:00Z'));
-    const { live, reset } = mockActivityEvents();
+    const { delta, reset } = mockActivityEvents();
     const replies: ((value: ActivityBucketSnapshot) => void)[] = [];
-    const value = bucketSnapshot;
-    const poll = async () => { live(); await vi.advanceTimersByTimeAsync(2_000); };
+    const stop = subscribeActivityBuckets();
     try {
       await initStore();
       api.activityBucketSnapshot.mockImplementation(() => new Promise((resolve) => { replies.push(resolve); }));
-      await poll(); await poll();
-      replies[0]!(value(1));
-      await Promise.resolve();
-      expect(activityBuckets()).toEqual(value(1).held);
-      replies[1]!(value(2));
-      await Promise.resolve();
-      expect(activityBuckets()).toEqual(value(2).held);
-      await poll(); await poll();
-      replies[3]!(value(4));
-      await Promise.resolve();
-      replies[2]!(value(3));
-      await Promise.resolve();
-      expect(activityBuckets()).toEqual(value(4).held);
-      await poll();
       reset();
-      replies[4]!(value(5));
+      reset();
+      delta({ watermark: 12, buckets: [liveBucket(12)] });
+      delta({ watermark: 13, buckets: [{ ...liveBucket(13), start: 0 }] });
+      const forecast = [liveBucket(10)];
+      replies[1]!({ watermark: 11, held: [liveBucket(11)], forecast });
       await Promise.resolve();
-      expect(activityBuckets()).toEqual(value(4).held);
-      replies[5]!(value(6));
+      expect(activityBuckets()).toEqual([liveBucket(12)]);
+      expect(forecastBuckets()).toBe(forecast);
+
+      delta({ watermark: 12, buckets: [liveBucket(99)] });
+      replies[0]!({ watermark: 10, held: forecast, forecast });
       await Promise.resolve();
-      expect(activityBuckets()).toEqual(value(6).held);
-      expect(forecastBuckets()).toEqual(value(6).forecast);
+      expect(activityBuckets()).toEqual([liveBucket(12)]);
+      delta({ watermark: 14, buckets: [liveBucket(14)] });
+      expect(activityBuckets()).toEqual([liveBucket(14)]);
     } finally {
-      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
+      stop();
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [], watermark: 0 });
       vi.clearAllTimers(); vi.useRealTimers();
     }
   });
 
-  it('keeps the forecast reference on live polls and refreshes it on reset, repricing and hour rollover', async () => {
+  it('merges live deltas for subscribers, defers resets with zero subscribers, and resyncs once on subscribe or reveal', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-25T14:58:00Z'));
-    const { live, reset, price } = mockActivityEvents();
-    const previousNow = now();
-    const startup = bucketSnapshot(1);
-    const next = bucketSnapshot(2);
-    api.activityBucketSnapshot.mockResolvedValueOnce(startup).mockResolvedValueOnce(next);
+    const { live, delta, reset, show } = mockActivityEvents();
+    const forecast = [liveBucket(1)];
+    api.activityBucketSnapshot.mockResolvedValueOnce({ watermark: 1, held: [], forecast });
     try {
       await initStore();
-      expect(forecastBuckets()).toBe(startup.forecast);
+      expect(api.activityBucketSnapshot).toHaveBeenLastCalledWith(31, false);
+      api.activityBucketSnapshot.mockClear();
+      const version = liveActivityVersion();
       live();
-      await vi.advanceTimersByTimeAsync(2_000);
-      expect(activityBuckets()).toBe(next.held);
-      expect(forecastBuckets()).toBe(startup.forecast);
+      delta({ watermark: 2, buckets: [liveBucket(2)] });
+      expect(liveActivityVersion()).toBe(version + 1);
+      // Resets with zero subscribers (e.g. visible Dashboard) bump liveActivityVersion without fetching held snapshots.
+      reset();
+      expect(liveActivityVersion()).toBe(version + 2);
+      expect(api.activityBucketSnapshot).not.toHaveBeenCalled();
 
-      const afterReset = bucketSnapshot(3);
-      api.activityBucketSnapshot.mockResolvedValueOnce(afterReset);
+      // Switching away and back to dashboard refreshes forecast-only when forecast is dirty.
+      api.activityBucketSnapshot.mockResolvedValueOnce({ watermark: 2, held: [], forecast });
+      setPage('settings');
+      setPage('dashboard');
+      await Promise.resolve();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(1);
+      expect(api.activityBucketSnapshot).toHaveBeenLastCalledWith(31, false);
+
+      // Subscribing fetches held buckets once; ref-counting holds across multiple subscribers.
+      api.activityBucketSnapshot.mockResolvedValueOnce({ watermark: 2, held: [liveBucket(2)], forecast: [] });
+      const stopFirst = subscribeActivityBuckets(), stopSecond = subscribeActivityBuckets();
+      try {
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+        expect(api.activityBucketSnapshot).toHaveBeenLastCalledWith(31, true);
+        stopFirst();
+        delta({ watermark: 3, buckets: [liveBucket(3)] });
+        expect(activityBuckets()).toEqual([liveBucket(3)]);
+        show(false);
+        delta({ watermark: 4, buckets: [liveBucket(4)] });
+        expect(activityBuckets()).toEqual([liveBucket(3)]);
+        expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+
+        api.activityBucketSnapshot.mockResolvedValueOnce({ watermark: 4, held: [liveBucket(4)], forecast: [] });
+        show(true);
+        await Promise.resolve();
+        expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(3);
+        expect(activityBuckets()).toEqual([liveBucket(4)]);
+        expect(forecastBuckets()).toBe(forecast);
+      } finally { stopSecond(); }
+      delta({ watermark: 5, buckets: [liveBucket(5)] });
+      expect(activityBuckets()).toEqual([liveBucket(4)]);
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(3);
+    } finally {
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [], watermark: 0 });
+      vi.clearAllTimers(); vi.useRealTimers();
+    }
+  });
+
+  it('recovers from pending-delta overflow and rejected snapshots without merging into stale baselines', async () => {
+    vi.useFakeTimers();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { delta, reset } = mockActivityEvents();
+    const stop = subscribeActivityBuckets();
+    try {
+      await initStore();
+      await Promise.resolve();
+      api.activityBucketSnapshot.mockClear();
+
+      // Overflowing pending deltas (>256) during a slow load triggers one clean resync.
+      let resolveSlow!: (value: ActivityBucketSnapshot) => void;
+      api.activityBucketSnapshot
+        .mockReturnValueOnce(new Promise((resolve) => { resolveSlow = resolve; }))
+        .mockResolvedValueOnce({ watermark: 300, held: [liveBucket(300)], forecast: [] });
+      reset();
+      for (let i = 1; i <= 260; i++) delta({ watermark: i, buckets: [liveBucket(i)] });
+      resolveSlow({ watermark: 0, held: [liveBucket(0)], forecast: [] });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+      expect(activityBuckets()).toEqual([liveBucket(300)]);
+
+      // A rejected snapshot keeps the baseline dirty, ignores intervening deltas, and recovers on backoff retry.
+      api.activityBucketSnapshot.mockClear()
+        .mockRejectedValueOnce(new Error('reader busy'))
+        .mockResolvedValueOnce({ watermark: 310, held: [liveBucket(310)], forecast: [] });
       reset();
       await Promise.resolve();
-      expect(forecastBuckets()).toBe(afterReset.forecast);
-
-      const afterPrice = bucketSnapshot(4);
-      api.activityBucketSnapshot.mockResolvedValueOnce(afterPrice);
-      price();
       await Promise.resolve();
-      expect(forecastBuckets()).toBe(afterPrice.forecast);
-
-      await vi.advanceTimersByTimeAsync(117_000);
-      expect(forecastBuckets()).toBe(afterPrice.forecast);
-      let resolveRollover!: (value: ActivityBucketSnapshot) => void;
-      const afterRollover = bucketSnapshot(5);
-      api.activityBucketSnapshot.mockReturnValueOnce(new Promise((resolve) => { resolveRollover = resolve; })).mockResolvedValueOnce(afterRollover);
-      live();
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(forecastBuckets()).toBe(afterPrice.forecast);
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(activityBuckets()).toBe(afterRollover.held);
-      expect(forecastBuckets()).toBe(afterRollover.forecast);
-      resolveRollover(bucketSnapshot(6));
+      expect(err).toHaveBeenCalledTimes(1);
+      delta({ watermark: 305, buckets: [liveBucket(305)] });
+      expect(activityBuckets()).toEqual([liveBucket(300)]);
+      await vi.advanceTimersByTimeAsync(2_000);
       await Promise.resolve();
-      expect(forecastBuckets()).toBe(afterRollover.forecast);
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+      expect(activityBuckets()).toEqual([liveBucket(310)]);
     } finally {
-      setNow(previousNow);
-      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
+      stop();
+      err.mockRestore();
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [], watermark: 0 });
       vi.clearAllTimers(); vi.useRealTimers();
     }
   });
@@ -275,38 +329,55 @@ describe('forecast activity evidence', () => {
     }
   });
 
-  it('keeps an in-flight rollover forecast pending when an earlier live reply arrives first', async () => {
+  it('refreshes forecast evidence on hidden startup, rollover, repricing, and defers hidden resets until reveal', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-25T14:59:57Z'));
-    const { live } = mockActivityEvents();
+    const endOfHour = new Date(2026, 10, 25, 14, 59, 57);
+    vi.setSystemTime(endOfHour);
+    const { live, show, reset, price } = mockActivityEvents();
+    show(false);
     const previousNow = now();
     const startup = bucketSnapshot(1);
-    const liveSnap = bucketSnapshot(2);
-    const rolloverSnap = bucketSnapshot(3);
-    let resolveLive!: (value: ActivityBucketSnapshot) => void;
+    const rollover = bucketSnapshot(2);
+    const afterPrice = bucketSnapshot(3);
+    const afterReveal = bucketSnapshot(4);
     let resolveRollover!: (value: ActivityBucketSnapshot) => void;
-    api.activityBucketSnapshot
+    api.activityBucketSnapshot.mockClear()
       .mockResolvedValueOnce(startup)
-      .mockReturnValueOnce(new Promise((resolve) => { resolveLive = resolve; }))
-      .mockReturnValueOnce(new Promise((resolve) => { resolveRollover = resolve; }));
+      .mockReturnValueOnce(new Promise((resolve) => { resolveRollover = resolve; }))
+      .mockResolvedValueOnce(afterReveal).mockResolvedValueOnce(afterPrice);
     try {
       await initStore();
-      live();
-      await vi.advanceTimersByTimeAsync(2_000); // 14:59:59: sends pre-rollover live request
-      await vi.advanceTimersByTimeAsync(1_000); // 15:00:00: sends rollover forecast request
-      const callsAtRollover = api.activityBucketSnapshot.mock.calls.length;
-      resolveLive(liveSnap);
-      await Promise.resolve();
-      expect(activityBuckets()).toBe(liveSnap.held);
       expect(forecastBuckets()).toBe(startup.forecast);
-      await vi.advanceTimersByTimeAsync(60_000); // 15:01:00: must not issue duplicate rollover request
-      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(callsAtRollover);
-      resolveRollover(rolloverSnap);
+      live();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+      expect(forecastBuckets()).toBe(startup.forecast);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+      // A hidden reset arriving mid-flight does not trigger IPC while hidden, and survives rollover resolution.
+      reset();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(2);
+      resolveRollover(rollover);
       await Promise.resolve();
-      expect(forecastBuckets()).toBe(rolloverSnap.forecast);
+      expect(forecastBuckets()).toBe(rollover.forecast);
+      // Reveal picks up the deferred mid-flight reset even with zero bucket subscribers.
+      show(true);
+      await Promise.resolve();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(3);
+      expect(forecastBuckets()).toBe(afterReveal.forecast);
+      // Hidden reset after load also defers, while price catalog refresh still updates tray forecasts while hidden.
+      show(false);
+      reset();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(3);
+      price();
+      await Promise.resolve();
+      expect(api.activityBucketSnapshot).toHaveBeenCalledTimes(4);
+      expect(forecastBuckets()).toBe(afterPrice.forecast);
     } finally {
       setNow(previousNow);
-      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [] });
+      api.activityBucketSnapshot.mockReset().mockResolvedValue({ held: [], forecast: [], watermark: 0 });
       vi.clearAllTimers(); vi.useRealTimers();
     }
   });

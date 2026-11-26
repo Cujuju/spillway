@@ -296,9 +296,9 @@ const handlers: Handlers = {
   clickhouseStatus,
   clickhouseSave: async (config, credentials) => { const status = await saveClickHouse(config, credentials); exportUsage(true); return status; }, clickhouseDiagnose: diagnoseClickHouse, clickhouseRetry: retryClickHouse, clickhouseClear: clearClickHouse,
   clickhouseCancel: () => cancelClickHouse(),
-  activityBucketSnapshot: (days) => {
+  activityBucketSnapshot: (days, includeHeld = true) => {
     const n = Math.max(1, Math.floor(Number(days) || 1));
-    return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n);
+    return activityLog.call('bucketSnapshot', days === null || n > MAX_BUCKET_DAYS ? null : n, includeHeld !== false);
   },
   clearActivity: () => withEvalDeletion(() => clearThinkingTests(() => withClickHousePaused(() => activityLog.call('clear')))),
   conversationNames: (sessionIds) => activityLog.call('names', sessionIds),

@@ -20,7 +20,7 @@ import type { CanaryResult, CanaryStatus } from './canary';
 import type { AppSettings } from './settings';
 import type { PriceCatalogState } from './modelPrices';
 import type {
-  ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, OAuthTarget, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
+  ActivityBucketDelta, ActivityBucketSnapshot, ActivityDaySummary, ActivityDayTotal, ActivityPage, ActivityPageQuery, ClientId, CredentialImportResult, CredentialModel, CredentialRenewResult,ClientSetupResult, ClientSetupStatus, HistorySample, ManagementLockout, LogLine, OAuthStart, ObservedSpan, OAuthStatus, OAuthTarget, ProxyCoverage, ProxyKeys, ProxyStatus, ResetCreditOutcome, StoredActivityEvent, UpdateStatus, UsageSnapshot, WindowStartStatus, WindowSummary,
 } from './types';
 import type { ManagedPolicyStatus } from './types';
 
@@ -146,7 +146,7 @@ export interface DesktopApi {
   archiveMigrationState(): Promise<ArchiveMigrationState>;
   activityCoverage(): Promise<ProxyCoverage>;
   /** Activity and fixed forecast ranges from the same totals and local-day boundary; null holds all activity. */
-  activityBucketSnapshot(days: number | null): Promise<ActivityBucketSnapshot>;
+  activityBucketSnapshot(days: number | null, includeHeld?: boolean): Promise<ActivityBucketSnapshot>;
   /** Deletes recent, stored and total activity. */
   clearActivity(): Promise<void>;
   /** Titles the clients gave these conversations (proxy session IDs); IDs without one are left out. */
@@ -210,6 +210,7 @@ export interface DesktopApi {
   onActivityReset(cb: () => void): () => void;
   onPriceCatalog(cb: (state: PriceCatalogState) => void): () => void;
   onActivity(cb: (e: StoredActivityEvent) => void): () => void;
+  onActivityBuckets(cb: (delta: ActivityBucketDelta) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
   onTaskbarDark(cb: (dark: boolean) => void): () => void;
 }
@@ -321,6 +322,7 @@ export const EVENTS = {
   onClientSetupChanged: 'clients:changed',
   onSettings: 'settings:changed',
   onActivity: 'activity:event',
+  onActivityBuckets: 'activity:buckets',
   onActivityImport: 'activity:import',
   onArchiveMigration: 'archive:migration',
   onCanaryChange: 'canary:change',

@@ -45,11 +45,18 @@ function parseWindow(raw: unknown): LimitWindow | null {
 const CLAUDE_OVERAGE_KEY = 'overage';
 
 /**
- * A status-only `rejected` overage window means pay-as-you-go is off, not a limit in use.
- * Usage or a reset means it is on, so it stays.
+ * Overage reasons meaning pay-as-you-go is on but ran out. Not `org_level_disabled_until`: accounts
+ * without extra usage send it on every response (anthropics/claude-code#104690).
  */
-const isDisabledOverage = (provider: string, w: LimitWindow): boolean =>
-  provider === 'claude' && w.key === CLAUDE_OVERAGE_KEY && w.status === 'rejected' && w.usedPercent === null && w.resetsAt === null;
+const CLAUDE_OVERAGE_LIMIT_REASONS: ReadonlySet<string> = new Set(['org_spend_cap_reached', 'out_of_credits']);
+
+/**
+ * A status-only `rejected` overage window means pay-as-you-go is off. Usage, a reset or a limit
+ * reason means it is on, so it stays. Older proxies send no reason.
+ */
+const isDisabledOverage = (provider: string, w: LimitWindow, disabledReason: string | null): boolean =>
+  provider === 'claude' && w.key === CLAUDE_OVERAGE_KEY && w.status === 'rejected' && w.usedPercent === null && w.resetsAt === null
+  && !(disabledReason !== null && CLAUDE_OVERAGE_LIMIT_REASONS.has(disabledReason));
 
 /** Default account name: the part after the last "@", e.g. "example.com". */
 export function emailDomain(email: string | null): string | null {
@@ -120,9 +127,10 @@ function parseCredential(raw: unknown): Credential | null {
   const id = s(c.id);
   const provider = s(c.provider)?.toLowerCase();
   if (!id || !provider) return null;
-  const windows = Array.isArray(c.windows)
-    ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null && !isDisabledOverage(provider, w))
-    : [];
+  const windows = (Array.isArray(c.windows) ? c.windows : []).flatMap((raw: unknown) => {
+    const w = parseWindow(raw);
+    return w && !isDisabledOverage(provider, w, s(obj(raw).disabled_reason)) ? [w] : [];
+  });
   const note = s(c.note);
   const email = s(c.email);
   const key = obj(c.api_key);

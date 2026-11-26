@@ -16,7 +16,7 @@ import './styles/waste.css';
 import './styles/pages.css';
 import './styles/help.css';
 import './styles/about.css';
-import { App } from './App';
+import { Root } from './Root';
 import { initStore } from './store';
 import { setHourCycle } from '@shared/timeFormat';
 
@@ -26,4 +26,6 @@ setHourCycle(window.api.hourCycle);
 // Platform-specific CSS (macOS title bar) keys off this.
 document.documentElement.dataset.platform = window.api.platform;
 
-void initStore().then(() => render(() => <App />, document.getElementById('root')!));
+// Never rejects; Root shows its failure with a Retry.
+void initStore();
+render(() => <Root />, document.getElementById('root')!);

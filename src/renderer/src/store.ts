@@ -17,6 +17,10 @@ export type Page = (typeof PAGES)[number];
 
 const api = window.api;
 
+export type StoreStartup = { status: 'loading' } | { status: 'ready' } | { status: 'error'; message: string };
+const [storeStartup, setStoreStartup] = createSignal<StoreStartup>({ status: 'loading' });
+export { storeStartup };
+
 export const [page, setPage] = persistedSignal<Page>('page', 'dashboard', PAGES);
 
 const SETTINGS_SECTIONS = ['general', 'appearance', 'notifications', 'startup', 'proxy', 'windowStart', 'dashboard', 'updates', 'capture', 'storage', 'clickhouse', 'about'] as const;
@@ -344,24 +348,50 @@ function onVisibilityChange(): void {
   if ((activityDirty && canMergeLiveBuckets()) || wantsForecast) loadActivity(wantsForecast);
 }
 
+let receivedCatalogEvent = false;
+let receivedImportEvent = false;
+let receivedMigrationEvent = false;
+let reloadActivity: (() => void) | undefined;
+
+function reportStartupError(err: unknown): void {
+  console.error('[store] startup failed:', err);
+  setStoreStartup({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+}
+
 export async function initStore(): Promise<void> {
-  // Before any await: main sends this once the page loads, which can beat the startup reads below.
-  api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
-  api.onOpenProxy(() => setPage('proxy'));
-  // Before the startup read, so a catalog download finishing meanwhile is not lost.
-  let receivedCatalogEvent = false;
-  let reloadActivity: (() => void) | undefined;
-  api.onPriceCatalog((state) => { receivedCatalogEvent = true; applyPriceCatalog(state); reloadActivity?.(); });
-  let receivedImportEvent = false;
-  api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
-  let receivedMigrationEvent = false;
-  api.onArchiveMigration((state) => { receivedMigrationEvent = true; setArchiveMigration(state); });
+  setStoreStartup({ status: 'loading' });
+  receivedCatalogEvent = receivedImportEvent = receivedMigrationEvent = false;
+  reloadActivity = undefined;
+  try {
+    // Main can send navigation events before the startup reads finish.
+    api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
+    api.onOpenProxy(() => setPage('proxy'));
+    // The startup failure view has a title bar too.
+    api.onMaximized(setMaximized);
+    // Register before reading so an event during startup or retry wins over the read.
+    api.onPriceCatalog((state) => { receivedCatalogEvent = true; applyPriceCatalog(state); reloadActivity?.(); });
+    api.onActivityImport((state) => { receivedImportEvent = true; setActivityImport(state); });
+    api.onArchiveMigration((state) => { receivedMigrationEvent = true; setArchiveMigration(state); });
+    await runStartup();
+  } catch (err) {
+    reportStartupError(err);
+  }
+}
+
+export async function retryStartup(): Promise<void> {
+  if (storeStartup().status !== 'error') return;
+  setStoreStartup({ status: 'loading' });
+  await runStartup().catch(reportStartupError);
+}
+
+async function runStartup(): Promise<void> {
   const [initialImport, initialMigration, initialCatalog] = await Promise.all([api.activityImportState(), api.archiveMigrationState(), api.priceCatalog()]);
-  if (!receivedCatalogEvent) applyPriceCatalog(initialCatalog);
-  if (!receivedImportEvent) setActivityImport(initialImport);
-  if (!receivedMigrationEvent) setArchiveMigration(initialMigration);  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
+  const [s, latest, status, hist, summaries, spans, logLines, dark] = await Promise.all([
     api.getSettings(), api.usageLatest(), api.proxyStatus(), api.usageHistory(), api.usageWindowSummaries(), api.usageObservedSpans(), api.proxyLogs(), api.taskbarDark(),
   ]);
+  if (!receivedCatalogEvent) applyPriceCatalog(initialCatalog);
+  if (!receivedImportEvent) setActivityImport(initialImport);
+  if (!receivedMigrationEvent) setArchiveMigration(initialMigration);
   setTaskbarDark(dark);
   setSettingsSignal(s);
   setSnapshot(latest.snapshot);
@@ -397,7 +427,6 @@ export async function initStore(): Promise<void> {
   api.onProxyStatus(setProxyStatus);
   stopProxyLog?.();
   stopProxyLog = api.onProxyLog(enqueueProxyLog);
-  api.onMaximized(setMaximized);
   api.onTaskbarDark(setTaskbarDark);
   api.onSettings(setSettingsSignal);
   api.onActivity(() => { setLiveActivityVersion((version) => version + 1); });
@@ -409,6 +438,7 @@ export async function initStore(): Promise<void> {
     void api.usageObservedSpans().then(setObservedSpans);
   }, HISTORY_REFRESH_MS);
   prefersDark.addEventListener('change', () => applyTheme(settings().general.theme));
+  setStoreStartup({ status: 'ready' });
 }
 
 /** Re-aims at the next minute from the wall clock each time, so ticks never drift off it. */

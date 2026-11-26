@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-solid';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from '@/lib/icons';
 import { createMemo, For, Show } from 'solid-js';
 import { DEFAULT_TRAY_LOOK, type TrayIconScope, type TrayIconSpec } from '@shared/settings';
 import { KNOWN_WINDOW_LABELS, providerLabel, readTray, shownPercent, thresholdInUnit, trayIconText, windowLabel } from '@shared/trayValues';

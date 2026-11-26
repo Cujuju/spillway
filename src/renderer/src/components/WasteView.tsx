@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { Flame } from 'lucide-solid';
+import { Flame } from '@/lib/icons';
 import type { PromptBucketId, TopWasteSession, WasteDriverTag, WasteReport } from '@shared/activityWaste';
 import { appLocale } from '@shared/timeFormat';
 import { modelName } from '../lib/comboSelection';

@@ -1,4 +1,4 @@
-import { Download, Plus, RefreshCw, X } from 'lucide-solid';
+import { Download, Plus, RefreshCw, X } from '@/lib/icons';
 import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 import { EVAL_ASSERTION_LIMITS, type EvalAnnotation, type EvalAssertion, type EvalCase, type EvalCaseSummary, type EvalExportPreview, type EvalReplayPreview, type EvalReplayResult } from '@shared/evalCase';
 import { shownText } from '../store';

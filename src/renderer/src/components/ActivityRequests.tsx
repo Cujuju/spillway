@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-solid';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from '@/lib/icons';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { localDay } from '@shared/activityCounts';
 import { inScope, type ActivityScope } from '@shared/activityScope';

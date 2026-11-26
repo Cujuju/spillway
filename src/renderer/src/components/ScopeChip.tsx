@@ -1,4 +1,4 @@
-import { ChevronDown, X } from 'lucide-solid';
+import { ChevronDown, X } from '@/lib/icons';
 import { createUniqueId, For, Show, type JSX } from 'solid-js';
 
 const ICON_PX = 12;

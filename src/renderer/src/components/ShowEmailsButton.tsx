@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from 'lucide-solid';
+import { Eye, EyeOff } from '@/lib/icons';
 import { Show } from 'solid-js';
 import { settings, updateSettings } from '../store';
 import { HoverTip } from './ChartTip';

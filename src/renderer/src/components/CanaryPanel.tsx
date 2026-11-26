@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, For, onCleanup, Show } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { Check, Minus, Play, Settings2, TriangleAlert, X } from 'lucide-solid';
+import { Check, Minus, Play, Settings2, TriangleAlert, X } from '@/lib/icons';
 import { CANARY_PROBES, type CanaryStatus } from '@shared/canary';
 import { compactNumber, dateTime, dayLabel, msDuration, pct } from '../lib/format';
 import { canaryDaily, canaryTargets, latestBatch, rangeDays, targetLabel } from '../lib/canaryView';

@@ -1,4 +1,4 @@
-import { FolderInput, FolderOpen, RotateCcw } from 'lucide-solid';
+import { FolderInput, FolderOpen, RotateCcw } from '@/lib/icons';
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { setHistory, setObservedSpans, setWindowSummaries, settings, shownText, updateSettings } from '../store';
 import { Dialog, NumberField, SettingRow, SettingsGroup } from './ui';

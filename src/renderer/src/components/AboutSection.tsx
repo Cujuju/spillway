@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-solid';
+import { ExternalLink } from '@/lib/icons';
 import { createResource, For, Show } from 'solid-js';
 import { APP_NAME, REPO_URL } from '@shared/app';
 import { ACKNOWLEDGEMENTS, CONTRIBUTORS, type Credit } from '../lib/credits';

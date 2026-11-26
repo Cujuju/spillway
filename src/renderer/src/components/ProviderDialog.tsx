@@ -1,4 +1,4 @@
-import { Plus, X } from 'lucide-solid';
+import { Plus, X } from '@/lib/icons';
 import { createSignal, createUniqueId, For, Index, onMount, Show, untrack } from 'solid-js';
 import {
   API_KEY_FAMILIES, CLAUDE_API_IDENTITY_DEFAULT, CLAUDE_API_IDENTITY_OPTIONS, FAMILY_INFO, MODEL_LISTS, validateDraft, type ClaudeApiIdentity, type ApiKeyFamily, type ApiModelAlias, type ApiProviderGroup, type ApiProviderTarget,

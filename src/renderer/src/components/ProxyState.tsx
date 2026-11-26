@@ -1,5 +1,5 @@
 import type { ProxyState } from '@shared/types';
-import { Server } from 'lucide-solid';
+import { Server } from '@/lib/icons';
 import { compactDuration } from '../lib/format';
 import { now, proxyStatus } from '../store';
 

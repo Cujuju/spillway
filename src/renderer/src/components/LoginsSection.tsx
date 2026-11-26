@@ -1,5 +1,5 @@
 import { HoverTip } from './ChartTip';
-import { KeyRound, LogIn, Plus, Trash2, Upload } from 'lucide-solid';
+import { KeyRound, LogIn, Plus, Trash2, Upload } from '@/lib/icons';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';

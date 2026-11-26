@@ -1,4 +1,4 @@
-import { FolderOpen } from 'lucide-solid';
+import { FolderOpen } from '@/lib/icons';
 import { createEffect, createMemo, For, on, onCleanup, onMount } from 'solid-js';
 import { Toggle } from '../components/ui';
 import { logs, now, setLogs, settings, shownText, updateSettings } from '../store';

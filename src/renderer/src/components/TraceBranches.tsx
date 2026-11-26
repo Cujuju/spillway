@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-solid';
+import { RefreshCw } from '@/lib/icons';
 import { For, Show } from 'solid-js';
 import type { TraceCoverage, TraceNode } from '@shared/sessionTrace';
 import { shownText } from '../store';

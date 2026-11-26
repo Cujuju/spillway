@@ -1,4 +1,4 @@
-import { Lock } from 'lucide-solid';
+import { Lock } from '@/lib/icons';
 import { Show } from 'solid-js';
 import { windowPace, type WindowPace } from '@shared/pace';
 import { RESET_GLYPH } from '@shared/resetTime';

@@ -1,4 +1,4 @@
-import { Check } from 'lucide-solid';
+import { Check } from '@/lib/icons';
 import { For, Show } from 'solid-js';
 import type { CredentialModel } from '@shared/types';
 import { familyName, groupModelFamilies, type ModelFamily } from '../lib/modelFamilies';

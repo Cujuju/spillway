@@ -1,4 +1,4 @@
-import { Info } from 'lucide-solid';
+import { Info } from '@/lib/icons';
 import { For, Show, type JSX } from 'solid-js';
 import { KvTooltip, KvTooltipPanel, type KvTooltipAnchor } from '@cujuju/solidjs-kv-tooltip';
 

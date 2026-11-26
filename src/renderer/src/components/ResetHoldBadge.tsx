@@ -1,6 +1,6 @@
 import { HoverTip, type TipRow } from './ChartTip';
 import { createSignal, Show } from 'solid-js';
-import { Lock, RotateCcw } from 'lucide-solid';
+import { Lock, RotateCcw } from '@/lib/icons';
 import { HoldIndicator, useHoldAction } from '@cujuju/solidjs-hold-action';
 import { clockText, resetParts } from '@shared/resetTime';
 import { dateTime } from '../lib/format';

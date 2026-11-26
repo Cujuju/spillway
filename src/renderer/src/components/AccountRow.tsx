@@ -1,4 +1,4 @@
-import { ChartLine, RefreshCw, Settings2 } from 'lucide-solid';
+import { ChartLine, RefreshCw, Settings2 } from '@/lib/icons';
 import { createSignal, For, Show } from 'solid-js';
 import { accountState } from '@shared/accountState';
 import type { Credential } from '@shared/types';

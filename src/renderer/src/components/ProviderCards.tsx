@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Layers, RotateCcw } from 'lucide-solid';
+import { ChevronDown, ChevronUp, Layers, RotateCcw } from '@/lib/icons';
 import { For, Show } from 'solid-js';
 import { providerLabel } from '@shared/trayValues';
 import { compactDuration, dateTime, quotaPercent } from '../lib/format';

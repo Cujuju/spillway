@@ -1,4 +1,4 @@
-import { Copy, Minus, Square, X } from 'lucide-solid';
+import { Copy, Minus, Square, X } from '@/lib/icons';
 import { APP_NAME } from '@shared/app';
 import { Show } from 'solid-js';
 import { maximized } from '../store';

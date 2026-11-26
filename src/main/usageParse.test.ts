@@ -40,6 +40,15 @@ describe('Claude overage window', () => {
     expect(keysOf('claude', overage({ status: 'rejected', used_percent: 100 }))).toEqual(['five_hour', 'overage']);
     expect(keysOf('claude', overage({ status: 'rejected', resets_at: '2026-12-01T00:00:00Z' }))).toEqual(['five_hour', 'overage']);
   });
+  it('keeps a status-only rejection whose reason is a reached credit limit', () => {
+    expect(keysOf('claude', overage({ status: 'rejected', disabled_reason: 'org_spend_cap_reached' }))).toEqual(['five_hour', 'overage']);
+    expect(keysOf('claude', overage({ status: 'rejected', disabled_reason: 'out_of_credits' }))).toEqual(['five_hour', 'overage']);
+  });
+  it('drops a status-only rejection whose reason means pay-as-you-go is off or unknown', () => {
+    for (const disabled_reason of ['org_level_disabled', 'org_level_disabled_until', 'member_zero_credit_limit', 'new_reason', null]) {
+      expect(keysOf('claude', overage({ status: 'rejected', disabled_reason }))).toEqual(['five_hour']);
+    }
+  });
   it('keeps status-only rejections of other windows and providers', () => {
     expect(keysOf('claude', { key: 'seven_day', status: 'rejected' })).toEqual(['five_hour', 'seven_day']);
     expect(keysOf('codex', overage({ status: 'rejected' }))).toEqual(['five_hour', 'overage']);

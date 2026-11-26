@@ -8,7 +8,7 @@ import { resetParts } from '@shared/resetTime';
 import { providerLabel } from '@shared/trayValues';
 import { minuteToTime, timeToMinute } from '@shared/windowStartSettings';
 import { isBoolean, persistedSignal } from '../lib/persisted';
-import { providerLogo, providerVar } from '../lib/providers';
+import { providerLogo, providerLogoUrl, providerVar } from '../lib/providers';
 
 /** StockApp-style On/Off toggle. */
 export function Toggle(props: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
@@ -194,20 +194,32 @@ const GLYPH_SIZE = { sm: 'var(--glyph-size-sm)', md: 'var(--glyph-size)', lg: 'v
 
 export function ProviderGlyph(props: { provider: string; size?: keyof typeof GLYPH_SIZE }) {
   const uid = createUniqueId();
+  const logoUrl = () => providerLogoUrl(props.provider);
   const logo = () => providerLogo(props.provider, uid);
   const px = () => GLYPH_SIZE[props.size ?? 'md'];
   return (
     <Show
-      when={logo()}
+      when={logoUrl()}
       fallback={
-        <span class="provider-glyph" title={providerLabel(props.provider)} style={{ background: providerVar(props.provider), width: px(), height: px() }}>
-          {providerLabel(props.provider).charAt(0)}
-        </span>
+        <Show
+          when={logo()}
+          fallback={
+            <span class="provider-glyph" title={providerLabel(props.provider)} style={{ background: providerVar(props.provider), width: px(), height: px() }}>
+              {providerLabel(props.provider).charAt(0)}
+            </span>
+          }
+        >
+          {/* Bundled SVGs (lib/providers.ts), inlined so currentColor follows the theme. */}
+          {/* oxlint-disable-next-line solid/no-innerhtml */}
+          <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }} innerHTML={logo()} />
+        </Show>
       }
     >
-      {/* Bundled SVGs (lib/providers.ts), inlined so currentColor follows the theme. */}
-      {/* oxlint-disable-next-line solid/no-innerhtml */}
-      <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }} innerHTML={logo()} />
+      {(url) => (
+        <span class="provider-logo" title={providerLabel(props.provider)} style={{ width: px(), height: px() }}>
+          <img src={url()} alt="" draggable={false} />
+        </span>
+      )}
     </Show>
   );
 }

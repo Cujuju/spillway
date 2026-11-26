@@ -10,7 +10,7 @@ export const OAUTH_PROVIDERS = [
   { id: 'meta', label: 'Muse (Meta)', hint: 'Meta account' },
 ] as const;
 
-import antigravity from '../assets/providers/antigravity.svg?raw';
+import antigravityUrl from '../assets/providers/antigravity.svg';
 import claude from '../assets/providers/claude.svg?raw';
 import codex from '../assets/providers/codex.svg?raw';
 import devin from '../assets/providers/devin.svg?raw';
@@ -21,8 +21,10 @@ import xai from '../assets/providers/xai.svg?raw';
 
 const KNOWN = new Set(['claude', 'codex', 'antigravity', 'xai', 'kimi', 'devin', 'meta', 'gemini']);
 
-/** Brand marks as SVG markup, keyed by provider id. kimi.ai shares Kimi's mark. */
-const LOGOS: Record<string, string> = { claude, codex, antigravity, xai, kimi, 'kimi-ai': kimi, devin, meta, gemini };
+/** Brand marks as inline SVG markup for currentColor logos; kimi.ai shares Kimi's mark. */
+const LOGOS: Record<string, string> = { claude, codex, xai, kimi, 'kimi-ai': kimi, devin, meta, gemini };
+/** Static multi-colour marks rendered via `<img>` so Chromium caches rasterization instead of live SVG `<filter>` trees. */
+const LOGO_URLS: Record<string, string> = { antigravity: antigravityUrl };
 
 /** lobe-icons suffix every gradient/mask id with this (a React useId artifact). */
 const LOGO_ID_SUFFIX = '_R_0_';
@@ -30,6 +32,11 @@ const LOGO_ID_SUFFIX = '_R_0_';
 /** The provider's logo with ids made unique per instance, or undefined when there is none. */
 export function providerLogo(provider: string, instanceId: string): string | undefined {
   return LOGOS[provider]?.replaceAll(LOGO_ID_SUFFIX, instanceId);
+}
+
+/** Static image URL for filter-heavy brand marks that do not depend on `currentColor`. */
+export function providerLogoUrl(provider: string): string | undefined {
+  return LOGO_URLS[provider];
 }
 
 /** CSS colour for a provider, from the --provider-* tokens. */

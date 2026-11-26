@@ -1,17 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createComputed, createRoot } from 'solid-js';
 import { unwrap } from 'solid-js/store';
 import { normalizeSettings, type AppSettings } from '@shared/settings';
 import { emptyCounts } from '@shared/activityCounts';
 import type { PriceCatalogState } from '@shared/modelPrices';
-import type { ActivityBucket, ActivityBucketDelta, ActivityBucketSnapshot, Credential, UsageSnapshot } from '@shared/types';
+import type { ActivityBucket, ActivityBucketDelta, ActivityBucketSnapshot, Credential, LogLine, UsageSnapshot } from '@shared/types';
 
 // IPC clones the request before main normalizes it.
 const api = {
   setSettings: async (s: AppSettings) => normalizeSettings(structuredClone(s)),
   activityBucketSnapshot: vi.fn<(days: number | null, includeHeld?: boolean) => Promise<ActivityBucketSnapshot>>().mockResolvedValue({ held: [], forecast: [], watermark: 0 }),
 };
-vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
+const stubWindow = () => vi.stubGlobal('window', { api, matchMedia: () => ({ matches: true, addEventListener: () => {} }) });
+stubWindow();
 const { activityBuckets, forecastBuckets, holdActivityDays, history, initStore, liveActivityVersion, logs, now, setHistory, setLogs, setNow, setPage, setSnapshot, settings, settingsError, shownText, snapshot, subscribeActivityBuckets, updateSettings } = await import('./store');
 const { createPoolModel, poolRemaining } = await import('./components/poolModel');
 
@@ -77,6 +78,7 @@ function mockActivityEvents() {
   let delta = (_value: ActivityBucketDelta) => {};
   let reset = () => {};
   let price = (_state: PriceCatalogState) => {};
+  const logListeners = new Set<(line: LogLine) => void>();
   const doc = Object.assign(new EventTarget(), { hidden: false });
   vi.stubGlobal('document', doc);
   const catalog: PriceCatalogState = { prices: {}, info: { fetchedAt: null, models: 0 } };
@@ -89,7 +91,12 @@ function mockActivityEvents() {
     getSettings: async () => structuredClone(unwrap(settings())), usageLatest: async () => ({ snapshot: null, error: null }),
     proxyStatus: async () => null, usageHistory: async () => [], usageWindowSummaries: async () => [], usageObservedSpans: async () => [],
     proxyLogs: async () => [], taskbarDark: async () => true,
-    onSnapshot: subscribe, onUsageError: subscribe, onProxyStatus: subscribe, onProxyLog: subscribe,
+    onSnapshot: subscribe, onUsageError: subscribe, onProxyStatus: subscribe,
+    onProxyLog: (cb: (line: LogLine) => void) => {
+      const listener = (line: LogLine) => cb(line);
+      logListeners.add(listener);
+      return () => logListeners.delete(listener);
+    },
     onMaximized: subscribe, onTaskbarDark: subscribe, onSettings: subscribe,
     onActivity: (cb: () => void) => { live = cb; return () => {}; },
     onActivityBuckets: (cb: (value: ActivityBucketDelta) => void) => { delta = cb; return () => {}; },
@@ -97,8 +104,113 @@ function mockActivityEvents() {
     onPriceCatalog: (cb: (state: PriceCatalogState) => void) => { price = cb; return () => {}; },
   });
   const show = (visible: boolean) => { doc.hidden = !visible; doc.dispatchEvent(new Event('visibilitychange')); };
-  return { live: () => live(), delta: (value: ActivityBucketDelta) => delta(value), reset: () => reset(), price: () => price(catalog), show };
+  return { doc, live: () => live(), delta: (value: ActivityBucketDelta) => delta(value), reset: () => reset(), price: () => price(catalog), show, log: (line: LogLine) => logListeners.forEach((cb) => cb(line)) };
 }
+
+describe('proxy log batching', () => {
+  const logLimit = 2_000;
+  const makeLine = (i: number): LogLine => ({ at: '', stream: 'stdout', text: String(i) });
+
+  async function startLogStore() {
+    vi.useFakeTimers();
+    const events = mockActivityEvents();
+    const frames = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    const request = vi.fn((callback: FrameRequestCallback) => { frames.set(++id, callback); return id; });
+    const cancel = vi.fn((frame: number) => { frames.delete(frame); });
+    vi.stubGlobal('requestAnimationFrame', request);
+    vi.stubGlobal('cancelAnimationFrame', cancel);
+    await initStore();
+    const runFrame = () => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      for (const callback of callbacks) callback(0);
+    };
+    return { ...events, request, cancel, runFrame };
+  }
+
+  afterEach(() => {
+    setLogs([]);
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    stubWindow();
+  });
+
+  it('publishes a burst once per frame, in order and within the log limit', async () => {
+    const { log, request, runFrame } = await startLogStore();
+    const existing = Array.from({ length: logLimit }, (_, i) => makeLine(i));
+    const burst = [makeLine(logLimit), makeLine(logLimit + 1), makeLine(logLimit + 2)];
+    setLogs(existing);
+    const observe = vi.fn();
+    createRoot((dispose) => {
+      try {
+        createComputed(() => observe(logs()));
+        for (const line of burst) log(line);
+        expect(observe).toHaveBeenCalledTimes(1);
+        expect(request).toHaveBeenCalledTimes(1);
+
+        runFrame();
+        expect(observe).toHaveBeenCalledTimes(2);
+        expect(logs()).toHaveLength(logLimit);
+        expect(logs()).toEqual([...existing.slice(burst.length), ...burst]);
+        expect(logs()[0]).toBe(existing[burst.length]);
+      } finally { dispose(); }
+    });
+  });
+
+  it('cancels pre-clear lines and lets subsequent lines wait for their own frame', async () => {
+    const { log, request, cancel, runFrame } = await startLogStore();
+    setLogs([makeLine(0)]);
+    log(makeLine(1));
+    setLogs([]);
+    expect(cancel).toHaveBeenCalledWith(request.mock.results[0]!.value);
+    expect(logs()).toEqual([]);
+
+    const afterClear = makeLine(2);
+    log(afterClear);
+    request.mock.calls[0]![0](0);
+    expect(logs()).toEqual([]);
+    runFrame();
+    expect(logs()).toEqual([afterClear]);
+  });
+
+  it('keeps the latest lines during hidden overflow and flushes them on reveal', async () => {
+    const { doc, log, request, show, runFrame } = await startLogStore();
+    const listen = vi.spyOn(doc, 'addEventListener');
+    try {
+      await initStore();
+      expect(listen).not.toHaveBeenCalled();
+      const incoming = Array.from({ length: 2 * logLimit + 7 }, (_, i) => makeLine(i));
+      log(incoming[0]!);
+      show(false);
+      for (const line of incoming.slice(1)) log(line);
+      runFrame();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(logs()).toEqual([]);
+
+      show(true);
+      expect(logs()).toEqual(incoming.slice(-logLimit));
+      const revealed = logs();
+      runFrame();
+      expect(logs()).toBe(revealed);
+    } finally { listen.mockRestore(); }
+  });
+
+  it('batches in a microtask when animation frames are unavailable', async () => {
+    const { log } = await startLogStore();
+    vi.stubGlobal('requestAnimationFrame', undefined);
+    log(makeLine(0));
+    setLogs(() => []);
+    const first = makeLine(1);
+    const second = makeLine(2);
+    log(first);
+    log(second);
+    expect(logs()).toEqual([]);
+    await Promise.resolve();
+    expect(logs()).toEqual([first, second]);
+  });
+});
 
 const bucketSnapshot = (start: number, watermark = start): ActivityBucketSnapshot => ({ held: [{ start } as ActivityBucket], forecast: [{ start } as ActivityBucket], watermark });
 const liveBucket = (requests: number): ActivityBucket => ({ ...emptyCounts(), start: new Date().setMinutes(0, 0, 0), wholeDay: false, provider: 'claude', authIndex: 'a', model: 'm', client: null, requests });

@@ -72,7 +72,8 @@ export const [history, setHistory] = createSignal<HistorySample[]>([]);
 export const [windowSummaries, setWindowSummaries] = createSignal<WindowSummary[]>([]);
 export const [observedSpans, setObservedSpans] = createSignal<ObservedSpan[]>([]);
 export const [proxyStatus, setProxyStatus] = createSignal<ProxyStatus | null>(null);
-export const [logs, setLogs] = createSignal<LogLine[]>([]);
+const [logs, replaceLogs] = createSignal<LogLine[]>([]);
+export { logs };
 /** Hourly activity for the Activity overview and plan sizing (poolCapacity). */
 export const [activityBuckets, setActivityBuckets] = createSignal<ActivityBucket[]>([]);
 export const [liveActivityVersion, setLiveActivityVersion] = createSignal(0);
@@ -88,7 +89,52 @@ export const [taskbarDark, setTaskbarDark] = createSignal(true);
 export const [priceCatalogInfo, setPriceCatalogInfo] = createSignal<PriceCatalogInfo>({ fetchedAt: null, models: 0 });
 const applyPriceCatalog = (state: PriceCatalogState) => { installCatalogPrices(state.prices); setPriceCatalogInfo(state.info); };
 
-const MAX_LOG_LINES = 2000;
+const isDocumentHidden = () => typeof document !== 'undefined' && document.hidden;
+const MAX_LOG_LINES = 2_000;
+let pendingLogs: LogLine[] = [];
+let nextPendingLog = 0;
+let scheduledLogFlush: { frame?: number } | undefined;
+
+function cancelLogFlush(): void {
+  const frame = scheduledLogFlush?.frame;
+  scheduledLogFlush = undefined;
+  if (frame !== undefined && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+}
+
+export const setLogs: typeof replaceLogs = <U extends LogLine[]>(next: Exclude<U, Function> | ((prev: LogLine[]) => U)): U => {
+  cancelLogFlush();
+  pendingLogs = [];
+  nextPendingLog = 0;
+  return replaceLogs<U>(next);
+};
+
+function flushPendingLogs(): void {
+  if (!pendingLogs.length) return;
+  const pending = pendingLogs;
+  const oldest = pending.length === MAX_LOG_LINES ? nextPendingLog : 0;
+  pendingLogs = [];
+  nextPendingLog = 0;
+  replaceLogs((previous) => {
+    const keepFrom = Math.max(0, previous.length + pending.length - MAX_LOG_LINES);
+    return [...previous.slice(keepFrom), ...pending.slice(oldest), ...pending.slice(0, oldest)];
+  });
+}
+
+function enqueueProxyLog(line: LogLine): void {
+  pendingLogs[nextPendingLog] = line;
+  nextPendingLog = (nextPendingLog + 1) % MAX_LOG_LINES;
+  if (scheduledLogFlush || isDocumentHidden()) return;
+  const scheduled: { frame?: number } = {};
+  scheduledLogFlush = scheduled;
+  const flush = () => {
+    if (scheduledLogFlush !== scheduled) return;
+    scheduledLogFlush = undefined;
+    if (!isDocumentHidden()) flushPendingLogs();
+  };
+  if (typeof requestAnimationFrame === 'function') scheduled.frame = requestAnimationFrame(flush);
+  else queueMicrotask(flush);
+}
+
 /** History refetch after a snapshot is cheap (local file) and keeps the chart current. */
 const HISTORY_REFRESH_MS = 5 * 60_000;
 /** Plan sizing (poolCapacity) and the account lists read recent history; they have always had 31 local days. */
@@ -100,7 +146,6 @@ const MAX_PENDING_BUCKET_DELTAS = 256;
 /** Bounded backoff when an active bucket snapshot fails. */
 const BUCKET_RETRY_INITIAL_MS = 2_000;
 const BUCKET_RETRY_MAX_MS = 30_000;
-const isDocumentHidden = () => typeof document !== 'undefined' && document.hidden;
 const canMergeLiveBuckets = () => bucketSubscribers > 0 && !isDocumentHidden();
 const bucketKey = (b: ActivityBucket) => JSON.stringify([b.wholeDay, b.start, b.provider, b.authIndex, b.model, b.client, b.source ?? 'proxy', b.effectiveModel ?? null, b.reasoningEffort ?? null]);
 let storeInitialized = false;
@@ -285,6 +330,20 @@ function applyTheme(choice: string): void {
   setActiveTheme(theme);
 }
 
+let stopProxyLog: (() => void) | undefined;
+let visibilityDocument: Document | undefined;
+
+function onVisibilityChange(): void {
+  cancelLogFlush();
+  if (isDocumentHidden()) {
+    clearBucketRetry();
+    return;
+  }
+  flushPendingLogs();
+  const wantsForecast = forecastDirty || localHourStart(Date.now()) !== lastForecastHour;
+  if ((activityDirty && canMergeLiveBuckets()) || wantsForecast) loadActivity(wantsForecast);
+}
+
 export async function initStore(): Promise<void> {
   // Before any await: main sends this once the page loads, which can beat the startup reads below.
   api.onOpenSettings((s) => (SETTINGS_SECTIONS as readonly string[]).includes(s) ? openSettings(s as SettingsSection) : setPage('settings'));
@@ -324,14 +383,11 @@ export async function initStore(): Promise<void> {
     loadActivity(true);
   });
   api.onActivityBuckets(receiveBucketDelta);
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
-    if (isDocumentHidden()) {
-      clearBucketRetry();
-      return;
-    }
-    const wantsForecast = forecastDirty || localHourStart(Date.now()) !== lastForecastHour;
-    if ((activityDirty && canMergeLiveBuckets()) || wantsForecast) loadActivity(wantsForecast);
-  });
+  if (typeof document !== 'undefined' && visibilityDocument !== document) {
+    visibilityDocument?.removeEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    visibilityDocument = document;
+  }
 
   api.onSnapshot((next) => {
     setSnapshot(next);
@@ -339,7 +395,8 @@ export async function initStore(): Promise<void> {
   });
   api.onUsageError(setUsageError);
   api.onProxyStatus(setProxyStatus);
-  api.onProxyLog((line) => setLogs((prev) => (prev.length >= MAX_LOG_LINES ? [...prev.slice(1), line] : [...prev, line])));
+  stopProxyLog?.();
+  stopProxyLog = api.onProxyLog(enqueueProxyLog);
   api.onMaximized(setMaximized);
   api.onTaskbarDark(setTaskbarDark);
   api.onSettings(setSettingsSignal);

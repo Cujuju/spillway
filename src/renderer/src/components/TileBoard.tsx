@@ -71,10 +71,10 @@ export function TileBoard<S extends { kind: string }>(props: {
   /** The board's floor: the page's height below what sits above it, less the gap the bottom edge sits in. */
   const [floorPx, setFloorPx] = createSignal(0);
   onMount(() => {
-    const measure = () => setFloorPx(Math.round(area!.clientHeight - tileGapPx));
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(([e]) => {
+      if (e) setFloorPx(Math.round(e.contentRect.height - tileGapPx));
+    });
     observer.observe(area!);
-    measure();
     onCleanup(() => observer.disconnect());
   });
   const state = () => props.state;

@@ -28,6 +28,24 @@ describe('errorText', () => {
   });
 });
 
+describe('Claude overage window', () => {
+  const overage = (fields: Record<string, unknown>) => ({ key: 'overage', label: 'Overage', scoped: true, ...fields });
+  const keysOf = (provider: string, window: Record<string, unknown>) =>
+    parseOne({ provider, windows: [{ key: 'five_hour', status: 'allowed', used_percent: 10 }, window] }).windows.map((w) => w.key);
+
+  it('drops a status-only rejection: pay-as-you-go is off', () =>
+    expect(keysOf('claude', overage({ status: 'rejected' }))).toEqual(['five_hour']));
+  it('keeps it when it reports usage or a reset: pay-as-you-go is on', () => {
+    expect(keysOf('claude', overage({ status: 'allowed' }))).toEqual(['five_hour', 'overage']);
+    expect(keysOf('claude', overage({ status: 'rejected', used_percent: 100 }))).toEqual(['five_hour', 'overage']);
+    expect(keysOf('claude', overage({ status: 'rejected', resets_at: '2026-12-01T00:00:00Z' }))).toEqual(['five_hour', 'overage']);
+  });
+  it('keeps status-only rejections of other windows and providers', () => {
+    expect(keysOf('claude', { key: 'seven_day', status: 'rejected' })).toEqual(['five_hour', 'seven_day']);
+    expect(keysOf('codex', overage({ status: 'rejected' }))).toEqual(['five_hour', 'overage']);
+  });
+});
+
 describe('credential label', () => {
   it('defaults to the email domain', () => expect(labelOf({ email: 'someone@example.com', label: 'someone@example.com' })).toBe('example.com'));
   it('prefers the note', () => expect(labelOf({ email: 'someone@example.com', note: 'Work' })).toBe('Work'));

@@ -39,7 +39,7 @@ async function startNormalApp(): Promise<void> {
   const { usage } = await import('./usagePoller');
   const { canaryService } = await import('./canaryService');
   const { windowStarter } = await import('./windowStarter');
-  const { createMainWindow, isQuitting, mainWindow, markQuitting, showMainWindow, showWindowAndSend, syncWindowBackground } = await import('./window');
+  const { createMainWindow, isQuitting, mainWindow, markQuitting, onRendererCrashCap, showMainWindow, showWindowAndSend, syncWindowBackground } = await import('./window');
   const { notify, noticeOverlay, startNotices } = await import('./notifier');
 
   const isMac = process.platform === 'darwin';
@@ -66,6 +66,12 @@ async function startNormalApp(): Promise<void> {
   }
 
   function wireEvents(): void {
+    onRendererCrashCap(() => notify(spillwayNotice('windowCrashed', {
+      target: 'window',
+      title: `${APP_NAME} window crashed`,
+      body: 'It kept crashing, so automatic reloads stopped. Click to reload it.',
+      short: 'Window crashed',
+    })));
     let lastAccountMap = '';
     let latestAccounts: Record<string, string> | null = null;
     let resyncAccounts = false;

@@ -9,6 +9,7 @@ import { captureJournalKey, newSupervisorPassword, portInUse, SUPERVISOR_PASSWOR
 import { getSecrets, getSettings } from './settingsStore';
 import { management } from './managementClient';
 import { LogBuffer } from './logBuffer';
+import { CrashWindow } from './crashWindow';
 
 /** Proxy startup reads config, auth files and model catalogs; well under this on a normal machine. */
 const READY_TIMEOUT_MS = 30_000;
@@ -32,7 +33,9 @@ const attachEndpoint = app.commandLine.getSwitchValue(ATTACH_SWITCH) || null;
 class ProxySupervisor extends EventEmitter {
   private proc: ChildProcess | null = null;
   private stopping = false;
-  private crashTimes: number[] = [];
+  private readonly crashWindow = new CrashWindow({
+    maxAttempts: MAX_CRASH_RESTARTS, windowMs: CRASH_WINDOW_MS, backoffBaseMs: RESTART_BACKOFF_BASE_MS,
+  });
   private restartTimer: ReturnType<typeof setTimeout> | undefined;
   private logFile: WriteStream | null = null;
   private userConfigWatcher: FSWatcher | null = null;
@@ -217,14 +220,12 @@ class ProxySupervisor extends EventEmitter {
 
   private scheduleRestart(): void {
     if (!getSettings().proxy.restartOnCrash) return;
-    const now = Date.now();
-    this.crashTimes = this.crashTimes.filter((t) => now - t < CRASH_WINDOW_MS);
-    this.crashTimes.push(now);
-    if (this.crashTimes.length > MAX_CRASH_RESTARTS) {
-      this.log('app', `crashed ${this.crashTimes.length} times in ${CRASH_WINDOW_MS / 60_000} min; not restarting`);
+    const decision = this.crashWindow.record();
+    if (decision.action === 'give-up') {
+      this.log('app', `crashed ${decision.count} times in ${CRASH_WINDOW_MS / 60_000} min; not restarting`);
       return;
     }
-    const backoff = RESTART_BACKOFF_BASE_MS * 2 ** (this.crashTimes.length - 1);
+    const backoff = decision.delayMs;
     this.log('app', `restarting in ${backoff} ms`);
     this.restartTimer = setTimeout(() => {
       this.restartTimer = undefined;
@@ -262,7 +263,7 @@ class ProxySupervisor extends EventEmitter {
 
   async restart(): Promise<void> {
     await this.stop();
-    this.crashTimes = [];
+    this.crashWindow.reset();
     await this.start();
   }
 }

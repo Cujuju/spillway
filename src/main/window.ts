@@ -9,12 +9,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { appPaths, shellIconPath } from './paths';
 import { getSettings, writeFileAtomic } from './settingsStore';
+import { CrashWindow } from './crashWindow';
 
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 860;
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 const STATE_SAVE_DEBOUNCE_MS = 500;
+// Bound repeated reloads after a persistent renderer failure.
+const RENDERER_MAX_RELOADS = 3;
+// Count failures across successful page loads within a crash streak.
+const RENDERER_CRASH_WINDOW_MS = 2 * 60_000;
+// Pause briefly before trying to start the renderer again.
+const RENDERER_RELOAD_BACKOFF_BASE_MS = 500;
+// Chromium net::ERR_ABORTED includes benign cancellation when a new navigation starts.
+const ERR_ABORTED = -3;
 const isMac = process.platform === 'darwin';
 /** Centres the macOS traffic lights (about 14px tall) in the 36px --titlebar-height. */
 const TRAFFIC_LIGHTS = { x: 14, y: 11 };
@@ -32,12 +41,33 @@ interface WindowState {
   maximized: boolean;
 }
 
+export interface RendererCrashInfo {
+  readonly reason: string;
+  readonly count: number;
+}
+
 let win: BrowserWindow | null = null;
 let quitting = false;
 let saveTimer: NodeJS.Timeout | null = null;
+const rendererCrashWindow = new CrashWindow({
+  maxAttempts: RENDERER_MAX_RELOADS, windowMs: RENDERER_CRASH_WINDOW_MS, backoffBaseMs: RENDERER_RELOAD_BACKOFF_BASE_MS,
+});
+let rendererCapped = false;
+let reloadTimer: NodeJS.Timeout | null = null;
+let crashCapListener: ((info: RendererCrashInfo) => void) | undefined;
+
+export function onRendererCrashCap(listener: (info: RendererCrashInfo) => void): void {
+  crashCapListener = listener;
+}
+
+function clearReloadTimer(): void {
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = null;
+}
 
 export const markQuitting = () => {
   quitting = true;
+  clearReloadTimer();
 };
 export const isQuitting = () => quitting;
 export const mainWindow = () => (win && !win.isDestroyed() ? win : null);
@@ -76,7 +106,15 @@ export function syncWindowBackground(): void {
 }
 
 export function showMainWindow(): void {
-  const w = mainWindow() ?? createMainWindow(true);
+  const existing = mainWindow();
+  const w = existing ?? createMainWindow(true);
+  if (existing && !reloadTimer && (rendererCapped || w.webContents.isCrashed())) {
+    if (rendererCapped) {
+      rendererCapped = false;
+      rendererCrashWindow.reset();
+    }
+    loadRendererPage(w, 'index.html');
+  }
   if (w.isMinimized()) w.restore();
   w.show();
   w.focus();
@@ -104,8 +142,27 @@ export function rendererPreferences(): Electron.WebPreferences {
 /** Loads a renderer page from the dev server in development, else from the build. */
 export function loadRendererPage(w: BrowserWindow, page: 'index.html' | 'notice.html'): void {
   const devUrl = process.env.ELECTRON_RENDERER_URL;
-  if (!app.isPackaged && devUrl) void w.loadURL(new URL(page, `${devUrl}/`).href);
-  else void w.loadFile(path.join(import.meta.dirname, '../renderer', page));
+  const load = !app.isPackaged && devUrl
+    ? w.loadURL(new URL(page, `${devUrl}/`).href)
+    : w.loadFile(path.join(import.meta.dirname, '../renderer', page));
+  // did-fail-load reports navigation failures.
+  void load.catch(() => {});
+}
+
+function scheduleRendererRecovery(reason: string): void {
+  if (reloadTimer || rendererCapped) return;
+  const decision = rendererCrashWindow.record();
+  if (decision.action === 'give-up') {
+    rendererCapped = true;
+    console.error(`[window] renderer reload cap reached (reason=${reason}, count=${decision.count})`);
+    crashCapListener?.({ reason, count: decision.count });
+    return;
+  }
+  reloadTimer = setTimeout(() => {
+    reloadTimer = null;
+    const w = mainWindow();
+    if (w && !quitting) loadRendererPage(w, 'index.html');
+  }, decision.delayMs);
 }
 
 /** Shows the window and sends it one event. A window still loading gets it after load; sent earlier, the renderer misses it. */
@@ -114,7 +171,8 @@ export function showWindowAndSend(channel: string, payload?: unknown): void {
   const contents = mainWindow()?.webContents;
   if (!contents) return;
   const send = () => contents.send(channel, payload);
-  if (contents.isLoading()) contents.once('did-finish-load', send);
+  // A renderer awaiting a crash reload is dead but not loading; the reload delivers it.
+  if (contents.isLoading() || reloadTimer) contents.once('did-finish-load', send);
   else send();
 }
 
@@ -143,6 +201,18 @@ export function createMainWindow(show: boolean): BrowserWindow {
   win.webContents.on('did-finish-load', () => {
     if (win) win.webContents.send(EVENTS.onMaximized, win.isMaximized());
   });
+  win.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
+    if (quitting || reason === 'clean-exit') return;
+    console.error(`[window] renderer process gone (reason=${reason}, exitCode=${exitCode})`);
+    scheduleRendererRecovery(reason);
+  });
+  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+    if (quitting || !isMainFrame || code === ERR_ABORTED) return;
+    console.error(`[window] page failed to load (code=${code}, description=${description}, url=${url})`);
+    scheduleRendererRecovery(description);
+  });
+  win.webContents.on('unresponsive', () => console.warn('[window] renderer unresponsive'));
+  win.webContents.on('responsive', () => console.warn('[window] renderer responsive'));
   win.on('close', (e) => {
     saveState();
     if (!quitting && getSettings().general.closeToTray) {
@@ -160,6 +230,7 @@ export function createMainWindow(show: boolean): BrowserWindow {
     win.on('show', () => void app.dock?.show());
   }
   win.on('closed', () => {
+    clearReloadTimer();
     win = null;
     if (!quitting && !getSettings().general.closeToTray) app.quit();
   });

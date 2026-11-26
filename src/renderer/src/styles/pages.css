@@ -157,6 +157,10 @@
   border-radius: var(--corner-radius);
   padding: var(--spacing-2) var(--spacing-2_5);
 }
+.log-view > div {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(var(--leading-log) * 1em);
+}
 .log-err {
   color: var(--color-red-light);
 }

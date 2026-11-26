@@ -5,6 +5,7 @@ import type { Credential } from '@shared/types';
 import { earlyResetFor } from '@shared/usageWindows';
 import { persistedSignal } from '../lib/persisted';
 import { pastSeries } from '../lib/poolHistory';
+import { appendLivePoint } from '../lib/poolWindows';
 import { providerVar } from '../lib/providers';
 import { history, now } from '../store';
 import { chartFrom } from './poolModel';
@@ -38,7 +39,7 @@ export function AccountPanel(props: { credential: Credential; onClose: () => voi
       id: w.key,
       label: w.label,
       color: color(i),
-      past: [...pastSeries(history(), [c], w.key, WHOLE_HISTORY, shares), { t: now(), remaining: Math.max(0, FULL - w.usedPercent!) }],
+      past: appendLivePoint(pastSeries(history(), [c], w.key, WHOLE_HISTORY, shares), now(), Math.max(0, FULL - w.usedPercent!)),
     }));
   });
   const markers = createMemo(() => {

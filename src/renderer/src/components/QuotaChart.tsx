@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { panRange, timeTicks, wheelFactor, zoomRange, type TimeRange } from '../lib/chartZoom';
 import type { SeriesPoint } from '../lib/poolHistory';
-import { valueAt } from '../lib/poolWindows';
+import { decimateSeries, valueAt } from '../lib/poolWindows';
 import { dayTime } from '../lib/format';
 import { ChartTip } from './ChartTip';
 
@@ -47,10 +47,19 @@ export interface QuotaChartProps {
  */
 export function QuotaChart(props: QuotaChartProps) {
   let host!: HTMLDivElement;
+  let hoverFrame: number | undefined;
+  let pendingHover: { clientX: number; clientY: number } | null = null;
   const [width, setWidth] = createSignal(800);
   const [height, setHeight] = createSignal(0);
   const [hoverT, setHoverT] = createSignal<number | null>(null);
   const [pointer, setPointer] = createSignal({ x: 0, y: 0 });
+  const cancelHoverFrame = () => {
+    pendingHover = null;
+    if (hoverFrame !== undefined) {
+      cancelAnimationFrame(hoverFrame);
+      hoverFrame = undefined;
+    }
+  };
   onMount(() => {
     const ro = new ResizeObserver(([e]) => {
       if (!e) return;
@@ -58,7 +67,10 @@ export function QuotaChart(props: QuotaChartProps) {
       setHeight(e.contentRect.height);
     });
     ro.observe(host);
-    onCleanup(() => ro.disconnect());
+    onCleanup(() => {
+      ro.disconnect();
+      cancelHoverFrame();
+    });
   });
 
   // Zoom held as offsets from now, so a zoomed view follows the clock like the default one.
@@ -84,10 +96,14 @@ export function QuotaChart(props: QuotaChartProps) {
   const yMax = createMemo(() => {
     const { from, to } = view();
     let peak = 0;
-    for (const s of props.series) for (const p of [...s.past, ...(s.future ?? [])]) if (p.t >= from && p.t <= to) peak = Math.max(peak, p.remaining);
+    for (const s of props.series) {
+      for (const p of s.past) if (p.t >= from && p.t <= to && p.remaining > peak) peak = p.remaining;
+      if (s.future) for (const p of s.future) if (p.t >= from && p.t <= to && p.remaining > peak) peak = p.remaining;
+    }
     return Math.max(1, props.yMax(peak));
   });
   const y = (v: number) => PAD.top + plotH() - (Math.min(yMax(), Math.max(0, v)) / yMax()) * plotH();
+  const visible = (pts: SeriesPoint[]) => decimateSeries(pts, view().from, view().to, plotW());
   const path = (pts: SeriesPoint[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.remaining).toFixed(1)}`).join('');
   const area = (pts: SeriesPoint[]) =>
     pts.length ? `${path(pts)}L${x(pts.at(-1)!.t).toFixed(1)},${y(0)}L${x(pts[0]!.t).toFixed(1)},${y(0)}Z` : '';
@@ -123,6 +139,7 @@ export function QuotaChart(props: QuotaChartProps) {
   const canPan = () => view().from > bounds().from || view().to < bounds().to;
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0 || !canPan()) return;
+    cancelHoverFrame();
     host.setPointerCapture(e.pointerId);
     setDrag({ x: e.clientX, view: view() });
     setHoverT(null);
@@ -133,18 +150,29 @@ export function QuotaChart(props: QuotaChartProps) {
     setDrag(null);
     onMove(e);
   };
+  const applyHover = (clientX: number, clientY: number) => {
+    const rect = host.getBoundingClientRect();
+    const px = clientX - rect.left;
+    if (px < PAD.left || px > width() - PAD.right) return setHoverT(null);
+    hoverAt(tAt(px), clientX, clientY);
+  };
   const onMove = (e: MouseEvent) => {
     const d = drag();
     if (d) return setView(panRange(d.view, (d.x - e.clientX) * msPerPx(), bounds()));
-    const rect = host.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    if (px < PAD.left || px > width() - PAD.right) return setHoverT(null);
-    hoverAt(tAt(px), e.clientX, e.clientY);
+    pendingHover = { clientX: e.clientX, clientY: e.clientY };
+    if (hoverFrame !== undefined) return;
+    hoverFrame = requestAnimationFrame(() => {
+      hoverFrame = undefined;
+      const next = pendingHover;
+      pendingHover = null;
+      if (next && !drag()) applyHover(next.clientX, next.clientY);
+    });
   };
   const onKey = (e: KeyboardEvent) => {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!dir) return;
     e.preventDefault();
+    cancelHoverFrame();
     const t = (hoverT() ?? props.now) + (dir * span()) / KEY_STEPS;
     const rect = host.getBoundingClientRect();
     hoverAt(t, rect.left + x(t), rect.top + PAD.top);
@@ -153,10 +181,12 @@ export function QuotaChart(props: QuotaChartProps) {
   const onWheel = (e: WheelEvent) => {
     if (!e.deltaY && !e.deltaX) return;
     e.preventDefault();
+    if (drag()) return;
+    cancelHoverFrame();
     const rect = host.getBoundingClientRect();
     if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) setView(panRange(view(), e.deltaX * msPerPx(), bounds()));
     else setView(zoomRange(view(), tAt(e.clientX - rect.left), wheelFactor(e.deltaY), bounds()));
-    onMove(e);
+    applyHover(e.clientX, e.clientY);
   };
 
   return (
@@ -168,11 +198,11 @@ export function QuotaChart(props: QuotaChartProps) {
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      onPointerLeave={() => setHoverT(null)}
+      onPointerLeave={() => { cancelHoverFrame(); setHoverT(null); }}
       onWheel={onWheel}
       onDblClick={() => setZoom(null)}
     >
-      <svg class="chart" width={width()} height={height()} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => setHoverT(null)}>
+      <svg class="chart" width={width()} height={height()} role="img" aria-label={props.ariaLabel} tabindex="0" onKeyDown={onKey} onBlur={() => { cancelHoverFrame(); setHoverT(null); }}>
         <defs>
           <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stop-color={props.series[0]?.color} stop-opacity="0.28" />
@@ -193,15 +223,19 @@ export function QuotaChart(props: QuotaChartProps) {
         <For each={xTicks()}>{(tick) => <text x={x(tick.t)} y={height() - 6} text-anchor="middle">{tick.label}</text>}</For>
         <g clip-path={`url(#${clipId})`}>
         <For each={props.series}>
-          {(s) => (
-            <>
-              <Show when={single()}><path d={area(s.past)} fill={`url(#${gradientId})`} /></Show>
-              <path d={path(s.past)} fill="none" stroke={s.color} stroke-width="2" stroke-linejoin="round" />
-              <Show when={s.future?.length}>
-                <path d={path(s.future!)} fill="none" stroke={s.color} stroke-width="1.6" stroke-dasharray="5 4" opacity="0.75" />
-              </Show>
-            </>
-          )}
+          {(s) => {
+            const past = createMemo(() => visible(s.past));
+            const future = createMemo(() => (s.future?.length ? visible(s.future) : []));
+            return (
+              <>
+                <Show when={single()}><path d={area(past())} fill={`url(#${gradientId})`} /></Show>
+                <path d={path(past())} fill="none" stroke={s.color} stroke-width="2" stroke-linejoin="round" />
+                <Show when={future().length}>
+                  <path d={path(future())} fill="none" stroke={s.color} stroke-width="1.6" stroke-dasharray="5 4" opacity="0.75" />
+                </Show>
+              </>
+            );
+          }}
         </For>
         <For each={(props.markers ?? []).filter((m) => m.t >= view().from && m.t <= view().to)}>
           {(m) => (

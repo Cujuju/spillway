@@ -4,7 +4,7 @@ import { poolSummary, poolWindowKey, project } from '../lib/forecast';
 import { sustainedForecastRate } from '../lib/forecastRate';
 import { poolShares, preparePoolEvidence, type AccountShare } from '../lib/poolCapacity';
 import { drainRatePerHour, drainSeries, pastSeries } from '../lib/poolHistory';
-import { keyForDuration, lengthLineId, nextResetAt, poolSegments, scopedChoices, scopedLineId, type WindowChoice } from '../lib/poolWindows';
+import { appendLivePoint, keyForDuration, lengthLineId, nextResetAt, poolSegments, scopedChoices, scopedLineId, type WindowChoice } from '../lib/poolWindows';
 import { forecastAsOf, forecastBuckets, history, now, settings, windowSummaries } from '../store';
 import { localHourStart, rhythmProfile, type RhythmProfile } from '../lib/rhythmProfile';
 
@@ -103,7 +103,7 @@ export function createPoolModel(
     const k = key();
     const s = summary();
     if (!k || !s) return [];
-    return [...pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), { t: now(), remaining: s.remaining }];
+    return appendLivePoint(pastSeries(history(), pool().credentials, k, WHOLE_HISTORY, shares()), now(), s.remaining);
   });
   const projection = createMemo(() =>
     key() ? project(pool().credentials, key()!, sustainedForecastRate(history(), windowSummaries(), pool().credentials, key()!, shares(), anchorKey(), anchorShares(), now(), settings().dashboard.drainLookbackHours, rhythm()) ?? 0, now(), settings().dashboard.forecastHours, strategy(), shares(), rhythm()) : null,

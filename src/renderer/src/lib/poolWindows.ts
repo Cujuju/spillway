@@ -4,6 +4,8 @@ import type { SeriesPoint } from './poolHistory';
 import { accountsFor, blockingWindow, remainingIn } from './forecastState';
 
 const FULL = 100;
+const MAX_POINTS_PER_COLUMN = 4;
+const SPARSE_POINTS_PER_PIXEL = 2;
 
 export interface WindowChoice {
   value: string;
@@ -69,12 +71,67 @@ export function nextResetAt(credentials: Credential[], key: string, now: number)
   return soonest;
 }
 
+function timeBound(points: readonly SeriesPoint[], t: number, afterEqual = false): number {
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    const time = points[mid]!.t;
+    if (afterEqual ? time > t : time >= t) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/** Appends the live reading at `now`, keeping timestamps strictly sorted and `< now` before it even after clock rollbacks. */
+export function appendLivePoint(series: readonly SeriesPoint[], now: number, remaining: number): SeriesPoint[] {
+  let sorted = true;
+  let allBefore = true;
+  let prev = -Infinity;
+  for (const p of series) {
+    if (p.t >= now) allBefore = false;
+    if (p.t < prev) sorted = false;
+    prev = p.t;
+  }
+  const base = allBefore ? (sorted ? series : [...series].sort((a, b) => a.t - b.t))
+    : series.filter((p) => p.t < now).sort((a, b) => a.t - b.t);
+  return [...base, { t: now, remaining }];
+}
+
 /** Linear value at `t`; null outside the series. Points are in time order. */
 export function valueAt(points: SeriesPoint[], t: number): number | null {
   if (!points.length || t < points[0]!.t || t > points.at(-1)!.t) return null;
-  const i = points.findIndex((p) => p.t >= t);
+  const i = timeBound(points, t);
   const b = points[i]!;
   if (b.t === t || i === 0) return b.remaining;
   const a = points[i - 1]!;
   return a.remaining + ((b.remaining - a.remaining) * (t - a.t)) / (b.t - a.t);
+}
+
+/** Clips sorted points with one neighbor on each side and retains each pixel column's shape. */
+export function decimateSeries(points: readonly SeriesPoint[], from: number, to: number, pixelWidth: number): SeriesPoint[] {
+  const start = Math.max(0, timeBound(points, from) - 1);
+  const end = Math.min(points.length, timeBound(points, to, true) + 1);
+  const sparseLimit = Math.max(MAX_POINTS_PER_COLUMN, Math.ceil(pixelWidth) * SPARSE_POINTS_PER_PIXEL);
+  if (pixelWidth <= 0 || to <= from || end - start <= sparseLimit) return points.slice(start, end);
+
+  const columns = Math.max(1, Math.floor(pixelWidth));
+  const column = (t: number) => Math.min(columns - 1, Math.floor(((t - from) / (to - from)) * columns));
+  const last = end - 1;
+  const result = [points[start]!];
+  for (let first = start + 1; first < last;) {
+    const bucket = column(points[first]!.t);
+    let min = first;
+    let max = first;
+    let next = first + 1;
+    for (; next < last && column(points[next]!.t) === bucket; next++) {
+      if (points[next]!.remaining < points[min]!.remaining) min = next;
+      if (points[next]!.remaining > points[max]!.remaining) max = next;
+    }
+    const indices = [...new Set([first, min, max, next - 1])].sort((a, b) => a - b);
+    for (const i of indices) result.push(points[i]!);
+    first = next;
+  }
+  result.push(points[last]!);
+  return result;
 }

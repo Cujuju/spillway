@@ -1,5 +1,5 @@
 import { FolderOpen } from 'lucide-solid';
-import { createEffect, createMemo, For, on } from 'solid-js';
+import { createEffect, createMemo, For, on, onCleanup, onMount } from 'solid-js';
 import { Toggle } from '../components/ui';
 import { logs, now, setLogs, settings, shownText, updateSettings } from '../store';
 import { PageHeader } from '../components/PageHeader';
@@ -12,15 +12,36 @@ const FOLLOW_TAIL_SHARE = 0.25;
 /** Proxy and supervisor output; the view fills the page height. */
 export function Logs() {
   let logBox!: HTMLDivElement;
+  let followTail = true;
+  let scrollFrame: number | undefined;
   // Shared formatter across all rows; Solid's reference equality skips row updates unless the time zone changes.
   const timeFormat = createMemo(() => (now(), dateTimeFormat(DEFAULT_TIME_OPTIONS)));
 
+  const scheduleScrollToBottom = () => {
+    if (scrollFrame !== undefined) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = undefined;
+      if (logBox && followTail) logBox.scrollTop = logBox.scrollHeight;
+    });
+  };
+
+  onMount(() => {
+    const onScroll = () => {
+      if (!logBox) return;
+      followTail = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < logBox.clientHeight * FOLLOW_TAIL_SHARE;
+    };
+    logBox.addEventListener('scroll', onScroll, { passive: true });
+    scheduleScrollToBottom();
+    onCleanup(() => {
+      logBox.removeEventListener('scroll', onScroll);
+      if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+    });
+  });
+
   // Follow the log tail unless the user scrolled up to read.
   createEffect(on(logs, () => {
-    if (!logBox) return;
-    const atBottom = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < logBox.clientHeight * FOLLOW_TAIL_SHARE;
-    if (atBottom) queueMicrotask(() => (logBox.scrollTop = logBox.scrollHeight));
-  }));
+    if (followTail) scheduleScrollToBottom();
+  }, { defer: true }));
 
   return (
     <>
@@ -39,7 +60,7 @@ export function Logs() {
             onChange={(v) => void updateSettings((d) => void (d.proxy.requestLog = v))}
           />
           <button class="btn ghost" onClick={() => void window.api.openPath('logs')}><FolderOpen size={ICON_PX} /> Open folder</button>
-          <button class="btn ghost" onClick={() => void window.api.clearProxyLogs().then(() => setLogs([]))}>Clear</button>
+          <button class="btn ghost" onClick={() => void window.api.clearProxyLogs().then(() => { followTail = true; setLogs([]); })}>Clear</button>
         </div>
       </PageHeader>
       <div class="log-view selectable" ref={logBox}>

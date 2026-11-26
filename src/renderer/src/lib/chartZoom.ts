@@ -1,4 +1,4 @@
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, formatDate } from '@shared/timeFormat';
 /** Wheel zoom for time charts: pure range math, so the chart only wires events. */
 
 const MINUTE_MS = 60_000;
@@ -60,13 +60,12 @@ export function timeTicks(range: TimeRange): { t: number; label: string }[] {
     const stepMin = step / MINUTE_MS;
     start.setHours(0, Math.ceil((start.getHours() * 60 + start.getMinutes()) / stepMin) * stepMin, 0, 0);
   }
-  const label = (d: Date) =>
-    daily
-      ? d.toLocaleDateString(appLocale(), span <= WEEKDAY_LABEL_MAX_MS ? { weekday: 'short' } : { month: 'short', day: 'numeric' })
-      : d.toLocaleTimeString(appLocale(), step < HOUR_MS ? { hour: 'numeric', minute: '2-digit' } : { hour: 'numeric' });
+  const formatter = dateTimeFormat(daily
+    ? span <= WEEKDAY_LABEL_MAX_MS ? { weekday: 'short' } : { month: 'short', day: 'numeric' }
+    : step < HOUR_MS ? { hour: 'numeric', minute: '2-digit' } : { hour: 'numeric' });
   const out: { t: number; label: string }[] = [];
   for (let t = start.getTime(); t <= range.to; t += step) {
-    if (t >= range.from) out.push({ t, label: label(new Date(t)) });
+    if (t >= range.from) out.push({ t, label: formatDate(formatter, new Date(t)) });
   }
   return out;
 }

@@ -1,9 +1,9 @@
 import { FolderOpen } from 'lucide-solid';
-import { createEffect, For, on } from 'solid-js';
+import { createEffect, createMemo, For, on } from 'solid-js';
 import { Toggle } from '../components/ui';
-import { logs, setLogs, settings, shownText, updateSettings } from '../store';
+import { logs, now, setLogs, settings, shownText, updateSettings } from '../store';
 import { PageHeader } from '../components/PageHeader';
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, DEFAULT_TIME_OPTIONS, formatDate } from '@shared/timeFormat';
 
 const ICON_PX = 14;
 /** Within this share of a screen from the bottom counts as following the tail. */
@@ -12,6 +12,8 @@ const FOLLOW_TAIL_SHARE = 0.25;
 /** Proxy and supervisor output; the view fills the page height. */
 export function Logs() {
   let logBox!: HTMLDivElement;
+  // Shared formatter across all rows; Solid's reference equality skips row updates unless the time zone changes.
+  const timeFormat = createMemo(() => (now(), dateTimeFormat(DEFAULT_TIME_OPTIONS)));
 
   // Follow the log tail unless the user scrolled up to read.
   createEffect(on(logs, () => {
@@ -44,7 +46,7 @@ export function Logs() {
         <For each={logs()} fallback={<div class="muted">No output yet.</div>}>
           {(l) => (
             <div classList={{ 'log-err': l.stream === 'stderr', 'log-app': l.stream === 'app' }}>
-              <span class="muted">{new Date(l.at).toLocaleTimeString(appLocale())}</span> {shownText(l.text)}
+              <span class="muted">{formatDate(timeFormat(), new Date(l.at))}</span> {shownText(l.text)}
             </div>
           )}
         </For>

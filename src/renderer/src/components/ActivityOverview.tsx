@@ -61,6 +61,7 @@ export function ActivityOverview(props: {
   const accountRows = createMemo(() => byAccount(scoped()));
   const clientRows = createMemo(() => byClient(scoped()));
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
+  const pointTitle = (i: number) => bucketTitle(points()[i]!.start, points()[i]!.end, unit());
   const data: ActivityData = {
     points,
     rows,
@@ -74,7 +75,8 @@ export function ActivityOverview(props: {
     total,
     bucketNote: () => UNIT_NOTE[unit()],
     xLabel: (t) => axisLabel(t, unit()),
-    tip: (i) => ({ title: bucketTitle(points()[i]!.start, points()[i]!.end, unit()), rows: countRows(points()[i]!.summary) }),
+    pointTitle,
+    tip: (i) => ({ title: pointTitle(i), rows: countRows(points()[i]!.summary) }),
     compare: () => props.compare,
     retentionDays: () => settings().activity.retentionDays,
   };

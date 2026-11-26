@@ -50,6 +50,7 @@ export interface ActivityData {
   /** "Hourly", "Daily" … for the range. */
   bucketNote: () => string;
   xLabel: (t: number) => string;
+  pointTitle: (i: number) => string;
   tip: (i: number) => { title: string; rows: TipRow[] };
   /** Combination cards and Compare; undefined while loading, null for a query main rejected. */
   compare: () => CompareReport | null | undefined;
@@ -98,7 +99,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
       const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) })));
       return (
         <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)} points={points()}
-          yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} tooltip={data.tip} />
+          yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} pointTitle={data.pointTitle} tooltip={data.tip} />
       );
     },
   },
@@ -111,7 +112,7 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
       const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate })));
       return (
         <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS} points={points()}
-          yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} tooltip={data.tip} />
+          yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} pointTitle={data.pointTitle} tooltip={data.tip} />
       );
     },
   },

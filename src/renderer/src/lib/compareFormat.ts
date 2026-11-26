@@ -1,6 +1,6 @@
 import type { DaySpan } from '@shared/activityCompare';
 import { usd } from './format';
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, formatDate } from '@shared/timeFormat';
 
 const PERCENT = 100;
 /** From ten times the baseline, decimals stop adding meaning. */
@@ -19,7 +19,11 @@ export const share = (part: number, whole: number): number | null => (whole > 0 
 
 /** "Oct 18 – Nov 11" for local day keys. */
 export function spanText(span: Pick<DaySpan, 'from' | 'to'>): string {
-  const label = (day: string) => { const [y, m, d] = day.split('-').map(Number); return new Date(y!, m! - 1, d!).toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' }); };
+  const formatter = dateTimeFormat({ month: 'short', day: 'numeric' });
+  const label = (day: string) => {
+    const [y, m, d] = day.split('-').map(Number);
+    return formatDate(formatter, new Date(y!, m! - 1, d!));
+  };
   return span.from === span.to ? label(span.from) : `${label(span.from)} – ${label(span.to)}`;
 }
 

@@ -1,4 +1,4 @@
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, formatDate } from '@shared/timeFormat';
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -33,10 +33,11 @@ function daysAhead(at: number, now: number): number {
 /** "2:30 PM" today, "Mon 2:30 PM" within the week, "Nov 2, 2:30 PM" beyond. */
 export function clockText(at: number, now: number): string {
   const days = daysAhead(at, now);
+  const date = new Date(at);
   const time: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
-  if (days === 0) return new Date(at).toLocaleTimeString(appLocale(), time);
-  if (days > 0 && days < WEEKDAY_SPAN_DAYS) return new Date(at).toLocaleString(appLocale(), { weekday: 'short', ...time });
-  return new Date(at).toLocaleString(appLocale(), { month: 'short', day: 'numeric', ...time });
+  if (days === 0) return formatDate(dateTimeFormat(time), date);
+  if (days > 0 && days < WEEKDAY_SPAN_DAYS) return formatDate(dateTimeFormat({ weekday: 'short', ...time }), date);
+  return formatDate(dateTimeFormat({ month: 'short', day: 'numeric', ...time }), date);
 }
 
 /**

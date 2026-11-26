@@ -1,4 +1,4 @@
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, formatDate, numberFormat } from '@shared/timeFormat';
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -15,17 +15,17 @@ export function compactDuration(ms: number): string {
 }
 
 export function dayTime(t: number): string {
-  return new Date(t).toLocaleString(appLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return formatDate(dateTimeFormat({ weekday: 'short', hour: 'numeric', minute: '2-digit' }), new Date(t));
 }
 
 /** "Sat, Oct 25" for a local YYYY-MM-DD day key. */
 export function dayLabel(day: string): string {
   const [y, m, d] = day.split('-').map(Number);
-  return new Date(y!, m! - 1, d!).toLocaleDateString(appLocale(), { weekday: 'short', month: 'short', day: 'numeric' });
+  return formatDate(dateTimeFormat({ weekday: 'short', month: 'short', day: 'numeric' }), new Date(y!, m! - 1, d!));
 }
 
 export function dateTime(at: string | number): string {
-  return new Date(at).toLocaleString(appLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return formatDate(dateTimeFormat({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }), new Date(at));
 }
 
 export function pct(value: number, digits = 0): string {
@@ -44,11 +44,20 @@ export function quotaPercent(value: number | null): string {
 /** Below the smallest shown step, "<$0.01"; to the cent (or `digits`) under $1,000; whole dollars above. */
 const WHOLE_DOLLARS_FROM = 1000;
 const CENT_DIGITS = 2;
+const MAX_INTL_FRACTION_DIGITS = 100;
 export function usd(v: number, digits = CENT_DIGITS): string {
   const step = 10 ** -digits;
-  if (v > 0 && v < step) return `<${step.toLocaleString(appLocale(), { style: 'currency', currency: 'USD', maximumFractionDigits: digits })}`;
-  const fraction = v >= WHOLE_DOLLARS_FROM ? 0 : digits;
-  return v.toLocaleString(appLocale(), { style: 'currency', currency: 'USD', maximumFractionDigits: fraction, minimumFractionDigits: fraction });
+  const belowStep = v > 0 && v < step;
+  const fraction = !belowStep && v >= WHOLE_DOLLARS_FROM ? 0 : digits;
+  // Share keys for digits Intl rounds down and let Intl reject out-of-range values.
+  const formatDigits = fraction >= 0 && fraction <= MAX_INTL_FRACTION_DIGITS ? Math.floor(fraction) : fraction;
+  const format = numberFormat({
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: formatDigits,
+    minimumFractionDigits: belowStep ? undefined : formatDigits,
+  });
+  return belowStep ? `<${format.format(step)}` : format.format(v);
 }
 
 const MS_PER_SECOND = 1000;
@@ -62,7 +71,7 @@ export function msDuration(ms: number | null): string {
 
 /** "1.2M", "34K", "980" for token counts. */
 export function compactNumber(v: number): string {
-  return v.toLocaleString(appLocale(), { notation: 'compact', maximumFractionDigits: 1 });
+  return numberFormat({ notation: 'compact', maximumFractionDigits: 1 }).format(v);
 }
 
 const KIB = 1024;
@@ -70,5 +79,5 @@ const MIB = KIB * KIB;
 /** Stored sizes: KiB below a mebibyte, so small stores never read as 0 MiB. */
 export function byteSize(bytes: number): string {
   const [value, unit] = bytes < MIB ? [bytes / KIB, 'KiB'] : [bytes / MIB, 'MiB'];
-  return `${value.toLocaleString(appLocale(), { maximumFractionDigits: 1 })} ${unit}`;
+  return `${numberFormat({ maximumFractionDigits: 1 }).format(value)} ${unit}`;
 }

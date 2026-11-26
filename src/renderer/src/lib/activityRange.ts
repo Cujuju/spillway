@@ -1,5 +1,5 @@
 import { localHourStart } from '@shared/activityCounts';
-import { appLocale } from '@shared/timeFormat';
+import { dateTimeFormat, formatDate } from '@shared/timeFormat';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -99,18 +99,22 @@ export const daysToFetch = (range: Range, span: Span, now: number): number | nul
 
 export const UNIT_NOTE: Record<BucketUnit, string> = { hour: 'Hourly', '3h': 'Every 3 hours', day: 'Daily', week: 'Weekly', month: 'Monthly' };
 
+const HOUR_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric' };
+const WEEKDAY_HOUR_LABEL: Intl.DateTimeFormatOptions = { weekday: 'short', ...HOUR_LABEL };
+
 export function axisLabel(t: number, unit: BucketUnit): string {
-  if (unit === 'hour') return new Date(t).toLocaleTimeString(appLocale(), { hour: 'numeric' });
-  if (unit === 'month') return new Date(t).toLocaleDateString(appLocale(), { month: 'short', year: '2-digit' });
-  return new Date(t).toLocaleDateString(appLocale(), { month: 'numeric', day: 'numeric' });
+  const date = new Date(t);
+  if (unit === 'hour') return formatDate(dateTimeFormat(HOUR_LABEL), date);
+  if (unit === 'month') return formatDate(dateTimeFormat({ month: 'short', year: '2-digit' }), date);
+  return formatDate(dateTimeFormat({ month: 'numeric', day: 'numeric' }), date);
 }
 
 /** "Mon 3 AM", "Mon 3 AM – 6 AM", "Mon, Oct 26", "Week of Oct 26", "October 2026". */
 export function bucketTitle(start: number, end: number, unit: BucketUnit): string {
   const d = new Date(start);
-  if (unit === 'hour') return d.toLocaleString(appLocale(), { weekday: 'short', hour: 'numeric' });
-  if (unit === '3h') return `${d.toLocaleString(appLocale(), { weekday: 'short', hour: 'numeric' })} – ${new Date(end).toLocaleTimeString(appLocale(), { hour: 'numeric' })}`;
-  if (unit === 'day') return d.toLocaleDateString(appLocale(), { weekday: 'short', month: 'short', day: 'numeric' });
-  if (unit === 'week') return `Week of ${d.toLocaleDateString(appLocale(), { month: 'short', day: 'numeric' })}`;
-  return d.toLocaleDateString(appLocale(), { month: 'long', year: 'numeric' });
+  if (unit === 'hour') return formatDate(dateTimeFormat(WEEKDAY_HOUR_LABEL), d);
+  if (unit === '3h') return `${formatDate(dateTimeFormat(WEEKDAY_HOUR_LABEL), d)} – ${formatDate(dateTimeFormat(HOUR_LABEL), new Date(end))}`;
+  if (unit === 'day') return formatDate(dateTimeFormat({ weekday: 'short', month: 'short', day: 'numeric' }), d);
+  if (unit === 'week') return `Week of ${formatDate(dateTimeFormat({ month: 'short', day: 'numeric' }), d)}`;
+  return formatDate(dateTimeFormat({ month: 'long', year: 'numeric' }), d);
 }

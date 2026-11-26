@@ -41,6 +41,16 @@ function parseWindow(raw: unknown): LimitWindow | null {
   };
 }
 
+/** The proxy's key for Claude's pay-as-you-go limit (`Anthropic-Ratelimit-Unified-Overage-*`). */
+const CLAUDE_OVERAGE_KEY = 'overage';
+
+/**
+ * A status-only `rejected` overage window means pay-as-you-go is off, not a limit in use.
+ * Usage or a reset means it is on, so it stays.
+ */
+const isDisabledOverage = (provider: string, w: LimitWindow): boolean =>
+  provider === 'claude' && w.key === CLAUDE_OVERAGE_KEY && w.status === 'rejected' && w.usedPercent === null && w.resetsAt === null;
+
 /** Default account name: the part after the last "@", e.g. "example.com". */
 export function emailDomain(email: string | null): string | null {
   const at = email?.lastIndexOf('@') ?? -1;
@@ -110,7 +120,9 @@ function parseCredential(raw: unknown): Credential | null {
   const id = s(c.id);
   const provider = s(c.provider)?.toLowerCase();
   if (!id || !provider) return null;
-  const windows = Array.isArray(c.windows) ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null) : [];
+  const windows = Array.isArray(c.windows)
+    ? c.windows.map(parseWindow).filter((w): w is LimitWindow => w !== null && !isDisabledOverage(provider, w))
+    : [];
   const note = s(c.note);
   const email = s(c.email);
   const key = obj(c.api_key);

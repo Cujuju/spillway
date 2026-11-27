@@ -1,4 +1,4 @@
-import { CornerLeftUp, FileArchive, FileDown, ListTree } from 'lucide-solid';
+import { CornerLeftUp, FileArchive, FileDown, ListTree } from '@/lib/icons';
 import { For, Show, type JSX } from 'solid-js';
 import type { TraceAttempt, TraceNode } from '@shared/sessionTrace';
 import { DIAGNOSTIC_LIMITS } from '@shared/diagnosticBundle';

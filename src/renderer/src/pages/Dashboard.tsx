@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Search } from 'lucide-solid';
+import { Plus, RefreshCw, Search } from '@/lib/icons';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import { RESET_GLYPH } from '@shared/resetTime';
 import type { AppSettings } from '@shared/settings';

@@ -1,6 +1,6 @@
 import { HoverTip, type TipRow } from './ChartTip';
 import { dateTime } from '../lib/format';
-import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from 'lucide-solid';
+import { Check, ChevronDown, ChevronUp, Copy, RotateCcw } from '@/lib/icons';
 import { Flyout } from '@cujuju/solidjs-select-flyout';
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';

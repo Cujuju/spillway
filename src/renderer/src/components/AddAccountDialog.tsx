@@ -1,4 +1,4 @@
-import { CheckCircle2, ExternalLink, LoaderCircle } from 'lucide-solid';
+import { CheckCircle2, ExternalLink, LoaderCircle } from '@/lib/icons';
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import type { Credential, OAuthStart } from '@shared/types';
 import { providerLabel } from '@shared/trayValues';

@@ -1,4 +1,4 @@
-import { X } from 'lucide-solid';
+import { X } from '@/lib/icons';
 import { createMemo, For, Show } from 'solid-js';
 import { RESET_GLYPH } from '@shared/resetTime';
 import type { Credential } from '@shared/types';

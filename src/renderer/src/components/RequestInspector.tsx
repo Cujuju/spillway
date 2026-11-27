@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, FileArchive, FlaskConical, MessagesSquare, RefreshCw, Settings2, X } from 'lucide-solid';
+import { ChevronDown, ChevronUp, FileArchive, FlaskConical, MessagesSquare, RefreshCw, Settings2, X } from '@/lib/icons';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ArchiveDetail, CaptureState } from '@shared/archive';
 import { openSettings, shownText } from '../store';

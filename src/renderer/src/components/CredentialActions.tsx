@@ -1,4 +1,4 @@
-import { Download, KeyRound, ListTree, LogIn } from 'lucide-solid';
+import { Download, KeyRound, ListTree, LogIn } from '@/lib/icons';
 import { createResource, createSignal, Show } from 'solid-js';
 import type { Credential, CredentialRenewResult } from '@shared/types';
 import { ModelFamilyList } from './ModelFamilyList';

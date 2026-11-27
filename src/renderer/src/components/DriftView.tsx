@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, For, onCleanup, Show } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { Activity, CircleAlert, CircleCheck, CircleDashed } from 'lucide-solid';
+import { Activity, CircleAlert, CircleCheck, CircleDashed } from '@/lib/icons';
 import type { ActivityScope } from '@shared/activityScope';
 import type { DriftSeries } from '@shared/drift';
 import { dayLabel } from '../lib/format';

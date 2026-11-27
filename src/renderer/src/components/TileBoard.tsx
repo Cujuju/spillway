@@ -1,5 +1,5 @@
 import { normalize, tileIds, TilingWorkspace, type Placing, type TileNode, type TileSize } from '@cujuju/solidjs-tiling-window-manager';
-import { X } from 'lucide-solid';
+import { X } from '@/lib/icons';
 import { createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import { appendRow } from '../lib/boardGrow';
 

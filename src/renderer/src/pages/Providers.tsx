@@ -1,5 +1,5 @@
 import { HoverTip } from '../components/ChartTip';
-import { Pencil, Plus, Trash2 } from 'lucide-solid';
+import { Pencil, Plus, Trash2 } from '@/lib/icons';
 import { createResource, createSignal, For, Show } from 'solid-js';
 import { FAMILY_INFO, type ApiProviderGroup, type ApiProviderTarget } from '@shared/apiProviders';
 import { LoginsSection } from '../components/LoginsSection';

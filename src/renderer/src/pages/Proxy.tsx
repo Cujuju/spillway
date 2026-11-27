@@ -1,4 +1,4 @@
-import { Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from 'lucide-solid';
+import { Eye, EyeOff, FilePen, Play, RefreshCw, RotateCw, Square } from '@/lib/icons';
 import { createResource, createSignal, Show } from 'solid-js';
 import { ClientSetup } from '../components/ClientSetup';
 import { ManagedPolicySetup } from '../components/ManagedPolicySetup';

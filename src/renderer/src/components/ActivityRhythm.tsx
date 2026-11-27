@@ -1,4 +1,4 @@
-import { Sunrise, Sunset } from 'lucide-solid';
+import { Sunrise, Sunset } from '@/lib/icons';
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { darkTheme, themeTokens } from '@shared/themes';
 import type { ActivityBucket } from '@shared/types';

@@ -1,6 +1,6 @@
 import { HoverTip } from './ChartTip';
 import { importLabel, migrating, migrationLabel, MIGRATION_NOTE } from './ActivityImport';
-import { Activity as ActivityIcon, ChevronLeft, ChevronRight, CircleHelp, Gauge, Network, ScrollText, Settings as SettingsIcon } from 'lucide-solid';
+import { Activity as ActivityIcon, ChevronLeft, ChevronRight, CircleHelp, Gauge, Network, ScrollText, Settings as SettingsIcon } from '@/lib/icons';
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { activityImport, archiveMigration, page, setPage, settings, snapshot, updateSettings, type Page } from '../store';
 import { isMac } from '../lib/platform';

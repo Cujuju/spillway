@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Ban, Download, Power, RotateCcw, TriangleAlert } from 'lucide-solid';
+import { ArrowLeftRight, Ban, Download, Power, RotateCcw, TriangleAlert } from '@/lib/icons';
 import type { NoticeIcon } from '@cujuju/electron-notices/renderer';
 import type { SpillwayNoticeKind } from '@shared/notice';
 

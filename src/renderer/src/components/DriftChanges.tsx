@@ -1,5 +1,5 @@
 import { createMemo, For, Show } from 'solid-js';
-import { Package, SlidersHorizontal } from 'lucide-solid';
+import { Package, SlidersHorizontal } from '@/lib/icons';
 import type { DriftSeries } from '@shared/drift';
 import { dateTime } from '../lib/format';
 import { changeText } from '../lib/driftView';

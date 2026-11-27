@@ -47,7 +47,9 @@
         "solid/style-prop": "warn",
         "solid/no-react-deps": "warn",
         "solid/no-react-specific-props": "warn",
-        "solid/self-closing-comp": "warn"
+        "solid/self-closing-comp": "warn",
+        // The barrel makes the dev server compile every icon; src/renderer/src/lib/icons.ts imports each one used.
+        "no-restricted-imports": ["error", { "paths": [{ "name": "lucide-solid", "message": "Import icons from '@/lib/icons'." }] }]
       }
     },
     {

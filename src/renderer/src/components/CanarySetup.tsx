@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { Plus, X } from 'lucide-solid';
+import { Plus, X } from '@/lib/icons';
 import { CANARY_INTERVALS, CANARY_MAX_TARGETS, CANARY_PROBES, type CanaryTarget } from '@shared/canary';
 import type { AppSettings } from '@shared/settings';
 import { settings, updateSettings } from '../store';

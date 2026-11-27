@@ -53,6 +53,16 @@ describe('diffUsage', () => {
     expect(diffUsage(rejected, stillRejected)).toEqual([]);
   });
 
+  it('marks limit events from scoped windows as scoped', () => {
+    const overage = (status: LimitWindow['status']) => fiveHour(status, { key: 'overage', label: 'Overage', resetsAt: null, usedPercent: null, scoped: true });
+    const allowed = snap(cred('a', { windows: overage('allowed') }));
+    const rejected = snap(cred('a', { windows: overage('rejected') }));
+    expect(diffUsage(allowed, rejected)).toMatchObject([{ kind: 'limitHit', scoped: true }]);
+    expect(diffUsage(rejected, allowed)).toMatchObject([{ kind: 'limitReset', scoped: true }]);
+    expect(diffUsage(snap(cred('a', { windows: fiveHour('allowed') })), snap(cred('a', { windows: fiveHour('rejected') }))))
+      .toMatchObject([{ kind: 'limitHit', scoped: false }]);
+  });
+
   it('reports a change of the next-pick account', () => {
     const before = snap(cred('a', { nextPick: true }), cred('b'));
     const after = snap(cred('a'), cred('b', { nextPick: true }));

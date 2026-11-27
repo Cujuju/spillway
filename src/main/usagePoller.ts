@@ -14,6 +14,10 @@ import { notify } from './notifier';
 
 const MS_PER_SECOND = 1000;
 
+/** Scoped windows don't drive routing and say nothing about the account, so their notices make no account claim. */
+const limitHitBody = (scoped: boolean) => (scoped ? 'No reset time reported.' : 'Switching to the next account.');
+const limitResetBody = (scoped: boolean) => (scoped ? '' : 'The account is available again.');
+
 /** The notice for a usage event, or null when its notification is off. */
 export function usageNotice(event: UsageEvent): NoticeInput | null {
   const { notifications: n, dashboard } = getSettings();
@@ -21,11 +25,11 @@ export function usageNotice(event: UsageEvent): NoticeInput | null {
   const name = (c: { label: string }) => (dashboard.showEmails ? c.label : maskEmails(c.label));
   if (event.kind === 'limitHit' && n.limitHit) {
     return spillwayNotice('limitHit', { target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reached`,
-      body: event.resetsAt ? resetText(event.resetsAt, Date.now()) : 'Switching to the next account.', short: `${event.windowLabel} limit reached` });
+      body: event.resetsAt ? resetText(event.resetsAt, Date.now()) : limitHitBody(event.scoped), short: `${event.windowLabel} limit reached` });
   }
   if (event.kind === 'limitReset' && n.limitReset) {
     return spillwayNotice('limitReset', { target: 'window', title: `${name(event.credential)}: ${event.windowLabel} limit reset`,
-      body: 'The account is available again.', short: `${event.windowLabel} limit reset` });
+      body: limitResetBody(event.scoped), short: `${event.windowLabel} limit reset` });
   }
   if (event.kind === 'accountSwitched' && n.accountSwitched) {
     return spillwayNotice('accountSwitched', { target: 'window', title: `${event.provider}: now using ${name(event.to)}`,

@@ -1,8 +1,8 @@
 import type { Credential, LimitWindow, UsageSnapshot } from '@shared/types';
 
 export type UsageEvent =
-  | { kind: 'limitHit'; credential: Credential; windowLabel: string; resetsAt: string | null }
-  | { kind: 'limitReset'; credential: Credential; windowLabel: string }
+  | { kind: 'limitHit'; credential: Credential; windowLabel: string; scoped: boolean; resetsAt: string | null }
+  | { kind: 'limitReset'; credential: Credential; windowLabel: string; scoped: boolean }
   | { kind: 'accountSwitched'; provider: string; from: Credential | null; to: Credential };
 
 const FULL = 100;
@@ -20,10 +20,10 @@ export function diffUsage(prev: UsageSnapshot | null, next: UsageSnapshot): Usag
     for (const w of c.windows) {
       const previous = oldWindows.get(w.key);
       if (isExhausted(w)) {
-        if (!previous || !isExhausted(previous)) events.push({ kind: 'limitHit', credential: c, windowLabel: w.label, resetsAt: w.resetsAt });
+        if (!previous || !isExhausted(previous)) events.push({ kind: 'limitHit', credential: c, windowLabel: w.label, scoped: w.scoped, resetsAt: w.resetsAt });
       } else if (previous && isExhausted(previous) && (w.status !== null || w.usedPercent !== null)) {
         // Lookups can omit status; missing data is not evidence of recovery.
-        events.push({ kind: 'limitReset', credential: c, windowLabel: w.label });
+        events.push({ kind: 'limitReset', credential: c, windowLabel: w.label, scoped: w.scoped });
       }
     }
   }

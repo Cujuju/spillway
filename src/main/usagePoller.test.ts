@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import type { Credential } from '@shared/types';
 vi.mock('./notifier', () => ({ notify: vi.fn() }));
 vi.mock('./historyStore', () => ({ history: { add: vi.fn() } }));
 vi.mock('./managementClient', async (original) => ({
@@ -8,8 +9,9 @@ vi.mock('./managementClient', async (original) => ({
 vi.mock('./proxySupervisor', () => ({ proxy: { isRunning: () => true } }));
 vi.mock('./settingsStore', () => ({ getSettings: vi.fn() }));
 vi.mock('./usageEvents', () => ({ diffUsage: () => [] }));
-const { usage } = await import('./usagePoller');
+const { usage, usageNotice } = await import('./usagePoller');
 const { management, UsageRefreshError } = await import('./managementClient');
+const { getSettings } = await import('./settingsStore');
 const snapshot = { strategy: 'soonest-reset', fetchedAt: new Date().toISOString(), credentials: [] };
 const newer = { ...snapshot, strategy: 'newer' };
 usage.on('error', () => undefined);
@@ -21,6 +23,16 @@ function deferred<T>() {
 }
 
 afterEach(() => { usage.removeAllListeners('snapshot'); vi.clearAllMocks(); });
+it.each([
+  { scoped: false, hit: 'Switching to the next account.', reset: 'The account is available again.' },
+  { scoped: true, hit: 'No reset time reported.', reset: '' },
+])('words limit notices for scoped=$scoped windows', ({ scoped, hit, reset }) => {
+  vi.mocked(getSettings).mockReturnValue({ notifications: { limitHit: true, limitReset: true }, dashboard: { showEmails: true } } as ReturnType<typeof getSettings>);
+  const credential = { label: 'a' } as Credential;
+  expect(usageNotice({ kind: 'limitHit', credential, windowLabel: 'Overage', scoped, resetsAt: null })?.body).toBe(hit);
+  expect(usageNotice({ kind: 'limitReset', credential, windowLabel: 'Overage', scoped })?.body).toBe(reset);
+});
+
 it('coalesces triggers during a poll into one follow-up after it completes', async () => {
   let complete!: (value: typeof snapshot) => void;
   vi.mocked(management.usage).mockImplementationOnce(() => new Promise((r) => { complete = r; }))

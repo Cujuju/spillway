@@ -39,11 +39,21 @@ const binaryName = (target) => (target.startsWith('win32-') ? 'cli-proxy-api.exe
 const destFor = (target) => path.join(root, 'resources', 'bin', target, binaryName(target));
 
 /** A build's inputs besides its target: the fork's content, the Go toolchain and this script. Every build stamps it; only --dev skips. */
-const buildKey = forkPresent ? JSON.stringify({
-  source: sourceState(src),
-  go: execFileSync('go', ['env', 'GOVERSION'], { encoding: 'utf8' }).trim(),
-  script: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
-}) : null;
+function readBuildKey() {
+  if (!forkPresent) return null;
+  try {
+    return JSON.stringify({
+      source: sourceState(src),
+      // From the fork: its go.mod can select a different toolchain.
+      go: execFileSync('go', ['env', 'GOVERSION'], { cwd: src, encoding: 'utf8' }).trim(),
+      script: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
+    });
+  } catch (err) {
+    console.warn(`Could not read the fork's build state, so the proxy rebuilds: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+const buildKey = readBuildKey();
 const keyFor = (target) => `${buildKey}|${target}`;
 const pending = targets.filter((target) => {
   if (!dev || !buildKey || !isUpToDate(destFor(target), keyFor(target))) return true;
@@ -151,7 +161,7 @@ for (const target of pending) {
     execFileSync('go', ['build', '-trimpath', '-ldflags', ldflags(), '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
     // EBUSY on Windows when a proxy from this binary is still running.
     copyFileSync(built, dest);
-    writeStamp(dest, keyFor(target));
+    if (buildKey) writeStamp(dest, keyFor(target));
   } catch (err) {
     fail(`Proxy build for ${target} failed: ${err instanceof Error ? err.message : err}`, dest);
     continue;

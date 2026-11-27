@@ -3,26 +3,64 @@
 // in electron-builder.ts and bundledProxyPath() in src/main/paths.ts.
 // Source checkout: CLIPROXY_SRC env var, else ../CLIProxyAPI next to this repo.
 // Targets: host by default; or e.g. `pnpm proxy:build darwin-arm64 darwin-x64`, or `all`.
-// --keep-last-good (used by `pnpm dev`): a failed build keeps the existing binary instead of failing,
-// so a fork mid-edit never stops the dev app from launching.
+// --dev (used by `pnpm dev`): an unchanged fork skips the build, the contract tests leave out DEV_SKIPPED_TESTS,
+// and a failed build keeps the existing binary, so a fork mid-edit never stops the dev app from launching.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitBuild } from '../appVersion.ts';
+import { isUpToDate, sourceState, writeStamp } from './proxyBuildStamp.mts';
 
 const ALL_TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'];
 const GOOS = { win32: 'windows', darwin: 'darwin', linux: 'linux' };
 const GOARCH = { x64: 'amd64', arm64: 'arm64' };
-const KEEP_LAST_GOOD = '--keep-last-good';
+const DEV = '--dev';
 /** Collects the Go dependencies' license files. Pinned; installed into the fork's dist/, so the build needs only Go. */
 const GO_LICENSES = 'github.com/google/go-licenses/v2@v2.0.1';
+/** Upstream's load test: 33 s of the 45 s contract run. Releases and `pnpm proxy:build` still run it. */
+const DEV_SKIPPED_TESTS = ['TestIssue7431_LargeWeightedPoolRotatesAcrossTransientExclusionsAndCooldowns'];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = path.resolve(process.env.CLIPROXY_SRC ?? path.join(root, '..', 'CLIProxyAPI'));
-const keepLastGood = process.argv.includes(KEEP_LAST_GOOD);
-const args = process.argv.slice(2).filter((a) => a !== KEEP_LAST_GOOD);
+const dev = process.argv.includes(DEV);
+const args = process.argv.slice(2).filter((a) => a !== DEV);
 const targets = args.includes('all') ? ALL_TARGETS : args.length ? args : [`${process.platform}-${process.arch}`];
+for (const target of targets) {
+  const [platform, arch] = target.split('-');
+  if (!GOOS[platform] || !GOARCH[arch]) {
+    console.error(`Unknown target "${target}". Use <platform>-<arch>, e.g. ${ALL_TARGETS.join(', ')}.`);
+    process.exit(1);
+  }
+}
+const forkPresent = existsSync(path.join(src, 'go.mod'));
+const binaryName = (target) => (target.startsWith('win32-') ? 'cli-proxy-api.exe' : 'cli-proxy-api');
+const destFor = (target) => path.join(root, 'resources', 'bin', target, binaryName(target));
+
+/** A build's inputs besides its target: the fork's content, the Go toolchain and this script. Every build stamps it; only --dev skips. */
+function readBuildKey() {
+  if (!forkPresent) return null;
+  try {
+    return JSON.stringify({
+      source: sourceState(src),
+      // From the fork: its go.mod can select a different toolchain.
+      go: execFileSync('go', ['env', 'GOVERSION'], { cwd: src, encoding: 'utf8' }).trim(),
+      script: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
+    });
+  } catch (err) {
+    console.warn(`Could not read the fork's build state, so the proxy rebuilds: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+const buildKey = readBuildKey();
+const keyFor = (target) => `${buildKey}|${target}`;
+const pending = targets.filter((target) => {
+  if (!dev || !buildKey || !isUpToDate(destFor(target), keyFor(target))) return true;
+  console.log(`proxy binary up to date → ${destFor(target)}`);
+  return false;
+});
+if (!pending.length) process.exit(0);
 /**
  * Licenses for modules whose release has no LICENSE file, copied from the module's repo at the commit that added it.
  * Layout: <module path>/LICENSE. go-licenses skips these modules; the files are copied in instead.
@@ -33,7 +71,7 @@ const overridesDir = path.join(root, 'scripts', 'go-license-overrides');
  * Returns null when the fork checkout is missing; each target then reports that.
  */
 function installGoLicenses() {
-  if (!existsSync(path.join(src, 'go.mod'))) return null;
+  if (!forkPresent) return null;
   const bin = path.join(src, 'dist', 'tools');
   const { GOOS: _os, GOARCH: _arch, ...hostEnv } = process.env;
   execFileSync('go', ['install', GO_LICENSES], { cwd: src, env: { ...hostEnv, GOBIN: bin }, stdio: 'inherit' });
@@ -48,10 +86,11 @@ const goLicenses = installGoLicenses();
 const CONTRACT_TEST_PACKAGES = ['./sdk/cliproxy/auth/', './internal/codexusage/', './internal/claudeusage/'];
 /** Runs once on this machine; no target builds when they fail. A missing checkout passes; each target reports it. */
 function contractTestsPass() {
-  if (!existsSync(path.join(src, 'go.mod'))) return true;
+  if (!forkPresent) return true;
   const { GOOS: _os, GOARCH: _arch, ...hostEnv } = process.env;
   try {
-    execFileSync('go', ['test', ...CONTRACT_TEST_PACKAGES], { cwd: src, env: hostEnv, stdio: 'inherit' });
+    const skip = dev ? ['-skip', DEV_SKIPPED_TESTS.map((name) => `^${name}$`).join('|')] : [];
+    execFileSync('go', ['test', ...skip, ...CONTRACT_TEST_PACKAGES], { cwd: src, env: hostEnv, stdio: 'inherit' });
     return true;
   } catch {
     return false;
@@ -62,9 +101,9 @@ const overriddenModules = readdirSync(overridesDir, { recursive: true, encoding:
   .filter((f) => path.basename(f) === 'LICENSE')
   .map((f) => path.dirname(f).split(path.sep).join('/'));
 
-/** Reports a failed target; exits unless --keep-last-good and a binary is already in place. */
+/** Reports a failed target; exits unless --dev and a binary is already in place. */
 function fail(message, dest) {
-  if (keepLastGood && existsSync(dest)) {
+  if (dev && existsSync(dest)) {
     console.warn(`${message}\nKeeping the last good proxy binary at ${dest}.`);
     return;
   }
@@ -82,16 +121,11 @@ function ldflags() {
   return ['-s', '-w', ...Object.entries(stamp).map(([name, value]) => `-X main.${name}=${value}`)].join(' ');
 }
 
-for (const target of targets) {
+for (const target of pending) {
   const [platform, arch] = target.split('-');
-  if (!GOOS[platform] || !GOARCH[arch]) {
-    console.error(`Unknown target "${target}". Use <platform>-<arch>, e.g. ${ALL_TARGETS.join(', ')}.`);
-    process.exit(1);
-  }
-  const name = platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
-  const built = path.join(src, 'dist', target, name);
-  const dest = path.join(root, 'resources', 'bin', target, name);
-  if (!existsSync(path.join(src, 'go.mod'))) {
+  const dest = destFor(target);
+  const built = path.join(src, 'dist', target, path.basename(dest));
+  if (!forkPresent) {
     fail(`CLIProxyAPI source not found at ${src}. Set CLIPROXY_SRC to the checkout.`, dest);
     continue;
   }
@@ -127,6 +161,7 @@ for (const target of targets) {
     execFileSync('go', ['build', '-trimpath', '-ldflags', ldflags(), '-o', built, './cmd/server'], { cwd: src, env, stdio: 'inherit' });
     // EBUSY on Windows when a proxy from this binary is still running.
     copyFileSync(built, dest);
+    if (buildKey) writeStamp(dest, keyFor(target));
   } catch (err) {
     fail(`Proxy build for ${target} failed: ${err instanceof Error ? err.message : err}`, dest);
     continue;

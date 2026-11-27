@@ -32,13 +32,16 @@ export function sourceState(src: string): string {
 
 const stampPath = (binary: string) => path.join(path.dirname(binary), STAMP_FILE);
 
-/** True when `binary` is the file the last good build with this key wrote. */
+/** True when `binary` is the file the last good build with this key wrote. A missing or unreadable stamp or binary is a miss. */
 export function isUpToDate(binary: string, key: string): boolean {
   if (!existsSync(binary) || !existsSync(stampPath(binary))) return false;
-  let stamp: Stamp;
-  try { stamp = JSON.parse(readFileSync(stampPath(binary), 'utf8')) as Stamp; } catch { return false; }
-  const { size, mtimeMs } = statSync(binary);
-  return stamp.key === key && stamp.size === size && stamp.mtimeMs === mtimeMs;
+  try {
+    const stamp = JSON.parse(readFileSync(stampPath(binary), 'utf8')) as Partial<Stamp> | null;
+    const { size, mtimeMs } = statSync(binary);
+    return stamp?.key === key && stamp.size === size && stamp.mtimeMs === mtimeMs;
+  } catch {
+    return false;
+  }
 }
 
 /** Records `key` for the binary a build just wrote. electron-builder.ts ships only the binary from its folder. */

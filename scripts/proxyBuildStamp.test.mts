@@ -80,6 +80,8 @@ describe('build stamp', () => {
     writeStamp(binary(), 'k1');
     write('bin/build-stamp.json', '{not json');
     expect(isUpToDate(binary(), 'k1')).toBe(false);
+    write('bin/build-stamp.json', 'null');
+    expect(isUpToDate(binary(), 'k1')).toBe(false);
     rmSync(binary());
     expect(isUpToDate(binary(), 'k1')).toBe(false);
   });

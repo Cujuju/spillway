@@ -185,6 +185,10 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
       }}</For>
     </tr>
   );
+  /** The heading spans every column; its inner label pins to the left edge while the columns scroll. */
+  const GroupRow = (p: { children: JSX.Element }) => (
+    <tr class="group-row"><td colSpan={span()}><span class="pin">{p.children}</span></td></tr>
+  );
   const unknown = () => props.report.unknownEffort;
   const anyUnmatched = () => columns().some((c) => (c.row.planReach?.weekly?.unmatchedIntervals ?? 0) > 0 || (c.row.planReach?.fiveHour?.unmatchedIntervals ?? 0) > 0);
   return (
@@ -199,18 +203,18 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
         )}</For>
       </tr></thead>
       <tbody>
-        <tr class="group-row"><td colSpan={span()}>Whole range<span class="gnote">{spanText(props.report.range)} · {props.report.range.days} days · from hourly totals</span></td></tr>
+        <GroupRow>Whole range<span class="gnote">{spanText(props.report.range)} · {props.report.range.days} days · from hourly totals</span></GroupRow>
         <For each={wholeRows(props.report)}>{(row) => <RowView row={row} />}</For>
-        <tr class="group-row"><td colSpan={span()}>Per task (covered days)<span class="gnote">
+        <GroupRow>Per task (covered days)<span class="gnote">
           {props.report.retained ? `${spanText(props.report.retained)} · ${daysOf(props.report.retained, props.report.range)}` : 'No kept requests in this range'} · requests are kept {props.retentionDays} days</span>
-          <Coverage part={props.report.retained} range={props.report.range} /></td></tr>
+          <Coverage part={props.report.retained} range={props.report.range} /></GroupRow>
         <For each={taskRows()}>{(row) => <RowView row={row} />}</For>
-        <tr class="group-row"><td colSpan={span()}>Per turn (covered days)<span class="gnote">
+        <GroupRow>Per turn (covered days)<span class="gnote">
           {props.report.retained ? `${spanText(props.report.retained)} · ${daysOf(props.report.retained, props.report.range)}` : 'No kept requests in this range'} · agentic steps per user prompt</span>
-          <Coverage part={props.report.retained} range={props.report.range} /></td></tr>
+          <Coverage part={props.report.retained} range={props.report.range} /></GroupRow>
         <For each={turnRows()}>{(row) => <RowView row={row} />}</For>
-        <tr class="group-row"><td colSpan={span()}>Plan reach<span class="gnote">
-          from clean quota intervals · excludes resets and zero-spend jumps{anyUnmatched() ? ' · hover for skipped jumps' : ''}</span></td></tr>
+        <GroupRow>Plan reach<span class="gnote">
+          from clean quota intervals · excludes resets and zero-spend jumps{anyUnmatched() ? ' · hover for skipped jumps' : ''}</span></GroupRow>
         <For each={planReachRows()}>{(row) => <RowView row={row} />}</For>
       </tbody>
       <Show when={unknown().requests > 0}>

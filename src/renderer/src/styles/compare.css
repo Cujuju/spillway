@@ -72,7 +72,24 @@
   --multiple-width: 54px;
   /* Width the combination columns ask for together; the label column takes at least its content. */
   --combo-share: 96%;
+  /* Separate borders: collapsed ones stay behind when a pinned cell moves. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-xs);
+}
+/* Row labels stay in view while the combination columns scroll sideways. */
+.table.cmp thead th:first-child,
+.cmp td.lab {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-raised);
+  background: var(--color-surface);
+  border-right: var(--border-width) solid var(--color-divider);
+}
+.cmp tr.group-row .pin {
+  display: inline-block;
+  position: sticky;
+  left: var(--spacing-4);
 }
 .table.cmp th {
   padding: var(--spacing-2);

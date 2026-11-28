@@ -4,6 +4,9 @@ export const ACTIVITY_PANEL_KINDS = ['trend', 'cache', 'heatmap', 'rhythm', 'mod
 export type ActivityPanelKind = (typeof ACTIVITY_PANEL_KINDS)[number];
 export const ACTIVITY_METRICS = ['cost', 'tokens', 'requests'] as const;
 export type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
+/** Bar sizes a trend chart can be fixed to. */
+export const TREND_UNITS = ['day', 'week', 'month'] as const;
+export type TrendUnit = (typeof TREND_UNITS)[number];
 
 export interface ActivityPanelSpec {
   kind: ActivityPanelKind;
@@ -11,6 +14,8 @@ export interface ActivityPanelSpec {
   metric: ActivityMetric;
   /** A combination card's combination (comboKey). Absent: the costliest combination in range not on another card. */
   combo?: string;
+  /** A trend chart's bar size. Absent: it follows the time frame. */
+  unit?: TrendUnit;
 }
 
 /** Bumped when a release adds a chart every saved board should gain once. */
@@ -95,7 +100,8 @@ export function normalizeActivityBoard(raw: unknown): ActivityBoard {
   if (!isObj(raw) || !isObj(raw.panels) || !(raw.tiles === null || isObj(raw.tiles))) return DEFAULT_ACTIVITY_BOARD;
   const panels = Object.fromEntries(Object.entries(raw.panels).flatMap(([id, v]): [string, ActivityPanelSpec][] =>
     id && isObj(v) && oneOf(v.kind, ACTIVITY_PANEL_KINDS)
-      ? [[id, { kind: v.kind, metric: oneOf(v.metric, ACTIVITY_METRICS) ? v.metric : 'cost', ...(v.kind === 'combo' && typeof v.combo === 'string' ? { combo: v.combo } : {}) }]]
+      ? [[id, { kind: v.kind, metric: oneOf(v.metric, ACTIVITY_METRICS) ? v.metric : 'cost', ...(v.kind === 'combo' && typeof v.combo === 'string' ? { combo: v.combo } : {}),
+        ...(v.kind === 'trend' && oneOf(v.unit, TREND_UNITS) ? { unit: v.unit } : {}) }]]
       : []));
   const heightPx = typeof raw.heightPx === 'number' && Number.isFinite(raw.heightPx) && raw.heightPx > 0 ? raw.heightPx : null;
   const board = { version: ACTIVITY_BOARD_VERSION, tiles: raw.tiles, panels, heightPx };

@@ -8,7 +8,7 @@ import type { ActivityBucket } from '@shared/types';
 import { metricValue, type AccountRow, type ClientRow, type ModelEffortRow, type ModelRow, type SeriesPoint, type Summary } from '../lib/activityStats';
 import { settings } from '../store';
 import { pct } from '../lib/format';
-import type { Span } from '../lib/activityRange';
+import type { BucketUnit, Span } from '../lib/activityRange';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { ActivityRhythm } from './ActivityRhythm';
 import { EffortsInfo, EffortsTable } from './ActivityEfforts';
@@ -32,9 +32,20 @@ const TABLE_TILE_MIN: TileSize = { width: 420, height: 170 };
 /** A combination card: its title, the median line and the five-line ledger. */
 const COMBO_TILE_MIN: TileSize = { width: 240, height: 230 };
 
+/** A time frame's activity split into bars of one unit. */
+export interface TrendSeries {
+  points: () => SeriesPoint[];
+  xLabel: (t: number) => string;
+  pointTitle: (i: number) => string;
+  tip: (i: number) => { title: string; rows: TipRow[] };
+}
+
 /** Everything the Overview's charts read, for the selected range. */
 export interface ActivityData {
-  points: () => SeriesPoint[];
+  /** The bar size that suits the time frame. */
+  unit: () => BucketUnit;
+  /** Builds a series in the caller's reactive scope; call once per chart. */
+  series: (unit: () => BucketUnit) => TrendSeries;
   /** Held activity in scope; the heatmap and rhythm keep the rows inside `span`. */
   rows: () => ActivityBucket[];
   /** The page's time frame. */
@@ -47,11 +58,6 @@ export interface ActivityData {
   /** Display name for an account, masked when "Show emails" is off. */
   account: (authIndex: string | null) => string;
   total: () => Summary;
-  /** "Hourly", "Daily" … for the range. */
-  bucketNote: () => string;
-  xLabel: (t: number) => string;
-  pointTitle: (i: number) => string;
-  tip: (i: number) => { title: string; rows: TipRow[] };
   /** Combination cards and Compare; undefined while loading, null for a query main rejected. */
   compare: () => CompareReport | null | undefined;
   retentionDays: () => number;
@@ -82,6 +88,8 @@ interface PanelDef {
   info?: () => JSX.Element;
   /** The title is a menu switching the tile's metric; each option is the title for that metric. Tables show every metric as a column, so they have none. */
   switchesMetric: boolean;
+  /** The note is a menu fixing the bar size, or leaving it to the time frame. */
+  switchesUnit?: boolean;
   /** Smallest tile that still reads: axis labels plus a few bars, or a header and two table rows. */
   minSize: TileSize;
   /** Builds the tile body once per tile; it reads `spec` inside its own JSX and memos. */
@@ -91,15 +99,16 @@ interface PanelDef {
 export const PANELS: Record<ActivityPanelKind, PanelDef> = {
   trend: {
     title: (spec) => metricLabel(spec.metric),
-    note: (data) => data.bucketNote(),
     switchesMetric: true,
+    switchesUnit: true,
     minSize: { width: 360, height: TREND_TILE_MIN_HEIGHT_PX },
     createBody: (spec, data) => {
+      const s = data.series(() => spec().unit ?? data.unit());
       // Built once per data or metric change, not on every read while the chart resizes.
-      const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) })));
+      const points = createMemo(() => s.points().map((p) => ({ start: p.start, value: metricValue(p.summary, spec().metric) })));
       return (
         <TrendChart kind="bar" ariaLabel={metricLabel(spec().metric)} points={points()}
-          yLabel={axisMetric(spec().metric)} xLabel={data.xLabel} pointTitle={data.pointTitle} tooltip={data.tip} />
+          yLabel={axisMetric(spec().metric)} xLabel={s.xLabel} pointTitle={s.pointTitle} tooltip={s.tip} />
       );
     },
   },
@@ -109,10 +118,11 @@ export const PANELS: Record<ActivityPanelKind, PanelDef> = {
     switchesMetric: false,
     minSize: { width: 320, height: TREND_TILE_MIN_HEIGHT_PX },
     createBody: (_spec, data) => {
-      const points = createMemo(() => data.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate })));
+      const s = data.series(data.unit);
+      const points = createMemo(() => s.points().map((p) => ({ start: p.start, value: p.summary.cacheHitRate })));
       return (
         <TrendChart kind="line" ariaLabel="Cache hit" yMax={1} yTicks={CACHE_Y_TICKS} points={points()}
-          yLabel={(v) => pct(v * 100)} xLabel={data.xLabel} pointTitle={data.pointTitle} tooltip={data.tip} />
+          yLabel={(v) => pct(v * 100)} xLabel={s.xLabel} pointTitle={s.pointTitle} tooltip={s.tip} />
       );
     },
   },

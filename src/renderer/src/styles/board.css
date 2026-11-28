@@ -76,6 +76,14 @@
   background: transparent;
   color: var(--color-text-muted);
 }
+/* A note that is a menu (trend bar size) keeps the note's size and tone. */
+.board-tile-head > .chart-head-note.title-switch.select-flyout {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.board-tile-head > .chart-head-note.title-switch.select-flyout:is(:hover, :focus-visible, .cujuju-select-flyout-trigger-open) {
+  color: var(--color-text);
+}
 /* A small remove button, so the header is only as tall as its title. */
 .board-tile-head > .icon-btn {
   --icon-btn-size: var(--spacing-5);

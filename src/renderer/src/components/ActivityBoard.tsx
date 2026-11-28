@@ -1,14 +1,21 @@
 import { normalize, tileIds } from '@cujuju/solidjs-tiling-window-manager';
 import { createMemo, Show } from 'solid-js';
-import { Select } from './ui';
-import { ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, type ActivityMetric, type ActivityPanelKind, type ActivityPanelSpec } from '@shared/activityBoard';
+import { Select, type SelectOption } from './ui';
+import {
+  ACTIVITY_BOARD_VERSION, ACTIVITY_METRICS, TREND_UNITS, type ActivityMetric, type ActivityPanelKind, type ActivityPanelSpec, type TrendUnit,
+} from '@shared/activityBoard';
+import { UNIT_NOTE } from '../lib/activityRange';
 import { DEFAULT_COMBOS, type CompareReport } from '@shared/activityCompare';
 import { baselineOf, comboName, comboTiles, pinCombos, resolveCombos, shownCombos } from '../lib/comboSelection';
 import { settings, updateSettings } from '../store';
 import { ADD_CHOICES, PANELS, type ActivityData, type ComboSelection } from './activityPanels';
 import { createTileBoard, TileBoard, type PendingTile, type TileBoardState, type TileDef } from './TileBoard';
 
-const sameSpec = (a: ActivityPanelSpec | undefined, b: ActivityPanelSpec | undefined) => a?.kind === b?.kind && a?.metric === b?.metric;
+const sameSpec = (a: ActivityPanelSpec | undefined, b: ActivityPanelSpec | undefined) => a?.kind === b?.kind && a?.metric === b?.metric && a?.unit === b?.unit;
+
+/** The bar-size menu's choice that leaves the size to the time frame. */
+const AUTO_UNIT = 'auto';
+type UnitChoice = TrendUnit | typeof AUTO_UNIT;
 
 /** A chart waiting to be placed. */
 export type PendingChart = PendingTile<ActivityPanelSpec>;
@@ -57,6 +64,17 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
       const panel = d.activity.board.panels[id];
       if (panel) panel.metric = metric;
     });
+  const setUnit = (id: string, unit: UnitChoice) =>
+    updateSettings((d) => {
+      const panel = d.activity.board.panels[id];
+      if (!panel) return;
+      if (unit === AUTO_UNIT) delete panel.unit;
+      else panel.unit = unit;
+    });
+  const unitOptions = (): SelectOption<UnitChoice>[] => [
+    { value: AUTO_UNIT, label: `Auto · ${UNIT_NOTE[props.data.unit()]}`, title: 'Bar size follows the time frame' },
+    ...TREND_UNITS.map((u) => ({ value: u, label: UNIT_NOTE[u] })),
+  ];
   const def = (kind: ActivityPanelKind): TileDef<ActivityPanelSpec> => {
     const panel = PANELS[kind];
     return {
@@ -71,6 +89,10 @@ export function ActivityBoard(props: { data: ActivityData; placing: PendingChart
                 onChange={(metric) => void setMetric(id, metric)} />
             </Show>
             <Show when={panel.info}>{(info) => info()()}</Show>
+            <Show when={panel.switchesUnit}>
+              <Select<UnitChoice> class="chart-head-note title-switch" label="Bar size" title="Change bar size" value={spec().unit ?? AUTO_UNIT}
+                options={unitOptions()} onChange={(unit) => void setUnit(id, unit)} />
+            </Show>
             <Show when={panel.note}>{(note) => <span class="chart-head-note">{note()(props.data, ctx)}</span>}</Show>
           </>
         );

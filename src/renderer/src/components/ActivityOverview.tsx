@@ -2,7 +2,7 @@ import { createEffect, createMemo, Show, type JSX } from 'solid-js';
 import { inScope, type ActivityScope } from '@shared/activityScope';
 import type { CompareReport } from '@shared/activityCompare';
 import {
-  axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, floorTo, UNIT_NOTE, type Range, type Span,
+  axisLabel, bucketStarts, bucketTitle, bucketUnit, daysToFetch, floorTo, type BucketUnit, type Range, type Span,
 } from '../lib/activityRange';
 import { byAccount, byClient, byModel, byModelEffort, series, summarize } from '../lib/activityStats';
 import { compactNumber, usd } from '../lib/format';
@@ -12,7 +12,7 @@ import { activityBuckets, holdActivityDays, now, settings } from '../store';
 import { ActivityBoard, type PendingChart } from './ActivityBoard';
 import { ActivityInfo } from './ActivityInfo';
 import { costText, countRows, hitRate, savings } from './activityFormat';
-import type { ActivityData } from './activityPanels';
+import type { ActivityData, TrendSeries } from './activityPanels';
 import { appLocale } from '@shared/timeFormat';
 
 function Stat(props: { label: string; value: string; sub: string; title?: string; info?: JSX.Element }) {
@@ -34,7 +34,6 @@ export function ActivityOverview(props: {
   const span = () => props.span;
   createEffect(() => holdActivityDays(daysToFetch(range(), span(), now())));
   const unit = createMemo(() => bucketUnit(span()));
-  const starts = createMemo(() => bucketStarts(span(), unit()));
   const older = createOlderBuckets(span);
   // ClickHouse rows end where local totals begin, so the two never count the same hour.
   const olderRows = createMemo(() => {
@@ -55,15 +54,24 @@ export function ActivityOverview(props: {
     return { tone: 'info', text: `Activity older than the local data comes from ClickHouse.${read.truncated ? ' Its row limit was reached, so some of it is missing.' : ''}` };
   });
   const total = createMemo(() => summarize(scoped()));
-  const points = createMemo(() => series(scoped(), starts(), span().to));
+  const trendSeries = (u: () => BucketUnit): TrendSeries => {
+    const points = createMemo(() => series(scoped(), bucketStarts(span(), u()), span().to));
+    const pointTitle = (i: number) => bucketTitle(points()[i]!.start, points()[i]!.end, u());
+    return {
+      points,
+      xLabel: (t) => axisLabel(t, u()),
+      pointTitle,
+      tip: (i) => ({ title: pointTitle(i), rows: countRows(points()[i]!.summary) }),
+    };
+  };
   const models = createMemo(() => byModel(scoped()));
   const efforts = createMemo(() => byModelEffort(scoped()));
   const accountRows = createMemo(() => byAccount(scoped()));
   const clientRows = createMemo(() => byClient(scoped()));
   const unpriced = createMemo(() => models().filter((m) => m.summary.unpricedRequests > 0).map((m) => m.model));
-  const pointTitle = (i: number) => bucketTitle(points()[i]!.start, points()[i]!.end, unit());
   const data: ActivityData = {
-    points,
+    unit,
+    series: trendSeries,
     rows,
     span,
     now,
@@ -73,10 +81,6 @@ export function ActivityOverview(props: {
     clients: clientRows,
     account: (authIndex) => props.account(authIndex),
     total,
-    bucketNote: () => UNIT_NOTE[unit()],
-    xLabel: (t) => axisLabel(t, unit()),
-    pointTitle,
-    tip: (i) => ({ title: pointTitle(i), rows: countRows(points()[i]!.summary) }),
     compare: () => props.compare,
     retentionDays: () => settings().activity.retentionDays,
   };

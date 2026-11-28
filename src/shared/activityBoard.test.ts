@@ -59,6 +59,12 @@ describe('normalizeActivityBoard', () => {
     expect(board.panels).toEqual({ c: { kind: 'combo', metric: 'cost', combo: '["m","high"]' }, t: { kind: 'trend', metric: 'cost' } });
   });
 
+  it('keeps a trend chart’s bar size and drops an unknown one or one on other kinds', () => {
+    const board = normalizeActivityBoard({ version: ACTIVITY_BOARD_VERSION, tiles: null,
+      panels: { w: { kind: 'trend', unit: 'week' }, h: { kind: 'trend', unit: 'hour' }, c: { kind: 'cache', unit: 'month' } } });
+    expect(board.panels).toEqual({ w: { kind: 'trend', metric: 'cost', unit: 'week' }, h: { kind: 'trend', metric: 'cost' }, c: { kind: 'cache', metric: 'cost' } });
+  });
+
   it('falls back to the default for anything else', () => {
     expect(normalizeActivityBoard(undefined)).toBe(DEFAULT_ACTIVITY_BOARD);
     expect(normalizeActivityBoard({ tiles: 'x', panels: {} })).toBe(DEFAULT_ACTIVITY_BOARD);

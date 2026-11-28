@@ -190,23 +190,24 @@ export function CompareTable(props: { report: CompareReport; shown: string[]; ba
     <tr class="group-row"><td colSpan={span()}><span class="pin">{p.children}</span></td></tr>
   );
   let corner!: HTMLTableCellElement;
-  /** Focus scrolls a header into the scrollport, but the pinned label column may still cover it. */
-  const revealPastLabels = (th: HTMLElement) => {
-    th.style.scrollMarginInlineStart = `${corner.offsetWidth}px`;
-    th.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  /** Focus scrolls a header into view, but the pinned labels may cover it; then align its name just past them. A whole header can exceed that space. */
+  const revealPastLabels = (name: HTMLElement) => {
+    if (name.getBoundingClientRect().left >= corner.getBoundingClientRect().right) return;
+    name.style.scrollMarginInlineStart = `${corner.offsetWidth}px`;
+    name.scrollIntoView({ block: 'nearest', inline: 'start' });
   };
   const unknown = () => props.report.unknownEffort;
   const anyUnmatched = () => columns().some((c) => (c.row.planReach?.weekly?.unmatchedIntervals ?? 0) > 0 || (c.row.planReach?.fiveHour?.unmatchedIntervals ?? 0) > 0);
   return (
     <table class="table cmp" style={{ '--combo-columns': String(props.shown.length) }}>
       <thead><tr><th ref={corner} />
-        <For each={columns()}>{(c) => (
+        <For each={columns()}>{(c) => { let name!: HTMLSpanElement; return (
           <th class="num combo" classList={{ base: c.key === base().key }} tabIndex={0} role="button" aria-pressed={c.key === base().key}
-            onFocus={(e) => revealPastLabels(e.currentTarget)} onClick={() => props.onBaseline(c.key)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onBaseline(c.key); } }}>
-            <span class="n"><Show when={c.row.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show>{comboName(c.key)}</span> <span class="x blank">0</span>
+            onFocus={() => revealPastLabels(name)} onClick={() => props.onBaseline(c.key)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onBaseline(c.key); } }}>
+            <span class="n" ref={name}><Show when={c.row.provider}>{(p) => <ProviderGlyph provider={p()} size="sm" />}</Show>{comboName(c.key)}</span> <span class="x blank">0</span>
             <small><Show when={c.key === base().key} fallback={<span class="act">use as baseline</span>}>baseline</Show> <span class="x blank">0</span></small>
           </th>
-        )}</For>
+        ); }}</For>
       </tr></thead>
       <tbody>
         <GroupRow>Whole range<span class="gnote">{spanText(props.report.range)} · {props.report.range.days} days · from hourly totals</span></GroupRow>
